@@ -1,0 +1,146 @@
+services:
+  - type: web
+    name: mern-template-api-prod
+    runtime: node
+    branch: main
+    autoDeployTrigger: off
+    rootDir: server
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        value: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
+        sync: false
+      - key: EMAIL_VERIFY_TTL_MINUTES
+        value: 60
+      - key: PASSWORD_RESET_TTL_MINUTES
+        value: 30
+      - key: POSTHOG_KEY
+        sync: false
+      - key: POSTHOG_HOST
+        value: https://app.posthog.com
+
+  - type: web
+    name: mern-template-client-prod
+    runtime: static
+    branch: main
+    autoDeployTrigger: off
+    rootDir: client
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_APP_NAME
+        value: MERN Template
+      - key: VITE_APP_ENV
+        value: production
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_ENABLE_ANALYTICS
+        value: false
+      - key: VITE_POSTHOG_KEY
+        sync: false
+      - key: VITE_POSTHOG_HOST
+        value: https://app.posthog.com
+
+  - type: web
+    name: mern-template-api-dev
+    runtime: node
+    branch: dev
+    autoDeployTrigger: commit
+    rootDir: server
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        value: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
+        sync: false
+      - key: EMAIL_VERIFY_TTL_MINUTES
+        value: 60
+      - key: PASSWORD_RESET_TTL_MINUTES
+        value: 30
+      - key: POSTHOG_KEY
+        sync: false
+      - key: POSTHOG_HOST
+        value: https://app.posthog.com
+
+  - type: web
+    name: mern-template-client-dev
+    runtime: static
+    branch: dev
+    autoDeployTrigger: commit
+    rootDir: client
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_APP_NAME
+        value: MERN Template (Dev)
+      - key: VITE_APP_ENV
+        value: development
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_ENABLE_ANALYTICS
+        value: false
+      - key: VITE_POSTHOG_KEY
+        sync: false
+      - key: VITE_POSTHOG_HOST
+        value: https://app.posthog.com

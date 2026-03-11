@@ -1,0 +1,293 @@
+const bcrypt = require('bcryptjs');
+const {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  findOrCreateGoogleUser,
+  upsertSession,
+  findSessionById,
+  deleteSessionById,
+  deleteSessionsByUserId,
+  createAuthToken,
+  findAuthTokenByHashAndType,
+  invalidateTokensForUserByType,
+  markAuthTokenUsed,
+  markEmailVerified,
+  updateUserPassword,
+} = require('./auth.repository');
+const { ApiError } = require('../../utils/apiError');
+const { env } = require('../../config/env');
+const {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+} = require('../../services/token.service');
+const { createSessionPayload, hashRefreshToken } = require('../../services/session.service');
+const {
+  generateRawToken,
+  hashAuthToken,
+  buildTokenExpiry,
+} = require('../../services/authToken.service');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../../services/email.service');
+
+function sanitizeUser(user) {
+  return {
+    id: String(user._id),
+    email: user.email,
+    name: user.name,
+    roles: user.roles,
+    emailVerified: Boolean(user.emailVerified),
+    authProvider: user.authProvider,
+  };
+}
+
+function getPrimaryClientOrigin() {
+  const [firstOrigin] = env.CLIENT_ORIGIN.split(',');
+  return firstOrigin.trim();
+}
+
+function buildClientUrl(pathname, token) {
+  return `${getPrimaryClientOrigin()}${pathname}?token=${encodeURIComponent(token)}`;
+}
+
+async function issueAuthTokens(user, metadata) {
+  const payload = createSessionPayload(user._id);
+  const accessToken = signAccessToken(payload);
+  const refreshToken = signRefreshToken(payload);
+  const refreshTokenHash = hashRefreshToken(refreshToken);
+
+  await upsertSession({
+    userId: user._id,
+    sessionId: payload.sid,
+    refreshTokenHash,
+    userAgent: metadata.userAgent,
+    ip: metadata.ip,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  });
+
+  return {
+    accessToken,
+    refreshToken,
+    user: sanitizeUser(user),
+  };
+}
+
+async function issueEmailVerification(user) {
+  await invalidateTokensForUserByType(user._id, 'email_verification');
+
+  const rawToken = generateRawToken();
+  await createAuthToken({
+    userId: user._id,
+    type: 'email_verification',
+    tokenHash: hashAuthToken(rawToken),
+    expiresAt: buildTokenExpiry('email_verification'),
+  });
+
+  await sendVerificationEmail({
+    to: user.email,
+    name: user.name,
+    verifyUrl: buildClientUrl('/verify-email', rawToken),
+  });
+}
+
+async function issuePasswordReset(user) {
+  await invalidateTokensForUserByType(user._id, 'password_reset');
+
+  const rawToken = generateRawToken();
+  await createAuthToken({
+    userId: user._id,
+    type: 'password_reset',
+    tokenHash: hashAuthToken(rawToken),
+    expiresAt: buildTokenExpiry('password_reset'),
+  });
+
+  await sendPasswordResetEmail({
+    to: user.email,
+    name: user.name,
+    resetUrl: buildClientUrl('/reset-password', rawToken),
+  });
+}
+
+async function register(input) {
+  const existing = await findUserByEmail(input.email);
+  if (existing) {
+    throw new ApiError(409, 'Email is already in use');
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const user = await createUser({
+    email: input.email.toLowerCase(),
+    name: input.name,
+    passwordHash,
+    authProvider: 'local',
+    emailVerified: false,
+    roles: ['user'],
+  });
+
+  await issueEmailVerification(user);
+
+  return {
+    user: sanitizeUser(user),
+    message: 'Registration successful. Verify your email before logging in.',
+  };
+}
+
+async function login(input, metadata) {
+  const user = await findUserByEmail(input.email);
+  if (!user || !user.passwordHash) {
+    throw new ApiError(401, 'Invalid credentials');
+  }
+
+  if (user.authProvider === 'local' && !user.emailVerified) {
+    throw new ApiError(403, 'Email is not verified. Check your inbox for a verification link.');
+  }
+
+  const valid = await bcrypt.compare(input.password, user.passwordHash);
+  if (!valid) {
+    throw new ApiError(401, 'Invalid credentials');
+  }
+
+  return issueAuthTokens(user, metadata);
+}
+
+async function refresh(refreshToken, metadata) {
+  if (!refreshToken) {
+    throw new ApiError(401, 'Missing refresh token');
+  }
+
+  let payload;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch {
+    throw new ApiError(401, 'Invalid refresh token');
+  }
+
+  const session = await findSessionById(payload.sid);
+  if (!session) {
+    throw new ApiError(401, 'Session not found');
+  }
+
+  if (session.refreshTokenHash !== hashRefreshToken(refreshToken)) {
+    await deleteSessionById(payload.sid);
+    throw new ApiError(401, 'Session token mismatch');
+  }
+
+  const user = await findUserById(payload.sub);
+  if (!user) {
+    throw new ApiError(401, 'User not found');
+  }
+
+  await deleteSessionById(payload.sid);
+  return issueAuthTokens(user, metadata);
+}
+
+async function logout(refreshToken) {
+  if (!refreshToken) {
+    return;
+  }
+
+  try {
+    const payload = verifyRefreshToken(refreshToken);
+    await deleteSessionById(payload.sid);
+  } catch {
+    // Ignore invalid tokens on logout.
+  }
+}
+
+async function getCurrentUser(userId) {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  return sanitizeUser(user);
+}
+
+async function requestEmailVerification(email) {
+  const user = await findUserByEmail(email);
+
+  if (user && user.authProvider === 'local' && !user.emailVerified) {
+    await issueEmailVerification(user);
+  }
+
+  return {
+    message: 'If an account exists for that email, a verification link has been sent.',
+  };
+}
+
+async function verifyEmail(token) {
+  const tokenHash = hashAuthToken(token);
+  const tokenDoc = await findAuthTokenByHashAndType(tokenHash, 'email_verification');
+
+  if (!tokenDoc) {
+    throw new ApiError(400, 'Verification token is invalid or expired');
+  }
+
+  await markAuthTokenUsed(tokenDoc._id);
+  await markEmailVerified(tokenDoc.userId);
+  await invalidateTokensForUserByType(tokenDoc.userId, 'email_verification');
+
+  return {
+    message: 'Email verified. You can now sign in.',
+  };
+}
+
+async function forgotPassword(email) {
+  const user = await findUserByEmail(email);
+
+  if (user && user.passwordHash) {
+    await issuePasswordReset(user);
+  }
+
+  return {
+    message: 'If an account exists for that email, a reset link has been sent.',
+  };
+}
+
+async function resetPassword(token, newPassword) {
+  const tokenHash = hashAuthToken(token);
+  const tokenDoc = await findAuthTokenByHashAndType(tokenHash, 'password_reset');
+
+  if (!tokenDoc) {
+    throw new ApiError(400, 'Reset token is invalid or expired');
+  }
+
+  const user = await findUserById(tokenDoc.userId);
+  if (!user || !user.passwordHash) {
+    throw new ApiError(400, 'Reset token is invalid or expired');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  await updateUserPassword(user._id, passwordHash);
+  await markAuthTokenUsed(tokenDoc._id);
+  await invalidateTokensForUserByType(user._id, 'password_reset');
+  await deleteSessionsByUserId(user._id);
+
+  return {
+    message: 'Password reset successful. Please sign in again.',
+  };
+}
+
+async function loginWithGoogle(googleProfile, metadata) {
+  const user = await findOrCreateGoogleUser({
+    googleId: googleProfile.id,
+    email: googleProfile.email,
+    name: googleProfile.name,
+  });
+
+  return issueAuthTokens(user, metadata);
+}
+
+module.exports = {
+  register,
+  login,
+  refresh,
+  logout,
+  getCurrentUser,
+  requestEmailVerification,
+  verifyEmail,
+  forgotPassword,
+  resetPassword,
+  loginWithGoogle,
+};

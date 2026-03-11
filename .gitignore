@@ -1,0 +1,29 @@
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+coverage
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.local
+.env.production
+.env.development
+client/.env
+server/.env
+env/client/.env.local
+env/client/.env.production
+env/server/.env.local
+env/server/.env.production
+
+# OS files
+.DS_Store
+
+# Cache
+.vite
+.nyc_output
