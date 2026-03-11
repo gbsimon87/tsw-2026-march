@@ -69,6 +69,24 @@ Base path: `/api/v1`
 
 - `POST /analytics/event`
 
+## Teams
+
+- `POST /teams`
+- `GET /teams`
+- `GET /teams/:teamId`
+- `POST /teams/:teamId/players`
+- `PATCH /teams/:teamId/players/:playerId`
+- `DELETE /teams/:teamId/players/:playerId`
+
+## Games
+
+- `POST /games`
+- `GET /games`
+- `GET /games/:gameId`
+- `POST /games/:gameId/events`
+- `DELETE /games/:gameId/events/:eventId`
+- `POST /games/:gameId/finish`
+
 ### Sample Event Payload
 
 ```json

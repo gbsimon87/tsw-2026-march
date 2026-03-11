@@ -14,12 +14,6 @@ coverage
 .env.local
 .env.production
 .env.development
-client/.env
-server/.env
-env/client/.env.local
-env/client/.env.production
-env/server/.env.local
-env/server/.env.production
 
 # OS files
 .DS_Store

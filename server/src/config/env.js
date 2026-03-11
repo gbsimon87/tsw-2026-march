@@ -9,6 +9,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   CLIENT_ORIGIN: z.string().min(1),
   MONGO_URI: z.string().min(1),
+  MONGO_DB_NAME: z.string().min(1).optional(),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   ACCESS_TOKEN_TTL: z.string().default('15m'),

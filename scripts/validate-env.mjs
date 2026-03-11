@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = process.cwd();
 
 const expected = {
-  'client/.env.example': [
+  'env/client/.env.development': [
     'VITE_APP_NAME',
     'VITE_APP_ENV',
     'VITE_API_BASE_URL',
@@ -12,11 +12,20 @@ const expected = {
     'VITE_POSTHOG_KEY',
     'VITE_POSTHOG_HOST',
   ],
-  'server/.env.example': [
+  'env/client/.env.production': [
+    'VITE_APP_NAME',
+    'VITE_APP_ENV',
+    'VITE_API_BASE_URL',
+    'VITE_ENABLE_ANALYTICS',
+    'VITE_POSTHOG_KEY',
+    'VITE_POSTHOG_HOST',
+  ],
+  'env/server/.env.development': [
     'NODE_ENV',
     'PORT',
     'CLIENT_ORIGIN',
     'MONGO_URI',
+    'MONGO_DB_NAME',
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
     'GOOGLE_CLIENT_ID',
@@ -34,35 +43,12 @@ const expected = {
     'POSTHOG_KEY',
     'POSTHOG_HOST',
   ],
-  'env/client/.env.local.example': ['VITE_APP_NAME', 'VITE_APP_ENV', 'VITE_API_BASE_URL'],
-  'env/client/.env.production.example': ['VITE_APP_NAME', 'VITE_APP_ENV', 'VITE_API_BASE_URL'],
-  'env/server/.env.local.example': [
+  'env/server/.env.production': [
     'NODE_ENV',
     'PORT',
     'CLIENT_ORIGIN',
     'MONGO_URI',
-    'JWT_ACCESS_SECRET',
-    'JWT_REFRESH_SECRET',
-    'GOOGLE_CLIENT_ID',
-    'GOOGLE_CLIENT_SECRET',
-    'GOOGLE_CALLBACK_URL',
-    'SMTP_HOST',
-    'SMTP_PORT',
-    'SMTP_SECURE',
-    'SMTP_USER',
-    'SMTP_PASS',
-    'SMTP_FROM_EMAIL',
-    'SMTP_FROM_NAME',
-    'EMAIL_VERIFY_TTL_MINUTES',
-    'PASSWORD_RESET_TTL_MINUTES',
-    'POSTHOG_KEY',
-    'POSTHOG_HOST',
-  ],
-  'env/server/.env.production.example': [
-    'NODE_ENV',
-    'PORT',
-    'CLIENT_ORIGIN',
-    'MONGO_URI',
+    'MONGO_DB_NAME',
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
     'GOOGLE_CLIENT_ID',
@@ -111,11 +97,11 @@ for (const [relativePath, requiredKeys] of Object.entries(expected)) {
 }
 
 if (failures.length > 0) {
-  console.error('Environment template validation failed:');
+  console.error('Environment file validation failed:');
   for (const failure of failures) {
     console.error(`- ${failure}`);
   }
   process.exit(1);
 }
 
-console.log('Environment templates are valid.');
+console.log('Environment files are valid.');

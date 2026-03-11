@@ -2,25 +2,32 @@
 
 ## Completed
 
-- Monorepo scaffold with `client` and `server`
-- Secure auth baseline (email/password + Google OAuth hooks)
-- Environment template structure and validation script
-- CI baseline with lint, test, and build jobs
+- MERN monorepo baseline (`client` + `server`)
+- Secure authentication baseline (email/password, Google OAuth, CSRF, rotating JWT cookies)
+- Core deployment and environment scaffolding
+- V1 backend domain scaffolding for teams and games
+- V1 frontend routes/pages for team setup, game tracking, and box scores
 
 ## In Progress
 
-- PostHog dashboard event taxonomy
-- Documentation hardening for first-time setup
+- Teams and roster UX refinement
+- Live game tracking UX polish (event entry speed, error states)
+- Box score presentation improvements
+- Expanded automated test coverage for teams/games workflows
+- Documentation alignment for API and onboarding
 
 ## Planned
 
-- Role-based access control module
-- Password reset and email verification flow
-- Background jobs for async workflows
+- Opponent totals or opponent roster support per game
+- Additional basketball stats (rebounds, assists, steals, turnovers, fouls)
+- Shot chart analytics and trend summaries
+- Export/shareable box score views
 
 ## Ideas
 
-- Multi-tenant organization model
-- Feature flag integration
-- Redis-backed cache/session adapter
-- OpenAPI generation and SDK automation
+- Multi-tenant organizations (coach/staff permissions)
+- Team season dashboards and leaderboards
+- Advanced reports and CSV export pipelines
+- OpenAPI generation and API SDK automation
+
+See also: `docs/product-roadmap.md`

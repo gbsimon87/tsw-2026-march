@@ -4,7 +4,9 @@ const { logger } = require('./logger');
 
 async function connectDb(attempt = 1) {
   try {
-    await mongoose.connect(env.MONGO_URI);
+    await mongoose.connect(env.MONGO_URI, {
+      dbName: env.MONGO_DB_NAME,
+    });
     logger.info('Connected to MongoDB');
   } catch (error) {
     const retries = 5;

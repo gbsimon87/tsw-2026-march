@@ -11,8 +11,14 @@ bash scripts/bootstrap.sh
 ## First Updates
 
 - Rename placeholders: `bash scripts/rename-template.sh your-app-slug "Your App Name"`
-- Update all environment files from `.example` values.
-- Configure separate prod/dev MongoDB URIs.
+- Configure env files directly:
+  - `env/client/.env.development`
+  - `env/client/.env.production`
+  - `env/server/.env.development`
+  - `env/server/.env.production`
+- Use Atlas SRV MongoDB URI in both server env files.
+- Use `MONGO_DB_NAME=tsw_2026_dev` for development and `MONGO_DB_NAME=tsw_2026_main` for production.
+- Optional: for local-only dev, set development `MONGO_URI` to `mongodb://127.0.0.1:27017`.
 - Configure separate prod/dev Google OAuth callback URLs.
 - Configure SMTP credentials for verification and password reset emails.
 - Configure separate prod/dev frontend origins and API base URLs.
@@ -34,5 +40,6 @@ Keep these values separate for prod and dev:
 - `VITE_API_BASE_URL`
 - `GOOGLE_CALLBACK_URL`
 - `MONGO_URI`
+- `MONGO_DB_NAME`
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`

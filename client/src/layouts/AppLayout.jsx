@@ -15,6 +15,8 @@ export function AppLayout() {
           <nav className="flex items-center gap-4 text-sm">
             <Link to="/">Home</Link>
             <Link to="/dashboard">Dashboard</Link>
+            {user ? <Link to="/games">Games</Link> : null}
+            {user ? <Link to="/games/new">New Game</Link> : null}
             {!user ? (
               <>
                 <Link to="/login">Login</Link>

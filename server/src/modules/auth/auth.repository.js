@@ -23,7 +23,7 @@ const sessionSchema = new mongoose.Schema(
     refreshTokenHash: { type: String, required: true },
     userAgent: { type: String },
     ip: { type: String },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
   },
   {
     timestamps: true,
@@ -40,7 +40,7 @@ const authTokenSchema = new mongoose.Schema(
       index: true,
     },
     tokenHash: { type: String, required: true, unique: true, index: true },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
     usedAt: { type: Date, default: null },
   },
   {
