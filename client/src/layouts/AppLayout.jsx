@@ -9,7 +9,7 @@ export function AppLayout() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between p-4">
           <Link to="/" className="text-lg font-semibold">
-            {import.meta.env.VITE_APP_NAME || 'MERN Template'}
+            {import.meta.env.VITE_APP_NAME || 'tsw-2026-march'}
           </Link>
 
           <nav className="flex items-center gap-4 text-sm">

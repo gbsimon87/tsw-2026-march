@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: mern-template-api-prod
+    name: tsw-2026-march-api-prod
     runtime: node
     branch: main
     autoDeployTrigger: off
@@ -51,7 +51,7 @@ services:
         value: https://app.posthog.com
 
   - type: web
-    name: mern-template-client-prod
+    name: tsw-2026-march-client-prod
     runtime: static
     branch: main
     autoDeployTrigger: off
@@ -60,7 +60,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_APP_NAME
-        value: MERN Template
+        value: tsw-2026-march
       - key: VITE_APP_ENV
         value: production
       - key: VITE_API_BASE_URL
@@ -73,7 +73,7 @@ services:
         value: https://app.posthog.com
 
   - type: web
-    name: mern-template-api-dev
+    name: tsw-2026-march-api-dev
     runtime: node
     branch: dev
     autoDeployTrigger: commit
@@ -124,7 +124,7 @@ services:
         value: https://app.posthog.com
 
   - type: web
-    name: mern-template-client-dev
+    name: tsw-2026-march-client-dev
     runtime: static
     branch: dev
     autoDeployTrigger: commit
@@ -133,7 +133,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_APP_NAME
-        value: MERN Template (Dev)
+        value: tsw-2026-march (Dev)
       - key: VITE_APP_ENV
         value: development
       - key: VITE_API_BASE_URL

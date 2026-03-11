@@ -13,6 +13,6 @@ describe('App shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/MERN Template/i)).toBeInTheDocument();
+    expect(screen.getByText(/tsw-2026-march/i)).toBeInTheDocument();
   });
 });

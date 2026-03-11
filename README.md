@@ -1,4 +1,4 @@
-# MERN Render Template
+# tsw-2026-march
 
 Production-ready MERN monorepo starter optimized for cloning and shipping quickly on Render.
 
@@ -33,10 +33,10 @@ This template is configured for two long-lived branches and two long-lived Rende
 
 Default service names in this template:
 
-- `mern-template-api-prod`
-- `mern-template-client-prod`
-- `mern-template-api-dev`
-- `mern-template-client-dev`
+- `tsw-2026-march-api-prod`
+- `tsw-2026-march-client-prod`
+- `tsw-2026-march-api-dev`
+- `tsw-2026-march-client-dev`
 
 ## 3) New Project Setup Checklist
 
@@ -63,7 +63,7 @@ Default service names in this template:
 
 At minimum, update:
 
-- App slug/name placeholders (`mern-render-template`, `MERN Render Template`)
+- App slug/name placeholders (`tsw-2026-march`, `tsw-2026-march`)
 - `MONGO_URI` (separate values for prod/dev)
 - `JWT_ACCESS_SECRET` (separate values for prod/dev)
 - `JWT_REFRESH_SECRET` (separate values for prod/dev)
@@ -88,7 +88,7 @@ At minimum, update:
 ### Client (`client/.env`)
 
 ```dotenv
-VITE_APP_NAME=MERN Render Template
+VITE_APP_NAME=tsw-2026-march
 VITE_APP_ENV=development
 VITE_API_BASE_URL=http://localhost:4000/api/v1
 VITE_ENABLE_ANALYTICS=false
@@ -114,7 +114,7 @@ SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM_EMAIL=no-reply@example.com
-SMTP_FROM_NAME=MERN Template
+SMTP_FROM_NAME=tsw-2026-march
 EMAIL_VERIFY_TTL_MINUTES=60
 PASSWORD_RESET_TTL_MINUTES=30
 POSTHOG_KEY=

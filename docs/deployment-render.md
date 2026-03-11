@@ -9,10 +9,10 @@ This template uses a **single `render.yaml`** that defines two full stacks:
 
 Services defined:
 
-- `mern-template-api-prod`
-- `mern-template-client-prod`
-- `mern-template-api-dev`
-- `mern-template-client-dev`
+- `tsw-2026-march-api-prod`
+- `tsw-2026-march-client-prod`
+- `tsw-2026-march-api-dev`
+- `tsw-2026-march-client-dev`
 
 ## Why branch is set per service
 

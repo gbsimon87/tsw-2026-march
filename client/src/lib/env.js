@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  VITE_APP_NAME: z.string().default('MERN Render Template'),
+  VITE_APP_NAME: z.string().default('tsw-2026-march'),
   VITE_APP_ENV: z.enum(['development', 'production']).default('development'),
   VITE_API_BASE_URL: z.string().url().default('http://localhost:4000/api/v1'),
   VITE_ENABLE_ANALYTICS: z

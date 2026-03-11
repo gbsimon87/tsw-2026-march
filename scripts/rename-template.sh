@@ -12,7 +12,7 @@ NEW_DISPLAY="$2"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-TARGET_FILES=$(rg -l "mern-render-template|mern-template|MERN Render Template|MERN Template")
+TARGET_FILES=$(rg -l "tsw-2026-march|tsw-2026-march|tsw-2026-march|tsw-2026-march")
 
 if [ -z "$TARGET_FILES" ]; then
   echo "No template placeholders found."
@@ -20,7 +20,7 @@ if [ -z "$TARGET_FILES" ]; then
 fi
 
 while IFS= read -r file; do
-  perl -0pi -e "s/mern-render-template/${NEW_PACKAGE}/g; s/mern-template/${NEW_PACKAGE}/g; s/MERN Render Template/${NEW_DISPLAY}/g; s/MERN Template/${NEW_DISPLAY}/g" "$file"
+  perl -0pi -e "s/tsw-2026-march/${NEW_PACKAGE}/g; s/tsw-2026-march/${NEW_PACKAGE}/g; s/tsw-2026-march/${NEW_DISPLAY}/g; s/tsw-2026-march/${NEW_DISPLAY}/g" "$file"
 done <<< "$TARGET_FILES"
 
 echo "Template placeholders updated:"
