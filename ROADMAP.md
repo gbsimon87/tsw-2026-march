@@ -7,13 +7,14 @@
 - Core deployment and environment scaffolding
 - V1 backend domain scaffolding for teams and games
 - V1 frontend routes/pages for team setup, game tracking, and box scores
+- GameTrack full-court image tap flow with inferred 2PT/3PT, zone inference, and free-throw handling
+- Court image calibration/debug overlay with draggable handles and calibration value output
+- GameDetail shot map with made/missed markers, player + shot-type filters, zone overlay toggle, and zone results table
 
 ## In Progress
 
 - Teams and roster UX refinement
-- Full-court interactive shot input (finger/mouse tap) with inferred zone + shot family
 - Live game tracking UX polish (event entry speed, error states)
-- Box score presentation improvements
 - Expanded automated test coverage for teams/games workflows
 - Documentation alignment for API and onboarding
 
@@ -21,7 +22,7 @@
 
 - Opponent totals or opponent roster support per game
 - Additional basketball stats (rebounds, assists, steals, turnovers, fouls)
-- Richer shot-zone analytics and trend summaries
+- Richer shot-zone analytics and trend summaries (heatmaps, efficiency overlays, splits)
 - Export/shareable box score views
 
 ## Ideas

@@ -94,14 +94,20 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
     expect(screen.getByText(/Game Date \/ Time/i)).toBeInTheDocument();
     expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
-    expect(screen.getByText(/Paint/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Paint/i).length).toBeGreaterThan(0);
     expect(screen.getByTestId('game-shot-map')).toBeInTheDocument();
+    expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
+    expect(screen.getByTestId('shot-zone-table')).toBeInTheDocument();
+    expect(screen.getByText('Zone Results')).toBeInTheDocument();
+    expect(screen.getByText('Paint')).toBeInTheDocument();
+    expect(screen.getByText('ABOVE_BREAK_THREE')).toBeInTheDocument();
     expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
     expect(screen.getAllByTestId('shot-miss-marker')).toHaveLength(1);
 
     fireEvent.change(screen.getByLabelText('Player'), { target: { value: 'p1' } });
     expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
     expect(screen.queryByTestId('shot-miss-marker')).not.toBeInTheDocument();
+    expect(screen.queryByText('ABOVE_BREAK_THREE')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '2PT' }));
     expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
@@ -111,5 +117,10 @@ describe('GameDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '3PT' }));
     expect(screen.queryByTestId('shot-made-marker')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('shot-miss-marker')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Zones' }));
+    expect(screen.queryByTestId('shot-zone-overlay')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Zones' }));
+    expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
   });
 });

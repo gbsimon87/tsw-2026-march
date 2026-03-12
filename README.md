@@ -10,7 +10,7 @@ V1 focuses on fast, simple tracking for one team at a time:
 - Authenticated user accounts (email/password + Google OAuth)
 - Team and player roster setup
 - Game creation and in-progress tracking
-- Full-court visual tracking (tap/click on SVG court)
+- Full-court visual tracking (tap/click on calibrated court image)
 - Event-based stat capture for:
   - Inferred 2-pointers or 3-pointers from court selection + make/miss action
   - Free throws from dedicated FT buttons
@@ -47,10 +47,22 @@ V1 focuses on fast, simple tracking for one team at a time:
 
 ### Tracking Interaction
 
-- Tap/click on full court to infer `zoneId`, nearest hoop, and shot family (`FG2` or `FG3`).
+- Tap/click on full court image to infer `zoneId`, nearest hoop, and shot family (`FG2` or `FG3`).
 - Record shot outcomes with `Shot Make` / `Shot Miss`.
 - Record free throws with `FT Make` / `FT Miss` using fixed free-throw-line coordinates.
 - Every event stores normalized coordinates (`x`, `y`) in the range `0..100`.
+- Built-in calibration overlay and draggable handles for court-image alignment/debugging.
+
+### Game Detail Experience
+
+- Box score table and game metadata (scheduled, recorded, finished timestamps).
+- Play-by-play event log with stat type, zone, coordinates, and event time.
+- Shot map rendered on court image with made/missed markers.
+- In-map filters:
+  - Player: all players or a specific player
+  - Shot type: all shots, 2PT, 3PT
+- Optional zone-outline overlay toggle (`Hide Zones` / `Show Zones`).
+- Zone Results table summarizing made/missed/total by zone for the current filters.
 
 ## Stack
 
