@@ -10,6 +10,8 @@
 - GameTrack full-court image tap flow with inferred 2PT/3PT, zone inference, and free-throw handling
 - Court image calibration/debug overlay with draggable handles and calibration value output
 - GameDetail shot map with made/missed markers, player + shot-type filters, zone overlay toggle, and zone results table
+- GameDetail tabbed UI (`Box Score`, `Replay`, `Game Info`) to reduce page length and improve navigation
+- Replay flow with sequential event playback and live-updating replay box score
 
 ## In Progress
 

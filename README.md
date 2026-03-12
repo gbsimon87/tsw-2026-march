@@ -55,14 +55,28 @@ V1 focuses on fast, simple tracking for one team at a time:
 
 ### Game Detail Experience
 
-- Box score table and game metadata (scheduled, recorded, finished timestamps).
-- Play-by-play event log with stat type, zone, coordinates, and event time.
-- Shot map rendered on court image with made/missed markers.
-- In-map filters:
+- Tabbed layout for shorter, focused views:
+  - `Box Score`
+  - `Replay`
+  - `Game Info`
+- `Box Score` tab includes:
+  - Box score table
+  - Shot map rendered on court image with made/missed markers
+  - Zone Results table (made/missed/total by zone)
+  - Play-by-play event log with stat type, zone, coordinates, and event time
+- Shot-map filters:
   - Player: all players or a specific player
   - Shot type: all shots, 2PT, 3PT
 - Optional zone-outline overlay toggle (`Hide Zones` / `Show Zones`).
-- Zone Results table summarizing made/missed/total by zone for the current filters.
+- `Replay` tab includes:
+  - Event-by-event replay controls (`Previous` / `Next`)
+  - Progressive shot plotting in event order
+  - Live replay box score that updates as events are stepped through
+- `Game Info` tab includes game metadata and title/state details:
+  - game title/status
+  - game date/time
+  - recorded at
+  - finished at
 
 ## Stack
 

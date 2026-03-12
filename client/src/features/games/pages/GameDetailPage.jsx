@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Tabs } from '../../../components/Tabs';
 import { gamesApi } from '../api/gamesApi';
+import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameShotMap } from '../components/GameShotMap';
 import { STAT_LABELS, ZONE_LABELS } from '../constants';
 
@@ -69,6 +70,10 @@ export function GameDetailPage() {
     return aTime - bTime;
   });
   const shotMapEvents = game.events.map((event) => ({
+    ...event,
+    playerName: playersById.get(event.playerId)?.displayName || 'Unknown Player',
+  }));
+  const replayEvents = sortedEvents.map((event) => ({
     ...event,
     playerName: playersById.get(event.playerId)?.displayName || 'Unknown Player',
   }));
@@ -191,6 +196,7 @@ export function GameDetailPage() {
       </div>
     </div>
   );
+  const replayContent = <GameReplayPanel events={replayEvents} players={team.players || []} />;
 
   return (
     <section className="space-y-4">
@@ -198,6 +204,7 @@ export function GameDetailPage() {
         defaultValue="box-score"
         items={[
           { value: 'box-score', label: 'Box Score', content: boxScoreContent },
+          { value: 'replay', label: 'Replay', content: replayContent },
           { value: 'game-info', label: 'Game Info', content: gameInfoContent },
         ]}
       />

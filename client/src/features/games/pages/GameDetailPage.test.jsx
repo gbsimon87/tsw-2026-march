@@ -88,6 +88,7 @@ describe('GameDetailPage', () => {
     expect(await screen.findByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
 
     expect(screen.getByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Game Info' })).toBeInTheDocument();
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
     expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
@@ -121,6 +122,18 @@ describe('GameDetailPage', () => {
     expect(screen.queryByTestId('shot-zone-overlay')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show Zones' }));
     expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));
+    expect(screen.getByText('Event 1 of 3')).toBeInTheDocument();
+    expect(screen.getAllByTestId('replay-marker')).toHaveLength(1);
+    expect(screen.getByTestId('replay-box-score')).toBeInTheDocument();
+    expect(screen.getByText('Alex')).toBeInTheDocument();
+    expect(screen.getByText('Jordan')).toBeInTheDocument();
+    expect(screen.getByText('1/1')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Event 2 of 3')).toBeInTheDocument();
+    expect(screen.getAllByTestId('replay-marker')).toHaveLength(2);
+    expect(screen.getByText('0/1')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Game Info' }));
     expect(screen.getByText(/Game Date \/ Time/i)).toBeInTheDocument();
