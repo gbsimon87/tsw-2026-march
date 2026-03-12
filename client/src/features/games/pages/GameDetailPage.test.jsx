@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
@@ -12,7 +12,7 @@ vi.mock('../api/gamesApi', () => ({
 }));
 
 describe('GameDetailPage', () => {
-  test('renders box score, metadata, and play by play', async () => {
+  test('renders tabbed game detail sections and shot map interactions', async () => {
     apiMocks.getById.mockResolvedValue({
       game: {
         id: 'game-1',
@@ -85,14 +85,13 @@ describe('GameDetailPage', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/vs Wildcats/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
 
-    expect(screen.getByText(/Box Score/i)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Game Info' })).toBeInTheDocument();
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
     expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
-    expect(screen.getByText(/Game Date \/ Time/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Game Date \/ Time/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Paint/i).length).toBeGreaterThan(0);
     expect(screen.getByTestId('game-shot-map')).toBeInTheDocument();
@@ -122,5 +121,14 @@ describe('GameDetailPage', () => {
     expect(screen.queryByTestId('shot-zone-overlay')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show Zones' }));
     expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Game Info' }));
+    expect(screen.getByText(/Game Date \/ Time/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded At/i)).toBeInTheDocument();
+    expect(screen.getByText(/Finished At/i)).toBeInTheDocument();
+    expect(screen.getByText(/vs Wildcats/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
+    expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
   });
 });

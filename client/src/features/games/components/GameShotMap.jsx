@@ -140,7 +140,7 @@ function buildZoneOverlayPaths() {
 export function GameShotMap({ events }) {
   const [shotFilter, setShotFilter] = useState('ALL');
   const [playerFilter, setPlayerFilter] = useState('ALL');
-  const [showZoneLines, setShowZoneLines] = useState(false);
+  const [showZoneLines, setShowZoneLines] = useState(true);
   const allShots = useMemo(
     () =>
       (events || []).filter(
