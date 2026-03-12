@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { registerSchema } from '../schemas/authSchemas';
@@ -64,6 +64,12 @@ export function RegisterForm() {
       </button>
       <p className="text-xs text-slate-500">
         New accounts must verify email before password login is enabled.
+      </p>
+      <p className="text-sm text-slate-600">
+        Already have an account?{' '}
+        <Link className="text-blue-600 hover:underline" to="/login">
+          Sign in
+        </Link>
       </p>
     </form>
   );

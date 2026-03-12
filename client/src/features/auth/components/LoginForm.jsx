@@ -65,6 +65,12 @@ export function LoginForm() {
       >
         Continue with Google
       </a>
+      <p className="text-sm text-slate-600">
+        Don&apos;t have an account?{' '}
+        <Link className="text-blue-600 hover:underline" to="/register">
+          Create one
+        </Link>
+      </p>
     </form>
   );
 }

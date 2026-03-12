@@ -1,39 +1,184 @@
-import { Link, Outlet } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
+
+const desktopNavLinkClass = ({ isActive }) =>
+  `text-sm transition-colors ${
+    isActive ? 'font-semibold text-slate-900' : 'text-slate-600 hover:text-slate-900'
+  }`;
+
+const mobileNavLinkClass = ({ isActive }) =>
+  `text-base transition-colors ${
+    isActive ? 'font-semibold text-slate-900' : 'text-slate-600 hover:text-slate-900'
+  }`;
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between p-4">
+        <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
           <Link to="/" className="text-lg font-semibold">
-            {import.meta.env.VITE_APP_NAME || 'tsw-2026-march'}
+            {import.meta.env.VITE_APP_NAME || 'TSW'}
           </Link>
 
-          <nav className="flex items-center gap-4 text-sm">
-            <Link to="/">Home</Link>
-            <Link to="/dashboard">Dashboard</Link>
-            {user ? <Link to="/games">Games</Link> : null}
-            {user ? <Link to="/games/new">New Game</Link> : null}
+          <nav className="ml-auto hidden items-center gap-4 md:flex">
+            <NavLink to="/" end className={desktopNavLinkClass}>
+              Home
+            </NavLink>
+            {user ? (
+              <NavLink to="/dashboard" className={desktopNavLinkClass}>
+                Dashboard
+              </NavLink>
+            ) : null}
+            {user ? (
+              <NavLink to="/games" className={desktopNavLinkClass}>
+                Games
+              </NavLink>
+            ) : null}
             {!user ? (
               <>
-                <Link to="/login">Login</Link>
-                <Link to="/register">Register</Link>
+                <NavLink to="/login" className={desktopNavLinkClass}>
+                  Login
+                </NavLink>
+                <NavLink to="/register" className={desktopNavLinkClass}>
+                  Register
+                </NavLink>
               </>
             ) : (
               <button
                 type="button"
-                className="rounded bg-slate-800 px-3 py-1 text-white"
+                className="rounded bg-slate-800 px-3 py-1 text-sm text-white"
                 onClick={logout}
               >
                 Logout
               </button>
             )}
           </nav>
+
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center justify-center rounded border border-slate-300 p-2 text-slate-700 md:hidden"
+            aria-label="Toggle navigation menu"
+            aria-expanded={isMobileMenuOpen}
+            onClick={() => setIsMobileMenuOpen((previousValue) => !previousValue)}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              {isMobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
         </div>
       </header>
+
+      <div className="md:hidden">
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className={`fixed inset-0 z-40 bg-slate-900/40 transition-opacity duration-300 ${
+            isMobileMenuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+
+        <nav
+          className={`fixed inset-y-0 right-0 z-50 w-4/5 max-w-sm bg-white p-6 shadow-xl transition-transform duration-300 ${
+            isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
+          }`}
+          aria-hidden={!isMobileMenuOpen}
+        >
+          <div className="mb-6 flex justify-end">
+            <button
+              type="button"
+              className="rounded border border-slate-300 p-2 text-slate-700"
+              aria-label="Close navigation menu"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <NavLink
+              to="/"
+              end
+              className={mobileNavLinkClass}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Home
+            </NavLink>
+            {user ? (
+              <NavLink
+                to="/dashboard"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Dashboard
+              </NavLink>
+            ) : null}
+            {user ? (
+              <NavLink
+                to="/games"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Games
+              </NavLink>
+            ) : null}
+            {!user ? (
+              <>
+                <NavLink
+                  to="/login"
+                  className={mobileNavLinkClass}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Login
+                </NavLink>
+                <NavLink
+                  to="/register"
+                  className={mobileNavLinkClass}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Register
+                </NavLink>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="w-fit rounded bg-slate-800 px-3 py-1 text-sm text-white"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  logout();
+                }}
+              >
+                Logout
+              </button>
+            )}
+          </div>
+        </nav>
+      </div>
+
       <main className="mx-auto max-w-5xl p-4">
         <Outlet />
       </main>
