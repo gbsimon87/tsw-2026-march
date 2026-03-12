@@ -26,14 +26,15 @@ const zoneIdSchema = z.enum([
   SHOT_ZONE_IDS.WING_RIGHT_3,
   SHOT_ZONE_IDS.CORNER_RIGHT_3,
   SHOT_ZONE_IDS.BACKCOURT,
+  SHOT_ZONE_IDS.FREE_THROW_LINE,
 ]);
 
 const appendEventSchema = z.object({
   playerId: z.string().min(1),
   statType: statTypeSchema,
   zoneId: zoneIdSchema,
-  x: z.number().min(0).max(100).optional(),
-  y: z.number().min(0).max(100).optional(),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
   occurredAt: z.string().datetime().optional(),
 });
 

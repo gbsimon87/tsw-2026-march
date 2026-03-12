@@ -28,6 +28,7 @@ const shotEventSchema = new mongoose.Schema(
         SHOT_ZONE_IDS.WING_RIGHT_3,
         SHOT_ZONE_IDS.CORNER_RIGHT_3,
         SHOT_ZONE_IDS.BACKCOURT,
+        SHOT_ZONE_IDS.FREE_THROW_LINE,
       ],
       required: true,
     },

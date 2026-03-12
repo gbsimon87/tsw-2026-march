@@ -1,20 +1,21 @@
-export const SHOT_ZONE_OPTIONS = [
-  { id: 'PAINT', label: 'Paint' },
-  { id: 'MID_RANGE_LEFT', label: 'Mid Left' },
-  { id: 'MID_RANGE_RIGHT', label: 'Mid Right' },
-  { id: 'TOP_KEY', label: 'Top Key' },
-  { id: 'CORNER_LEFT_3', label: 'Corner Left 3' },
-  { id: 'WING_LEFT_3', label: 'Wing Left 3' },
-  { id: 'WING_RIGHT_3', label: 'Wing Right 3' },
-  { id: 'CORNER_RIGHT_3', label: 'Corner Right 3' },
-  { id: 'BACKCOURT', label: 'Backcourt' },
-];
+export const ZONE_LABELS = {
+  PAINT: 'Paint',
+  MID_RANGE_LEFT: 'Mid Left',
+  MID_RANGE_RIGHT: 'Mid Right',
+  TOP_KEY: 'Top Key',
+  CORNER_LEFT_3: 'Corner Left 3',
+  WING_LEFT_3: 'Wing Left 3',
+  WING_RIGHT_3: 'Wing Right 3',
+  CORNER_RIGHT_3: 'Corner Right 3',
+  BACKCOURT: 'Backcourt',
+  FREE_THROW_LINE: 'Free Throw Line',
+};
 
-export const SHOT_STAT_OPTIONS = [
-  { id: 'FT_MADE', label: 'FT Make' },
-  { id: 'FT_MISS', label: 'FT Miss' },
-  { id: 'FG2_MADE', label: '2PT Make' },
-  { id: 'FG2_MISS', label: '2PT Miss' },
-  { id: 'FG3_MADE', label: '3PT Make' },
-  { id: 'FG3_MISS', label: '3PT Miss' },
-];
+export const STAT_LABELS = {
+  FT_MADE: 'FT Make',
+  FT_MISS: 'FT Miss',
+  FG2_MADE: '2PT Make',
+  FG2_MISS: '2PT Miss',
+  FG3_MADE: '3PT Make',
+  FG3_MISS: '3PT Miss',
+};

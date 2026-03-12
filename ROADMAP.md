@@ -11,6 +11,7 @@
 ## In Progress
 
 - Teams and roster UX refinement
+- Full-court interactive shot input (finger/mouse tap) with inferred zone + shot family
 - Live game tracking UX polish (event entry speed, error states)
 - Box score presentation improvements
 - Expanded automated test coverage for teams/games workflows
@@ -20,7 +21,7 @@
 
 - Opponent totals or opponent roster support per game
 - Additional basketball stats (rebounds, assists, steals, turnovers, fouls)
-- Shot chart analytics and trend summaries
+- Richer shot-zone analytics and trend summaries
 - Export/shareable box score views
 
 ## Ideas

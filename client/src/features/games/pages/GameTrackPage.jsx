@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { gamesApi } from '../api/gamesApi';
-import { SHOT_STAT_OPTIONS, SHOT_ZONE_OPTIONS } from '../constants';
+import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
+import {
+  buildFreeThrowPayload,
+  buildShotStatType,
+  inferCourtSelection,
+} from '../court/courtInference';
+import { DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
+import { STAT_LABELS, ZONE_LABELS } from '../constants';
 
 function formatEventLabel(event, playersById) {
   const player = playersById.get(event.playerId);
   const playerName = player?.displayName || 'Unknown';
-  return `${playerName} - ${event.statType} @ ${event.zoneId}`;
+  const statLabel = STAT_LABELS[event.statType] || event.statType;
+  const zoneLabel = ZONE_LABELS[event.zoneId] || event.zoneId;
+  const x = typeof event.x === 'number' ? event.x.toFixed(1) : '?';
+  const y = typeof event.y === 'number' ? event.y.toFixed(1) : '?';
+  return `${playerName} - ${statLabel} @ ${zoneLabel} (${x}, ${y})`;
 }
 
 export function GameTrackPage() {
@@ -14,10 +25,8 @@ export function GameTrackPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
-  const [selectedStatType, setSelectedStatType] = useState('FT_MADE');
-  const [selectedZoneId, setSelectedZoneId] = useState('PAINT');
-  const [x, setX] = useState('');
-  const [y, setY] = useState('');
+  const [selectedShot, setSelectedShot] = useState(null);
+  const [lastTappedHoop, setLastTappedHoop] = useState('south');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,9 +53,29 @@ export function GameTrackPage() {
     [data]
   );
 
-  async function addEvent() {
+  function requirePlayerSelection() {
     if (!selectedPlayerId) {
       setError('Select a player first');
+      return false;
+    }
+
+    return true;
+  }
+
+  function onCourtSelect(point) {
+    const inferred = inferCourtSelection(point.x, point.y, DEFAULT_COURT_IMAGE_CALIBRATION);
+    setSelectedShot(inferred);
+    setLastTappedHoop(inferred.nearestHoop);
+    setError('');
+  }
+
+  async function addShotEvent(outcome) {
+    if (!requirePlayerSelection()) {
+      return;
+    }
+
+    if (!selectedShot) {
+      setError('Tap the court first to select a shot location');
       return;
     }
 
@@ -56,19 +85,47 @@ export function GameTrackPage() {
     try {
       const payload = {
         playerId: selectedPlayerId,
-        statType: selectedStatType,
-        zoneId: selectedZoneId,
+        statType: buildShotStatType(selectedShot.shotFamily, outcome),
+        zoneId: selectedShot.zoneId,
+        x: Number(selectedShot.x.toFixed(2)),
+        y: Number(selectedShot.y.toFixed(2)),
       };
-
-      if (x !== '' && y !== '') {
-        payload.x = Number(x);
-        payload.y = Number(y);
-      }
 
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
     } catch (submitError) {
-      setError(submitError.message || 'Failed to add event');
+      setError(submitError.message || 'Failed to add shot event');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function addFreeThrowEvent(outcome) {
+    if (!requirePlayerSelection()) {
+      return;
+    }
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const inferred = buildFreeThrowPayload(
+        lastTappedHoop,
+        outcome,
+        DEFAULT_COURT_IMAGE_CALIBRATION
+      );
+      const payload = {
+        playerId: selectedPlayerId,
+        statType: inferred.statType,
+        zoneId: inferred.zoneId,
+        x: inferred.x,
+        y: inferred.y,
+      };
+
+      const response = await gamesApi.appendEvent(gameId, payload);
+      setData((current) => ({ ...current, ...response }));
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to add free throw event');
     } finally {
       setIsSaving(false);
     }
@@ -138,73 +195,69 @@ export function GameTrackPage() {
           </select>
         </label>
 
-        <label className="block">
-          <span className="mb-1 block text-sm">Stat</span>
-          <select
-            value={selectedStatType}
-            onChange={(event) => setSelectedStatType(event.target.value)}
-            className="w-full rounded border px-3 py-2"
-          >
-            {SHOT_STAT_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <InteractiveCourtImage
+          selectedPoint={selectedShot}
+          onSelect={onCourtSelect}
+          calibration={DEFAULT_COURT_IMAGE_CALIBRATION}
+        />
 
-        <label className="block">
-          <span className="mb-1 block text-sm">Court Zone</span>
-          <select
-            value={selectedZoneId}
-            onChange={(event) => setSelectedZoneId(event.target.value)}
-            className="w-full rounded border px-3 py-2"
-          >
-            {SHOT_ZONE_OPTIONS.map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="mb-1 block text-sm">X (0-100)</span>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className="w-full rounded border px-3 py-2"
-              value={x}
-              onChange={(event) => setX(event.target.value)}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm">Y (0-100)</span>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              className="w-full rounded border px-3 py-2"
-              value={y}
-              onChange={(event) => setY(event.target.value)}
-            />
-          </label>
+        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
+          <p className="font-semibold">Shot Inference</p>
+          {selectedShot ? (
+            <p className="mt-1 text-slate-700">
+              {selectedShot.shotFamily} | {ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId}{' '}
+              | ({selectedShot.x.toFixed(1)}, {selectedShot.y.toFixed(1)}) | hoop:{' '}
+              {selectedShot.nearestHoop}
+            </p>
+          ) : (
+            <p className="mt-1 text-slate-600">Tap the court to infer shot type and zone.</p>
+          )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
             disabled={isSaving}
-            onClick={addEvent}
+            onClick={() => addShotEvent('made')}
           >
-            Add Event
+            Shot Make
+          </button>
+          <button
+            type="button"
+            className="rounded bg-slate-700 px-4 py-2 text-white disabled:opacity-60"
+            disabled={isSaving}
+            onClick={() => addShotEvent('miss')}
+          >
+            Shot Miss
           </button>
           <button
             type="button"
             className="rounded bg-emerald-700 px-4 py-2 text-white disabled:opacity-60"
+            disabled={isSaving}
+            onClick={() => addFreeThrowEvent('made')}
+          >
+            FT Make
+          </button>
+          <button
+            type="button"
+            className="rounded bg-emerald-600 px-4 py-2 text-white disabled:opacity-60"
+            disabled={isSaving}
+            onClick={() => addFreeThrowEvent('miss')}
+          >
+            FT Miss
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Free throws use a fixed free-throw-line location and follow the most recently tapped hoop
+          (fallback: south hoop).
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="rounded bg-emerald-800 px-4 py-2 text-white disabled:opacity-60"
             disabled={isSaving}
             onClick={finishGame}
           >
