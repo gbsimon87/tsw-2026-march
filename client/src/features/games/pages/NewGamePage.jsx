@@ -6,24 +6,51 @@ import { gamesApi } from '../api/gamesApi';
 export function NewGamePage() {
   const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
+  const [knownOpponents, setKnownOpponents] = useState([]);
   const [teamId, setTeamId] = useState('');
   const [title, setTitle] = useState('');
+  const [opponentMode, setOpponentMode] = useState('new');
+  const [selectedOpponent, setSelectedOpponent] = useState('');
+  const [newOpponent, setNewOpponent] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    teamsApi
-      .list()
-      .then((response) => {
-        setTeams(response.teams || []);
-        if ((response.teams || []).length > 0) {
-          setTeamId(response.teams[0].id);
+    Promise.allSettled([teamsApi.list(), gamesApi.list()])
+      .then(([teamsResult, gamesResult]) => {
+        if (teamsResult.status === 'fulfilled') {
+          const loadedTeams = teamsResult.value.teams || [];
+          setTeams(loadedTeams);
+          if (loadedTeams.length > 0) {
+            setTeamId(loadedTeams[0].id);
+          }
+        } else {
+          setError(teamsResult.reason?.message || 'Failed to load teams');
         }
-      })
-      .catch((loadError) => {
-        setError(loadError.message || 'Failed to load teams');
+
+        if (gamesResult.status === 'fulfilled') {
+          const values = [];
+          const seen = new Set();
+
+          for (const game of gamesResult.value.games || []) {
+            const opponent = game?.opponent?.trim();
+            if (!opponent) {
+              continue;
+            }
+            const key = opponent.toLowerCase();
+            if (seen.has(key)) {
+              continue;
+            }
+            seen.add(key);
+            values.push(opponent);
+          }
+
+          values.sort((a, b) => a.localeCompare(b));
+          setKnownOpponents(values);
+          setOpponentMode(values.length > 0 ? 'existing' : 'new');
+        }
       })
       .finally(() => {
         setIsLoading(false);
@@ -40,6 +67,14 @@ export function NewGamePage() {
         teamId,
         title,
       };
+
+      const resolvedOpponent = (
+        opponentMode === 'existing' ? selectedOpponent : newOpponent
+      )?.trim();
+
+      if (resolvedOpponent) {
+        payload.opponent = resolvedOpponent;
+      }
 
       if (scheduledAt) {
         payload.scheduledAt = new Date(scheduledAt).toISOString();
@@ -105,6 +140,70 @@ export function NewGamePage() {
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
+
+        <div className="space-y-2">
+          <span className="block text-sm">Opponent (optional)</span>
+          {knownOpponents.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="opponentMode"
+                    value="existing"
+                    checked={opponentMode === 'existing'}
+                    onChange={() => setOpponentMode('existing')}
+                  />
+                  Choose existing
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="opponentMode"
+                    value="new"
+                    checked={opponentMode === 'new'}
+                    onChange={() => setOpponentMode('new')}
+                  />
+                  Add new opponent
+                </label>
+              </div>
+
+              {opponentMode === 'existing' ? (
+                <select
+                  className="w-full rounded border px-3 py-2"
+                  value={selectedOpponent}
+                  onChange={(event) => setSelectedOpponent(event.target.value)}
+                >
+                  <option value="">Select opponent (optional)</option>
+                  {knownOpponents.map((opponent) => (
+                    <option key={opponent} value={opponent}>
+                      {opponent}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  className="w-full rounded border px-3 py-2"
+                  placeholder="Enter opponent name"
+                  value={newOpponent}
+                  onChange={(event) => setNewOpponent(event.target.value)}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <input
+                type="text"
+                className="w-full rounded border px-3 py-2"
+                placeholder="Enter opponent name"
+                value={newOpponent}
+                onChange={(event) => setNewOpponent(event.target.value)}
+              />
+              <p className="text-xs text-slate-500">No previous opponents yet. You can type one.</p>
+            </div>
+          )}
+        </div>
 
         <label className="block">
           <span className="mb-1 block text-sm">Scheduled At (optional)</span>

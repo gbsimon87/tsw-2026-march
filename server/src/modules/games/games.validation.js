@@ -4,6 +4,7 @@ const { SHOT_ZONE_IDS, STAT_TYPES } = require('../shared/stats.constants');
 const createGameSchema = z.object({
   teamId: z.string().min(1),
   title: z.string().trim().min(1).max(120),
+  opponent: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
 });
 

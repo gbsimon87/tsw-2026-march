@@ -44,6 +44,7 @@ const gameSchema = new mongoose.Schema(
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
     title: { type: String, required: true, trim: true },
+    opponent: { type: String, trim: true, default: null },
     status: {
       type: String,
       enum: ['in_progress', 'completed'],

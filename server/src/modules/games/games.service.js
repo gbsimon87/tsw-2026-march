@@ -27,6 +27,7 @@ function sanitizeGame(game) {
     ownerUserId: String(game.ownerUserId),
     teamId: String(game.teamId),
     title: game.title,
+    opponent: game.opponent ?? null,
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
@@ -151,6 +152,7 @@ async function createGameForUser(userId, payload) {
     ownerUserId: userId,
     teamId: payload.teamId,
     title: payload.title.trim(),
+    opponent: payload.opponent?.trim() ? payload.opponent.trim() : undefined,
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
     status: 'in_progress',
   });
@@ -164,6 +166,7 @@ async function listGamesForUser(userId, filter = {}) {
     id: String(game._id),
     teamId: String(game.teamId),
     title: game.title,
+    opponent: game.opponent ?? null,
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,

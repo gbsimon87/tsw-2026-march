@@ -36,18 +36,44 @@ export function GamesListPage() {
               <div>
                 <p className="font-semibold">{game.title}</p>
                 <p className="text-xs text-slate-500">Status: {game.status}</p>
+                <p className="text-xs text-slate-500">Opponent: {game.opponent || 'N/A'}</p>
               </div>
               <div className="flex gap-2">
                 {game.status === 'in_progress' ? (
                   <Link
-                    className="text-sm text-blue-600 hover:underline"
+                    aria-label={`Track ${game.title}`}
+                    className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50"
                     to={`/games/${game.id}/track`}
                   >
-                    Track
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M4 19h16" />
+                      <path d="M7 16V8" />
+                      <path d="M12 16V5" />
+                      <path d="M17 16v-4" />
+                    </svg>
                   </Link>
                 ) : null}
-                <Link className="text-sm text-blue-600 hover:underline" to={`/games/${game.id}`}>
-                  Box Score
+                <Link
+                  aria-label={`Open details for ${game.title}`}
+                  className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50"
+                  to={`/games/${game.id}`}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
                 </Link>
               </div>
             </div>

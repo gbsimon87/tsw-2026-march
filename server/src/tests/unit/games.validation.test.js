@@ -1,4 +1,4 @@
-const { appendEventSchema } = require('../../modules/games/games.validation');
+const { createGameSchema, appendEventSchema } = require('../../modules/games/games.validation');
 
 describe('games validation', () => {
   test('accepts FREE_THROW_LINE zone with coordinates', () => {
@@ -19,6 +19,26 @@ describe('games validation', () => {
         playerId: 'player-1',
         statType: 'FG3_MADE',
         zoneId: 'WING_LEFT_3',
+      })
+    ).toThrow();
+  });
+
+  test('accepts optional opponent when creating game', () => {
+    const parsed = createGameSchema.parse({
+      teamId: 'team-1',
+      title: 'Playoff game',
+      opponent: 'Wildcats',
+    });
+
+    expect(parsed.opponent).toBe('Wildcats');
+  });
+
+  test('rejects blank opponent when provided', () => {
+    expect(() =>
+      createGameSchema.parse({
+        teamId: 'team-1',
+        title: 'Playoff game',
+        opponent: '   ',
       })
     ).toThrow();
   });
