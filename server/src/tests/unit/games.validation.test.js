@@ -23,6 +23,15 @@ describe('games validation', () => {
     ).toThrow();
   });
 
+  test('accepts rebound event without coordinates', () => {
+    const parsed = appendEventSchema.parse({
+      playerId: 'player-1',
+      statType: 'OREB',
+    });
+
+    expect(parsed.statType).toBe('OREB');
+  });
+
   test('accepts optional opponent when creating game', () => {
     const parsed = createGameSchema.parse({
       teamId: 'team-1',

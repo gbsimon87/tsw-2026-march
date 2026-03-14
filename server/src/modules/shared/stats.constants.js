@@ -18,6 +18,8 @@ const STAT_TYPES = {
   FG2_MISS: 'FG2_MISS',
   FG3_MADE: 'FG3_MADE',
   FG3_MISS: 'FG3_MISS',
+  OREB: 'OREB',
+  DREB: 'DREB',
 };
 
 module.exports = {

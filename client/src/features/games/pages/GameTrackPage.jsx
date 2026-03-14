@@ -12,14 +12,41 @@ import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
 
+function formatEventMeta(event) {
+  const parts = [];
+
+  if (event.zoneId) {
+    parts.push(ZONE_LABELS[event.zoneId] || event.zoneId);
+  }
+
+  if (typeof event.x === 'number' && typeof event.y === 'number') {
+    parts.push(`(${event.x.toFixed(1)}, ${event.y.toFixed(1)})`);
+  }
+
+  return parts.length ? ` @ ${parts.join(' ')}` : '';
+}
+
 function formatEventLabel(event, playersById) {
   const player = playersById.get(event.playerId);
   const playerName = player?.displayName || 'Unknown';
   const statLabel = STAT_LABELS[event.statType] || event.statType;
-  const zoneLabel = ZONE_LABELS[event.zoneId] || event.zoneId;
-  const x = typeof event.x === 'number' ? event.x.toFixed(1) : '?';
-  const y = typeof event.y === 'number' ? event.y.toFixed(1) : '?';
-  return `${playerName} - ${statLabel} @ ${zoneLabel} (${x}, ${y})`;
+  return `${playerName} - ${statLabel}${formatEventMeta(event)}`;
+}
+
+function formatThreePointPercentage(made, attempts) {
+  if (!attempts) {
+    return '--';
+  }
+
+  return `${((made / attempts) * 100).toFixed(1)}%`;
+}
+
+function formatPercentage(made, attempts) {
+  if (!attempts) {
+    return '--';
+  }
+
+  return `${((made / attempts) * 100).toFixed(1)}%`;
 }
 
 export function GameTrackPage() {
@@ -28,6 +55,7 @@ export function GameTrackPage() {
   const [data, setData] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [selectedShot, setSelectedShot] = useState(null);
+  const [pendingReboundPrompt, setPendingReboundPrompt] = useState(null);
   const [lastTappedHoop, setLastTappedHoop] = useState('south');
   const [isSaving, setIsSaving] = useState(false);
   const [isTrackingFullscreen, setIsTrackingFullscreen] = useState(false);
@@ -84,6 +112,7 @@ export function GameTrackPage() {
   function onCourtSelect(point) {
     const inferred = inferCourtSelection(point.x, point.y, DEFAULT_COURT_IMAGE_CALIBRATION);
     setSelectedShot(inferred);
+    setPendingReboundPrompt(null);
     setLastTappedHoop(inferred.nearestHoop);
     setError('');
   }
@@ -95,7 +124,61 @@ export function GameTrackPage() {
 
   function closeTrackingOverlay() {
     setSelectedShot(null);
+    setPendingReboundPrompt(null);
     setIsTrackingFullscreen(false);
+  }
+
+  function clearEventPicker() {
+    setSelectedShot(null);
+    setPendingReboundPrompt(null);
+  }
+
+  async function addReboundEvent(statType, playerIdOverride) {
+    const reboundPlayerId = playerIdOverride || selectedPlayerId;
+    if (!reboundPlayerId) {
+      setError('Select a player first');
+      return;
+    }
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const response = await gamesApi.appendEvent(gameId, {
+        playerId: reboundPlayerId,
+        statType,
+      });
+      setData((current) => ({ ...current, ...response }));
+      clearEventPicker();
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to add rebound event');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleReboundSelection(option) {
+    if (option === 'NO_REBOUND') {
+      clearEventPicker();
+      setError('');
+      return;
+    }
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const response = await gamesApi.appendEvent(gameId, {
+        playerId: option,
+        statType: 'OREB',
+      });
+      setData((current) => ({ ...current, ...response }));
+      clearEventPicker();
+    } catch (submitError) {
+      setError(submitError.message || 'Miss recorded, but failed to add rebound');
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function addShotEvent(outcome) {
@@ -122,7 +205,11 @@ export function GameTrackPage() {
 
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
-      setSelectedShot(null);
+      if (outcome === 'miss') {
+        setPendingReboundPrompt({ sourceStatType: payload.statType });
+      } else {
+        clearEventPicker();
+      }
     } catch (submitError) {
       setError(submitError.message || 'Failed to add shot event');
     } finally {
@@ -154,7 +241,11 @@ export function GameTrackPage() {
 
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
-      setSelectedShot(null);
+      if (outcome === 'miss') {
+        setPendingReboundPrompt({ sourceStatType: payload.statType });
+      } else {
+        clearEventPicker();
+      }
     } catch (submitError) {
       setError(submitError.message || 'Failed to add free throw event');
     } finally {
@@ -205,133 +296,168 @@ export function GameTrackPage() {
     );
   }
 
-  const eventPicker = selectedShot ? (
-    <>
-      <button
-        type="button"
-        aria-label="Cancel event input"
-        className="absolute inset-0 bg-slate-950/20"
-        onClick={() => setSelectedShot(null)}
-      />
-      <div className="absolute inset-0 flex items-center justify-center px-3 landscape:justify-end landscape:px-3 landscape:pr-4">
-        <div
-          className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-lg landscape:w-[26rem] landscape:-rotate-90 landscape:origin-center"
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <div className="w-full landscape:h-[19rem]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Add Event</p>
-                <p className="text-xs text-slate-600">
-                  {ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} •{' '}
-                  {selectedShot.shotFamily}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close event picker"
-                className="rounded-md border border-slate-300 p-1 text-slate-600 transition hover:bg-slate-50"
-                onClick={() => setSelectedShot(null)}
-              >
-                <svg
-                  viewBox="0 0 20 20"
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
+  const eventPicker =
+    selectedShot || pendingReboundPrompt ? (
+      <>
+        <button
+          type="button"
+          aria-label="Cancel event input"
+          className="absolute inset-0 bg-slate-950/20"
+          onClick={clearEventPicker}
+        />
+        <div className="absolute inset-0 flex items-center justify-center px-3 landscape:justify-end landscape:px-3 landscape:pr-4">
+          <div
+            className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-lg landscape:w-[26rem] landscape:-rotate-90 landscape:origin-center"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="w-full landscape:h-[19rem]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Add Event</p>
+                  <p className="text-xs text-slate-600">
+                    {pendingReboundPrompt
+                      ? 'Who got the rebound?'
+                      : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close event picker"
+                  className="rounded-md border border-slate-300 p-1 text-slate-600 transition hover:bg-slate-50"
+                  onClick={clearEventPicker}
                 >
-                  <path d="m5 5 10 10" />
-                  <path d="M15 5 5 15" />
-                </svg>
-              </button>
-            </div>
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="m5 5 10 10" />
+                    <path d="M15 5 5 15" />
+                  </svg>
+                </button>
+              </div>
 
-            <div className="mt-3 grid grid-cols-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),7rem] landscape:h-[calc(100%-2.25rem)]">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Player
-                </p>
-                <div className="max-h-36 overflow-y-auto pr-1 landscape:h-[calc(100%-1.25rem)] landscape:max-h-none">
-                  <div className="space-y-1">
-                    {players.map((player) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        className={`flex min-h-10 w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
-                          selectedPlayerId === player.id
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                        }`}
-                        onClick={() => setSelectedPlayerId(player.id)}
-                      >
-                        <span>{player.displayName}</span>
-                        {selectedPlayerId === player.id ? (
-                          <svg
-                            viewBox="0 0 20 20"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),7rem] landscape:h-[calc(100%-2.25rem)]">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {pendingReboundPrompt ? 'Rebounder' : 'Player'}
+                  </p>
+                  <div className="max-h-36 overflow-y-auto pr-1 landscape:h-[calc(100%-1.25rem)] landscape:max-h-none">
+                    <div className="space-y-1">
+                      {players.map((player) => (
+                        <button
+                          key={player.id}
+                          type="button"
+                          className={`flex min-h-10 w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                            selectedPlayerId === player.id
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                          }`}
+                          onClick={() =>
+                            pendingReboundPrompt
+                              ? handleReboundSelection(player.id)
+                              : setSelectedPlayerId(player.id)
+                          }
+                        >
+                          <span>{player.displayName}</span>
+                          {!pendingReboundPrompt && selectedPlayerId === player.id ? (
+                            <svg
+                              viewBox="0 0 20 20"
+                              className="h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <path d="M4.5 10.5 8 14l7.5-8" />
+                            </svg>
+                          ) : null}
+                        </button>
+                      ))}
+                      {pendingReboundPrompt ? (
+                        <>
+                          <button
+                            type="button"
+                            className="flex min-h-10 w-full items-center rounded-lg bg-slate-100 px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-slate-200"
+                            disabled={isSaving}
+                            onClick={() => handleReboundSelection('NO_REBOUND')}
                           >
-                            <path d="M4.5 10.5 8 14l7.5-8" />
-                          </svg>
-                        ) : null}
-                      </button>
-                    ))}
+                            No Rebound
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Action
-                </p>
-                <div className="grid gap-1 landscape:content-start">
-                  <button
-                    type="button"
-                    aria-label="Shot Make"
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
-                    disabled={isSaving}
-                    onClick={() => addShotEvent('made')}
-                  >
-                    Make
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Shot Miss"
-                    className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-600 disabled:opacity-60"
-                    disabled={isSaving}
-                    onClick={() => addShotEvent('miss')}
-                  >
-                    Miss
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="FT Make"
-                    className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
-                    disabled={isSaving}
-                    onClick={() => addFreeThrowEvent('made')}
-                  >
-                    FT+
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="FT Miss"
-                    className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
-                    disabled={isSaving}
-                    onClick={() => addFreeThrowEvent('miss')}
-                  >
-                    FT-
-                  </button>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Action
+                  </p>
+                  <div className="grid gap-1 landscape:content-start">
+                    {pendingReboundPrompt ? (
+                      <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                        Select a player or <span className="font-medium">No Rebound</span>.
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          aria-label="Shot Make"
+                          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                          disabled={isSaving}
+                          onClick={() => addShotEvent('made')}
+                        >
+                          Make
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Shot Miss"
+                          className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-600 disabled:opacity-60"
+                          disabled={isSaving}
+                          onClick={() => addShotEvent('miss')}
+                        >
+                          Miss
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="FT Make"
+                          className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                          disabled={isSaving}
+                          onClick={() => addFreeThrowEvent('made')}
+                        >
+                          FT+
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="FT Miss"
+                          className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+                          disabled={isSaving}
+                          onClick={() => addFreeThrowEvent('miss')}
+                        >
+                          FT-
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Defensive Rebound"
+                          className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                          disabled={isSaving}
+                          onClick={() => addReboundEvent('DREB')}
+                        >
+                          DREB
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </>
-  ) : null;
+      </>
+    ) : null;
 
   const trackingOverlay = isTrackingFullscreen ? (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm">
@@ -415,18 +541,78 @@ export function GameTrackPage() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded border bg-white p-4">
+        <div className="min-w-0 space-y-4">
+          <div className="min-w-0 rounded border bg-white p-4">
             <h2 className="mb-2 text-lg font-semibold">Live Box Score</h2>
-            <ul className="space-y-1 text-sm">
-              {boxScore.players.map((row) => (
-                <li key={row.playerId} className="flex items-center justify-between">
-                  <span>{row.displayName}</span>
-                  <span>{row.points} pts</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-sm font-semibold">Team Points: {boxScore.teamTotals.points}</p>
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-max min-w-[980px] text-sm">
+                <thead className="bg-slate-100 text-slate-600">
+                  <tr>
+                    <th className="sticky left-0 z-10 bg-slate-100 px-3 py-2 text-left">Player</th>
+                    <th className="px-3 py-2 text-right">PTS</th>
+                    <th className="px-3 py-2 text-right">REB</th>
+                    <th className="px-3 py-2 text-right">2PT FG</th>
+                    <th className="px-3 py-2 text-right">2PT FG%</th>
+                    <th className="px-3 py-2 text-right">3PT FG</th>
+                    <th className="px-3 py-2 text-right">3PT %</th>
+                    <th className="px-3 py-2 text-right">Free Throw</th>
+                    <th className="px-3 py-2 text-right">OREB</th>
+                    <th className="px-3 py-2 text-right">DREB</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {boxScore.players.map((row) => (
+                    <tr key={row.playerId} className="border-t">
+                      <td className="sticky left-0 bg-white px-3 py-2">{row.displayName}</td>
+                      <td className="px-3 py-2 text-right">{row.points}</td>
+                      <td className="px-3 py-2 text-right">{row.reb}</td>
+                      <td className="px-3 py-2 text-right">
+                        {row.fg2m}/{row.fg2a}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {formatPercentage(row.fg2m, row.fg2a)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {row.fg3m}/{row.fg3a}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {formatThreePointPercentage(row.fg3m, row.fg3a)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {row.ftm}/{row.fta}
+                      </td>
+                      <td className="px-3 py-2 text-right">{row.oreb}</td>
+                      <td className="px-3 py-2 text-right">{row.dreb}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t bg-slate-50 font-semibold">
+                    <td className="sticky left-0 bg-slate-50 px-3 py-2">Team Total</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.points}</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.reb}</td>
+                    <td className="px-3 py-2 text-right">
+                      {boxScore.teamTotals.fg2m}/{boxScore.teamTotals.fg2a}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {formatPercentage(boxScore.teamTotals.fg2m, boxScore.teamTotals.fg2a)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {boxScore.teamTotals.fg3m}/{boxScore.teamTotals.fg3a}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {formatThreePointPercentage(
+                        boxScore.teamTotals.fg3m,
+                        boxScore.teamTotals.fg3a
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {boxScore.teamTotals.ftm}/{boxScore.teamTotals.fta}
+                    </td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.oreb}</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.dreb}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="rounded border bg-white p-4">

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
@@ -53,6 +53,24 @@ describe('GameDetailPage', () => {
             y: 20,
             occurredAt: '2026-03-12T18:05:00.000Z',
           },
+          {
+            id: 'e4',
+            playerId: 'p2',
+            statType: 'DREB',
+            zoneId: null,
+            x: null,
+            y: null,
+            occurredAt: '2026-03-12T18:06:00.000Z',
+          },
+          {
+            id: 'e5',
+            playerId: 'p1',
+            statType: 'FT_MADE',
+            zoneId: 'FREE_THROW_LINE',
+            x: 50,
+            y: 20,
+            occurredAt: '2026-03-12T18:07:00.000Z',
+          },
         ],
       },
       team: {
@@ -68,16 +86,44 @@ describe('GameDetailPage', () => {
           {
             playerId: 'p1',
             displayName: 'Alex',
-            ftm: 0,
-            fta: 0,
+            ftm: 2,
+            fta: 2,
             fg2m: 1,
             fg2a: 1,
             fg3m: 0,
             fg3a: 0,
-            points: 2,
+            oreb: 0,
+            dreb: 0,
+            reb: 0,
+            points: 4,
+          },
+          {
+            playerId: 'p2',
+            displayName: 'Jordan',
+            ftm: 0,
+            fta: 0,
+            fg2m: 0,
+            fg2a: 0,
+            fg3m: 0,
+            fg3a: 1,
+            oreb: 0,
+            dreb: 1,
+            reb: 1,
+            points: 0,
           },
         ],
-        teamTotals: { ftm: 0, fta: 0, fg2m: 1, fg2a: 1, fg3m: 0, fg3a: 0, points: 2 },
+        teamTotals: {
+          ftm: 2,
+          fta: 2,
+          fg2m: 1,
+          fg2a: 1,
+          fg3m: 0,
+          fg3a: 1,
+          oreb: 0,
+          dreb: 1,
+          reb: 1,
+          points: 4,
+        },
       },
     });
 
@@ -98,6 +144,10 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
     expect(screen.queryByText(/Game Date \/ Time/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
+    expect(screen.getByText(/Jordan: Defensive Rebound/i)).toBeInTheDocument();
+    expect(screen.getByText('OREB')).toBeInTheDocument();
+    expect(screen.getByText('DREB')).toBeInTheDocument();
+    expect(screen.getByText('REB')).toBeInTheDocument();
     expect(screen.getAllByText(/Paint/i).length).toBeGreaterThan(0);
     expect(screen.getByTestId('game-shot-map')).toBeInTheDocument();
     expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
@@ -128,16 +178,24 @@ describe('GameDetailPage', () => {
     expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));
-    expect(screen.getByText('Event 1 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Event 1 of 4')).toBeInTheDocument();
     expect(screen.getAllByTestId('replay-marker')).toHaveLength(1);
     expect(screen.getByTestId('replay-box-score')).toBeInTheDocument();
     expect(screen.getByText('Alex')).toBeInTheDocument();
     expect(screen.getByText('Jordan')).toBeInTheDocument();
     expect(screen.getByText('1/1')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByText('Event 2 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Event 2 of 4')).toBeInTheDocument();
     expect(screen.getAllByTestId('replay-marker')).toHaveLength(2);
     expect(screen.getByText('0/1')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Event 3 of 4')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Event 4 of 4')).toBeInTheDocument();
+    const jordanReplayRow = within(screen.getByTestId('replay-box-score'))
+      .getByText('Jordan')
+      .closest('tr');
+    expect(jordanReplayRow).toHaveTextContent('1');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Game Info' }));
     expect(screen.getByText(/Game Date \/ Time/i)).toBeInTheDocument();

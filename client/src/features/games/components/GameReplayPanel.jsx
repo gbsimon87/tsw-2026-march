@@ -39,6 +39,9 @@ function emptyLine(player) {
     fg2a: 0,
     fg3m: 0,
     fg3a: 0,
+    oreb: 0,
+    dreb: 0,
+    reb: 0,
     points: 0,
   };
 }
@@ -72,13 +75,29 @@ function applyEventToLine(line, statType) {
   }
   if (statType === 'FG3_MISS') {
     line.fg3a += 1;
+    return;
+  }
+  if (statType === 'OREB') {
+    line.oreb += 1;
+    line.reb += 1;
+    return;
+  }
+  if (statType === 'DREB') {
+    line.dreb += 1;
+    line.reb += 1;
   }
 }
 
 export function GameReplayPanel({ events, players }) {
-  const replayEvents = useMemo(() => (events || []).filter(canReplayEvent), [events]);
+  const replayEvents = useMemo(() => {
+    const allEvents = events || [];
+    return allEvents
+      .map((event, index) => ({ ...event, replaySourceIndex: index }))
+      .filter(canReplayEvent);
+  }, [events]);
   const [currentIndex, setCurrentIndex] = useState(replayEvents.length ? 0 : -1);
   const currentEvent = currentIndex >= 0 ? replayEvents[currentIndex] : null;
+  const currentSourceIndex = currentEvent?.replaySourceIndex ?? -1;
   const visibleEvents = useMemo(
     () => (currentIndex >= 0 ? replayEvents.slice(0, currentIndex + 1) : []),
     [currentIndex, replayEvents]
@@ -95,7 +114,10 @@ export function GameReplayPanel({ events, players }) {
     const lines = basePlayers.map(emptyLine);
     const byId = new Map(lines.map((line) => [line.playerId, line]));
 
-    for (const event of visibleEvents) {
+    const countableEvents =
+      currentSourceIndex >= 0 ? (events || []).slice(0, currentSourceIndex + 1) : [];
+
+    for (const event of countableEvents) {
       if (!byId.has(event.playerId)) {
         const fallback = emptyLine({
           id: event.playerId,
@@ -108,7 +130,7 @@ export function GameReplayPanel({ events, players }) {
     }
 
     return lines;
-  }, [players, replayEvents, visibleEvents]);
+  }, [currentSourceIndex, events, players, replayEvents]);
 
   return (
     <div className="space-y-3 rounded border bg-white p-3">
@@ -188,6 +210,9 @@ export function GameReplayPanel({ events, players }) {
                   <th className="px-3 py-2 text-right">FT</th>
                   <th className="px-3 py-2 text-right">2PT</th>
                   <th className="px-3 py-2 text-right">3PT</th>
+                  <th className="px-3 py-2 text-right">OREB</th>
+                  <th className="px-3 py-2 text-right">DREB</th>
+                  <th className="px-3 py-2 text-right">REB</th>
                   <th className="px-3 py-2 text-right">PTS</th>
                 </tr>
               </thead>
@@ -204,6 +229,9 @@ export function GameReplayPanel({ events, players }) {
                     <td className="px-3 py-2 text-right">
                       {line.fg3m}/{line.fg3a}
                     </td>
+                    <td className="px-3 py-2 text-right">{line.oreb}</td>
+                    <td className="px-3 py-2 text-right">{line.dreb}</td>
+                    <td className="px-3 py-2 text-right">{line.reb}</td>
                     <td className="px-3 py-2 text-right font-medium">{line.points}</td>
                   </tr>
                 ))}

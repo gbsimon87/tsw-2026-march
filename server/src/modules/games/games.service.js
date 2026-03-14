@@ -16,7 +16,7 @@ function sanitizeEvent(event) {
     id: String(event._id),
     playerId: String(event.playerId),
     statType: event.statType,
-    zoneId: event.zoneId,
+    zoneId: event.zoneId ?? null,
     x: event.x ?? null,
     y: event.y ?? null,
     occurredAt: event.occurredAt,
@@ -49,6 +49,9 @@ function emptyStats(playerId, displayName) {
     fg2a: 0,
     fg3m: 0,
     fg3a: 0,
+    oreb: 0,
+    dreb: 0,
+    reb: 0,
     points: 0,
   };
 }
@@ -87,6 +90,18 @@ function applyEventToRow(row, statType) {
 
   if (statType === STAT_TYPES.FG3_MISS) {
     row.fg3a += 1;
+    return;
+  }
+
+  if (statType === STAT_TYPES.OREB) {
+    row.oreb += 1;
+    row.reb += 1;
+    return;
+  }
+
+  if (statType === STAT_TYPES.DREB) {
+    row.dreb += 1;
+    row.reb += 1;
   }
 }
 
@@ -123,6 +138,9 @@ function computeBoxScore(game, team) {
       fg2a: summary.fg2.attempts,
       fg3m: summary.fg3.made,
       fg3a: summary.fg3.attempts,
+      oreb: players.reduce((total, row) => total + row.oreb, 0),
+      dreb: players.reduce((total, row) => total + row.dreb, 0),
+      reb: players.reduce((total, row) => total + row.reb, 0),
       points: summary.points,
     },
   };

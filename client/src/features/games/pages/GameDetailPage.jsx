@@ -39,6 +39,21 @@ function eventTime(value) {
   });
 }
 
+function formatEventMeta(event) {
+  const parts = [];
+
+  if (event.zoneId) {
+    parts.push(ZONE_LABELS[event.zoneId] || event.zoneId);
+  }
+
+  if (typeof event.x === 'number' && typeof event.y === 'number') {
+    parts.push(`(${event.x.toFixed(1)}, ${event.y.toFixed(1)})`);
+  }
+
+  parts.push(eventTime(event.occurredAt));
+  return parts.join(' | ');
+}
+
 export function GameDetailPage() {
   const { gameId } = useParams();
   const { user } = useAuth();
@@ -93,6 +108,9 @@ export function GameDetailPage() {
               <th className="px-3 py-2 text-right">FT</th>
               <th className="px-3 py-2 text-right">2PT</th>
               <th className="px-3 py-2 text-right">3PT</th>
+              <th className="px-3 py-2 text-right">OREB</th>
+              <th className="px-3 py-2 text-right">DREB</th>
+              <th className="px-3 py-2 text-right">REB</th>
               <th className="px-3 py-2 text-right">PTS</th>
             </tr>
           </thead>
@@ -109,6 +127,9 @@ export function GameDetailPage() {
                 <td className="px-3 py-2 text-right">
                   {row.fg3m}/{row.fg3a}
                 </td>
+                <td className="px-3 py-2 text-right">{row.oreb}</td>
+                <td className="px-3 py-2 text-right">{row.dreb}</td>
+                <td className="px-3 py-2 text-right">{row.reb}</td>
                 <td className="px-3 py-2 text-right font-semibold">{row.points}</td>
               </tr>
             ))}
@@ -123,6 +144,9 @@ export function GameDetailPage() {
               <td className="px-3 py-2 text-right">
                 {boxScore.teamTotals.fg3m}/{boxScore.teamTotals.fg3a}
               </td>
+              <td className="px-3 py-2 text-right">{boxScore.teamTotals.oreb}</td>
+              <td className="px-3 py-2 text-right">{boxScore.teamTotals.dreb}</td>
+              <td className="px-3 py-2 text-right">{boxScore.teamTotals.reb}</td>
               <td className="px-3 py-2 text-right">{boxScore.teamTotals.points}</td>
             </tr>
           </tbody>
@@ -141,9 +165,6 @@ export function GameDetailPage() {
               const player = playersById.get(event.playerId);
               const playerName = player?.displayName || 'Unknown Player';
               const statLabel = STAT_LABELS[event.statType] || event.statType;
-              const zoneLabel = ZONE_LABELS[event.zoneId] || event.zoneId;
-              const x = typeof event.x === 'number' ? event.x.toFixed(1) : '?';
-              const y = typeof event.y === 'number' ? event.y.toFixed(1) : '?';
 
               return (
                 <li key={event.id} className="grid grid-cols-[auto_1fr] gap-3 px-3 py-2">
@@ -152,9 +173,7 @@ export function GameDetailPage() {
                     <p className="font-medium text-slate-900">
                       {playerName}: {statLabel}
                     </p>
-                    <p className="text-xs text-slate-600">
-                      {zoneLabel} | ({x}, {y}) | {eventTime(event.occurredAt)}
-                    </p>
+                    <p className="text-xs text-slate-600">{formatEventMeta(event)}</p>
                   </div>
                 </li>
               );
