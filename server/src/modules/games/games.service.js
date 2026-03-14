@@ -9,6 +9,7 @@ const {
   saveGame,
 } = require('./games.repository');
 const { STAT_TYPES } = require('../shared/stats.constants');
+const { summarizeEvents } = require('../shared/statSummary');
 
 function sanitizeEvent(event) {
   return {
@@ -89,22 +90,6 @@ function applyEventToRow(row, statType) {
   }
 }
 
-function computeTotals(rows) {
-  return rows.reduce(
-    (acc, row) => {
-      acc.ftm += row.ftm;
-      acc.fta += row.fta;
-      acc.fg2m += row.fg2m;
-      acc.fg2a += row.fg2a;
-      acc.fg3m += row.fg3m;
-      acc.fg3a += row.fg3a;
-      acc.points += row.points;
-      return acc;
-    },
-    { ftm: 0, fta: 0, fg2m: 0, fg2a: 0, fg3m: 0, fg3a: 0, points: 0 }
-  );
-}
-
 function computeBoxScore(game, team) {
   const activePlayers = team.players.filter((player) => player.isActive);
   const map = new Map(
@@ -127,9 +112,19 @@ function computeBoxScore(game, team) {
   const players = Array.from(map.values()).sort((a, b) =>
     a.displayName.localeCompare(b.displayName)
   );
+  const summary = summarizeEvents(game.events);
+
   return {
     players,
-    teamTotals: computeTotals(players),
+    teamTotals: {
+      ftm: summary.ft.made,
+      fta: summary.ft.attempts,
+      fg2m: summary.fg2.made,
+      fg2a: summary.fg2.attempts,
+      fg3m: summary.fg3.made,
+      fg3a: summary.fg3.attempts,
+      points: summary.points,
+    },
   };
 }
 

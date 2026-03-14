@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
-const { STAT_TYPES } = require('../shared/stats.constants');
+const {
+  summarizeEvents,
+  createEmptyTeamStatSummary,
+  applyEventToTeamStatSummary,
+  finalizeTeamStatSummary,
+} = require('../shared/statSummary');
 const {
   createTeam,
   listTeamsByOwner,
@@ -43,29 +48,20 @@ function ensureNoDuplicatePlayers(players) {
   }
 }
 
-function applyEventPoints(total, statType) {
-  if (statType === STAT_TYPES.FT_MADE) {
-    return total + 1;
-  }
-  if (statType === STAT_TYPES.FG2_MADE) {
-    return total + 2;
-  }
-  if (statType === STAT_TYPES.FG3_MADE) {
-    return total + 3;
-  }
-  return total;
-}
-
 function computeTeamPoints(game) {
-  return game.events.reduce((total, event) => applyEventPoints(total, event.statType), 0);
+  return summarizeEvents(game.events).points;
 }
 
-function sanitizePublicGame(game) {
+function isGamePubliclyViewable(game) {
   const now = Date.now();
   const scheduledTime = game.scheduledAt ? new Date(game.scheduledAt).getTime() : null;
   const isFuture =
     typeof scheduledTime === 'number' && !Number.isNaN(scheduledTime) && scheduledTime > now;
 
+  return !isFuture;
+}
+
+function sanitizePublicGame(game) {
   return {
     id: String(game._id),
     title: game.title,
@@ -74,8 +70,27 @@ function sanitizePublicGame(game) {
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
     teamPoints: game.status === 'completed' ? computeTeamPoints(game) : null,
-    isPubliclyViewable: !isFuture,
+    isPubliclyViewable: isGamePubliclyViewable(game),
     createdAt: game.createdAt,
+  };
+}
+
+function buildPublicTeamSummary(games) {
+  const includedGames = games.filter(
+    (game) => game.status === 'completed' && isGamePubliclyViewable(game)
+  );
+
+  const totals = createEmptyTeamStatSummary();
+
+  for (const game of includedGames) {
+    for (const event of game.events) {
+      applyEventToTeamStatSummary(totals, event.statType);
+    }
+  }
+
+  return {
+    gamesCount: includedGames.length,
+    ...finalizeTeamStatSummary(totals),
   };
 }
 
@@ -152,6 +167,7 @@ async function getPublicTeam(teamId) {
       name: team.name,
       players,
     },
+    summary: buildPublicTeamSummary(games),
     games: games.map(sanitizePublicGame),
   };
 }
@@ -255,6 +271,7 @@ module.exports = {
   listTeamsForUser,
   getTeamForUser,
   getPublicTeam,
+  buildPublicTeamSummary,
   updateTeamForUser,
   addPlayerToTeam,
   updatePlayerOnTeam,

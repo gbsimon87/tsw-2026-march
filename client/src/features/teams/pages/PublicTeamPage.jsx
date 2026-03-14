@@ -36,6 +36,14 @@ function gameTimeValue(game) {
   return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
+function formatPercentage(value) {
+  if (typeof value !== 'number') {
+    return '--';
+  }
+
+  return `${value.toFixed(1)}%`;
+}
+
 function PublicGameRow({ game }) {
   const primaryText = game.opponent || game.title || 'Opponent TBD';
 
@@ -67,6 +75,20 @@ function PublicGameRow({ game }) {
         </Link>
       ) : null}
     </article>
+  );
+}
+
+function ShootingSummaryRow({ label, stats }) {
+  return (
+    <tr className="border-t border-slate-200">
+      <th className="px-3 py-3 text-left font-medium text-slate-900">{label}</th>
+      <td className="px-3 py-3 text-right text-slate-700">{stats.made}</td>
+      <td className="px-3 py-3 text-right text-slate-700">{stats.missed}</td>
+      <td className="px-3 py-3 text-right text-slate-700">{stats.attempts}</td>
+      <td className="px-3 py-3 text-right font-semibold text-slate-900">
+        {formatPercentage(stats.percentage)}
+      </td>
+    </tr>
   );
 }
 
@@ -106,6 +128,14 @@ export function PublicTeamPage() {
     return <p className="text-sm text-red-600">{error || 'Team not found'}</p>;
   }
 
+  const summary = data.summary || {
+    gamesCount: 0,
+    points: 0,
+    fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
+    fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
+    ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+  };
+
   return (
     <main className="mx-auto max-w-3xl space-y-6">
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
@@ -115,6 +145,43 @@ export function PublicTeamPage() {
         <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
           {data.team.name}
         </h1>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-2">
+          <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Completed Public Games
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">{summary.gamesCount}</p>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Total Points
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900">{summary.points}</p>
+          </article>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-100 text-slate-600">
+              <tr>
+                <th className="px-3 py-2 text-left">Shot Type</th>
+                <th className="px-3 py-2 text-right">Made</th>
+                <th className="px-3 py-2 text-right">Missed</th>
+                <th className="px-3 py-2 text-right">Attempts</th>
+                <th className="px-3 py-2 text-right">Pct</th>
+              </tr>
+            </thead>
+            <tbody>
+              <ShootingSummaryRow label="2PT" stats={summary.fg2} />
+              <ShootingSummaryRow label="3PT" stats={summary.fg3} />
+              <ShootingSummaryRow label="FT" stats={summary.ft} />
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

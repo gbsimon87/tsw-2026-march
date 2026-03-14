@@ -20,7 +20,7 @@ jest.mock('mongoose', () => ({
 
 const { findTeamById } = require('../../modules/teams/teams.repository');
 const { listGamesByTeamId } = require('../../modules/games/games.repository');
-const { getPublicTeam } = require('../../modules/teams/teams.service');
+const { getPublicTeam, buildPublicTeamSummary } = require('../../modules/teams/teams.service');
 
 describe('teams public service', () => {
   beforeEach(() => {
@@ -47,7 +47,7 @@ describe('teams public service', () => {
     ]);
   });
 
-  test('includes public game summaries with computed team points and future visibility', async () => {
+  test('includes public game summaries with computed team points, future visibility, and summary totals', async () => {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
       name: 'TSW Blue',
@@ -62,7 +62,14 @@ describe('teams public service', () => {
         scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
         completedAt: new Date('2026-03-10T02:00:00.000Z'),
         createdAt: new Date('2026-03-10T00:00:00.000Z'),
-        events: [{ statType: 'FG2_MADE' }, { statType: 'FT_MADE' }, { statType: 'FG3_MADE' }],
+        events: [
+          { statType: 'FG2_MADE' },
+          { statType: 'FG2_MISS' },
+          { statType: 'FT_MADE' },
+          { statType: 'FT_MISS' },
+          { statType: 'FG3_MADE' },
+          { statType: 'FG3_MISS' },
+        ],
       },
       {
         _id: 'g2',
@@ -78,6 +85,14 @@ describe('teams public service', () => {
 
     const result = await getPublicTeam('team-1');
 
+    expect(result.summary).toEqual({
+      gamesCount: 1,
+      points: 6,
+      fg2: { made: 1, missed: 1, attempts: 2, percentage: 50 },
+      fg3: { made: 1, missed: 1, attempts: 2, percentage: 50 },
+      ft: { made: 1, missed: 1, attempts: 2, percentage: 50 },
+    });
+
     expect(result.games).toEqual([
       expect.objectContaining({
         id: 'g1',
@@ -90,5 +105,28 @@ describe('teams public service', () => {
         isPubliclyViewable: false,
       }),
     ]);
+  });
+
+  test('returns zeroed summary when no completed public games qualify', () => {
+    const result = buildPublicTeamSummary([
+      {
+        status: 'in_progress',
+        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+        events: [{ statType: 'FG2_MADE' }],
+      },
+      {
+        status: 'completed',
+        scheduledAt: new Date('2099-03-10T00:00:00.000Z'),
+        events: [{ statType: 'FG3_MADE' }],
+      },
+    ]);
+
+    expect(result).toEqual({
+      gamesCount: 0,
+      points: 0,
+      fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
+      fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
+      ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+    });
   });
 });

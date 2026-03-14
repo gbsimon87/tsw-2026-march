@@ -39,6 +39,13 @@ describe('PublicTeamPage', () => {
           { id: 'p2', displayName: 'Jordan Lee', jerseyNumber: null },
         ],
       },
+      summary: {
+        gamesCount: 1,
+        points: 72,
+        fg2: { made: 20, missed: 12, attempts: 32, percentage: 62.5 },
+        fg3: { made: 8, missed: 10, attempts: 18, percentage: 44.444 },
+        ft: { made: 8, missed: 3, attempts: 11, percentage: 72.727 },
+      },
       games: [
         {
           id: 'g1',
@@ -84,6 +91,12 @@ describe('PublicTeamPage', () => {
 
     expect(screen.getByText('#12 Alex Carter')).toBeInTheDocument();
     expect(screen.getByText('Jordan Lee')).toBeInTheDocument();
+    expect(screen.getByText('Completed Public Games')).toBeInTheDocument();
+    expect(screen.getByText('Total Points')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '20' })).toBeInTheDocument();
+    expect(screen.getByText('62.5%')).toBeInTheDocument();
+    expect(screen.getByText('44.4%')).toBeInTheDocument();
+    expect(screen.getByText('72.7%')).toBeInTheDocument();
     expect(screen.getByText('Upcoming')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
     expect(screen.getByText(/72 pts/i)).toBeInTheDocument();
@@ -99,6 +112,13 @@ describe('PublicTeamPage', () => {
         name: 'TSW Varsity',
         players: [],
       },
+      summary: {
+        gamesCount: 0,
+        points: 0,
+        fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
+        fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
+        ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+      },
       games: [],
     });
 
@@ -110,6 +130,7 @@ describe('PublicTeamPage', () => {
 
     expect(screen.getByText(/No upcoming games scheduled/i)).toBeInTheDocument();
     expect(screen.getByText(/No recent games yet/i)).toBeInTheDocument();
+    expect(screen.getAllByText('--')).toHaveLength(3);
   });
 
   test('renders error state', async () => {
