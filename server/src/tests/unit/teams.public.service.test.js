@@ -51,7 +51,10 @@ describe('teams public service', () => {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
       name: 'TSW Blue',
-      players: [],
+      players: [
+        { _id: 'p1', displayName: 'Alex', isActive: true },
+        { _id: 'p2', displayName: 'Chris', isActive: false },
+      ],
     });
     listGamesByTeamId.mockResolvedValue([
       {
@@ -63,12 +66,13 @@ describe('teams public service', () => {
         completedAt: new Date('2026-03-10T02:00:00.000Z'),
         createdAt: new Date('2026-03-10T00:00:00.000Z'),
         events: [
-          { statType: 'FG2_MADE' },
-          { statType: 'FG2_MISS' },
-          { statType: 'FT_MADE' },
-          { statType: 'FT_MISS' },
-          { statType: 'FG3_MADE' },
-          { statType: 'FG3_MISS' },
+          { playerId: 'p1', statType: 'FG2_MADE' },
+          { playerId: 'p1', statType: 'FG2_MISS' },
+          { playerId: 'p1', statType: 'FT_MADE' },
+          { playerId: 'p1', statType: 'FT_MISS' },
+          { playerId: 'p2', statType: 'FG3_MADE' },
+          { playerId: 'p2', statType: 'FG3_MISS' },
+          { playerId: 'p2', statType: 'DREB' },
         ],
       },
       {
@@ -91,6 +95,50 @@ describe('teams public service', () => {
       fg2: { made: 1, missed: 1, attempts: 2, percentage: 50 },
       fg3: { made: 1, missed: 1, attempts: 2, percentage: 50 },
       ft: { made: 1, missed: 1, attempts: 2, percentage: 50 },
+      boxScore: {
+        players: [
+          {
+            playerId: 'p1',
+            displayName: 'Alex',
+            ftm: 1,
+            fta: 2,
+            fg2m: 1,
+            fg2a: 2,
+            fg3m: 0,
+            fg3a: 0,
+            oreb: 0,
+            dreb: 0,
+            reb: 0,
+            points: 3,
+          },
+          {
+            playerId: 'p2',
+            displayName: 'Chris',
+            ftm: 0,
+            fta: 0,
+            fg2m: 0,
+            fg2a: 0,
+            fg3m: 1,
+            fg3a: 2,
+            oreb: 0,
+            dreb: 1,
+            reb: 1,
+            points: 3,
+          },
+        ],
+        teamTotals: {
+          ftm: 1,
+          fta: 2,
+          fg2m: 1,
+          fg2a: 2,
+          fg3m: 1,
+          fg3a: 2,
+          oreb: 0,
+          dreb: 1,
+          reb: 1,
+          points: 6,
+        },
+      },
     });
 
     expect(result.games).toEqual([
@@ -108,18 +156,21 @@ describe('teams public service', () => {
   });
 
   test('returns zeroed summary when no completed public games qualify', () => {
-    const result = buildPublicTeamSummary([
-      {
-        status: 'in_progress',
-        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
-        events: [{ statType: 'FG2_MADE' }],
-      },
-      {
-        status: 'completed',
-        scheduledAt: new Date('2099-03-10T00:00:00.000Z'),
-        events: [{ statType: 'FG3_MADE' }],
-      },
-    ]);
+    const result = buildPublicTeamSummary(
+      [
+        {
+          status: 'in_progress',
+          scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+          events: [{ statType: 'FG2_MADE' }],
+        },
+        {
+          status: 'completed',
+          scheduledAt: new Date('2099-03-10T00:00:00.000Z'),
+          events: [{ statType: 'FG3_MADE' }],
+        },
+      ],
+      { players: [] }
+    );
 
     expect(result).toEqual({
       gamesCount: 0,
@@ -127,6 +178,21 @@ describe('teams public service', () => {
       fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
       fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
       ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+      boxScore: {
+        players: [],
+        teamTotals: {
+          ftm: 0,
+          fta: 0,
+          fg2m: 0,
+          fg2a: 0,
+          fg3m: 0,
+          fg3a: 0,
+          oreb: 0,
+          dreb: 0,
+          reb: 0,
+          points: 0,
+        },
+      },
     });
   });
 });

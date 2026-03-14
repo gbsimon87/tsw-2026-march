@@ -36,14 +36,6 @@ function gameTimeValue(game) {
   return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
-function formatPercentage(value) {
-  if (typeof value !== 'number') {
-    return '--';
-  }
-
-  return `${value.toFixed(1)}%`;
-}
-
 function PublicGameRow({ game }) {
   const primaryText = game.opponent || game.title || 'Opponent TBD';
 
@@ -78,20 +70,6 @@ function PublicGameRow({ game }) {
   );
 }
 
-function ShootingSummaryRow({ label, stats }) {
-  return (
-    <tr className="border-t border-slate-200">
-      <th className="px-3 py-3 text-left font-medium text-slate-900">{label}</th>
-      <td className="px-3 py-3 text-right text-slate-700">{stats.made}</td>
-      <td className="px-3 py-3 text-right text-slate-700">{stats.missed}</td>
-      <td className="px-3 py-3 text-right text-slate-700">{stats.attempts}</td>
-      <td className="px-3 py-3 text-right font-semibold text-slate-900">
-        {formatPercentage(stats.percentage)}
-      </td>
-    </tr>
-  );
-}
-
 export function PublicTeamPage() {
   const { teamId } = useParams();
   const [data, setData] = useState(null);
@@ -120,6 +98,11 @@ export function PublicTeamPage() {
       .sort((gameA, gameB) => gameTimeValue(gameB) - gameTimeValue(gameA));
   }, [data]);
 
+  const boxScoreByPlayerId = useMemo(() => {
+    const rows = data?.summary?.boxScore?.players || [];
+    return new Map(rows.map((row) => [row.playerId, row]));
+  }, [data]);
+
   if (isLoading) {
     return <p className="text-sm">Loading team...</p>;
   }
@@ -134,6 +117,21 @@ export function PublicTeamPage() {
     fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
     fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
     ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+    boxScore: {
+      players: [],
+      teamTotals: {
+        ftm: 0,
+        fta: 0,
+        fg2m: 0,
+        fg2a: 0,
+        fg3m: 0,
+        fg3a: 0,
+        oreb: 0,
+        dreb: 0,
+        reb: 0,
+        points: 0,
+      },
+    },
   };
 
   return (
@@ -155,30 +153,67 @@ export function PublicTeamPage() {
             </p>
             <p className="mt-2 text-3xl font-bold text-slate-900">{summary.gamesCount}</p>
           </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Total Points
-            </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">{summary.points}</p>
-          </article>
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-full text-sm">
+          <table className="min-w-[860px] text-sm">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="px-3 py-2 text-left">Shot Type</th>
-                <th className="px-3 py-2 text-right">Made</th>
-                <th className="px-3 py-2 text-right">Missed</th>
-                <th className="px-3 py-2 text-right">Attempts</th>
-                <th className="px-3 py-2 text-right">Pct</th>
+                <th className="px-3 py-2 text-left">Player</th>
+                <th className="px-3 py-2 text-right">FT</th>
+                <th className="px-3 py-2 text-right">2PT</th>
+                <th className="px-3 py-2 text-right">3PT</th>
+                <th className="px-3 py-2 text-right">OREB</th>
+                <th className="px-3 py-2 text-right">DREB</th>
+                <th className="px-3 py-2 text-right">REB</th>
+                <th className="px-3 py-2 text-right">PTS</th>
               </tr>
             </thead>
             <tbody>
-              <ShootingSummaryRow label="2PT" stats={summary.fg2} />
-              <ShootingSummaryRow label="3PT" stats={summary.fg3} />
-              <ShootingSummaryRow label="FT" stats={summary.ft} />
+              {summary.boxScore.players.map((row) => (
+                <tr key={row.playerId} className="border-t border-slate-200">
+                  <td className="px-3 py-3 text-slate-900">{row.displayName}</td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {row.ftm}/{row.fta}
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {row.fg2m}/{row.fg2a}
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">
+                    {row.fg3m}/{row.fg3a}
+                  </td>
+                  <td className="px-3 py-3 text-right text-slate-700">{row.oreb}</td>
+                  <td className="px-3 py-3 text-right text-slate-700">{row.dreb}</td>
+                  <td className="px-3 py-3 text-right text-slate-700">{row.reb}</td>
+                  <td className="px-3 py-3 text-right font-semibold text-slate-900">
+                    {row.points}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+                <td className="px-3 py-3 text-slate-900">Team Total</td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.ftm}/{summary.boxScore.teamTotals.fta}
+                </td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.fg2m}/{summary.boxScore.teamTotals.fg2a}
+                </td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.fg3m}/{summary.boxScore.teamTotals.fg3a}
+                </td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.oreb}
+                </td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.dreb}
+                </td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.reb}
+                </td>
+                <td className="px-3 py-3 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.points}
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -195,9 +230,17 @@ export function PublicTeamPage() {
                 key={player.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800"
               >
-                {typeof player.jerseyNumber === 'number'
-                  ? `#${player.jerseyNumber} ${player.displayName}`
-                  : player.displayName}
+                <div className="flex items-center justify-between gap-3">
+                  <span>
+                    {typeof player.jerseyNumber === 'number'
+                      ? `#${player.jerseyNumber} ${player.displayName}`
+                      : player.displayName}
+                  </span>
+                  <span className="text-xs font-medium text-slate-500">
+                    {boxScoreByPlayerId.get(player.id)?.points || 0} pts •{' '}
+                    {boxScoreByPlayerId.get(player.id)?.reb || 0} reb
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

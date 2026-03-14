@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PublicTeamPage } from './PublicTeamPage';
 import { teamsApi } from '../api/teamsApi';
@@ -45,6 +46,50 @@ describe('PublicTeamPage', () => {
         fg2: { made: 20, missed: 12, attempts: 32, percentage: 62.5 },
         fg3: { made: 8, missed: 10, attempts: 18, percentage: 44.444 },
         ft: { made: 8, missed: 3, attempts: 11, percentage: 72.727 },
+        boxScore: {
+          players: [
+            {
+              playerId: 'p1',
+              displayName: 'Alex Carter',
+              ftm: 4,
+              fta: 6,
+              fg2m: 5,
+              fg2a: 7,
+              fg3m: 3,
+              fg3a: 5,
+              oreb: 2,
+              dreb: 4,
+              reb: 6,
+              points: 23,
+            },
+            {
+              playerId: 'p2',
+              displayName: 'Jordan Lee',
+              ftm: 0,
+              fta: 0,
+              fg2m: 1,
+              fg2a: 3,
+              fg3m: 0,
+              fg3a: 1,
+              oreb: 1,
+              dreb: 5,
+              reb: 6,
+              points: 2,
+            },
+          ],
+          teamTotals: {
+            ftm: 8,
+            fta: 11,
+            fg2m: 20,
+            fg2a: 32,
+            fg3m: 8,
+            fg3a: 18,
+            oreb: 9,
+            dreb: 22,
+            reb: 31,
+            points: 72,
+          },
+        },
       },
       games: [
         {
@@ -89,14 +134,37 @@ describe('PublicTeamPage', () => {
       expect(screen.getByText('TSW Varsity')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('#12 Alex Carter')).toBeInTheDocument();
-    expect(screen.getByText('Jordan Lee')).toBeInTheDocument();
+    const rosterSection = screen.getByRole('heading', { name: 'Roster' }).closest('section');
+    expect(rosterSection).not.toBeNull();
+    const roster = within(rosterSection);
+
+    expect(roster.getByText('#12 Alex Carter')).toBeInTheDocument();
+    expect(roster.getByText('Jordan Lee')).toBeInTheDocument();
+    expect(roster.getByText('23 pts • 6 reb')).toBeInTheDocument();
+    expect(roster.getByText('2 pts • 6 reb')).toBeInTheDocument();
     expect(screen.getByText('Completed Public Games')).toBeInTheDocument();
-    expect(screen.getByText('Total Points')).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '20' })).toBeInTheDocument();
-    expect(screen.getByText('62.5%')).toBeInTheDocument();
-    expect(screen.getByText('44.4%')).toBeInTheDocument();
-    expect(screen.getByText('72.7%')).toBeInTheDocument();
+    expect(screen.getByText('FT')).toBeInTheDocument();
+    expect(screen.getByText('2PT')).toBeInTheDocument();
+    expect(screen.getByText('3PT')).toBeInTheDocument();
+    expect(screen.getByText('OREB')).toBeInTheDocument();
+    expect(screen.getByText('DREB')).toBeInTheDocument();
+    expect(screen.getByText('REB')).toBeInTheDocument();
+    expect(screen.getByText('PTS')).toBeInTheDocument();
+    expect(screen.getByText('4/6')).toBeInTheDocument();
+    expect(screen.getByText('5/7')).toBeInTheDocument();
+    expect(screen.getByText('3/5')).toBeInTheDocument();
+    expect(screen.getByText('Team Total')).toBeInTheDocument();
+    const headerCells = within(screen.getByRole('table')).getAllByRole('columnheader');
+    expect(headerCells.map((cell) => cell.textContent)).toEqual([
+      'Player',
+      'FT',
+      '2PT',
+      '3PT',
+      'OREB',
+      'DREB',
+      'REB',
+      'PTS',
+    ]);
     expect(screen.getByText('Upcoming')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
     expect(screen.getByText(/72 pts/i)).toBeInTheDocument();
@@ -118,6 +186,21 @@ describe('PublicTeamPage', () => {
         fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
         fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
         ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+        boxScore: {
+          players: [],
+          teamTotals: {
+            ftm: 0,
+            fta: 0,
+            fg2m: 0,
+            fg2a: 0,
+            fg3m: 0,
+            fg3a: 0,
+            oreb: 0,
+            dreb: 0,
+            reb: 0,
+            points: 0,
+          },
+        },
       },
       games: [],
     });
@@ -130,7 +213,8 @@ describe('PublicTeamPage', () => {
 
     expect(screen.getByText(/No upcoming games scheduled/i)).toBeInTheDocument();
     expect(screen.getByText(/No recent games yet/i)).toBeInTheDocument();
-    expect(screen.getAllByText('--')).toHaveLength(3);
+    expect(screen.getByText('Team Total')).toBeInTheDocument();
+    expect(screen.getAllByText('0/0')).toHaveLength(3);
   });
 
   test('renders error state', async () => {

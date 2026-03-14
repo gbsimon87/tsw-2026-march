@@ -105,10 +105,12 @@ function applyEventToRow(row, statType) {
   }
 }
 
-function computeBoxScore(game, team) {
-  const activePlayers = team.players.filter((player) => player.isActive);
+function computeBoxScore(game, team, options = {}) {
+  const basePlayers = options.includeInactivePlayers
+    ? team.players
+    : team.players.filter((player) => player.isActive);
   const map = new Map(
-    activePlayers.map((player) => [
+    basePlayers.map((player) => [
       String(player._id),
       emptyStats(String(player._id), player.displayName),
     ])

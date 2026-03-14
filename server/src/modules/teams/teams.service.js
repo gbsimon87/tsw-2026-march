@@ -14,6 +14,7 @@ const {
   saveTeam,
 } = require('./teams.repository');
 const { listGamesByTeamId } = require('../games/games.repository');
+const { computeBoxScore } = require('../games/games.service');
 
 function normalizeName(name) {
   return String(name || '')
@@ -75,7 +76,7 @@ function sanitizePublicGame(game) {
   };
 }
 
-function buildPublicTeamSummary(games) {
+function buildPublicTeamSummary(games, team) {
   const includedGames = games.filter(
     (game) => game.status === 'completed' && isGamePubliclyViewable(game)
   );
@@ -88,9 +89,18 @@ function buildPublicTeamSummary(games) {
     }
   }
 
+  const boxScore = computeBoxScore(
+    {
+      events: includedGames.flatMap((game) => game.events || []),
+    },
+    team,
+    { includeInactivePlayers: true }
+  );
+
   return {
     gamesCount: includedGames.length,
     ...finalizeTeamStatSummary(totals),
+    boxScore,
   };
 }
 
@@ -167,7 +177,7 @@ async function getPublicTeam(teamId) {
       name: team.name,
       players,
     },
-    summary: buildPublicTeamSummary(games),
+    summary: buildPublicTeamSummary(games, team),
     games: games.map(sanitizePublicGame),
   };
 }
