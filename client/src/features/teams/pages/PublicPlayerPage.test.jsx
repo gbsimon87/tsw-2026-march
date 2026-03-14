@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PublicPlayerPage } from './PublicPlayerPage';
@@ -122,6 +122,14 @@ describe('PublicPlayerPage', () => {
     expect(screen.getByText('8/12')).toBeInTheDocument();
     expect(screen.getByText('1/5')).toBeInTheDocument();
     expect(screen.getByText('24')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /PTS/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
+    const rows = within(screen.getByRole('table')).getAllByRole('row');
+    expect(within(rows[1]).getByText('Totals')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Date/i }));
+    expect(screen.getByRole('button', { name: /Date/i })).toBeInTheDocument();
   });
 
   test('renders zero-state game log when the player has no completed public games', async () => {

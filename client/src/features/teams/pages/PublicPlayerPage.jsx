@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { teamsApi } from '../api/teamsApi';
+import { StatsTable } from '../components/StatsTable';
 
 function formatGameDate(game) {
   const rawValue = game.date || game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -94,6 +95,71 @@ export function PublicPlayerPage() {
     typeof data.player.jerseyNumber === 'number'
       ? `#${data.player.jerseyNumber} ${data.player.displayName}`
       : data.player.displayName;
+  const gameLogRows = [
+    ...data.games.map((game) => ({
+      id: game.gameId,
+      opponent: game.opponent || game.title || 'Opponent TBD',
+      dateLabel: formatGameDate(game),
+      dateValue: game.date || game.scheduledAt || game.completedAt || game.createdAt || null,
+      ...game.stats,
+    })),
+    {
+      id: 'totals',
+      opponent: 'Totals',
+      dateLabel: 'Season',
+      dateValue: null,
+      ...totals,
+    },
+  ];
+  const gameLogColumns = [
+    {
+      id: 'opponent',
+      label: 'Opponent',
+      align: 'left',
+      sortKey: 'opponent',
+      render: (row) => row.opponent,
+    },
+    {
+      id: 'date',
+      label: 'Date',
+      align: 'left',
+      sortKey: 'dateValue',
+      render: (row) => row.dateLabel,
+    },
+    {
+      id: 'ft',
+      label: 'FT',
+      align: 'right',
+      sortValue: (row) => row.ftm,
+      render: (row) => `${row.ftm}/${row.fta}`,
+    },
+    {
+      id: 'fg2',
+      label: '2PT',
+      align: 'right',
+      sortValue: (row) => row.fg2m,
+      render: (row) => `${row.fg2m}/${row.fg2a}`,
+    },
+    {
+      id: 'fg3',
+      label: '3PT',
+      align: 'right',
+      sortValue: (row) => row.fg3m,
+      render: (row) => `${row.fg3m}/${row.fg3a}`,
+    },
+    { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast },
+    { id: 'oreb', label: 'OREB', align: 'right', sortKey: 'oreb', render: (row) => row.oreb },
+    { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
+    { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
+    {
+      id: 'pts',
+      label: 'PTS',
+      align: 'right',
+      sortKey: 'points',
+      emphasis: true,
+      render: (row) => row.points,
+    },
+  ];
 
   return (
     <main className="mx-auto max-w-5xl space-y-6">
@@ -145,66 +211,11 @@ export function PublicPlayerPage() {
         ) : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-[1040px] text-sm">
-            <thead className="bg-slate-100 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Opponent</th>
-                <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-right">FT</th>
-                <th className="px-3 py-2 text-right">2PT</th>
-                <th className="px-3 py-2 text-right">3PT</th>
-                <th className="px-3 py-2 text-right">AST</th>
-                <th className="px-3 py-2 text-right">OREB</th>
-                <th className="px-3 py-2 text-right">DREB</th>
-                <th className="px-3 py-2 text-right">REB</th>
-                <th className="px-3 py-2 text-right">PTS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.games.map((game) => (
-                <tr key={game.gameId} className="border-t border-slate-200">
-                  <td className="px-3 py-3 text-slate-900">
-                    {game.opponent || game.title || 'Opponent TBD'}
-                  </td>
-                  <td className="px-3 py-3 text-slate-700">{formatGameDate(game)}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {game.stats.ftm}/{game.stats.fta}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {game.stats.fg2m}/{game.stats.fg2a}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {game.stats.fg3m}/{game.stats.fg3a}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">{game.stats.ast}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">{game.stats.oreb}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">{game.stats.dreb}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">{game.stats.reb}</td>
-                  <td className="px-3 py-3 text-right font-semibold text-slate-900">
-                    {game.stats.points}
-                  </td>
-                </tr>
-              ))}
-              <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
-                <td className="px-3 py-3 text-slate-900">Totals</td>
-                <td className="px-3 py-3 text-slate-900">Season</td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {totals.ftm}/{totals.fta}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {totals.fg2m}/{totals.fg2a}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {totals.fg3m}/{totals.fg3a}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">{totals.ast}</td>
-                <td className="px-3 py-3 text-right text-slate-900">{totals.oreb}</td>
-                <td className="px-3 py-3 text-right text-slate-900">{totals.dreb}</td>
-                <td className="px-3 py-3 text-right text-slate-900">{totals.reb}</td>
-                <td className="px-3 py-3 text-right text-slate-900">{totals.points}</td>
-              </tr>
-            </tbody>
-          </table>
+          <StatsTable
+            columns={gameLogColumns}
+            rows={gameLogRows}
+            tableClassName="min-w-[1040px] text-sm"
+          />
         </div>
       </section>
     </main>

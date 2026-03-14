@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { Tabs } from '../../../components/Tabs';
+import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameShotMap } from '../components/GameShotMap';
@@ -96,64 +97,101 @@ export function GameDetailPage() {
     ...event,
     playerName: playersById.get(event.playerId)?.displayName || 'Unknown Player',
   }));
+  const boxScoreRows = [
+    ...boxScore.players,
+    {
+      playerId: 'team-total',
+      displayName: 'Team Total',
+      ftm: boxScore.teamTotals.ftm,
+      fta: boxScore.teamTotals.fta,
+      fg2m: boxScore.teamTotals.fg2m,
+      fg2a: boxScore.teamTotals.fg2a,
+      fg3m: boxScore.teamTotals.fg3m,
+      fg3a: boxScore.teamTotals.fg3a,
+      ast: boxScore.teamTotals.ast,
+      oreb: boxScore.teamTotals.oreb,
+      dreb: boxScore.teamTotals.dreb,
+      reb: boxScore.teamTotals.reb,
+      points: boxScore.teamTotals.points,
+      isTeamTotal: true,
+    },
+  ];
+  const boxScoreColumns = [
+    {
+      id: 'player',
+      label: 'Player',
+      align: 'left',
+      sortKey: 'displayName',
+      render: (row) => row.displayName,
+    },
+    {
+      id: 'pts',
+      label: 'PTS',
+      align: 'right',
+      sortKey: 'points',
+      emphasis: true,
+      render: (row) => row.points,
+    },
+    {
+      id: 'reb',
+      label: 'REB',
+      align: 'right',
+      sortKey: 'reb',
+      render: (row) => row.reb,
+    },
+    {
+      id: 'ast',
+      label: 'AST',
+      align: 'right',
+      sortKey: 'ast',
+      render: (row) => row.ast,
+    },
+    {
+      id: 'ft',
+      label: 'FT',
+      align: 'right',
+      sortValue: (row) => row.ftm,
+      render: (row) => `${row.ftm}/${row.fta}`,
+    },
+    {
+      id: 'fg2',
+      label: '2PT',
+      align: 'right',
+      sortValue: (row) => row.fg2m,
+      render: (row) => `${row.fg2m}/${row.fg2a}`,
+    },
+    {
+      id: 'fg3',
+      label: '3PT',
+      align: 'right',
+      sortValue: (row) => row.fg3m,
+      render: (row) => `${row.fg3m}/${row.fg3a}`,
+    },
+    {
+      id: 'oreb',
+      label: 'OREB',
+      align: 'right',
+      sortKey: 'oreb',
+      render: (row) => row.oreb,
+    },
+    {
+      id: 'dreb',
+      label: 'DREB',
+      align: 'right',
+      sortKey: 'dreb',
+      render: (row) => row.dreb,
+    },
+  ];
 
   const boxScoreContent = (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded border bg-white">
         <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">Box Score</div>
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-100">
-            <tr>
-              <th className="px-3 py-2 text-left">Player</th>
-              <th className="px-3 py-2 text-right">FT</th>
-              <th className="px-3 py-2 text-right">2PT</th>
-              <th className="px-3 py-2 text-right">3PT</th>
-              <th className="px-3 py-2 text-right">AST</th>
-              <th className="px-3 py-2 text-right">OREB</th>
-              <th className="px-3 py-2 text-right">DREB</th>
-              <th className="px-3 py-2 text-right">REB</th>
-              <th className="px-3 py-2 text-right">PTS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {boxScore.players.map((row) => (
-              <tr key={row.playerId} className="border-t">
-                <td className="px-3 py-2">{row.displayName}</td>
-                <td className="px-3 py-2 text-right">
-                  {row.ftm}/{row.fta}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {row.fg2m}/{row.fg2a}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {row.fg3m}/{row.fg3a}
-                </td>
-                <td className="px-3 py-2 text-right">{row.ast}</td>
-                <td className="px-3 py-2 text-right">{row.oreb}</td>
-                <td className="px-3 py-2 text-right">{row.dreb}</td>
-                <td className="px-3 py-2 text-right">{row.reb}</td>
-                <td className="px-3 py-2 text-right font-semibold">{row.points}</td>
-              </tr>
-            ))}
-            <tr className="border-t bg-slate-50 font-semibold">
-              <td className="px-3 py-2">Team Total</td>
-              <td className="px-3 py-2 text-right">
-                {boxScore.teamTotals.ftm}/{boxScore.teamTotals.fta}
-              </td>
-              <td className="px-3 py-2 text-right">
-                {boxScore.teamTotals.fg2m}/{boxScore.teamTotals.fg2a}
-              </td>
-              <td className="px-3 py-2 text-right">
-                {boxScore.teamTotals.fg3m}/{boxScore.teamTotals.fg3a}
-              </td>
-              <td className="px-3 py-2 text-right">{boxScore.teamTotals.ast}</td>
-              <td className="px-3 py-2 text-right">{boxScore.teamTotals.oreb}</td>
-              <td className="px-3 py-2 text-right">{boxScore.teamTotals.dreb}</td>
-              <td className="px-3 py-2 text-right">{boxScore.teamTotals.reb}</td>
-              <td className="px-3 py-2 text-right">{boxScore.teamTotals.points}</td>
-            </tr>
-          </tbody>
-        </table>
+        <StatsTable
+          columns={boxScoreColumns}
+          rows={boxScoreRows}
+          tableClassName="min-w-full text-sm"
+        />
       </div>
 
       <GameShotMap events={shotMapEvents} />

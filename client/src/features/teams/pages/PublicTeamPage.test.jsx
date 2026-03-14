@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -30,7 +30,7 @@ describe('PublicTeamPage', () => {
     cleanup();
   });
 
-  test('renders team name, consolidated player table, and split games lists', async () => {
+  test('renders team name, sortable player table, and stacked games lists', async () => {
     teamsApi.getPublicById.mockResolvedValue({
       team: {
         id: 'team-1',
@@ -127,6 +127,61 @@ describe('PublicTeamPage', () => {
         },
         {
           id: 'g3',
+          title: 'vs Tigers',
+          opponent: 'Tigers',
+          status: 'completed',
+          scheduledAt: '2026-03-09T00:00:00.000Z',
+          completedAt: '2026-03-09T02:00:00.000Z',
+          teamPoints: 68,
+          isPubliclyViewable: true,
+          createdAt: '2026-03-09T00:00:00.000Z',
+        },
+        {
+          id: 'g4',
+          title: 'vs Panthers',
+          opponent: 'Panthers',
+          status: 'completed',
+          scheduledAt: '2026-03-08T00:00:00.000Z',
+          completedAt: '2026-03-08T02:00:00.000Z',
+          teamPoints: 65,
+          isPubliclyViewable: true,
+          createdAt: '2026-03-08T00:00:00.000Z',
+        },
+        {
+          id: 'g5',
+          title: 'vs Bears',
+          opponent: 'Bears',
+          status: 'completed',
+          scheduledAt: '2026-03-07T00:00:00.000Z',
+          completedAt: '2026-03-07T02:00:00.000Z',
+          teamPoints: 70,
+          isPubliclyViewable: true,
+          createdAt: '2026-03-07T00:00:00.000Z',
+        },
+        {
+          id: 'g6',
+          title: 'vs Wolves',
+          opponent: 'Wolves',
+          status: 'completed',
+          scheduledAt: '2026-03-06T00:00:00.000Z',
+          completedAt: '2026-03-06T02:00:00.000Z',
+          teamPoints: 74,
+          isPubliclyViewable: true,
+          createdAt: '2026-03-06T00:00:00.000Z',
+        },
+        {
+          id: 'g7',
+          title: 'vs Lions',
+          opponent: 'Lions',
+          status: 'in_progress',
+          scheduledAt: '2099-03-10T00:00:00.000Z',
+          completedAt: null,
+          teamPoints: null,
+          isPubliclyViewable: false,
+          createdAt: '2026-03-11T00:00:00.000Z',
+        },
+        {
+          id: 'g8',
           title: 'vs Lions',
           opponent: 'Lions',
           status: 'in_progress',
@@ -174,7 +229,7 @@ describe('PublicTeamPage', () => {
     expect(screen.getByText('5/7')).toBeInTheDocument();
     expect(screen.getByText('3/5')).toBeInTheDocument();
     const headerCells = within(screen.getByRole('table')).getAllByRole('columnheader');
-    expect(headerCells.map((cell) => cell.textContent)).toEqual([
+    expect(headerCells.map((cell) => cell.textContent.replace(/[↕▲▼]/g, '').trim())).toEqual([
       'Player',
       'GP',
       'PPG',
@@ -189,12 +244,28 @@ describe('PublicTeamPage', () => {
       '2PT',
       '3PT',
     ]);
-    expect(screen.getByText('Upcoming')).toBeInTheDocument();
-    expect(screen.getByText('Recent')).toBeInTheDocument();
+    const gamesHeading = screen.getByRole('heading', { name: 'Games' });
+    const gamesSection = gamesHeading.closest('section');
+    const headings = within(gamesSection).getAllByRole('heading', { level: 3 });
+    expect(headings.map((heading) => heading.textContent)).toEqual(['Upcoming', 'Recent']);
     expect(screen.getByText(/72 pts/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open details for Falcons/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open details for Hawks/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Open details for Lions/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /Open details for Wolves/i })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
+    const rowsAfterSort = within(screen.getByRole('table')).getAllByRole('row');
+    expect(within(rowsAfterSort[1]).getByRole('link', { name: 'Alex Carter' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show all/i }));
+    expect(screen.getByRole('link', { name: /Open details for Wolves/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Show fewer/i }));
+    expect(
+      screen.queryByRole('link', { name: /Open details for Wolves/i })
+    ).not.toBeInTheDocument();
   });
 
   test('renders empty states', async () => {

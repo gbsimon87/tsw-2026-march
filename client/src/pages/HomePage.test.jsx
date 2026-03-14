@@ -61,6 +61,8 @@ describe('HomePage', () => {
 
     expect(screen.getByText('TSW Blue')).toBeInTheDocument();
     expect(screen.getByText('TSW Red')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'TSW Blue' })).toHaveAttribute('href', '/teams/team-1');
+    expect(screen.getByRole('link', { name: 'TSW Red' })).toHaveAttribute('href', '/teams/team-2');
     expect(screen.getByRole('link', { name: /Open Falcons/i })).toHaveAttribute(
       'href',
       '/games/g1'

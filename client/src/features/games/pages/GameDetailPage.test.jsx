@@ -159,6 +159,7 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Jordan: Assist/i)).toBeInTheDocument();
     expect(screen.getByText(/Jordan: Defensive Rebound/i)).toBeInTheDocument();
     expect(screen.getByText('AST')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /PTS/i })).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
@@ -177,12 +178,12 @@ describe('GameDetailPage', () => {
     expect(screen.queryByTestId('shot-miss-marker')).not.toBeInTheDocument();
     expect(screen.queryByText('ABOVE_BREAK_THREE')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '2PT' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '2PT' })[1]);
     expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
     expect(screen.queryByTestId('shot-miss-marker')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Player'), { target: { value: 'ALL' } });
-    fireEvent.click(screen.getByRole('button', { name: '3PT' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '3PT' })[1]);
     expect(screen.queryByTestId('shot-made-marker')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('shot-miss-marker')).toHaveLength(1);
 
@@ -202,6 +203,9 @@ describe('GameDetailPage', () => {
     expect(screen.getByText('Event 2 of 4')).toBeInTheDocument();
     expect(screen.getAllByTestId('replay-marker')).toHaveLength(2);
     expect(screen.getByText('0/1')).toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByTestId('replay-box-score')).getByRole('button', { name: /AST/i })
+    );
     const jordanReplayRowAfterAssist = within(screen.getByTestId('replay-box-score'))
       .getByText('Jordan')
       .closest('tr');
@@ -224,5 +228,8 @@ describe('GameDetailPage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
+    const boxScoreRows = within(screen.getAllByRole('table')[0]).getAllByRole('row');
+    expect(within(boxScoreRows[1]).getByText('Alex')).toBeInTheDocument();
   });
 });

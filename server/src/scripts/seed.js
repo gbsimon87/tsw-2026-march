@@ -14,11 +14,10 @@ const Team = mongoose.model('Team');
 const Game = mongoose.model('Game');
 
 const seedConfig = {
-  email: (process.env.SEED_USER_EMAIL || 'seed.coach@tsw.local').toLowerCase(),
-  password: process.env.SEED_USER_PASSWORD || 'Password123!',
-  name: process.env.SEED_USER_NAME || 'Seed Coach',
-  teamName: process.env.SEED_TEAM_NAME || 'City Ballers',
-  gameCount: 100,
+  userCount: Number(process.env.SEED_USER_COUNT || 10),
+  gamesPerUser: Number(process.env.SEED_GAMES_PER_USER || 20),
+  playersPerTeam: Number(process.env.SEED_PLAYERS_PER_TEAM || 10),
+  password: process.env.SEED_USER_PASSWORD || 'password',
 };
 
 const playerBlueprints = [
@@ -75,6 +74,26 @@ const threePointZones = [
   SHOT_ZONE_IDS.TOP_KEY,
 ];
 
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomChoice(values) {
+  return values[randomInt(0, values.length - 1)];
+}
+
+function createSeedUsers() {
+  return Array.from({ length: seedConfig.userCount }, (_, index) => {
+    const number = index + 1;
+
+    return {
+      email: `user${number}@user${number}.com`,
+      name: `User ${number}`,
+      teamName: `Team ${number}`,
+    };
+  });
+}
+
 function createTrackedEvent(playerId, statType, zoneId, occurredAt, variant) {
   const base = zoneCoordinates[zoneId];
 
@@ -104,121 +123,132 @@ function createAssistEvent(playerId, occurredAt) {
   };
 }
 
-function pushRepeatedEvents(events, count, buildEvent) {
-  for (let index = 0; index < count; index += 1) {
-    events.push(buildEvent(index));
-  }
-}
-
-function buildGameEvents(players, gameIndex, scheduledAt) {
+function buildGameEvents(players, scheduledAt) {
   const events = [];
   let minuteOffset = 0;
-  const playerIds = players.map((player) => player._id);
 
-  const nextAssisterId = (playerIndex, variant) => {
-    if (playerIds.length < 2) {
+  const nextOccurredAt = () => {
+    const occurredAt = new Date(scheduledAt.getTime() + minuteOffset * 60 * 1000);
+    minuteOffset += 1;
+    return occurredAt;
+  };
+
+  const pickAssisterId = (shooterId) => {
+    const eligiblePlayers = players.filter((player) => String(player._id) !== String(shooterId));
+    if (eligiblePlayers.length === 0) {
       return null;
     }
 
-    return playerIds[(playerIndex + variant + 1) % playerIds.length];
+    return randomChoice(eligiblePlayers)._id;
   };
 
-  for (const [playerIndex, player] of players.entries()) {
-    const rotationSeed = gameIndex + playerIndex;
-    const fg2Made = 1 + (rotationSeed % 2);
-    const fg2Miss = 1 + (rotationSeed % 3 === 0 ? 1 : 0);
-    const fg3Made = 1 + (rotationSeed % 4 === 0 ? 1 : 0);
-    const fg3Miss = 1 + (rotationSeed % 2 === 0 ? 1 : 0);
-    const ftMade = 1 + (rotationSeed % 3 === 1 ? 1 : 0);
-    const ftMiss = 1 + (rotationSeed % 5 === 0 ? 1 : 0);
-    const oreb = 1 + (rotationSeed % 4 === 2 ? 1 : 0);
-    const dreb = 1 + (rotationSeed % 3 === 2 ? 1 : 0);
+  for (const player of players) {
     const playerId = player._id;
+    const fg2Made = randomInt(0, 4);
+    const fg2Miss = randomInt(0, 4);
+    const fg3Made = randomInt(0, 3);
+    const fg3Miss = randomInt(0, 3);
+    const ftMade = randomInt(0, 3);
+    const ftMiss = randomInt(0, 2);
+    const oreb = randomInt(0, 3);
+    const dreb = randomInt(0, 4);
 
-    const nextOccurredAt = () => {
-      const occurredAt = new Date(scheduledAt.getTime() + minuteOffset * 60 * 1000);
-      minuteOffset += 1;
-      return occurredAt;
-    };
+    for (let index = 0; index < fg2Made; index += 1) {
+      events.push(
+        createTrackedEvent(
+          playerId,
+          STAT_TYPES.FG2_MADE,
+          randomChoice(twoPointZones),
+          nextOccurredAt(),
+          index + randomInt(0, 100)
+        )
+      );
 
-    pushRepeatedEvents(events, fg2Made, (variant) =>
-      createTrackedEvent(
-        playerId,
-        STAT_TYPES.FG2_MADE,
-        twoPointZones[(rotationSeed + variant) % twoPointZones.length],
-        nextOccurredAt(),
-        rotationSeed + variant
-      )
-    );
+      if (Math.random() < 0.6) {
+        const assisterId = pickAssisterId(playerId);
+        if (assisterId) {
+          events.push(createAssistEvent(assisterId, nextOccurredAt()));
+        }
+      }
+    }
 
-    pushRepeatedEvents(events, Math.max(0, fg2Made - 1), (variant) =>
-      createAssistEvent(nextAssisterId(playerIndex, rotationSeed + variant), nextOccurredAt())
-    );
+    for (let index = 0; index < fg2Miss; index += 1) {
+      events.push(
+        createTrackedEvent(
+          playerId,
+          STAT_TYPES.FG2_MISS,
+          randomChoice(twoPointZones),
+          nextOccurredAt(),
+          index + randomInt(0, 100)
+        )
+      );
+    }
 
-    pushRepeatedEvents(events, fg2Miss, (variant) =>
-      createTrackedEvent(
-        playerId,
-        STAT_TYPES.FG2_MISS,
-        twoPointZones[(rotationSeed + variant + 1) % twoPointZones.length],
-        nextOccurredAt(),
-        rotationSeed + variant + 5
-      )
-    );
+    for (let index = 0; index < fg3Made; index += 1) {
+      events.push(
+        createTrackedEvent(
+          playerId,
+          STAT_TYPES.FG3_MADE,
+          randomChoice(threePointZones),
+          nextOccurredAt(),
+          index + randomInt(0, 100)
+        )
+      );
 
-    pushRepeatedEvents(events, fg3Made, (variant) =>
-      createTrackedEvent(
-        playerId,
-        STAT_TYPES.FG3_MADE,
-        threePointZones[(rotationSeed + variant) % threePointZones.length],
-        nextOccurredAt(),
-        rotationSeed + variant + 10
-      )
-    );
+      if (Math.random() < 0.6) {
+        const assisterId = pickAssisterId(playerId);
+        if (assisterId) {
+          events.push(createAssistEvent(assisterId, nextOccurredAt()));
+        }
+      }
+    }
 
-    pushRepeatedEvents(events, fg3Made, (variant) =>
-      createAssistEvent(nextAssisterId(playerIndex, rotationSeed + variant + 10), nextOccurredAt())
-    );
+    for (let index = 0; index < fg3Miss; index += 1) {
+      events.push(
+        createTrackedEvent(
+          playerId,
+          STAT_TYPES.FG3_MISS,
+          randomChoice(threePointZones),
+          nextOccurredAt(),
+          index + randomInt(0, 100)
+        )
+      );
+    }
 
-    pushRepeatedEvents(events, fg3Miss, (variant) =>
-      createTrackedEvent(
-        playerId,
-        STAT_TYPES.FG3_MISS,
-        threePointZones[(rotationSeed + variant + 2) % threePointZones.length],
-        nextOccurredAt(),
-        rotationSeed + variant + 15
-      )
-    );
+    for (let index = 0; index < ftMade; index += 1) {
+      events.push(
+        createTrackedEvent(
+          playerId,
+          STAT_TYPES.FT_MADE,
+          SHOT_ZONE_IDS.FREE_THROW_LINE,
+          nextOccurredAt(),
+          index + randomInt(0, 100)
+        )
+      );
+    }
 
-    pushRepeatedEvents(events, ftMade, (variant) =>
-      createTrackedEvent(
-        playerId,
-        STAT_TYPES.FT_MADE,
-        SHOT_ZONE_IDS.FREE_THROW_LINE,
-        nextOccurredAt(),
-        rotationSeed + variant + 20
-      )
-    );
+    for (let index = 0; index < ftMiss; index += 1) {
+      events.push(
+        createTrackedEvent(
+          playerId,
+          STAT_TYPES.FT_MISS,
+          SHOT_ZONE_IDS.FREE_THROW_LINE,
+          nextOccurredAt(),
+          index + randomInt(0, 100)
+        )
+      );
+    }
 
-    pushRepeatedEvents(events, ftMiss, (variant) =>
-      createTrackedEvent(
-        playerId,
-        STAT_TYPES.FT_MISS,
-        SHOT_ZONE_IDS.FREE_THROW_LINE,
-        nextOccurredAt(),
-        rotationSeed + variant + 25
-      )
-    );
+    for (let index = 0; index < oreb; index += 1) {
+      events.push(createReboundEvent(playerId, STAT_TYPES.OREB, nextOccurredAt()));
+    }
 
-    pushRepeatedEvents(events, oreb, () =>
-      createReboundEvent(playerId, STAT_TYPES.OREB, nextOccurredAt())
-    );
-
-    pushRepeatedEvents(events, dreb, () =>
-      createReboundEvent(playerId, STAT_TYPES.DREB, nextOccurredAt())
-    );
+    for (let index = 0; index < dreb; index += 1) {
+      events.push(createReboundEvent(playerId, STAT_TYPES.DREB, nextOccurredAt()));
+    }
   }
 
-  return events;
+  return events.sort((eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt));
 }
 
 function buildGameDocs(userId, team) {
@@ -234,9 +264,9 @@ function buildGameDocs(userId, team) {
   startDate.setFullYear(startDate.getFullYear() - 1);
   const totalSpanMs = endDate.getTime() - startDate.getTime();
 
-  return Array.from({ length: seedConfig.gameCount }, (_, gameIndex) => {
-    const opponent = opponents[gameIndex % opponents.length];
-    const progress = seedConfig.gameCount === 1 ? 1 : gameIndex / (seedConfig.gameCount - 1);
+  return Array.from({ length: seedConfig.gamesPerUser }, (_, gameIndex) => {
+    const opponent = opponents[(gameIndex + randomInt(0, opponents.length - 1)) % opponents.length];
+    const progress = seedConfig.gamesPerUser === 1 ? 1 : gameIndex / (seedConfig.gamesPerUser - 1);
     const scheduledAt = new Date(startDate.getTime() + totalSpanMs * progress);
     scheduledAt.setHours(18 + (gameIndex % 3), (gameIndex % 2) * 30, 0, 0);
     const completedAt = new Date(scheduledAt.getTime() + 2 * 60 * 60 * 1000);
@@ -249,44 +279,54 @@ function buildGameDocs(userId, team) {
       status: 'completed',
       scheduledAt,
       completedAt,
-      events: buildGameEvents(players, gameIndex, scheduledAt),
+      events: buildGameEvents(players, scheduledAt),
     };
   });
 }
 
-async function upsertSeedUser() {
+async function upsertSeedUsers() {
+  const seedUsers = createSeedUsers();
   const passwordHash = await bcrypt.hash(seedConfig.password, 12);
-  let user = await User.findOne({ email: seedConfig.email });
+  const users = [];
 
-  if (!user) {
-    user = await User.create({
-      email: seedConfig.email,
-      name: seedConfig.name,
-      passwordHash,
-      authProvider: 'local',
-      emailVerified: true,
-      emailVerifiedAt: new Date(),
-      roles: ['user'],
+  for (const seedUser of seedUsers) {
+    let user = await User.findOne({ email: seedUser.email });
+
+    if (!user) {
+      user = await User.create({
+        email: seedUser.email,
+        name: seedUser.name,
+        passwordHash,
+        authProvider: 'local',
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        roles: ['user'],
+      });
+    } else {
+      user.name = seedUser.name;
+      user.passwordHash = passwordHash;
+      user.authProvider = 'local';
+      user.emailVerified = true;
+      user.emailVerifiedAt = user.emailVerifiedAt || new Date();
+      user.roles = ['user'];
+      await user.save();
+    }
+
+    users.push({
+      user,
+      teamName: seedUser.teamName,
     });
-    return user;
   }
 
-  user.name = seedConfig.name;
-  user.passwordHash = passwordHash;
-  user.authProvider = 'local';
-  user.emailVerified = true;
-  user.emailVerifiedAt = user.emailVerifiedAt || new Date();
-  user.roles = ['user'];
-  await user.save();
-  return user;
+  return users;
 }
 
-async function resetSeedData(userId) {
+async function resetSeedData(userIds) {
   await Promise.all([
-    Game.deleteMany({ ownerUserId: userId }),
-    Team.deleteMany({ ownerUserId: userId }),
-    Session.deleteMany({ userId }),
-    AuthToken.deleteMany({ userId }),
+    Game.deleteMany({ ownerUserId: { $in: userIds } }),
+    Team.deleteMany({ ownerUserId: { $in: userIds } }),
+    Session.deleteMany({ userId: { $in: userIds } }),
+    AuthToken.deleteMany({ userId: { $in: userIds } }),
   ]);
 }
 
@@ -294,27 +334,44 @@ async function main() {
   await connectDb();
 
   try {
-    const user = await upsertSeedUser();
-    await resetSeedData(user._id);
+    const seededUsers = await upsertSeedUsers();
+    const userIds = seededUsers.map((entry) => entry.user._id);
+    await resetSeedData(userIds);
 
-    const team = await Team.create({
-      ownerUserId: user._id,
-      name: seedConfig.teamName,
-      players: playerBlueprints.map((player) => ({
-        ...player,
-        isActive: true,
-      })),
-    });
+    let teamCount = 0;
+    let playerCount = 0;
+    let gameCount = 0;
+    let eventCount = 0;
 
-    const games = await Game.insertMany(buildGameDocs(user._id, team), { ordered: true });
+    for (const [index, entry] of seededUsers.entries()) {
+      const team = await Team.create({
+        ownerUserId: entry.user._id,
+        name: entry.teamName || `Team ${index + 1}`,
+        players: playerBlueprints.slice(0, seedConfig.playersPerTeam).map((player) => ({
+          ...player,
+          isActive: true,
+        })),
+      });
+
+      const games = await Game.insertMany(buildGameDocs(entry.user._id, team), { ordered: true });
+
+      teamCount += 1;
+      playerCount += team.players.length;
+      gameCount += games.length;
+      eventCount += games.reduce((total, game) => total + game.events.length, 0);
+    }
 
     console.log('Seed complete');
-    console.log(`User: ${user.email}`);
+    console.log(`Users: ${seededUsers.length}`);
     console.log(`Password: ${seedConfig.password}`);
-    console.log(`Team: ${team.name}`);
-    console.log(`Players: ${team.players.length}`);
-    console.log(`Games: ${games.length}`);
-    console.log(`Events: ${games.reduce((total, game) => total + game.events.length, 0)}`);
+    console.log(`Teams: ${teamCount}`);
+    console.log(`Players: ${playerCount}`);
+    console.log(`Games: ${gameCount}`);
+    console.log(`Events: ${eventCount}`);
+    console.log('Logins:');
+    for (const entry of seededUsers) {
+      console.log(`- ${entry.user.email}`);
+    }
   } finally {
     await mongoose.disconnect();
   }
@@ -323,7 +380,5 @@ async function main() {
 main().catch((error) => {
   console.error('Seed failed');
   console.error(error);
-  mongoose.disconnect().finally(() => {
-    process.exit(1);
-  });
+  process.exitCode = 1;
 });

@@ -33,11 +33,7 @@ export function AppLayout() {
                 Dashboard
               </NavLink>
             ) : null}
-            {user ? (
-              <NavLink to="/games" className={desktopNavLinkClass}>
-                Games
-              </NavLink>
-            ) : null}
+            {user ? null : null}
             {!user ? (
               <>
                 <NavLink to="/login" className={desktopNavLinkClass}>
@@ -137,15 +133,7 @@ export function AppLayout() {
                 Dashboard
               </NavLink>
             ) : null}
-            {user ? (
-              <NavLink
-                to="/games"
-                className={mobileNavLinkClass}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Games
-              </NavLink>
-            ) : null}
+            {user ? null : null}
             {!user ? (
               <>
                 <NavLink

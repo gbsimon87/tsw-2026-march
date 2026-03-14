@@ -159,9 +159,12 @@ export function HomePage() {
                   key={game.id}
                   className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                  <Link
+                    to={`/teams/${game.team.id}`}
+                    className="text-xs font-semibold uppercase tracking-wide text-sky-700 underline decoration-sky-200 underline-offset-4 transition hover:text-sky-800 hover:decoration-sky-500"
+                  >
                     {game.team.name}
-                  </p>
+                  </Link>
                   <h3 className="mt-2 text-lg font-semibold text-slate-900">{primaryText}</h3>
                   <p className="mt-2 text-sm text-slate-600">
                     {formatGameDate(game)}

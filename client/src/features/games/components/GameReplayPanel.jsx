@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
+import { StatsTable } from '../../teams/components/StatsTable';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
@@ -136,6 +137,48 @@ export function GameReplayPanel({ events, players }) {
 
     return lines;
   }, [currentSourceIndex, events, players, replayEvents]);
+  const replayColumns = [
+    {
+      id: 'player',
+      label: 'Player',
+      align: 'left',
+      sortKey: 'displayName',
+      render: (row) => row.displayName,
+    },
+    {
+      id: 'pts',
+      label: 'PTS',
+      align: 'right',
+      sortKey: 'points',
+      emphasis: true,
+      render: (row) => row.points,
+    },
+    { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
+    { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast },
+    {
+      id: 'ft',
+      label: 'FT',
+      align: 'right',
+      sortValue: (row) => row.ftm,
+      render: (row) => `${row.ftm}/${row.fta}`,
+    },
+    {
+      id: 'fg2',
+      label: '2PT',
+      align: 'right',
+      sortValue: (row) => row.fg2m,
+      render: (row) => `${row.fg2m}/${row.fg2a}`,
+    },
+    {
+      id: 'fg3',
+      label: '3PT',
+      align: 'right',
+      sortValue: (row) => row.fg3m,
+      render: (row) => `${row.fg3m}/${row.fg3a}`,
+    },
+    { id: 'oreb', label: 'OREB', align: 'right', sortKey: 'oreb', render: (row) => row.oreb },
+    { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
+  ];
 
   return (
     <div className="space-y-3 rounded border bg-white p-3">
@@ -208,42 +251,11 @@ export function GameReplayPanel({ events, players }) {
             <div className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
               Replay Box Score
             </div>
-            <table className="min-w-full text-xs">
-              <thead className="bg-slate-100 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">Player</th>
-                  <th className="px-3 py-2 text-right">FT</th>
-                  <th className="px-3 py-2 text-right">2PT</th>
-                  <th className="px-3 py-2 text-right">3PT</th>
-                  <th className="px-3 py-2 text-right">AST</th>
-                  <th className="px-3 py-2 text-right">OREB</th>
-                  <th className="px-3 py-2 text-right">DREB</th>
-                  <th className="px-3 py-2 text-right">REB</th>
-                  <th className="px-3 py-2 text-right">PTS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {replayBoxScore.map((line) => (
-                  <tr key={line.playerId} className="border-t">
-                    <td className="px-3 py-2">{line.displayName}</td>
-                    <td className="px-3 py-2 text-right">
-                      {line.ftm}/{line.fta}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {line.fg2m}/{line.fg2a}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {line.fg3m}/{line.fg3a}
-                    </td>
-                    <td className="px-3 py-2 text-right">{line.ast}</td>
-                    <td className="px-3 py-2 text-right">{line.oreb}</td>
-                    <td className="px-3 py-2 text-right">{line.dreb}</td>
-                    <td className="px-3 py-2 text-right">{line.reb}</td>
-                    <td className="px-3 py-2 text-right font-medium">{line.points}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <StatsTable
+              columns={replayColumns}
+              rows={replayBoxScore}
+              tableClassName="min-w-full text-xs"
+            />
           </div>
         </>
       )}
