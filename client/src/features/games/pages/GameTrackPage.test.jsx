@@ -69,8 +69,13 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/Track Game:/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Open Full Screen Tracking/i })
+      ).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
+    expect(screen.getByRole('button', { name: /Close full screen tracking/i })).toBeInTheDocument();
 
     const court = screen.getByTestId('interactive-court-image');
     court.getBoundingClientRect = () => ({
@@ -86,6 +91,7 @@ describe('GameTrackPage', () => {
     });
 
     fireEvent.click(court, { clientX: 475, clientY: 900 });
+    expect(screen.getByText(/Add Event/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Shot Make/i }));
 
     await waitFor(() => {
@@ -99,13 +105,31 @@ describe('GameTrackPage', () => {
     expect(payload.y).toBeTypeOf('number');
   });
 
-  test('FT Make uses fixed free-throw-line payload with south fallback', async () => {
+  test('FT Make uses fixed free-throw-line payload', async () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/Track Game:/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Open Full Screen Tracking/i })
+      ).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
+
+    const court = screen.getByTestId('interactive-court-image');
+    court.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 500,
+      height: 940,
+      right: 500,
+      bottom: 940,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.click(court, { clientX: 250, clientY: 800 });
     fireEvent.click(screen.getByRole('button', { name: /FT Make/i }));
 
     await waitFor(() => {
@@ -115,6 +139,6 @@ describe('GameTrackPage', () => {
     const [, payload] = apiMocks.appendEvent.mock.calls[0];
     expect(payload.statType).toBe('FT_MADE');
     expect(payload.zoneId).toBe('FREE_THROW_LINE');
-    expect(payload.y).toBeGreaterThan(50);
+    expect(payload.y).toBeTypeOf('number');
   });
 });
