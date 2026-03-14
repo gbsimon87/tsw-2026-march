@@ -341,7 +341,7 @@ export function GameTrackPage() {
               </div>
 
               <div className="mt-3 grid grid-cols-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),7rem] landscape:h-[calc(100%-2.25rem)]">
-                <div className="space-y-1">
+                <div className="space-y-1 overflow-hidden">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {pendingReboundPrompt ? 'Rebounder' : 'Player'}
                   </p>

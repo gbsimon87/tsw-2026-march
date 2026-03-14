@@ -61,6 +61,8 @@ describe('PublicTeamPage', () => {
               dreb: 4,
               reb: 6,
               points: 23,
+              pointsPerGame: 23,
+              reboundsPerGame: 6,
             },
             {
               playerId: 'p2',
@@ -75,6 +77,8 @@ describe('PublicTeamPage', () => {
               dreb: 5,
               reb: 6,
               points: 2,
+              pointsPerGame: 2,
+              reboundsPerGame: 6,
             },
           ],
           teamTotals: {
@@ -140,16 +144,16 @@ describe('PublicTeamPage', () => {
 
     expect(roster.getByText('#12 Alex Carter')).toBeInTheDocument();
     expect(roster.getByText('Jordan Lee')).toBeInTheDocument();
-    expect(roster.getByText('23 pts • 6 reb')).toBeInTheDocument();
-    expect(roster.getByText('2 pts • 6 reb')).toBeInTheDocument();
+    expect(roster.getByText('23 pts • 6 reb • 23.0 ppg • 6.0 rpg')).toBeInTheDocument();
+    expect(roster.getByText('2 pts • 6 reb • 2.0 ppg • 6.0 rpg')).toBeInTheDocument();
     expect(screen.getByText('Completed Public Games')).toBeInTheDocument();
-    expect(screen.getByText('FT')).toBeInTheDocument();
+    expect(screen.getByText('PTS')).toBeInTheDocument();
+    expect(screen.getByText('REB')).toBeInTheDocument();
     expect(screen.getByText('2PT')).toBeInTheDocument();
     expect(screen.getByText('3PT')).toBeInTheDocument();
+    expect(screen.getByText('FT')).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
-    expect(screen.getByText('REB')).toBeInTheDocument();
-    expect(screen.getByText('PTS')).toBeInTheDocument();
     expect(screen.getByText('4/6')).toBeInTheDocument();
     expect(screen.getByText('5/7')).toBeInTheDocument();
     expect(screen.getByText('3/5')).toBeInTheDocument();
@@ -157,13 +161,13 @@ describe('PublicTeamPage', () => {
     const headerCells = within(screen.getByRole('table')).getAllByRole('columnheader');
     expect(headerCells.map((cell) => cell.textContent)).toEqual([
       'Player',
-      'FT',
+      'PTS',
+      'REB',
       '2PT',
       '3PT',
+      'FT',
       'OREB',
       'DREB',
-      'REB',
-      'PTS',
     ]);
     expect(screen.getByText('Upcoming')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
@@ -178,7 +182,7 @@ describe('PublicTeamPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW Varsity',
-        players: [],
+        players: [{ id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12 }],
       },
       summary: {
         gamesCount: 0,
@@ -187,7 +191,24 @@ describe('PublicTeamPage', () => {
         fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
         ft: { made: 0, missed: 0, attempts: 0, percentage: null },
         boxScore: {
-          players: [],
+          players: [
+            {
+              playerId: 'p1',
+              displayName: 'Alex Carter',
+              ftm: 0,
+              fta: 0,
+              fg2m: 0,
+              fg2a: 0,
+              fg3m: 0,
+              fg3a: 0,
+              oreb: 0,
+              dreb: 0,
+              reb: 0,
+              points: 0,
+              pointsPerGame: 0,
+              reboundsPerGame: 0,
+            },
+          ],
           teamTotals: {
             ftm: 0,
             fta: 0,
@@ -208,13 +229,14 @@ describe('PublicTeamPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/No active players listed yet/i)).toBeInTheDocument();
+      expect(screen.getByText('#12 Alex Carter')).toBeInTheDocument();
     });
 
     expect(screen.getByText(/No upcoming games scheduled/i)).toBeInTheDocument();
     expect(screen.getByText(/No recent games yet/i)).toBeInTheDocument();
     expect(screen.getByText('Team Total')).toBeInTheDocument();
-    expect(screen.getAllByText('0/0')).toHaveLength(3);
+    expect(screen.getAllByText('0/0')).toHaveLength(6);
+    expect(screen.getByText('0 pts • 0 reb • 0.0 ppg • 0.0 rpg')).toBeInTheDocument();
   });
 
   test('renders error state', async () => {

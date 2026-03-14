@@ -36,6 +36,10 @@ function gameTimeValue(game) {
   return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
+function formatPerGameValue(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : '0.0';
+}
+
 function PublicGameRow({ game }) {
   const primaryText = game.opponent || game.title || 'Opponent TBD';
 
@@ -159,59 +163,59 @@ export function PublicTeamPage() {
           <table className="min-w-[860px] text-sm">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="px-3 py-2 text-left">Player</th>
-                <th className="px-3 py-2 text-right">FT</th>
-                <th className="px-3 py-2 text-right">2PT</th>
-                <th className="px-3 py-2 text-right">3PT</th>
-                <th className="px-3 py-2 text-right">OREB</th>
-                <th className="px-3 py-2 text-right">DREB</th>
-                <th className="px-3 py-2 text-right">REB</th>
-                <th className="px-3 py-2 text-right">PTS</th>
+                <th className="px-2 py-1.5 text-left">Player</th>
+                <th className="px-2 py-1.5 text-right">PTS</th>
+                <th className="px-2 py-1.5 text-right">REB</th>
+                <th className="px-2 py-1.5 text-right">2PT</th>
+                <th className="px-2 py-1.5 text-right">3PT</th>
+                <th className="px-2 py-1.5 text-right">FT</th>
+                <th className="px-2 py-1.5 text-right">OREB</th>
+                <th className="px-2 py-1.5 text-right">DREB</th>
               </tr>
             </thead>
             <tbody>
               {summary.boxScore.players.map((row) => (
                 <tr key={row.playerId} className="border-t border-slate-200">
-                  <td className="px-3 py-3 text-slate-900">{row.displayName}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {row.ftm}/{row.fta}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {row.fg2m}/{row.fg2a}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">
-                    {row.fg3m}/{row.fg3a}
-                  </td>
-                  <td className="px-3 py-3 text-right text-slate-700">{row.oreb}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">{row.dreb}</td>
-                  <td className="px-3 py-3 text-right text-slate-700">{row.reb}</td>
-                  <td className="px-3 py-3 text-right font-semibold text-slate-900">
+                  <td className="px-2 py-1.5 text-slate-900">{row.displayName}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
                     {row.points}
                   </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.reb}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {row.fg2m}/{row.fg2a}
+                  </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {row.fg3m}/{row.fg3a}
+                  </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {row.ftm}/{row.fta}
+                  </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.oreb}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.dreb}</td>
                 </tr>
               ))}
               <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
-                <td className="px-3 py-3 text-slate-900">Team Total</td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.ftm}/{summary.boxScore.teamTotals.fta}
+                <td className="px-2 py-1.5 text-slate-900">Team Total</td>
+                <td className="px-2 py-1.5 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.points}
                 </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.fg2m}/{summary.boxScore.teamTotals.fg2a}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.fg3m}/{summary.boxScore.teamTotals.fg3a}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.oreb}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.dreb}
-                </td>
-                <td className="px-3 py-3 text-right text-slate-900">
+                <td className="px-2 py-1.5 text-right text-slate-900">
                   {summary.boxScore.teamTotals.reb}
                 </td>
-                <td className="px-3 py-3 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.points}
+                <td className="px-2 py-1.5 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.fg2m}/{summary.boxScore.teamTotals.fg2a}
+                </td>
+                <td className="px-2 py-1.5 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.fg3m}/{summary.boxScore.teamTotals.fg3a}
+                </td>
+                <td className="px-2 py-1.5 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.ftm}/{summary.boxScore.teamTotals.fta}
+                </td>
+                <td className="px-2 py-1.5 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.oreb}
+                </td>
+                <td className="px-2 py-1.5 text-right text-slate-900">
+                  {summary.boxScore.teamTotals.dreb}
                 </td>
               </tr>
             </tbody>
@@ -230,15 +234,17 @@ export function PublicTeamPage() {
                 key={player.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span>
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-slate-900">
                     {typeof player.jerseyNumber === 'number'
                       ? `#${player.jerseyNumber} ${player.displayName}`
                       : player.displayName}
                   </span>
                   <span className="text-xs font-medium text-slate-500">
                     {boxScoreByPlayerId.get(player.id)?.points || 0} pts •{' '}
-                    {boxScoreByPlayerId.get(player.id)?.reb || 0} reb
+                    {boxScoreByPlayerId.get(player.id)?.reb || 0} reb •{' '}
+                    {formatPerGameValue(boxScoreByPlayerId.get(player.id)?.pointsPerGame)} ppg •{' '}
+                    {formatPerGameValue(boxScoreByPlayerId.get(player.id)?.reboundsPerGame)} rpg
                   </span>
                 </div>
               </li>

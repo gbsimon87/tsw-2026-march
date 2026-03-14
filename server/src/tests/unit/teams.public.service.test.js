@@ -110,6 +110,8 @@ describe('teams public service', () => {
             dreb: 0,
             reb: 0,
             points: 3,
+            pointsPerGame: 3,
+            reboundsPerGame: 0,
           },
           {
             playerId: 'p2',
@@ -124,6 +126,8 @@ describe('teams public service', () => {
             dreb: 1,
             reb: 1,
             points: 3,
+            pointsPerGame: 3,
+            reboundsPerGame: 1,
           },
         ],
         teamTotals: {
@@ -194,5 +198,62 @@ describe('teams public service', () => {
         },
       },
     });
+  });
+
+  test('computes per-game averages from total public completed games and zeroes them when none qualify', () => {
+    const summary = buildPublicTeamSummary(
+      [
+        {
+          status: 'completed',
+          scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+          events: [
+            { playerId: 'p1', statType: 'FG2_MADE' },
+            { playerId: 'p1', statType: 'DREB' },
+          ],
+        },
+        {
+          status: 'completed',
+          scheduledAt: new Date('2026-03-12T00:00:00.000Z'),
+          events: [
+            { playerId: 'p1', statType: 'FG3_MADE' },
+            { playerId: 'p1', statType: 'OREB' },
+          ],
+        },
+      ],
+      {
+        players: [{ _id: 'p1', displayName: 'Alex', isActive: true }],
+      }
+    );
+
+    expect(summary.boxScore.players).toEqual([
+      expect.objectContaining({
+        playerId: 'p1',
+        points: 5,
+        reb: 2,
+        pointsPerGame: 2.5,
+        reboundsPerGame: 1,
+      }),
+    ]);
+
+    const zeroSummary = buildPublicTeamSummary(
+      [
+        {
+          status: 'in_progress',
+          scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+          events: [{ playerId: 'p1', statType: 'FG2_MADE' }],
+        },
+      ],
+      {
+        players: [{ _id: 'p1', displayName: 'Alex', isActive: true }],
+      }
+    );
+
+    expect(zeroSummary.boxScore.players).toEqual([
+      expect.objectContaining({
+        playerId: 'p1',
+        pointsPerGame: 0,
+        reboundsPerGame: 0,
+      }),
+    ]);
   });
 });

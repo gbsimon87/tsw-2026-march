@@ -80,6 +80,7 @@ function buildPublicTeamSummary(games, team) {
   const includedGames = games.filter(
     (game) => game.status === 'completed' && isGamePubliclyViewable(game)
   );
+  const gamesCount = includedGames.length;
 
   const totals = createEmptyTeamStatSummary();
 
@@ -97,10 +98,19 @@ function buildPublicTeamSummary(games, team) {
     { includeInactivePlayers: true }
   );
 
+  const playerSummaries = boxScore.players.map((row) => ({
+    ...row,
+    pointsPerGame: gamesCount > 0 ? row.points / gamesCount : 0,
+    reboundsPerGame: gamesCount > 0 ? row.reb / gamesCount : 0,
+  }));
+
   return {
-    gamesCount: includedGames.length,
+    gamesCount,
     ...finalizeTeamStatSummary(totals),
-    boxScore,
+    boxScore: {
+      ...boxScore,
+      players: playerSummaries,
+    },
   };
 }
 
