@@ -13,7 +13,7 @@ const {
   findTeamById,
   saveTeam,
 } = require('./teams.repository');
-const { listGamesByTeamId } = require('../games/games.repository');
+const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 
 function normalizeName(name) {
@@ -76,6 +76,32 @@ function sanitizePublicGame(game) {
   };
 }
 
+function publicGameTimeValue(game) {
+  const rawValue = game.scheduledAt || game.completedAt || game.createdAt || null;
+  if (!rawValue) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const parsed = new Date(rawValue).getTime();
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
+function sanitizePublicPlayer(player) {
+  return {
+    id: String(player._id),
+    displayName: player.displayName,
+    jerseyNumber: player.jerseyNumber ?? null,
+  };
+}
+
+function findPlayerById(team, playerId) {
+  if (typeof team.players?.id === 'function') {
+    return team.players.id(playerId);
+  }
+
+  return (team.players || []).find((player) => String(player._id) === String(playerId)) || null;
+}
+
 function buildPublicTeamSummary(games, team) {
   const includedGames = games.filter(
     (game) => game.status === 'completed' && isGamePubliclyViewable(game)
@@ -100,7 +126,9 @@ function buildPublicTeamSummary(games, team) {
 
   const playerSummaries = boxScore.players.map((row) => ({
     ...row,
+    gamesPlayed: gamesCount,
     pointsPerGame: gamesCount > 0 ? row.points / gamesCount : 0,
+    assistsPerGame: gamesCount > 0 ? row.ast / gamesCount : 0,
     reboundsPerGame: gamesCount > 0 ? row.reb / gamesCount : 0,
   }));
 
@@ -111,6 +139,73 @@ function buildPublicTeamSummary(games, team) {
       ...boxScore,
       players: playerSummaries,
     },
+  };
+}
+
+function buildPublicPlayerGameRows(games, team, player) {
+  return games
+    .filter((game) => game.status === 'completed' && isGamePubliclyViewable(game))
+    .map((game) => {
+      const boxScore = computeBoxScore(game, team, { includeInactivePlayers: true });
+      const playerRow = boxScore.players.find((row) => row.playerId === String(player._id)) || {
+        playerId: String(player._id),
+        displayName: player.displayName,
+        ftm: 0,
+        fta: 0,
+        fg2m: 0,
+        fg2a: 0,
+        fg3m: 0,
+        fg3a: 0,
+        ast: 0,
+        oreb: 0,
+        dreb: 0,
+        reb: 0,
+        points: 0,
+      };
+
+      return {
+        gameId: String(game._id),
+        opponent: game.opponent ?? null,
+        title: game.title,
+        date: game.scheduledAt || game.completedAt || game.createdAt || null,
+        scheduledAt: game.scheduledAt ?? null,
+        completedAt: game.completedAt ?? null,
+        createdAt: game.createdAt ?? null,
+        stats: {
+          ftm: playerRow.ftm,
+          fta: playerRow.fta,
+          fg2m: playerRow.fg2m,
+          fg2a: playerRow.fg2a,
+          fg3m: playerRow.fg3m,
+          fg3a: playerRow.fg3a,
+          ast: playerRow.ast,
+          oreb: playerRow.oreb,
+          dreb: playerRow.dreb,
+          reb: playerRow.reb,
+          points: playerRow.points,
+        },
+      };
+    })
+    .sort((gameA, gameB) => publicGameTimeValue(gameB) - publicGameTimeValue(gameA));
+}
+
+function buildPublicPlayerSummary(gameRows) {
+  const totals = gameRows.reduce(
+    (summary, game) => ({
+      points: summary.points + game.stats.points,
+      reb: summary.reb + game.stats.reb,
+      ast: summary.ast + game.stats.ast,
+    }),
+    { points: 0, reb: 0, ast: 0 }
+  );
+  const gamesCount = gameRows.length;
+
+  return {
+    gamesCount,
+    ...totals,
+    pointsPerGame: gamesCount > 0 ? totals.points / gamesCount : 0,
+    reboundsPerGame: gamesCount > 0 ? totals.reb / gamesCount : 0,
+    assistsPerGame: gamesCount > 0 ? totals.ast / gamesCount : 0,
   };
 }
 
@@ -190,6 +285,78 @@ async function getPublicTeam(teamId) {
     summary: buildPublicTeamSummary(games, team),
     games: games.map(sanitizePublicGame),
   };
+}
+
+async function getPublicPlayer(teamId, playerId) {
+  if (!mongoose.Types.ObjectId.isValid(teamId)) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  const team = await findTeamById(teamId);
+  if (!team) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  const player = findPlayerById(team, playerId);
+  if (!player) {
+    throw new ApiError(404, 'Player not found');
+  }
+
+  const games = await listGamesByTeamId(teamId);
+  const gameRows = buildPublicPlayerGameRows(games, team, player);
+
+  return {
+    team: {
+      id: String(team._id),
+      name: team.name,
+    },
+    player: sanitizePublicPlayer(player),
+    summary: buildPublicPlayerSummary(gameRows),
+    games: gameRows,
+  };
+}
+
+async function listPublicExploreGames(limit = 10) {
+  const games = await listCompletedGames();
+  const selectedGames = [];
+  const seenTeamIds = new Set();
+
+  for (const game of games) {
+    if (!isGamePubliclyViewable(game)) {
+      continue;
+    }
+
+    const currentTeamId = String(game.teamId);
+    if (seenTeamIds.has(currentTeamId)) {
+      continue;
+    }
+
+    const team = await findTeamById(currentTeamId);
+    if (!team) {
+      continue;
+    }
+
+    seenTeamIds.add(currentTeamId);
+    selectedGames.push({
+      id: String(game._id),
+      title: game.title,
+      opponent: game.opponent ?? null,
+      scheduledAt: game.scheduledAt ?? null,
+      completedAt: game.completedAt ?? null,
+      createdAt: game.createdAt ?? null,
+      teamPoints: computeTeamPoints(game),
+      team: {
+        id: String(team._id),
+        name: team.name,
+      },
+    });
+
+    if (selectedGames.length >= limit) {
+      break;
+    }
+  }
+
+  return selectedGames;
 }
 
 async function updateTeamForUser(userId, teamId, payload) {
@@ -291,7 +458,11 @@ module.exports = {
   listTeamsForUser,
   getTeamForUser,
   getPublicTeam,
+  getPublicPlayer,
+  listPublicExploreGames,
   buildPublicTeamSummary,
+  buildPublicPlayerGameRows,
+  buildPublicPlayerSummary,
   updateTeamForUser,
   addPlayerToTeam,
   updatePlayerOnTeam,

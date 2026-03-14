@@ -18,6 +18,7 @@ const seedConfig = {
   password: process.env.SEED_USER_PASSWORD || 'Password123!',
   name: process.env.SEED_USER_NAME || 'Seed Coach',
   teamName: process.env.SEED_TEAM_NAME || 'City Ballers',
+  gameCount: 100,
 };
 
 const playerBlueprints = [
@@ -95,6 +96,14 @@ function createReboundEvent(playerId, statType, occurredAt) {
   };
 }
 
+function createAssistEvent(playerId, occurredAt) {
+  return {
+    playerId,
+    statType: STAT_TYPES.AST,
+    occurredAt,
+  };
+}
+
 function pushRepeatedEvents(events, count, buildEvent) {
   for (let index = 0; index < count; index += 1) {
     events.push(buildEvent(index));
@@ -104,6 +113,15 @@ function pushRepeatedEvents(events, count, buildEvent) {
 function buildGameEvents(players, gameIndex, scheduledAt) {
   const events = [];
   let minuteOffset = 0;
+  const playerIds = players.map((player) => player._id);
+
+  const nextAssisterId = (playerIndex, variant) => {
+    if (playerIds.length < 2) {
+      return null;
+    }
+
+    return playerIds[(playerIndex + variant + 1) % playerIds.length];
+  };
 
   for (const [playerIndex, player] of players.entries()) {
     const rotationSeed = gameIndex + playerIndex;
@@ -133,6 +151,10 @@ function buildGameEvents(players, gameIndex, scheduledAt) {
       )
     );
 
+    pushRepeatedEvents(events, Math.max(0, fg2Made - 1), (variant) =>
+      createAssistEvent(nextAssisterId(playerIndex, rotationSeed + variant), nextOccurredAt())
+    );
+
     pushRepeatedEvents(events, fg2Miss, (variant) =>
       createTrackedEvent(
         playerId,
@@ -151,6 +173,10 @@ function buildGameEvents(players, gameIndex, scheduledAt) {
         nextOccurredAt(),
         rotationSeed + variant + 10
       )
+    );
+
+    pushRepeatedEvents(events, fg3Made, (variant) =>
+      createAssistEvent(nextAssisterId(playerIndex, rotationSeed + variant + 10), nextOccurredAt())
     );
 
     pushRepeatedEvents(events, fg3Miss, (variant) =>
@@ -196,15 +222,23 @@ function buildGameEvents(players, gameIndex, scheduledAt) {
 }
 
 function buildGameDocs(userId, team) {
-  const now = new Date();
   const players = team.players.map((player) => ({
     _id: player._id,
     displayName: player.displayName,
   }));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const endDate = new Date(today);
+  endDate.setDate(endDate.getDate() - 1);
+  const startDate = new Date(today);
+  startDate.setFullYear(startDate.getFullYear() - 1);
+  const totalSpanMs = endDate.getTime() - startDate.getTime();
 
-  return opponents.map((opponent, gameIndex) => {
-    const scheduledAt = new Date(now.getTime() - (10 - gameIndex) * 3 * 24 * 60 * 60 * 1000);
-    scheduledAt.setHours(18 + (gameIndex % 3), 0, 0, 0);
+  return Array.from({ length: seedConfig.gameCount }, (_, gameIndex) => {
+    const opponent = opponents[gameIndex % opponents.length];
+    const progress = seedConfig.gameCount === 1 ? 1 : gameIndex / (seedConfig.gameCount - 1);
+    const scheduledAt = new Date(startDate.getTime() + totalSpanMs * progress);
+    scheduledAt.setHours(18 + (gameIndex % 3), (gameIndex % 2) * 30, 0, 0);
     const completedAt = new Date(scheduledAt.getTime() + 2 * 60 * 60 * 1000);
 
     return {

@@ -50,8 +50,8 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     expect(screen.getByRole('link', { name: /New Game/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /View Games/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /New Team/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Games$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Teams$/i })).toBeInTheDocument();
     expect(screen.queryByText(/"name":/i)).not.toBeInTheDocument();
 
     await waitFor(() => {
@@ -59,19 +59,19 @@ describe('DashboardPage', () => {
     });
   });
 
-  test('renders empty team state with create team CTA', async () => {
+  test('renders empty recent-games state with start game CTA', async () => {
     teamsApi.list.mockResolvedValue({ teams: [] });
     gamesApi.list.mockResolvedValue({ games: [] });
 
     renderDashboard();
 
     await waitFor(() => {
-      expect(screen.getByText(/No team yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/No games recorded yet/i)).toBeInTheDocument();
     });
-    expect(screen.getAllByRole('link', { name: /Create Team/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: /Start New Game/i })).toBeInTheDocument();
   });
 
-  test('renders summary, team snapshot, and recent games when data exists', async () => {
+  test('renders summary and recent games when data exists', async () => {
     teamsApi.list.mockResolvedValue({
       teams: [
         { id: 't1', name: 'TSW A' },
@@ -95,13 +95,9 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     await waitFor(() => {
-      expect(screen.getByText('TSW A')).toBeInTheDocument();
+      expect(screen.getByText(/vs Hawks/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText('TSW B')).toBeInTheDocument();
-    expect(screen.getByText('TSW C')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Edit TSW A/i })).toBeInTheDocument();
-    expect(screen.getByText('+1 more')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText(/vs Hawks/i)).toBeInTheDocument();
     expect(screen.getByText(/In Progress/i)).toBeInTheDocument();

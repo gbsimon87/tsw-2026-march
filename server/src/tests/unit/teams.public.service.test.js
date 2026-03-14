@@ -8,6 +8,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
 
 jest.mock('../../modules/games/games.repository', () => ({
   listGamesByTeamId: jest.fn(),
+  listCompletedGames: jest.fn(),
 }));
 
 jest.mock('mongoose', () => ({
@@ -19,8 +20,15 @@ jest.mock('mongoose', () => ({
 }));
 
 const { findTeamById } = require('../../modules/teams/teams.repository');
-const { listGamesByTeamId } = require('../../modules/games/games.repository');
-const { getPublicTeam, buildPublicTeamSummary } = require('../../modules/teams/teams.service');
+const { listGamesByTeamId, listCompletedGames } = require('../../modules/games/games.repository');
+const {
+  getPublicTeam,
+  getPublicPlayer,
+  listPublicExploreGames,
+  buildPublicTeamSummary,
+  buildPublicPlayerSummary,
+  buildPublicPlayerGameRows,
+} = require('../../modules/teams/teams.service');
 
 describe('teams public service', () => {
   beforeEach(() => {
@@ -71,6 +79,7 @@ describe('teams public service', () => {
           { playerId: 'p1', statType: 'FT_MADE' },
           { playerId: 'p1', statType: 'FT_MISS' },
           { playerId: 'p2', statType: 'FG3_MADE' },
+          { playerId: 'p1', statType: 'AST' },
           { playerId: 'p2', statType: 'FG3_MISS' },
           { playerId: 'p2', statType: 'DREB' },
         ],
@@ -106,11 +115,14 @@ describe('teams public service', () => {
             fg2a: 2,
             fg3m: 0,
             fg3a: 0,
+            ast: 1,
             oreb: 0,
             dreb: 0,
             reb: 0,
             points: 3,
+            gamesPlayed: 1,
             pointsPerGame: 3,
+            assistsPerGame: 1,
             reboundsPerGame: 0,
           },
           {
@@ -122,11 +134,14 @@ describe('teams public service', () => {
             fg2a: 0,
             fg3m: 1,
             fg3a: 2,
+            ast: 0,
             oreb: 0,
             dreb: 1,
             reb: 1,
             points: 3,
+            gamesPlayed: 1,
             pointsPerGame: 3,
+            assistsPerGame: 0,
             reboundsPerGame: 1,
           },
         ],
@@ -137,6 +152,7 @@ describe('teams public service', () => {
           fg2a: 2,
           fg3m: 1,
           fg3a: 2,
+          ast: 1,
           oreb: 0,
           dreb: 1,
           reb: 1,
@@ -191,6 +207,7 @@ describe('teams public service', () => {
           fg2a: 0,
           fg3m: 0,
           fg3a: 0,
+          ast: 0,
           oreb: 0,
           dreb: 0,
           reb: 0,
@@ -229,8 +246,10 @@ describe('teams public service', () => {
       expect.objectContaining({
         playerId: 'p1',
         points: 5,
+        gamesPlayed: 2,
         reb: 2,
         pointsPerGame: 2.5,
+        assistsPerGame: 0,
         reboundsPerGame: 1,
       }),
     ]);
@@ -251,8 +270,230 @@ describe('teams public service', () => {
     expect(zeroSummary.boxScore.players).toEqual([
       expect.objectContaining({
         playerId: 'p1',
+        gamesPlayed: 0,
         pointsPerGame: 0,
+        assistsPerGame: 0,
         reboundsPerGame: 0,
+      }),
+    ]);
+  });
+
+  test('returns player public profile summary and most recent game rows first', async () => {
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [
+        { _id: 'p1', displayName: 'Alex', jerseyNumber: 12, isActive: true },
+        { _id: 'p2', displayName: 'Chris', jerseyNumber: 4, isActive: true },
+      ],
+    });
+    listGamesByTeamId.mockResolvedValue([
+      {
+        _id: 'g1',
+        title: 'vs Falcons',
+        opponent: 'Falcons',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+        completedAt: new Date('2026-03-10T02:00:00.000Z'),
+        createdAt: new Date('2026-03-10T00:00:00.000Z'),
+        events: [
+          { playerId: 'p1', statType: 'FG2_MADE' },
+          { playerId: 'p2', statType: 'AST' },
+          { playerId: 'p1', statType: 'OREB' },
+        ],
+      },
+      {
+        _id: 'g2',
+        title: 'vs Hawks',
+        opponent: 'Hawks',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-12T00:00:00.000Z'),
+        completedAt: new Date('2026-03-12T02:00:00.000Z'),
+        createdAt: new Date('2026-03-12T00:00:00.000Z'),
+        events: [
+          { playerId: 'p1', statType: 'FG3_MADE' },
+          { playerId: 'p1', statType: 'AST' },
+          { playerId: 'p1', statType: 'DREB' },
+        ],
+      },
+      {
+        _id: 'g3',
+        title: 'vs Future',
+        opponent: 'Future',
+        status: 'completed',
+        scheduledAt: new Date('2099-03-12T00:00:00.000Z'),
+        completedAt: new Date('2099-03-12T02:00:00.000Z'),
+        createdAt: new Date('2099-03-12T00:00:00.000Z'),
+        events: [{ playerId: 'p1', statType: 'FG2_MADE' }],
+      },
+    ]);
+
+    const result = await getPublicPlayer('team-1', 'p1');
+
+    expect(result.team).toEqual({ id: 'team-1', name: 'TSW Blue' });
+    expect(result.player).toEqual({ id: 'p1', displayName: 'Alex', jerseyNumber: 12 });
+    expect(result.summary).toEqual({
+      gamesCount: 2,
+      points: 5,
+      reb: 2,
+      ast: 1,
+      pointsPerGame: 2.5,
+      reboundsPerGame: 1,
+      assistsPerGame: 0.5,
+    });
+    expect(result.games.map((game) => game.gameId)).toEqual(['g2', 'g1']);
+    expect(result.games[0].stats).toEqual({
+      ftm: 0,
+      fta: 0,
+      fg2m: 0,
+      fg2a: 0,
+      fg3m: 1,
+      fg3a: 1,
+      ast: 1,
+      oreb: 0,
+      dreb: 1,
+      reb: 1,
+      points: 3,
+    });
+  });
+
+  test('returns zero rows for included games where the player recorded no events', () => {
+    const team = {
+      _id: 'team-1',
+      players: [{ _id: 'p1', displayName: 'Alex', jerseyNumber: 12, isActive: true }],
+    };
+    const player = team.players[0];
+    const rows = buildPublicPlayerGameRows(
+      [
+        {
+          _id: 'g1',
+          title: 'vs Falcons',
+          opponent: 'Falcons',
+          status: 'completed',
+          scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+          completedAt: new Date('2026-03-10T02:00:00.000Z'),
+          createdAt: new Date('2026-03-10T00:00:00.000Z'),
+          events: [{ playerId: 'other', statType: 'FG2_MADE' }],
+        },
+      ],
+      team,
+      player
+    );
+
+    expect(rows).toEqual([
+      {
+        gameId: 'g1',
+        opponent: 'Falcons',
+        title: 'vs Falcons',
+        date: new Date('2026-03-10T00:00:00.000Z'),
+        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+        completedAt: new Date('2026-03-10T02:00:00.000Z'),
+        createdAt: new Date('2026-03-10T00:00:00.000Z'),
+        stats: {
+          ftm: 0,
+          fta: 0,
+          fg2m: 0,
+          fg2a: 0,
+          fg3m: 0,
+          fg3a: 0,
+          ast: 0,
+          oreb: 0,
+          dreb: 0,
+          reb: 0,
+          points: 0,
+        },
+      },
+    ]);
+
+    expect(buildPublicPlayerSummary(rows)).toEqual({
+      gamesCount: 1,
+      points: 0,
+      reb: 0,
+      ast: 0,
+      pointsPerGame: 0,
+      reboundsPerGame: 0,
+      assistsPerGame: 0,
+    });
+  });
+
+  test('returns 404 when public player does not exist on the team', async () => {
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [{ _id: 'p1', displayName: 'Alex', isActive: true }],
+    });
+
+    await expect(getPublicPlayer('team-1', 'missing-player')).rejects.toMatchObject({
+      statusCode: 404,
+      message: 'Player not found',
+    });
+  });
+
+  test('returns recent public explore games with one game per team', async () => {
+    listCompletedGames.mockResolvedValue([
+      {
+        _id: 'g1',
+        teamId: 'team-1',
+        title: 'vs Falcons',
+        opponent: 'Falcons',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-12T00:00:00.000Z'),
+        completedAt: new Date('2026-03-12T02:00:00.000Z'),
+        createdAt: new Date('2026-03-12T00:00:00.000Z'),
+        events: [{ statType: 'FG2_MADE' }],
+      },
+      {
+        _id: 'g2',
+        teamId: 'team-1',
+        title: 'vs Hawks',
+        opponent: 'Hawks',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+        completedAt: new Date('2026-03-10T02:00:00.000Z'),
+        createdAt: new Date('2026-03-10T00:00:00.000Z'),
+        events: [{ statType: 'FG3_MADE' }],
+      },
+      {
+        _id: 'g3',
+        teamId: 'team-2',
+        title: 'vs Lions',
+        opponent: 'Lions',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-11T00:00:00.000Z'),
+        completedAt: new Date('2026-03-11T02:00:00.000Z'),
+        createdAt: new Date('2026-03-11T00:00:00.000Z'),
+        events: [{ statType: 'FT_MADE' }],
+      },
+      {
+        _id: 'g4',
+        teamId: 'team-3',
+        title: 'vs Future',
+        opponent: 'Future',
+        status: 'completed',
+        scheduledAt: new Date('2099-03-11T00:00:00.000Z'),
+        completedAt: new Date('2099-03-11T02:00:00.000Z'),
+        createdAt: new Date('2026-03-11T00:00:00.000Z'),
+        events: [{ statType: 'FT_MADE' }],
+      },
+    ]);
+    findTeamById
+      .mockResolvedValueOnce({ _id: 'team-1', name: 'TSW Blue' })
+      .mockResolvedValueOnce({ _id: 'team-2', name: 'TSW Red' });
+
+    const games = await listPublicExploreGames();
+
+    expect(games).toEqual([
+      expect.objectContaining({
+        id: 'g1',
+        opponent: 'Falcons',
+        teamPoints: 2,
+        team: { id: 'team-1', name: 'TSW Blue' },
+      }),
+      expect.objectContaining({
+        id: 'g3',
+        opponent: 'Lions',
+        teamPoints: 1,
+        team: { id: 'team-2', name: 'TSW Red' },
       }),
     ]);
   });

@@ -10,7 +10,9 @@ import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage';
 import { useAuth } from '../store/AuthContext';
 import { NewTeamPage } from '../../features/teams/pages/NewTeamPage';
 import { EditTeamPage } from '../../features/teams/pages/EditTeamPage';
+import { TeamsPage } from '../../features/teams/pages/TeamsPage';
 import { PublicTeamPage } from '../../features/teams/pages/PublicTeamPage';
+import { PublicPlayerPage } from '../../features/teams/pages/PublicPlayerPage';
 import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
@@ -41,6 +43,14 @@ export function AppRouter() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route
+          path="/teams"
+          element={
+            <ProtectedRoute>
+              <TeamsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/teams/new"
           element={
             <ProtectedRoute>
@@ -56,6 +66,7 @@ export function AppRouter() {
             </ProtectedRoute>
           }
         />
+        <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/teams/:teamId" element={<PublicTeamPage />} />
         <Route
           path="/games/new"

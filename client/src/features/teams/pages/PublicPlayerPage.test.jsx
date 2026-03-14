@@ -1,0 +1,163 @@
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { PublicPlayerPage } from './PublicPlayerPage';
+import { teamsApi } from '../api/teamsApi';
+
+vi.mock('../api/teamsApi', () => ({
+  teamsApi: {
+    getPublicPlayerById: vi.fn(),
+  },
+}));
+
+function renderPage() {
+  render(
+    <MemoryRouter initialEntries={['/teams/team-1/players/p1']}>
+      <Routes>
+        <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+describe('PublicPlayerPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  test('renders player hero, averages, and game log table', async () => {
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'TSW Varsity' },
+      player: { id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12 },
+      summary: {
+        gamesCount: 2,
+        points: 24,
+        reb: 10,
+        ast: 8,
+        pointsPerGame: 12,
+        reboundsPerGame: 5,
+        assistsPerGame: 4,
+      },
+      games: [
+        {
+          gameId: 'g2',
+          opponent: 'Hawks',
+          title: 'vs Hawks',
+          date: '2026-03-12T00:00:00.000Z',
+          scheduledAt: '2026-03-12T00:00:00.000Z',
+          completedAt: '2026-03-12T02:00:00.000Z',
+          createdAt: '2026-03-12T00:00:00.000Z',
+          stats: {
+            ftm: 2,
+            fta: 2,
+            fg2m: 3,
+            fg2a: 5,
+            fg3m: 1,
+            fg3a: 3,
+            ast: 5,
+            oreb: 1,
+            dreb: 4,
+            reb: 5,
+            points: 11,
+          },
+        },
+        {
+          gameId: 'g1',
+          opponent: 'Falcons',
+          title: 'vs Falcons',
+          date: '2026-03-10T00:00:00.000Z',
+          scheduledAt: '2026-03-10T00:00:00.000Z',
+          completedAt: '2026-03-10T02:00:00.000Z',
+          createdAt: '2026-03-10T00:00:00.000Z',
+          stats: {
+            ftm: 4,
+            fta: 6,
+            fg2m: 5,
+            fg2a: 7,
+            fg3m: 0,
+            fg3a: 2,
+            ast: 3,
+            oreb: 2,
+            dreb: 3,
+            reb: 5,
+            points: 13,
+          },
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('#12 Alex Carter')).toBeInTheDocument();
+    });
+
+    expect(teamsApi.getPublicPlayerById).toHaveBeenCalledWith('team-1', 'p1');
+    expect(screen.getByRole('link', { name: 'TSW Varsity' })).toHaveAttribute(
+      'href',
+      '/teams/team-1'
+    );
+    expect(screen.getByText('12.0')).toBeInTheDocument();
+    expect(screen.getByText('5.0')).toBeInTheDocument();
+    expect(screen.getByText('4.0')).toBeInTheDocument();
+    expect(screen.getByText('Opponent')).toBeInTheDocument();
+    expect(screen.getByText('Date')).toBeInTheDocument();
+    expect(screen.getByText('FT')).toBeInTheDocument();
+    expect(screen.getByText('2PT')).toBeInTheDocument();
+    expect(screen.getByText('3PT')).toBeInTheDocument();
+    expect(screen.getByText('AST')).toBeInTheDocument();
+    expect(screen.getByText('OREB')).toBeInTheDocument();
+    expect(screen.getByText('DREB')).toBeInTheDocument();
+    expect(screen.getByText('REB')).toBeInTheDocument();
+    expect(screen.getByText('PTS')).toBeInTheDocument();
+    expect(screen.getByText('Hawks')).toBeInTheDocument();
+    expect(screen.getByText('Falcons')).toBeInTheDocument();
+    expect(screen.getByText('Totals')).toBeInTheDocument();
+    expect(screen.getByText('Season')).toBeInTheDocument();
+    expect(screen.getByText('6/8')).toBeInTheDocument();
+    expect(screen.getByText('8/12')).toBeInTheDocument();
+    expect(screen.getByText('1/5')).toBeInTheDocument();
+    expect(screen.getByText('24')).toBeInTheDocument();
+  });
+
+  test('renders zero-state game log when the player has no completed public games', async () => {
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'TSW Varsity' },
+      player: { id: 'p1', displayName: 'Alex Carter', jerseyNumber: null },
+      summary: {
+        gamesCount: 0,
+        points: 0,
+        reb: 0,
+        ast: 0,
+        pointsPerGame: 0,
+        reboundsPerGame: 0,
+        assistsPerGame: 0,
+      },
+      games: [],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alex Carter')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/No completed public games yet/i)).toBeInTheDocument();
+    expect(screen.getAllByText('0.0')).toHaveLength(3);
+    expect(screen.getAllByText('0/0')).toHaveLength(3);
+  });
+
+  test('renders error state', async () => {
+    teamsApi.getPublicPlayerById.mockRejectedValue(new Error('Player not found'));
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Player not found/i)).toBeInTheDocument();
+    });
+  });
+});

@@ -39,6 +39,16 @@ async function getPublicById(req, res) {
   res.status(200).json(result);
 }
 
+async function listPublicExploreGames(req, res) {
+  const games = await teamsService.listPublicExploreGames();
+  res.status(200).json({ games });
+}
+
+async function getPublicPlayerById(req, res) {
+  const result = await teamsService.getPublicPlayer(req.params.teamId, req.params.playerId);
+  res.status(200).json(result);
+}
+
 async function update(req, res) {
   const userId = requireAuthUserId(req);
   const payload = updateTeamSchema.parse(req.body);
@@ -79,7 +89,9 @@ module.exports = {
   create,
   list,
   getById,
+  listPublicExploreGames,
   getPublicById,
+  getPublicPlayerById,
   update,
   addPlayer,
   updatePlayer,

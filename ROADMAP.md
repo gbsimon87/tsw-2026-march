@@ -12,6 +12,8 @@
 - GameDetail shot map with made/missed markers, player + shot-type filters, zone overlay toggle, and zone results table
 - GameDetail tabbed UI (`Box Score`, `Replay`, `Game Info`) to reduce page length and improve navigation
 - Replay flow with sequential event playback and live-updating replay box score
+- Rebounds and assists tracked in live game flow and included across all box scores
+- Public team page aggregate box score and roster stat summaries
 
 ## In Progress
 
@@ -23,7 +25,7 @@
 ## Planned
 
 - Opponent totals or opponent roster support per game
-- Additional basketball stats (rebounds, assists, steals, turnovers, fouls)
+- Additional basketball stats (steals, turnovers, fouls)
 - Richer shot-zone analytics and trend summaries (heatmaps, efficiency overlays, splits)
 - Export/shareable box score views
 

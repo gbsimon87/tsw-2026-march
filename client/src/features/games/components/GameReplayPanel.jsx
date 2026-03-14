@@ -39,6 +39,7 @@ function emptyLine(player) {
     fg2a: 0,
     fg3m: 0,
     fg3a: 0,
+    ast: 0,
     oreb: 0,
     dreb: 0,
     reb: 0,
@@ -75,6 +76,10 @@ function applyEventToLine(line, statType) {
   }
   if (statType === 'FG3_MISS') {
     line.fg3a += 1;
+    return;
+  }
+  if (statType === 'AST') {
+    line.ast += 1;
     return;
   }
   if (statType === 'OREB') {
@@ -210,6 +215,7 @@ export function GameReplayPanel({ events, players }) {
                   <th className="px-3 py-2 text-right">FT</th>
                   <th className="px-3 py-2 text-right">2PT</th>
                   <th className="px-3 py-2 text-right">3PT</th>
+                  <th className="px-3 py-2 text-right">AST</th>
                   <th className="px-3 py-2 text-right">OREB</th>
                   <th className="px-3 py-2 text-right">DREB</th>
                   <th className="px-3 py-2 text-right">REB</th>
@@ -229,6 +235,7 @@ export function GameReplayPanel({ events, players }) {
                     <td className="px-3 py-2 text-right">
                       {line.fg3m}/{line.fg3a}
                     </td>
+                    <td className="px-3 py-2 text-right">{line.ast}</td>
                     <td className="px-3 py-2 text-right">{line.oreb}</td>
                     <td className="px-3 py-2 text-right">{line.dreb}</td>
                     <td className="px-3 py-2 text-right">{line.reb}</td>

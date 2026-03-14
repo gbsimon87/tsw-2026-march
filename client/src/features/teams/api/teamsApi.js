@@ -10,6 +10,12 @@ export const teamsApi = {
   getPublicById(teamId) {
     return apiClient.get(`/public/teams/${teamId}`);
   },
+  listPublicExploreGames() {
+    return apiClient.get('/public/teams/explore');
+  },
+  getPublicPlayerById(teamId, playerId) {
+    return apiClient.get(`/public/teams/${teamId}/players/${playerId}`);
+  },
   update(teamId, payload) {
     return apiClient.patch(`/teams/${teamId}`, payload);
   },

@@ -55,7 +55,7 @@ export function GameTrackPage() {
   const [data, setData] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [selectedShot, setSelectedShot] = useState(null);
-  const [pendingReboundPrompt, setPendingReboundPrompt] = useState(null);
+  const [pendingFollowUpPrompt, setPendingFollowUpPrompt] = useState(null);
   const [lastTappedHoop, setLastTappedHoop] = useState('south');
   const [isSaving, setIsSaving] = useState(false);
   const [isTrackingFullscreen, setIsTrackingFullscreen] = useState(false);
@@ -112,7 +112,7 @@ export function GameTrackPage() {
   function onCourtSelect(point) {
     const inferred = inferCourtSelection(point.x, point.y, DEFAULT_COURT_IMAGE_CALIBRATION);
     setSelectedShot(inferred);
-    setPendingReboundPrompt(null);
+    setPendingFollowUpPrompt(null);
     setLastTappedHoop(inferred.nearestHoop);
     setError('');
   }
@@ -124,13 +124,13 @@ export function GameTrackPage() {
 
   function closeTrackingOverlay() {
     setSelectedShot(null);
-    setPendingReboundPrompt(null);
+    setPendingFollowUpPrompt(null);
     setIsTrackingFullscreen(false);
   }
 
   function clearEventPicker() {
     setSelectedShot(null);
-    setPendingReboundPrompt(null);
+    setPendingFollowUpPrompt(null);
   }
 
   async function addReboundEvent(statType, playerIdOverride) {
@@ -157,8 +157,19 @@ export function GameTrackPage() {
     }
   }
 
-  async function handleReboundSelection(option) {
+  async function handleFollowUpSelection(option) {
+    if (!pendingFollowUpPrompt) {
+      clearEventPicker();
+      return;
+    }
+
     if (option === 'NO_REBOUND') {
+      clearEventPicker();
+      setError('');
+      return;
+    }
+
+    if (option === 'NO_ASSIST') {
       clearEventPicker();
       setError('');
       return;
@@ -170,12 +181,17 @@ export function GameTrackPage() {
     try {
       const response = await gamesApi.appendEvent(gameId, {
         playerId: option,
-        statType: 'OREB',
+        statType: pendingFollowUpPrompt.statType,
       });
       setData((current) => ({ ...current, ...response }));
       clearEventPicker();
     } catch (submitError) {
-      setError(submitError.message || 'Miss recorded, but failed to add rebound');
+      setError(
+        submitError.message ||
+          (pendingFollowUpPrompt.kind === 'assist'
+            ? 'Basket recorded, but failed to add assist'
+            : 'Miss recorded, but failed to add rebound')
+      );
     } finally {
       setIsSaving(false);
     }
@@ -206,9 +222,23 @@ export function GameTrackPage() {
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
       if (outcome === 'miss') {
-        setPendingReboundPrompt({ sourceStatType: payload.statType });
+        setPendingFollowUpPrompt({
+          kind: 'rebound',
+          statType: 'OREB',
+          actorPlayerId: selectedPlayerId,
+        });
       } else {
-        clearEventPicker();
+        const shouldPromptAssist =
+          payload.statType === 'FG2_MADE' || payload.statType === 'FG3_MADE';
+        if (shouldPromptAssist) {
+          setPendingFollowUpPrompt({
+            kind: 'assist',
+            statType: 'AST',
+            actorPlayerId: selectedPlayerId,
+          });
+        } else {
+          clearEventPicker();
+        }
       }
     } catch (submitError) {
       setError(submitError.message || 'Failed to add shot event');
@@ -242,7 +272,11 @@ export function GameTrackPage() {
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
       if (outcome === 'miss') {
-        setPendingReboundPrompt({ sourceStatType: payload.statType });
+        setPendingFollowUpPrompt({
+          kind: 'rebound',
+          statType: 'OREB',
+          actorPlayerId: selectedPlayerId,
+        });
       } else {
         clearEventPicker();
       }
@@ -296,8 +330,14 @@ export function GameTrackPage() {
     );
   }
 
+  const followUpPlayers = pendingFollowUpPrompt
+    ? pendingFollowUpPrompt.kind === 'assist'
+      ? players.filter((player) => player.id !== pendingFollowUpPrompt.actorPlayerId)
+      : players
+    : players;
+
   const eventPicker =
-    selectedShot || pendingReboundPrompt ? (
+    selectedShot || pendingFollowUpPrompt ? (
       <>
         <button
           type="button"
@@ -316,8 +356,10 @@ export function GameTrackPage() {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Add Event</p>
                   <p className="text-xs text-slate-600">
-                    {pendingReboundPrompt
-                      ? 'Who got the rebound?'
+                    {pendingFollowUpPrompt
+                      ? pendingFollowUpPrompt.kind === 'assist'
+                        ? 'Who got the assist?'
+                        : 'Who got the rebound?'
                       : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
                   </p>
                 </div>
@@ -343,11 +385,15 @@ export function GameTrackPage() {
               <div className="mt-3 grid grid-cols-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),7rem] landscape:h-[calc(100%-2.25rem)]">
                 <div className="space-y-1 overflow-hidden">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {pendingReboundPrompt ? 'Rebounder' : 'Player'}
+                    {pendingFollowUpPrompt
+                      ? pendingFollowUpPrompt.kind === 'assist'
+                        ? 'Assister'
+                        : 'Rebounder'
+                      : 'Player'}
                   </p>
                   <div className="max-h-36 overflow-y-auto pr-1 landscape:h-[calc(100%-1.25rem)] landscape:max-h-none">
                     <div className="space-y-1">
-                      {players.map((player) => (
+                      {followUpPlayers.map((player) => (
                         <button
                           key={player.id}
                           type="button"
@@ -357,13 +403,13 @@ export function GameTrackPage() {
                               : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
                           }`}
                           onClick={() =>
-                            pendingReboundPrompt
-                              ? handleReboundSelection(player.id)
+                            pendingFollowUpPrompt
+                              ? handleFollowUpSelection(player.id)
                               : setSelectedPlayerId(player.id)
                           }
                         >
                           <span>{player.displayName}</span>
-                          {!pendingReboundPrompt && selectedPlayerId === player.id ? (
+                          {!pendingFollowUpPrompt && selectedPlayerId === player.id ? (
                             <svg
                               viewBox="0 0 20 20"
                               className="h-4 w-4"
@@ -376,15 +422,19 @@ export function GameTrackPage() {
                           ) : null}
                         </button>
                       ))}
-                      {pendingReboundPrompt ? (
+                      {pendingFollowUpPrompt ? (
                         <>
                           <button
                             type="button"
                             className="flex min-h-10 w-full items-center rounded-lg bg-slate-100 px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-slate-200"
                             disabled={isSaving}
-                            onClick={() => handleReboundSelection('NO_REBOUND')}
+                            onClick={() =>
+                              handleFollowUpSelection(
+                                pendingFollowUpPrompt.kind === 'assist' ? 'NO_ASSIST' : 'NO_REBOUND'
+                              )
+                            }
                           >
-                            No Rebound
+                            {pendingFollowUpPrompt.kind === 'assist' ? 'No Assist' : 'No Rebound'}
                           </button>
                         </>
                       ) : null}
@@ -397,9 +447,17 @@ export function GameTrackPage() {
                     Action
                   </p>
                   <div className="grid gap-1 landscape:content-start">
-                    {pendingReboundPrompt ? (
+                    {pendingFollowUpPrompt ? (
                       <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
-                        Select a player or <span className="font-medium">No Rebound</span>.
+                        {pendingFollowUpPrompt.kind === 'assist' ? (
+                          <>
+                            Select a teammate or <span className="font-medium">No Assist</span>.
+                          </>
+                        ) : (
+                          <>
+                            Select a player or <span className="font-medium">No Rebound</span>.
+                          </>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -551,6 +609,7 @@ export function GameTrackPage() {
                     <th className="sticky left-0 z-10 bg-slate-100 px-3 py-2 text-left">Player</th>
                     <th className="px-3 py-2 text-right">PTS</th>
                     <th className="px-3 py-2 text-right">REB</th>
+                    <th className="px-3 py-2 text-right">AST</th>
                     <th className="px-3 py-2 text-right">2PT FG</th>
                     <th className="px-3 py-2 text-right">2PT FG%</th>
                     <th className="px-3 py-2 text-right">3PT FG</th>
@@ -566,6 +625,7 @@ export function GameTrackPage() {
                       <td className="sticky left-0 bg-white px-3 py-2">{row.displayName}</td>
                       <td className="px-3 py-2 text-right">{row.points}</td>
                       <td className="px-3 py-2 text-right">{row.reb}</td>
+                      <td className="px-3 py-2 text-right">{row.ast}</td>
                       <td className="px-3 py-2 text-right">
                         {row.fg2m}/{row.fg2a}
                       </td>
@@ -589,6 +649,7 @@ export function GameTrackPage() {
                     <td className="sticky left-0 bg-slate-50 px-3 py-2">Team Total</td>
                     <td className="px-3 py-2 text-right">{boxScore.teamTotals.points}</td>
                     <td className="px-3 py-2 text-right">{boxScore.teamTotals.reb}</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.ast}</td>
                     <td className="px-3 py-2 text-right">
                       {boxScore.teamTotals.fg2m}/{boxScore.teamTotals.fg2a}
                     </td>

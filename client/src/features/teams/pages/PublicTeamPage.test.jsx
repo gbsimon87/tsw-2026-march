@@ -30,7 +30,7 @@ describe('PublicTeamPage', () => {
     cleanup();
   });
 
-  test('renders team name, active roster, and split games lists', async () => {
+  test('renders team name, consolidated player table, and split games lists', async () => {
     teamsApi.getPublicById.mockResolvedValue({
       team: {
         id: 'team-1',
@@ -57,11 +57,14 @@ describe('PublicTeamPage', () => {
               fg2a: 7,
               fg3m: 3,
               fg3a: 5,
+              ast: 4,
               oreb: 2,
               dreb: 4,
               reb: 6,
               points: 23,
+              gamesPlayed: 1,
               pointsPerGame: 23,
+              assistsPerGame: 4,
               reboundsPerGame: 6,
             },
             {
@@ -73,11 +76,14 @@ describe('PublicTeamPage', () => {
               fg2a: 3,
               fg3m: 0,
               fg3a: 1,
+              ast: 2,
               oreb: 1,
               dreb: 5,
               reb: 6,
               points: 2,
+              gamesPlayed: 1,
               pointsPerGame: 2,
+              assistsPerGame: 2,
               reboundsPerGame: 6,
             },
           ],
@@ -88,6 +94,7 @@ describe('PublicTeamPage', () => {
             fg2a: 32,
             fg3m: 8,
             fg3a: 18,
+            ast: 14,
             oreb: 9,
             dreb: 22,
             reb: 31,
@@ -138,36 +145,49 @@ describe('PublicTeamPage', () => {
       expect(screen.getByText('TSW Varsity')).toBeInTheDocument();
     });
 
-    const rosterSection = screen.getByRole('heading', { name: 'Roster' }).closest('section');
-    expect(rosterSection).not.toBeNull();
-    const roster = within(rosterSection);
-
-    expect(roster.getByText('#12 Alex Carter')).toBeInTheDocument();
-    expect(roster.getByText('Jordan Lee')).toBeInTheDocument();
-    expect(roster.getByText('23 pts • 6 reb • 23.0 ppg • 6.0 rpg')).toBeInTheDocument();
-    expect(roster.getByText('2 pts • 6 reb • 2.0 ppg • 6.0 rpg')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Roster' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alex Carter' })).toHaveAttribute(
+      'href',
+      '/teams/team-1/players/p1'
+    );
+    expect(screen.getByRole('link', { name: 'Alex Carter' }).className).toContain('underline');
+    expect(screen.getByRole('link', { name: 'Jordan Lee' })).toHaveAttribute(
+      'href',
+      '/teams/team-1/players/p2'
+    );
     expect(screen.getByText('Completed Public Games')).toBeInTheDocument();
+    expect(screen.getByText('GP')).toBeInTheDocument();
+    expect(screen.getByText('PPG')).toBeInTheDocument();
     expect(screen.getByText('PTS')).toBeInTheDocument();
+    expect(screen.getByText('APG')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
+    expect(screen.getByText('RPG')).toBeInTheDocument();
     expect(screen.getByText('2PT')).toBeInTheDocument();
     expect(screen.getByText('3PT')).toBeInTheDocument();
     expect(screen.getByText('FT')).toBeInTheDocument();
+    expect(screen.getByText('AST')).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
+    expect(screen.getByText('23.0')).toBeInTheDocument();
+    expect(screen.getByText('4.0')).toBeInTheDocument();
     expect(screen.getByText('4/6')).toBeInTheDocument();
     expect(screen.getByText('5/7')).toBeInTheDocument();
     expect(screen.getByText('3/5')).toBeInTheDocument();
-    expect(screen.getByText('Team Total')).toBeInTheDocument();
     const headerCells = within(screen.getByRole('table')).getAllByRole('columnheader');
     expect(headerCells.map((cell) => cell.textContent)).toEqual([
       'Player',
+      'GP',
+      'PPG',
       'PTS',
+      'APG',
+      'AST',
+      'RPG',
       'REB',
-      '2PT',
-      '3PT',
-      'FT',
       'OREB',
       'DREB',
+      'FT',
+      '2PT',
+      '3PT',
     ]);
     expect(screen.getByText('Upcoming')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
@@ -201,11 +221,14 @@ describe('PublicTeamPage', () => {
               fg2a: 0,
               fg3m: 0,
               fg3a: 0,
+              ast: 0,
               oreb: 0,
               dreb: 0,
               reb: 0,
               points: 0,
+              gamesPlayed: 0,
               pointsPerGame: 0,
+              assistsPerGame: 0,
               reboundsPerGame: 0,
             },
           ],
@@ -216,6 +239,7 @@ describe('PublicTeamPage', () => {
             fg2a: 0,
             fg3m: 0,
             fg3a: 0,
+            ast: 0,
             oreb: 0,
             dreb: 0,
             reb: 0,
@@ -229,14 +253,14 @@ describe('PublicTeamPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('#12 Alex Carter')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Alex Carter' })).toBeInTheDocument();
     });
 
     expect(screen.getByText(/No upcoming games scheduled/i)).toBeInTheDocument();
     expect(screen.getByText(/No recent games yet/i)).toBeInTheDocument();
-    expect(screen.getByText('Team Total')).toBeInTheDocument();
-    expect(screen.getAllByText('0/0')).toHaveLength(6);
-    expect(screen.getByText('0 pts • 0 reb • 0.0 ppg • 0.0 rpg')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Roster' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('0/0')).toHaveLength(3);
+    expect(screen.getAllByText('0.0').length).toBeGreaterThanOrEqual(3);
   });
 
   test('renders error state', async () => {

@@ -24,7 +24,10 @@ const baseResponse = {
   team: {
     id: 'team-1',
     name: 'TSW Team',
-    players: [{ id: 'player-1', displayName: 'Alex', isActive: true }],
+    players: [
+      { id: 'player-1', displayName: 'Alex', isActive: true },
+      { id: 'player-2', displayName: 'Blake', isActive: true },
+    ],
   },
   boxScore: {
     players: [
@@ -36,22 +39,39 @@ const baseResponse = {
         fg3m: 3,
         fg3a: 5,
         points: 22,
+        ast: 1,
         reb: 6,
         oreb: 2,
         dreb: 4,
         ftm: 3,
         fta: 5,
       },
+      {
+        playerId: 'player-2',
+        displayName: 'Blake',
+        fg2m: 1,
+        fg2a: 2,
+        fg3m: 0,
+        fg3a: 1,
+        points: 2,
+        ast: 3,
+        reb: 5,
+        oreb: 1,
+        dreb: 4,
+        ftm: 0,
+        fta: 0,
+      },
     ],
     teamTotals: {
-      fg2m: 5,
-      fg2a: 7,
+      fg2m: 6,
+      fg2a: 9,
       fg3m: 3,
-      fg3a: 5,
-      points: 22,
-      reb: 6,
-      oreb: 2,
-      dreb: 4,
+      fg3a: 6,
+      points: 24,
+      ast: 4,
+      reb: 11,
+      oreb: 3,
+      dreb: 8,
       ftm: 3,
       fta: 5,
     },
@@ -81,21 +101,27 @@ describe('GameTrackPage', () => {
 
     apiMocks.getById.mockResolvedValue(baseResponse);
     apiMocks.appendEvent.mockImplementation((gameId, payload) => {
-      const row = { ...baseResponse.boxScore.players[0] };
+      const rows = baseResponse.boxScore.players.map((row) => ({ ...row }));
       const totals = { ...baseResponse.boxScore.teamTotals };
+      const row = rows.find((candidate) => candidate.playerId === payload.playerId);
 
-      if (payload.statType === 'OREB') {
+      if (payload.statType === 'OREB' && row) {
         row.oreb += 1;
         row.reb += 1;
         totals.oreb += 1;
         totals.reb += 1;
       }
 
-      if (payload.statType === 'DREB') {
+      if (payload.statType === 'DREB' && row) {
         row.dreb += 1;
         row.reb += 1;
         totals.dreb += 1;
         totals.reb += 1;
+      }
+
+      if (payload.statType === 'AST' && row) {
+        row.ast += 1;
+        totals.ast += 1;
       }
 
       return Promise.resolve({
@@ -104,7 +130,7 @@ describe('GameTrackPage', () => {
           events: [{ id: `event-${payload.statType}`, ...payload }],
         },
         boxScore: {
-          players: [row],
+          players: rows,
           teamTotals: totals,
         },
       });
@@ -150,6 +176,54 @@ describe('GameTrackPage', () => {
     expect(payload.zoneId).toBe('CORNER_RIGHT_3');
     expect(payload.x).toBeTypeOf('number');
     expect(payload.y).toBeTypeOf('number');
+    expect(screen.getByText(/Who got the assist/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Alex' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Blake' })).toBeInTheDocument();
+  });
+
+  test('made basket prompts for assist and logs assist for a teammate', async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Open Full Screen Tracking/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
+
+    const court = screen.getByTestId('interactive-court-image');
+    court.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 500,
+      height: 940,
+      right: 500,
+      bottom: 940,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.click(court, { clientX: 475, clientY: 900 });
+    fireEvent.click(screen.getByRole('button', { name: /Shot Make/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.getByText(/Who got the assist/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Blake' }));
+
+    await waitFor(() => {
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+    });
+
+    const [, assistPayload] = apiMocks.appendEvent.mock.calls[1];
+    expect(assistPayload).toEqual({
+      playerId: 'player-2',
+      statType: 'AST',
+    });
   });
 
   test('FT Make uses fixed free-throw-line payload', async () => {
@@ -187,6 +261,7 @@ describe('GameTrackPage', () => {
     expect(payload.statType).toBe('FT_MADE');
     expect(payload.zoneId).toBe('FREE_THROW_LINE');
     expect(payload.y).toBeTypeOf('number');
+    expect(screen.queryByText(/Who got the assist/i)).not.toBeInTheDocument();
   });
 
   test('Shot Miss prompts for rebound and logs offensive rebound for selected player', async () => {
@@ -270,6 +345,41 @@ describe('GameTrackPage', () => {
     expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
   });
 
+  test('No Assist does not log an assist event after a made basket', async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Open Full Screen Tracking/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
+
+    const court = screen.getByTestId('interactive-court-image');
+    court.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 500,
+      height: 940,
+      right: 500,
+      bottom: 940,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.click(court, { clientX: 475, clientY: 900 });
+    fireEvent.click(screen.getByRole('button', { name: /Shot Make/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /No Assist/i }));
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+  });
+
   test('defensive rebound is logged from the player action module', async () => {
     renderPage();
 
@@ -318,6 +428,7 @@ describe('GameTrackPage', () => {
 
     expect(screen.getByText('PTS')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
+    expect(screen.getByText('AST')).toBeInTheDocument();
     expect(screen.getByText('2PT FG')).toBeInTheDocument();
     expect(screen.getByText('2PT FG%')).toBeInTheDocument();
     expect(screen.getByText('3PT FG')).toBeInTheDocument();
@@ -325,14 +436,14 @@ describe('GameTrackPage', () => {
     expect(screen.getByText('Free Throw')).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
-    expect(screen.getAllByText('5/7')).toHaveLength(2);
-    expect(screen.getAllByText('71.4%')).toHaveLength(2);
-    expect(screen.getAllByText('3/5')).toHaveLength(4);
-    expect(screen.getAllByText('22')).toHaveLength(2);
-    expect(screen.getAllByText('6')).toHaveLength(2);
-    expect(screen.getAllByText('2')).not.toHaveLength(0);
+    expect(screen.getByText('5/7')).toBeInTheDocument();
+    expect(screen.getByText('71.4%')).toBeInTheDocument();
+    expect(screen.getAllByText('3/5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('22')).not.toHaveLength(0);
+    expect(screen.getAllByText('6')).not.toHaveLength(0);
     expect(screen.getAllByText('4')).not.toHaveLength(0);
-    expect(screen.getAllByText('60.0%')).toHaveLength(2);
+    expect(screen.getAllByText('2')).not.toHaveLength(0);
+    expect(screen.getAllByText('60.0%')).not.toHaveLength(0);
     expect(screen.getByText('Team Total')).toBeInTheDocument();
   });
 });

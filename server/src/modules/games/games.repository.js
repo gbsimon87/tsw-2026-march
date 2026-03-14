@@ -13,6 +13,7 @@ const shotEventSchema = new mongoose.Schema(
         STAT_TYPES.FG2_MISS,
         STAT_TYPES.FG3_MADE,
         STAT_TYPES.FG3_MISS,
+        STAT_TYPES.AST,
         STAT_TYPES.OREB,
         STAT_TYPES.DREB,
       ],
@@ -93,6 +94,14 @@ async function listGamesByTeamId(teamId) {
   return Game.find({ teamId }).sort({ scheduledAt: -1, completedAt: -1, createdAt: -1 });
 }
 
+async function listCompletedGames() {
+  return Game.find({ status: 'completed' }).sort({
+    scheduledAt: -1,
+    completedAt: -1,
+    createdAt: -1,
+  });
+}
+
 async function saveGame(game) {
   return game.save();
 }
@@ -103,5 +112,6 @@ module.exports = {
   findGameByIdAndOwner,
   findGameById,
   listGamesByTeamId,
+  listCompletedGames,
   saveGame,
 };

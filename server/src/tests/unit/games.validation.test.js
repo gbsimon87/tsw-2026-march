@@ -32,6 +32,15 @@ describe('games validation', () => {
     expect(parsed.statType).toBe('OREB');
   });
 
+  test('accepts assist event without coordinates', () => {
+    const parsed = appendEventSchema.parse({
+      playerId: 'player-1',
+      statType: 'AST',
+    });
+
+    expect(parsed.statType).toBe('AST');
+  });
+
   test('accepts optional opponent when creating game', () => {
     const parsed = createGameSchema.parse({
       teamId: 'team-1',

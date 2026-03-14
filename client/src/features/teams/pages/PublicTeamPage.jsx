@@ -102,11 +102,6 @@ export function PublicTeamPage() {
       .sort((gameA, gameB) => gameTimeValue(gameB) - gameTimeValue(gameA));
   }, [data]);
 
-  const boxScoreByPlayerId = useMemo(() => {
-    const rows = data?.summary?.boxScore?.players || [];
-    return new Map(rows.map((row) => [row.playerId, row]));
-  }, [data]);
-
   if (isLoading) {
     return <p className="text-sm">Loading team...</p>;
   }
@@ -130,6 +125,7 @@ export function PublicTeamPage() {
         fg2a: 0,
         fg3m: 0,
         fg3a: 0,
+        ast: 0,
         oreb: 0,
         dreb: 0,
         reb: 0,
@@ -160,128 +156,92 @@ export function PublicTeamPage() {
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-[860px] text-sm">
+          <table className="min-w-[1180px] text-sm">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
                 <th className="px-2 py-1.5 text-left">Player</th>
+                <th className="px-2 py-1.5 text-right">GP</th>
+                <th className="px-2 py-1.5 text-right">PPG</th>
                 <th className="px-2 py-1.5 text-right">PTS</th>
+                <th className="px-2 py-1.5 text-right">APG</th>
+                <th className="px-2 py-1.5 text-right">AST</th>
+                <th className="px-2 py-1.5 text-right">RPG</th>
                 <th className="px-2 py-1.5 text-right">REB</th>
-                <th className="px-2 py-1.5 text-right">2PT</th>
-                <th className="px-2 py-1.5 text-right">3PT</th>
-                <th className="px-2 py-1.5 text-right">FT</th>
                 <th className="px-2 py-1.5 text-right">OREB</th>
                 <th className="px-2 py-1.5 text-right">DREB</th>
+                <th className="px-2 py-1.5 text-right">FT</th>
+                <th className="px-2 py-1.5 text-right">2PT</th>
+                <th className="px-2 py-1.5 text-right">3PT</th>
               </tr>
             </thead>
             <tbody>
               {summary.boxScore.players.map((row) => (
                 <tr key={row.playerId} className="border-t border-slate-200">
-                  <td className="px-2 py-1.5 text-slate-900">{row.displayName}</td>
+                  <td className="px-2 py-1.5 text-slate-900">
+                    <Link
+                      to={`/teams/${teamId}/players/${row.playerId}`}
+                      className="font-medium underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+                    >
+                      {row.displayName}
+                    </Link>
+                  </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.gamesPlayed}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {formatPerGameValue(row.pointsPerGame)}
+                  </td>
                   <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
                     {row.points}
                   </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {formatPerGameValue(row.assistsPerGame)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.ast}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {formatPerGameValue(row.reboundsPerGame)}
+                  </td>
                   <td className="px-2 py-1.5 text-right text-slate-700">{row.reb}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.oreb}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">{row.dreb}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-700">
+                    {row.ftm}/{row.fta}
+                  </td>
                   <td className="px-2 py-1.5 text-right text-slate-700">
                     {row.fg2m}/{row.fg2a}
                   </td>
                   <td className="px-2 py-1.5 text-right text-slate-700">
                     {row.fg3m}/{row.fg3a}
                   </td>
-                  <td className="px-2 py-1.5 text-right text-slate-700">
-                    {row.ftm}/{row.fta}
-                  </td>
-                  <td className="px-2 py-1.5 text-right text-slate-700">{row.oreb}</td>
-                  <td className="px-2 py-1.5 text-right text-slate-700">{row.dreb}</td>
                 </tr>
               ))}
-              <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
-                <td className="px-2 py-1.5 text-slate-900">Team Total</td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.points}
-                </td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.reb}
-                </td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.fg2m}/{summary.boxScore.teamTotals.fg2a}
-                </td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.fg3m}/{summary.boxScore.teamTotals.fg3a}
-                </td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.ftm}/{summary.boxScore.teamTotals.fta}
-                </td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.oreb}
-                </td>
-                <td className="px-2 py-1.5 text-right text-slate-900">
-                  {summary.boxScore.teamTotals.dreb}
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Roster</h2>
-        {data.team.players.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-600">No active players listed yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {data.team.players.map((player) => (
-              <li
-                key={player.id}
-                className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800"
-              >
-                <div className="flex flex-col gap-1">
-                  <span className="font-medium text-slate-900">
-                    {typeof player.jerseyNumber === 'number'
-                      ? `#${player.jerseyNumber} ${player.displayName}`
-                      : player.displayName}
-                  </span>
-                  <span className="text-xs font-medium text-slate-500">
-                    {boxScoreByPlayerId.get(player.id)?.points || 0} pts •{' '}
-                    {boxScoreByPlayerId.get(player.id)?.reb || 0} reb •{' '}
-                    {formatPerGameValue(boxScoreByPlayerId.get(player.id)?.pointsPerGame)} ppg •{' '}
-                    {formatPerGameValue(boxScoreByPlayerId.get(player.id)?.reboundsPerGame)} rpg
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">Games</h2>
-
-        <div className="mt-4 space-y-5">
-          <div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               Upcoming
             </h3>
             {upcomingGames.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-600">No upcoming games scheduled.</p>
+              <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
+                No upcoming games scheduled.
+              </p>
             ) : (
-              <div className="mt-2 space-y-2">
-                {upcomingGames.map((game) => (
-                  <PublicGameRow key={game.id} game={game} />
-                ))}
-              </div>
+              upcomingGames.map((game) => <PublicGameRow key={game.id} game={game} />)
             )}
           </div>
 
-          <div>
+          <div className="space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Recent</h3>
             {recentGames.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-600">No recent games yet.</p>
+              <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
+                No recent games yet.
+              </p>
             ) : (
-              <div className="mt-2 space-y-2">
-                {recentGames.map((game) => (
-                  <PublicGameRow key={game.id} game={game} />
-                ))}
-              </div>
+              recentGames.map((game) => <PublicGameRow key={game.id} game={game} />)
             )}
           </div>
         </div>

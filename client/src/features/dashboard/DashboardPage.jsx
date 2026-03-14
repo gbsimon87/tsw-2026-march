@@ -68,9 +68,6 @@ export function DashboardPage() {
   const [error, setError] = useState('');
   const [copiedGameId, setCopiedGameId] = useState('');
 
-  const visibleTeams = teams.slice(0, 3);
-  const hiddenTeamsCount = Math.max(teams.length - visibleTeams.length, 0);
-
   const recentGames = [...games]
     .sort((gameA, gameB) => {
       const dateA = parseGameDate(gameA);
@@ -152,7 +149,7 @@ export function DashboardPage() {
               <path d="M5 12h14" />
             </svg>
           </QuickActionLink>
-          <QuickActionLink to="/games" label="View Games">
+          <QuickActionLink to="/games" label="Games">
             <svg
               viewBox="0 0 24 24"
               className="h-5 w-5"
@@ -166,7 +163,7 @@ export function DashboardPage() {
               <path d="M17 16v-4" />
             </svg>
           </QuickActionLink>
-          <QuickActionLink to="/teams/new" label="New Team">
+          <QuickActionLink to="/teams" label="Teams">
             <svg
               viewBox="0 0 24 24"
               className="h-5 w-5"
@@ -207,60 +204,6 @@ export function DashboardPage() {
             </p>
           </article>
         </div>
-      </section>
-
-      <section
-        aria-labelledby="team-snapshot-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-5"
-      >
-        <h2 id="team-snapshot-heading" className="text-xl font-semibold text-slate-900">
-          Team Snapshot
-        </h2>
-        {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading teams...</p> : null}
-        {!isLoading && teams.length === 0 ? (
-          <div className="mt-3 space-y-3">
-            <p className="text-sm text-slate-700">
-              No team yet. Create your first team to start tracking.
-            </p>
-            <Link
-              to="/teams/new"
-              className="inline-flex rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-            >
-              Create Team
-            </Link>
-          </div>
-        ) : null}
-        {!isLoading && teams.length > 0 ? (
-          <div className="mt-3 space-y-2">
-            {visibleTeams.map((team) => (
-              <article
-                key={team.id || team._id || team.name}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm font-medium text-slate-900">
-                    {team.name || 'Unnamed Team'}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Active roster: {(team.players || []).filter((player) => player.isActive).length}
-                  </p>
-                </div>
-                {team.id ? (
-                  <Link
-                    to={`/teams/${team.id}/edit`}
-                    aria-label={`Edit ${team.name || 'team'}`}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-                  >
-                    Edit
-                  </Link>
-                ) : null}
-              </article>
-            ))}
-            {hiddenTeamsCount > 0 ? (
-              <p className="text-sm font-medium text-slate-500">+{hiddenTeamsCount} more</p>
-            ) : null}
-          </div>
-        ) : null}
       </section>
 
       <section

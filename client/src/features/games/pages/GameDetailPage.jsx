@@ -108,6 +108,7 @@ export function GameDetailPage() {
               <th className="px-3 py-2 text-right">FT</th>
               <th className="px-3 py-2 text-right">2PT</th>
               <th className="px-3 py-2 text-right">3PT</th>
+              <th className="px-3 py-2 text-right">AST</th>
               <th className="px-3 py-2 text-right">OREB</th>
               <th className="px-3 py-2 text-right">DREB</th>
               <th className="px-3 py-2 text-right">REB</th>
@@ -127,6 +128,7 @@ export function GameDetailPage() {
                 <td className="px-3 py-2 text-right">
                   {row.fg3m}/{row.fg3a}
                 </td>
+                <td className="px-3 py-2 text-right">{row.ast}</td>
                 <td className="px-3 py-2 text-right">{row.oreb}</td>
                 <td className="px-3 py-2 text-right">{row.dreb}</td>
                 <td className="px-3 py-2 text-right">{row.reb}</td>
@@ -144,6 +146,7 @@ export function GameDetailPage() {
               <td className="px-3 py-2 text-right">
                 {boxScore.teamTotals.fg3m}/{boxScore.teamTotals.fg3a}
               </td>
+              <td className="px-3 py-2 text-right">{boxScore.teamTotals.ast}</td>
               <td className="px-3 py-2 text-right">{boxScore.teamTotals.oreb}</td>
               <td className="px-3 py-2 text-right">{boxScore.teamTotals.dreb}</td>
               <td className="px-3 py-2 text-right">{boxScore.teamTotals.reb}</td>

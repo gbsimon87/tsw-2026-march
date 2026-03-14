@@ -38,6 +38,15 @@ describe('GameDetailPage', () => {
           {
             id: 'e2',
             playerId: 'p2',
+            statType: 'AST',
+            zoneId: null,
+            x: null,
+            y: null,
+            occurredAt: '2026-03-12T18:03:30.000Z',
+          },
+          {
+            id: 'e3',
+            playerId: 'p2',
             statType: 'FG3_MISS',
             zoneId: 'ABOVE_BREAK_THREE',
             x: 24,
@@ -45,7 +54,7 @@ describe('GameDetailPage', () => {
             occurredAt: '2026-03-12T18:04:00.000Z',
           },
           {
-            id: 'e3',
+            id: 'e4',
             playerId: 'p1',
             statType: 'FT_MADE',
             zoneId: 'FREE_THROW_LINE',
@@ -54,7 +63,7 @@ describe('GameDetailPage', () => {
             occurredAt: '2026-03-12T18:05:00.000Z',
           },
           {
-            id: 'e4',
+            id: 'e5',
             playerId: 'p2',
             statType: 'DREB',
             zoneId: null,
@@ -63,7 +72,7 @@ describe('GameDetailPage', () => {
             occurredAt: '2026-03-12T18:06:00.000Z',
           },
           {
-            id: 'e5',
+            id: 'e6',
             playerId: 'p1',
             statType: 'FT_MADE',
             zoneId: 'FREE_THROW_LINE',
@@ -92,6 +101,7 @@ describe('GameDetailPage', () => {
             fg2a: 1,
             fg3m: 0,
             fg3a: 0,
+            ast: 0,
             oreb: 0,
             dreb: 0,
             reb: 0,
@@ -106,6 +116,7 @@ describe('GameDetailPage', () => {
             fg2a: 0,
             fg3m: 0,
             fg3a: 1,
+            ast: 1,
             oreb: 0,
             dreb: 1,
             reb: 1,
@@ -119,6 +130,7 @@ describe('GameDetailPage', () => {
           fg2a: 1,
           fg3m: 0,
           fg3a: 1,
+          ast: 1,
           oreb: 0,
           dreb: 1,
           reb: 1,
@@ -144,7 +156,9 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
     expect(screen.queryByText(/Game Date \/ Time/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
+    expect(screen.getByText(/Jordan: Assist/i)).toBeInTheDocument();
     expect(screen.getByText(/Jordan: Defensive Rebound/i)).toBeInTheDocument();
+    expect(screen.getByText('AST')).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
@@ -188,6 +202,10 @@ describe('GameDetailPage', () => {
     expect(screen.getByText('Event 2 of 4')).toBeInTheDocument();
     expect(screen.getAllByTestId('replay-marker')).toHaveLength(2);
     expect(screen.getByText('0/1')).toBeInTheDocument();
+    const jordanReplayRowAfterAssist = within(screen.getByTestId('replay-box-score'))
+      .getByText('Jordan')
+      .closest('tr');
+    expect(jordanReplayRowAfterAssist).toHaveTextContent('1');
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Event 3 of 4')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));

@@ -15,6 +15,7 @@ const statTypeSchema = z.enum([
   STAT_TYPES.FG2_MISS,
   STAT_TYPES.FG3_MADE,
   STAT_TYPES.FG3_MISS,
+  STAT_TYPES.AST,
   STAT_TYPES.OREB,
   STAT_TYPES.DREB,
 ]);
@@ -41,7 +42,7 @@ const trackedShotStatTypeSchema = z.enum([
   STAT_TYPES.FG3_MISS,
 ]);
 
-const reboundStatTypeSchema = z.enum([STAT_TYPES.OREB, STAT_TYPES.DREB]);
+const nonShotStatTypeSchema = z.enum([STAT_TYPES.AST, STAT_TYPES.OREB, STAT_TYPES.DREB]);
 
 const baseEventSchema = z.object({
   playerId: z.string().min(1),
@@ -55,11 +56,11 @@ const appendTrackedShotEventSchema = baseEventSchema.extend({
   y: z.number().min(0).max(100),
 });
 
-const appendReboundEventSchema = baseEventSchema.extend({
-  statType: reboundStatTypeSchema,
+const appendNonShotEventSchema = baseEventSchema.extend({
+  statType: nonShotStatTypeSchema,
 });
 
-const appendEventSchema = z.union([appendTrackedShotEventSchema, appendReboundEventSchema]);
+const appendEventSchema = z.union([appendTrackedShotEventSchema, appendNonShotEventSchema]);
 
 module.exports = {
   createGameSchema,

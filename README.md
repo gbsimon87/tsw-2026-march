@@ -14,6 +14,8 @@ V1 focuses on fast, simple tracking for one team at a time:
 - Event-based stat capture for:
   - Inferred 2-pointers or 3-pointers from court selection + make/miss action
   - Free throws from dedicated FT buttons
+  - Offensive/defensive rebounds
+  - Assists on made 2PT and 3PT baskets
 - Court location stored per event (`zoneId`, `x`, `y`)
 - Game finish/save flow
 - Previous game history + derived box scores
@@ -54,6 +56,9 @@ V1 focuses on fast, simple tracking for one team at a time:
 - Tap/click on full court image to infer `zoneId`, nearest hoop, and shot family (`FG2` or `FG3`).
 - Record shot outcomes with `Shot Make` / `Shot Miss`.
 - Record free throws with `FT Make` / `FT Miss` using fixed free-throw-line coordinates.
+- After made 2PT/3PT baskets, prompt for an optional assist from a teammate or `No Assist`.
+- After missed shots/free throws, prompt for an optional offensive rebound or `No Rebound`.
+- Record defensive rebounds from the player/action controls in the tracking overlay.
 - Every event stores normalized coordinates (`x`, `y`) in the range `0..100`.
 - Built-in calibration overlay and draggable handles for court-image alignment/debugging.
 
@@ -68,6 +73,7 @@ V1 focuses on fast, simple tracking for one team at a time:
   - Shot map rendered on court image with made/missed markers
   - Zone Results table (made/missed/total by zone)
   - Play-by-play event log with stat type, zone, coordinates, and event time
+  - Assists and rebound splits in all box score views
 - Shot-map filters:
   - Player: all players or a specific player
   - Shot type: all shots, 2PT, 3PT
@@ -75,7 +81,7 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `Replay` tab includes:
   - Event-by-event replay controls (`Previous` / `Next`)
   - Progressive shot plotting in event order
-  - Live replay box score that updates as events are stepped through
+  - Live replay box score that updates as events are stepped through, including non-shot stats such as assists and rebounds
 - `Game Info` tab includes game metadata and title/state details:
   - game title/status
   - game date/time

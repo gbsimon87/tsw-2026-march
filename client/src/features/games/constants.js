@@ -18,6 +18,7 @@ export const STAT_LABELS = {
   FG2_MISS: '2PT Miss',
   FG3_MADE: '3PT Make',
   FG3_MISS: '3PT Miss',
+  AST: 'Assist',
   OREB: 'Offensive Rebound',
   DREB: 'Defensive Rebound',
 };

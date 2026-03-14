@@ -6,6 +6,8 @@ const controller = require('./teams.controller');
 const teamsRouter = Router();
 const publicTeamsRouter = Router();
 
+publicTeamsRouter.get('/explore', asyncHandler(controller.listPublicExploreGames));
+publicTeamsRouter.get('/:teamId/players/:playerId', asyncHandler(controller.getPublicPlayerById));
 publicTeamsRouter.get('/:teamId', asyncHandler(controller.getPublicById));
 teamsRouter.use(authMiddleware);
 teamsRouter.post('/', asyncHandler(controller.create));

@@ -49,6 +49,7 @@ function emptyStats(playerId, displayName) {
     fg2a: 0,
     fg3m: 0,
     fg3a: 0,
+    ast: 0,
     oreb: 0,
     dreb: 0,
     reb: 0,
@@ -90,6 +91,11 @@ function applyEventToRow(row, statType) {
 
   if (statType === STAT_TYPES.FG3_MISS) {
     row.fg3a += 1;
+    return;
+  }
+
+  if (statType === STAT_TYPES.AST) {
+    row.ast += 1;
     return;
   }
 
@@ -140,6 +146,7 @@ function computeBoxScore(game, team, options = {}) {
       fg2a: summary.fg2.attempts,
       fg3m: summary.fg3.made,
       fg3a: summary.fg3.attempts,
+      ast: players.reduce((total, row) => total + row.ast, 0),
       oreb: players.reduce((total, row) => total + row.oreb, 0),
       dreb: players.reduce((total, row) => total + row.dreb, 0),
       reb: players.reduce((total, row) => total + row.reb, 0),
