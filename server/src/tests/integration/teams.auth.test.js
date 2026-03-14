@@ -15,4 +15,11 @@ describe('teams routes auth/csrf', () => {
 
     expect(response.statusCode).toBe(403);
   });
+
+  test('blocks PATCH /api/v1/teams/:teamId without csrf token', async () => {
+    const app = createApp();
+    const response = await request(app).patch('/api/v1/teams/team-123').send({ name: 'Updated' });
+
+    expect(response.statusCode).toBe(403);
+  });
 });

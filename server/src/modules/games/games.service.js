@@ -5,6 +5,7 @@ const {
   createGame,
   listGamesByOwner,
   findGameByIdAndOwner,
+  findGameById,
   saveGame,
 } = require('./games.repository');
 const { STAT_TYPES } = require('../shared/stats.constants');
@@ -21,10 +22,10 @@ function sanitizeEvent(event) {
   };
 }
 
-function sanitizeGame(game) {
+function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
-    ownerUserId: String(game.ownerUserId),
+    ...(options.includeOwnerUserId ? { ownerUserId: String(game.ownerUserId) } : {}),
     teamId: String(game.teamId),
     title: game.title,
     opponent: game.opponent ?? null,
@@ -177,12 +178,44 @@ async function listGamesForUser(userId, filter = {}) {
 }
 
 async function getGameForUser(userId, gameId) {
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    throw new ApiError(404, 'Game not found');
+  }
+
   const game = await findGameByIdAndOwner(gameId, userId);
   if (!game) {
     throw new ApiError(404, 'Game not found');
   }
 
   const team = await assertTeamOwnership(userId, game.teamId);
+
+  return {
+    game: sanitizeGame(game, { includeOwnerUserId: true }),
+    team: {
+      id: String(team._id),
+      name: team.name,
+      players: team.players.map((player) => ({
+        id: String(player._id),
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        isActive: Boolean(player.isActive),
+      })),
+    },
+    boxScore: computeBoxScore(game, team),
+  };
+}
+
+async function getPublicGame(gameId) {
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  const game = await findGameById(gameId);
+  if (!game) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  const team = await assertTeamOwnership(game.ownerUserId, game.teamId);
 
   return {
     game: sanitizeGame(game),
@@ -281,6 +314,7 @@ module.exports = {
   createGameForUser,
   listGamesForUser,
   getGameForUser,
+  getPublicGame,
   appendEventForUser,
   removeEventForUser,
   finishGameForUser,

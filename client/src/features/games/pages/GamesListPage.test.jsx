@@ -18,6 +18,9 @@ describe('GamesListPage', () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByRole('link', { name: /New Game/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Dashboard/i })).toBeInTheDocument();
+
     await waitFor(() => {
       expect(screen.getByText(/No games yet/i)).toBeInTheDocument();
     });

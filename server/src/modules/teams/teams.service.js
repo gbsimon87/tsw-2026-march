@@ -1,11 +1,14 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { STAT_TYPES } = require('../shared/stats.constants');
 const {
   createTeam,
   listTeamsByOwner,
   findTeamByIdAndOwner,
+  findTeamById,
   saveTeam,
 } = require('./teams.repository');
+const { listGamesByTeamId } = require('../games/games.repository');
 
 function normalizeName(name) {
   return String(name || '')
@@ -38,6 +41,42 @@ function ensureNoDuplicatePlayers(players) {
     }
     seen.add(key);
   }
+}
+
+function applyEventPoints(total, statType) {
+  if (statType === STAT_TYPES.FT_MADE) {
+    return total + 1;
+  }
+  if (statType === STAT_TYPES.FG2_MADE) {
+    return total + 2;
+  }
+  if (statType === STAT_TYPES.FG3_MADE) {
+    return total + 3;
+  }
+  return total;
+}
+
+function computeTeamPoints(game) {
+  return game.events.reduce((total, event) => applyEventPoints(total, event.statType), 0);
+}
+
+function sanitizePublicGame(game) {
+  const now = Date.now();
+  const scheduledTime = game.scheduledAt ? new Date(game.scheduledAt).getTime() : null;
+  const isFuture =
+    typeof scheduledTime === 'number' && !Number.isNaN(scheduledTime) && scheduledTime > now;
+
+  return {
+    id: String(game._id),
+    title: game.title,
+    opponent: game.opponent ?? null,
+    status: game.status,
+    scheduledAt: game.scheduledAt ?? null,
+    completedAt: game.completedAt ?? null,
+    teamPoints: game.status === 'completed' ? computeTeamPoints(game) : null,
+    isPubliclyViewable: !isFuture,
+    createdAt: game.createdAt,
+  };
 }
 
 async function createTeamForUser(userId, payload) {
@@ -73,6 +112,61 @@ async function getTeamForUser(userId, teamId) {
     throw new ApiError(404, 'Team not found');
   }
 
+  return sanitizeTeam(team);
+}
+
+async function getPublicTeam(teamId) {
+  if (!mongoose.Types.ObjectId.isValid(teamId)) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  const team = await findTeamById(teamId);
+  if (!team) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  const games = await listGamesByTeamId(teamId);
+  const players = team.players
+    .filter((player) => Boolean(player.isActive))
+    .sort((playerA, playerB) => {
+      const aHasNumber = typeof playerA.jerseyNumber === 'number';
+      const bHasNumber = typeof playerB.jerseyNumber === 'number';
+
+      if (aHasNumber && bHasNumber && playerA.jerseyNumber !== playerB.jerseyNumber) {
+        return playerA.jerseyNumber - playerB.jerseyNumber;
+      }
+      if (aHasNumber !== bHasNumber) {
+        return aHasNumber ? -1 : 1;
+      }
+      return playerA.displayName.localeCompare(playerB.displayName);
+    })
+    .map((player) => ({
+      id: String(player._id),
+      displayName: player.displayName,
+      jerseyNumber: player.jerseyNumber ?? null,
+    }));
+
+  return {
+    team: {
+      id: String(team._id),
+      name: team.name,
+      players,
+    },
+    games: games.map(sanitizePublicGame),
+  };
+}
+
+async function updateTeamForUser(userId, teamId, payload) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  if (payload.name) {
+    team.name = payload.name.trim();
+  }
+
+  await saveTeam(team);
   return sanitizeTeam(team);
 }
 
@@ -160,6 +254,8 @@ module.exports = {
   createTeamForUser,
   listTeamsForUser,
   getTeamForUser,
+  getPublicTeam,
+  updateTeamForUser,
   addPlayerToTeam,
   updatePlayerOnTeam,
   deactivatePlayerOnTeam,

@@ -9,6 +9,8 @@ import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage';
 import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage';
 import { useAuth } from '../store/AuthContext';
 import { NewTeamPage } from '../../features/teams/pages/NewTeamPage';
+import { EditTeamPage } from '../../features/teams/pages/EditTeamPage';
+import { PublicTeamPage } from '../../features/teams/pages/PublicTeamPage';
 import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
@@ -47,6 +49,15 @@ export function AppRouter() {
           }
         />
         <Route
+          path="/teams/:teamId/edit"
+          element={
+            <ProtectedRoute>
+              <EditTeamPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/teams/:teamId" element={<PublicTeamPage />} />
+        <Route
           path="/games/new"
           element={
             <ProtectedRoute>
@@ -70,14 +81,7 @@ export function AppRouter() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/games/:gameId"
-          element={
-            <ProtectedRoute>
-              <GameDetailPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/games/:gameId" element={<GameDetailPage />} />
         <Route
           path="/dashboard"
           element={

@@ -1,4 +1,9 @@
-const { createTeamSchema, addPlayerSchema, updatePlayerSchema } = require('./teams.validation');
+const {
+  createTeamSchema,
+  updateTeamSchema,
+  addPlayerSchema,
+  updatePlayerSchema,
+} = require('./teams.validation');
 const teamsService = require('./teams.service');
 const { ApiError } = require('../../utils/apiError');
 
@@ -26,6 +31,18 @@ async function list(req, res) {
 async function getById(req, res) {
   const userId = requireAuthUserId(req);
   const team = await teamsService.getTeamForUser(userId, req.params.teamId);
+  res.status(200).json({ team });
+}
+
+async function getPublicById(req, res) {
+  const result = await teamsService.getPublicTeam(req.params.teamId);
+  res.status(200).json(result);
+}
+
+async function update(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = updateTeamSchema.parse(req.body);
+  const team = await teamsService.updateTeamForUser(userId, req.params.teamId, payload);
   res.status(200).json({ team });
 }
 
@@ -62,6 +79,8 @@ module.exports = {
   create,
   list,
   getById,
+  getPublicById,
+  update,
   addPlayer,
   updatePlayer,
   removePlayer,

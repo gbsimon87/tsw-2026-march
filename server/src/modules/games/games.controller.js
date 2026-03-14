@@ -33,6 +33,11 @@ async function getById(req, res) {
   res.status(200).json(result);
 }
 
+async function getPublicById(req, res) {
+  const result = await gamesService.getPublicGame(req.params.gameId);
+  res.status(200).json(result);
+}
+
 async function appendEvent(req, res) {
   const userId = requireAuthUserId(req);
   const payload = appendEventSchema.parse(req.body);
@@ -60,6 +65,7 @@ module.exports = {
   create,
   list,
   getById,
+  getPublicById,
   appendEvent,
   removeEvent,
   finish,

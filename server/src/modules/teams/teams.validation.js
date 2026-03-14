@@ -10,6 +10,14 @@ const createTeamSchema = z.object({
   players: z.array(playerSchema).max(30).optional(),
 });
 
+const updateTeamSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one field is required',
+  });
+
 const addPlayerSchema = playerSchema;
 
 const updatePlayerSchema = z
@@ -24,6 +32,7 @@ const updatePlayerSchema = z
 
 module.exports = {
   createTeamSchema,
+  updateTeamSchema,
   addPlayerSchema,
   updatePlayerSchema,
 };

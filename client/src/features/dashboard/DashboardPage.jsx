@@ -36,6 +36,29 @@ function getGameStatus(game) {
   return 'Scheduled';
 }
 
+function QuickActionLink({ to, label, primary = false, children }) {
+  return (
+    <Link
+      to={to}
+      aria-label={label}
+      className={`flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+        primary
+          ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-700'
+          : 'border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50'
+      }`}
+    >
+      <span
+        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+          primary ? 'bg-white/12' : 'bg-slate-100'
+        }`}
+      >
+        {children}
+      </span>
+      <span>{label}</span>
+    </Link>
+  );
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -43,6 +66,7 @@ export function DashboardPage() {
   const [games, setGames] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [copiedGameId, setCopiedGameId] = useState('');
 
   const visibleTeams = teams.slice(0, 3);
   const hiddenTeamsCount = Math.max(teams.length - visibleTeams.length, 0);
@@ -80,6 +104,19 @@ export function DashboardPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  async function copyShareUrl(gameId) {
+    if (!gameId || !navigator?.clipboard?.writeText) {
+      return;
+    }
+
+    const shareUrl = `${window.location.origin}/games/${gameId}`;
+    await navigator.clipboard.writeText(shareUrl);
+    setCopiedGameId(gameId);
+    window.setTimeout(() => {
+      setCopiedGameId((current) => (current === gameId ? '' : current));
+    }, 1500);
+  }
+
   return (
     <main className="space-y-8">
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
@@ -102,25 +139,47 @@ export function DashboardPage() {
         <h2 id="quick-actions-heading" className="text-xl font-semibold text-slate-900">
           Quick Actions
         </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Link
-            to="/games/new"
-            className="rounded-lg bg-slate-900 px-5 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
-            New Game
-          </Link>
-          <Link
-            to="/games"
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-center text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-          >
-            View Games
-          </Link>
-          <Link
-            to="/teams/new"
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-center text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-          >
-            Manage Team
-          </Link>
+        <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
+          <QuickActionLink to="/games/new" label="New Game" primary>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          </QuickActionLink>
+          <QuickActionLink to="/games" label="View Games">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M4 19h16" />
+              <path d="M7 16V8" />
+              <path d="M12 16V5" />
+              <path d="M17 16v-4" />
+            </svg>
+          </QuickActionLink>
+          <QuickActionLink to="/teams/new" label="New Team">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="10" cy="7" r="3" />
+              <path d="M19 8v6" />
+              <path d="M16 11h6" />
+            </svg>
+          </QuickActionLink>
         </div>
       </section>
 
@@ -174,9 +233,28 @@ export function DashboardPage() {
         {!isLoading && teams.length > 0 ? (
           <div className="mt-3 space-y-2">
             {visibleTeams.map((team) => (
-              <p key={team.id || team._id || team.name} className="text-sm text-slate-700">
-                {team.name || 'Unnamed Team'}
-              </p>
+              <article
+                key={team.id || team._id || team.name}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium text-slate-900">
+                    {team.name || 'Unnamed Team'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Active roster: {(team.players || []).filter((player) => player.isActive).length}
+                  </p>
+                </div>
+                {team.id ? (
+                  <Link
+                    to={`/teams/${team.id}/edit`}
+                    aria-label={`Edit ${team.name || 'team'}`}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
+                  >
+                    Edit
+                  </Link>
+                ) : null}
+              </article>
             ))}
             {hiddenTeamsCount > 0 ? (
               <p className="text-sm font-medium text-slate-500">+{hiddenTeamsCount} more</p>
@@ -225,6 +303,34 @@ export function DashboardPage() {
                     <p className="text-sm text-slate-600">Opponent: {game.opponent || 'N/A'}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label={`Copy share link for ${getGameTitle(game, index)}`}
+                      disabled={!canNavigateToGame}
+                      className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => {
+                        if (gameId) {
+                          copyShareUrl(gameId);
+                        }
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        {copiedGameId === gameId ? (
+                          <path d="M5 13.5 9 17l10-10" />
+                        ) : (
+                          <>
+                            <rect x="9" y="9" width="10" height="10" rx="2" />
+                            <path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+                          </>
+                        )}
+                      </svg>
+                    </button>
                     <button
                       type="button"
                       aria-label={`Open details for ${getGameTitle(game, index)}`}

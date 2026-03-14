@@ -7,6 +7,12 @@ export const teamsApi = {
   getById(teamId) {
     return apiClient.get(`/teams/${teamId}`);
   },
+  getPublicById(teamId) {
+    return apiClient.get(`/public/teams/${teamId}`);
+  },
+  update(teamId, payload) {
+    return apiClient.patch(`/teams/${teamId}`, payload);
+  },
   create(payload) {
     return apiClient.post('/teams', payload);
   },

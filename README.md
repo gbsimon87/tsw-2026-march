@@ -25,6 +25,8 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `POST /api/v1/teams`
 - `GET /api/v1/teams`
 - `GET /api/v1/teams/:teamId`
+- `PATCH /api/v1/teams/:teamId`
+- `GET /api/v1/public/teams/:teamId`
 - `POST /api/v1/teams/:teamId/players`
 - `PATCH /api/v1/teams/:teamId/players/:playerId`
 - `DELETE /api/v1/teams/:teamId/players/:playerId`
@@ -40,6 +42,8 @@ V1 focuses on fast, simple tracking for one team at a time:
 
 - `/dashboard`
 - `/teams/new`
+- `/teams/:teamId`
+- `/teams/:teamId/edit`
 - `/games/new`
 - `/games`
 - `/games/:gameId/track`

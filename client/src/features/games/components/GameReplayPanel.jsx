@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
-import { STAT_LABELS, ZONE_LABELS } from '../constants';
+import gameConstants from '../constants';
+
+const { STAT_LABELS, ZONE_LABELS } = gameConstants;
 
 function eventTime(value) {
   if (!value) {
@@ -77,7 +79,10 @@ export function GameReplayPanel({ events, players }) {
   const replayEvents = useMemo(() => (events || []).filter(canReplayEvent), [events]);
   const [currentIndex, setCurrentIndex] = useState(replayEvents.length ? 0 : -1);
   const currentEvent = currentIndex >= 0 ? replayEvents[currentIndex] : null;
-  const visibleEvents = currentIndex >= 0 ? replayEvents.slice(0, currentIndex + 1) : [];
+  const visibleEvents = useMemo(
+    () => (currentIndex >= 0 ? replayEvents.slice(0, currentIndex + 1) : []),
+    [currentIndex, replayEvents]
+  );
   const replayBoxScore = useMemo(() => {
     const basePlayers = players?.length
       ? players.map((player) => ({ id: player.id, displayName: player.displayName }))

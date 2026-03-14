@@ -6,6 +6,7 @@ jest.mock('../../modules/games/games.repository', () => ({
   createGame: jest.fn(),
   listGamesByOwner: jest.fn(),
   findGameByIdAndOwner: jest.fn(),
+  findGameById: jest.fn(),
   saveGame: jest.fn(),
 }));
 
@@ -22,11 +23,13 @@ const {
   createGame,
   listGamesByOwner,
   findGameByIdAndOwner,
+  findGameById,
 } = require('../../modules/games/games.repository');
 const {
   createGameForUser,
   listGamesForUser,
   getGameForUser,
+  getPublicGame,
 } = require('../../modules/games/games.service');
 
 describe('games service opponent support', () => {
@@ -120,5 +123,31 @@ describe('games service opponent support', () => {
 
     const result = await getGameForUser('user-1', 'game-1');
     expect(result.game.opponent).toBe('Sharks');
+  });
+
+  test('getPublicGame returns detail payload without owner user id', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({
+      _id: 'team-1',
+      name: 'Team',
+      players: [],
+    });
+    findGameById.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Public Game',
+      opponent: 'Wolves',
+      status: 'completed',
+      scheduledAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+      events: [],
+    });
+
+    const result = await getPublicGame('game-1');
+
+    expect(result.game.opponent).toBe('Wolves');
+    expect(result.game.ownerUserId).toBeUndefined();
   });
 });

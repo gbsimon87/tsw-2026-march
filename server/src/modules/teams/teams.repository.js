@@ -34,6 +34,10 @@ async function findTeamByIdAndOwner(teamId, ownerUserId) {
   return Team.findOne({ _id: teamId, ownerUserId });
 }
 
+async function findTeamById(teamId) {
+  return Team.findById(teamId);
+}
+
 async function saveTeam(team) {
   return team.save();
 }
@@ -42,5 +46,6 @@ module.exports = {
   createTeam,
   listTeamsByOwner,
   findTeamByIdAndOwner,
+  findTeamById,
   saveTeam,
 };

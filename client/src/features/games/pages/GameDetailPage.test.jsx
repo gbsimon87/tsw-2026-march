@@ -11,6 +11,10 @@ vi.mock('../api/gamesApi', () => ({
   gamesApi: apiMocks,
 }));
 
+vi.mock('../../../app/store/AuthContext', () => ({
+  useAuth: vi.fn(() => ({ user: null })),
+}));
+
 describe('GameDetailPage', () => {
   test('renders tabbed game detail sections and shot map interactions', async () => {
     apiMocks.getById.mockResolvedValue({
@@ -140,6 +144,7 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Recorded At/i)).toBeInTheDocument();
     expect(screen.getByText(/Finished At/i)).toBeInTheDocument();
     expect(screen.getByText(/vs Wildcats/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'TSW Team' })).toHaveAttribute('href', '/teams/team-1');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();

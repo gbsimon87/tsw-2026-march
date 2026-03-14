@@ -19,3 +19,8 @@ export const STAT_LABELS = {
   FG3_MADE: '3PT Make',
   FG3_MISS: '3PT Miss',
 };
+
+export default {
+  ZONE_LABELS,
+  STAT_LABELS,
+};

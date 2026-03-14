@@ -84,6 +84,14 @@ async function findGameByIdAndOwner(gameId, ownerUserId) {
   return Game.findOne({ _id: gameId, ownerUserId });
 }
 
+async function findGameById(gameId) {
+  return Game.findById(gameId);
+}
+
+async function listGamesByTeamId(teamId) {
+  return Game.find({ teamId }).sort({ scheduledAt: -1, completedAt: -1, createdAt: -1 });
+}
+
 async function saveGame(game) {
   return game.save();
 }
@@ -92,5 +100,7 @@ module.exports = {
   createGame,
   listGamesByOwner,
   findGameByIdAndOwner,
+  findGameById,
+  listGamesByTeamId,
   saveGame,
 };

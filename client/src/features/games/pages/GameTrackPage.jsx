@@ -8,7 +8,9 @@ import {
   inferCourtSelection,
 } from '../court/courtInference';
 import { DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
-import { STAT_LABELS, ZONE_LABELS } from '../constants';
+import gameConstants from '../constants';
+
+const { STAT_LABELS, ZONE_LABELS } = gameConstants;
 
 function formatEventLabel(event, playersById) {
   const player = playersById.get(event.playerId);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
-import { ZONE_LABELS } from '../constants';
+import gameConstants from '../constants';
 import {
   CORNER_THREE_MAX_LOCAL_Y_FEET,
   CORNER_THREE_X_FEET,
@@ -12,6 +12,8 @@ import {
   feetToNormalized,
 } from '../court/courtGeometry';
 import { courtToImage, DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
+
+const { ZONE_LABELS } = gameConstants;
 
 function isMade(statType) {
   return statType.endsWith('_MADE');

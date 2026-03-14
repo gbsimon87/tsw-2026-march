@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from '../../../app/store/AuthContext';
 import { Tabs } from '../../../components/Tabs';
 import { gamesApi } from '../api/gamesApi';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameShotMap } from '../components/GameShotMap';
-import { STAT_LABELS, ZONE_LABELS } from '../constants';
+import gameConstants from '../constants';
+
+const { STAT_LABELS, ZONE_LABELS } = gameConstants;
 
 function formatDateTime(value) {
   if (!value) {
@@ -38,6 +41,7 @@ function eventTime(value) {
 
 export function GameDetailPage() {
   const { gameId } = useParams();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -166,9 +170,13 @@ export function GameDetailPage() {
       <div className="rounded border bg-white p-3">
         <h2 className="text-lg font-semibold">{game.title}</h2>
         <p className="text-sm text-slate-600">
-          Team: {team.name} | Status: {game.status}
+          Team:{' '}
+          <Link className="font-medium text-blue-600 hover:underline" to={`/teams/${team.id}`}>
+            {team.name}
+          </Link>{' '}
+          | Status: {game.status}
         </p>
-        {game.status === 'in_progress' ? (
+        {game.status === 'in_progress' && user ? (
           <Link
             className="mt-2 inline-block text-sm text-blue-600 hover:underline"
             to={`/games/${game.id}/track`}

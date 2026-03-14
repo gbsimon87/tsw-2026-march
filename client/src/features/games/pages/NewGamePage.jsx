@@ -95,54 +95,88 @@ export function NewGamePage() {
 
   if (teams.length === 0) {
     return (
-      <section className="space-y-3">
-        <h1 className="text-2xl font-bold">Create Game</h1>
-        <p className="text-sm text-slate-600">You need a team before creating a game.</p>
-        <button
-          type="button"
-          className="rounded bg-slate-900 px-4 py-2 text-white"
-          onClick={() => navigate('/teams/new')}
-        >
-          Create Team First
-        </button>
-      </section>
+      <main className="space-y-6">
+        <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
+          <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+            Create Game
+          </h1>
+          <p className="mt-2 text-base text-slate-700">
+            Set up game details and start tracking your team performance.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-sm text-slate-600">You need a team before creating a game.</p>
+          <button
+            type="button"
+            className="mt-3 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+            onClick={() => navigate('/teams/new')}
+          >
+            Create Team First
+          </button>
+        </section>
+      </main>
     );
   }
 
   return (
-    <section className="mx-auto max-w-xl space-y-4">
-      <h1 className="text-2xl font-bold">Create Game</h1>
-      <form className="space-y-4 rounded border bg-white p-4 shadow-sm" onSubmit={onSubmit}>
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        <label className="block">
-          <span className="mb-1 block text-sm">Team</span>
-          <select
-            className="w-full rounded border px-3 py-2"
-            value={teamId}
-            onChange={(event) => setTeamId(event.target.value)}
-          >
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-        </label>
+    <main className="mx-auto max-w-3xl space-y-8">
+      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
+        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Create Game</h1>
+        <p className="mt-2 text-base text-slate-700">
+          Prepare game details in seconds and move directly into live tracking.
+        </p>
+      </section>
 
-        <label className="block">
-          <span className="mb-1 block text-sm">Game Title</span>
-          <input
-            type="text"
-            required
-            className="w-full rounded border px-3 py-2"
-            placeholder="vs Wildcats - March 12"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
+      {error ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
 
-        <div className="space-y-2">
-          <span className="block text-sm">Opponent (optional)</span>
+      <form
+        className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        onSubmit={onSubmit}
+      >
+        <section aria-labelledby="game-details-heading" className="space-y-3">
+          <h2 id="game-details-heading" className="text-xl font-semibold text-slate-900">
+            Game Details
+          </h2>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Team</span>
+            <select
+              className="w-full rounded border border-slate-300 px-3 py-2"
+              value={teamId}
+              onChange={(event) => setTeamId(event.target.value)}
+            >
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Game Title</span>
+            <input
+              type="text"
+              required
+              className="w-full rounded border border-slate-300 px-3 py-2"
+              placeholder="vs Wildcats - March 12"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </label>
+        </section>
+
+        <section aria-labelledby="opponent-heading" className="space-y-3">
+          <h2 id="opponent-heading" className="text-xl font-semibold text-slate-900">
+            Opponent
+          </h2>
+          <p className="text-sm text-slate-600">
+            Optional: choose a previous opponent or add a new one for this game.
+          </p>
           {knownOpponents.length > 0 ? (
             <div className="space-y-2">
               <div className="flex flex-wrap gap-4 text-sm">
@@ -170,7 +204,7 @@ export function NewGamePage() {
 
               {opponentMode === 'existing' ? (
                 <select
-                  className="w-full rounded border px-3 py-2"
+                  className="w-full rounded border border-slate-300 px-3 py-2"
                   value={selectedOpponent}
                   onChange={(event) => setSelectedOpponent(event.target.value)}
                 >
@@ -184,7 +218,7 @@ export function NewGamePage() {
               ) : (
                 <input
                   type="text"
-                  className="w-full rounded border px-3 py-2"
+                  className="w-full rounded border border-slate-300 px-3 py-2"
                   placeholder="Enter opponent name"
                   value={newOpponent}
                   onChange={(event) => setNewOpponent(event.target.value)}
@@ -195,7 +229,7 @@ export function NewGamePage() {
             <div className="space-y-1">
               <input
                 type="text"
-                className="w-full rounded border px-3 py-2"
+                className="w-full rounded border border-slate-300 px-3 py-2"
                 placeholder="Enter opponent name"
                 value={newOpponent}
                 onChange={(event) => setNewOpponent(event.target.value)}
@@ -203,26 +237,33 @@ export function NewGamePage() {
               <p className="text-xs text-slate-500">No previous opponents yet. You can type one.</p>
             </div>
           )}
+        </section>
+
+        <section aria-labelledby="schedule-heading" className="space-y-3">
+          <h2 id="schedule-heading" className="text-xl font-semibold text-slate-900">
+            Schedule
+          </h2>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">Scheduled At (optional)</span>
+            <input
+              type="datetime-local"
+              className="w-full rounded border border-slate-300 px-3 py-2"
+              value={scheduledAt}
+              onChange={(event) => setScheduledAt(event.target.value)}
+            />
+          </label>
+        </section>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          >
+            {isSubmitting ? 'Creating...' : 'Create and Start Tracking'}
+          </button>
         </div>
-
-        <label className="block">
-          <span className="mb-1 block text-sm">Scheduled At (optional)</span>
-          <input
-            type="datetime-local"
-            className="w-full rounded border px-3 py-2"
-            value={scheduledAt}
-            onChange={(event) => setScheduledAt(event.target.value)}
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
-        >
-          {isSubmitting ? 'Creating...' : 'Create and Start Tracking'}
-        </button>
       </form>
-    </section>
+    </main>
   );
 }
