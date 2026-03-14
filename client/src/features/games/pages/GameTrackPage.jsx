@@ -677,7 +677,7 @@ export function GameTrackPage() {
           </div>
 
           <div className="rounded border bg-white p-4">
-            <h2 className="mb-2 text-lg font-semibold">Event Log</h2>
+            <h2 className="mb-2 text-lg font-semibold">Play by Play</h2>
             {game.events.length === 0 ? (
               <p className="text-sm text-slate-600">No events yet.</p>
             ) : null}

@@ -9,6 +9,7 @@ V1 focuses on fast, simple tracking for one team at a time:
 
 - Authenticated user accounts (email/password + Google OAuth)
 - Team and player roster setup
+- Teams and games management pages for authenticated users
 - Game creation and in-progress tracking
 - Full-court visual tracking (tap/click on calibrated court image)
 - Event-based stat capture for:
@@ -19,6 +20,9 @@ V1 focuses on fast, simple tracking for one team at a time:
 - Court location stored per event (`zoneId`, `x`, `y`)
 - Game finish/save flow
 - Previous game history + derived box scores
+- Public team pages with sortable season stat tables and recent/upcoming games
+- Public player pages with per-game logs plus PPG/RPG/APG
+- Homepage explore feed with recent public games across teams
 
 ## Current V1 Features
 
@@ -29,6 +33,8 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `GET /api/v1/teams/:teamId`
 - `PATCH /api/v1/teams/:teamId`
 - `GET /api/v1/public/teams/:teamId`
+- `GET /api/v1/public/teams/:teamId/players/:playerId`
+- `GET /api/v1/public/teams/explore`
 - `POST /api/v1/teams/:teamId/players`
 - `PATCH /api/v1/teams/:teamId/players/:playerId`
 - `DELETE /api/v1/teams/:teamId/players/:playerId`
@@ -43,9 +49,11 @@ V1 focuses on fast, simple tracking for one team at a time:
 ### Frontend Routes
 
 - `/dashboard`
+- `/teams`
 - `/teams/new`
 - `/teams/:teamId`
 - `/teams/:teamId/edit`
+- `/teams/:teamId/players/:playerId`
 - `/games/new`
 - `/games`
 - `/games/:gameId/track`
@@ -61,6 +69,7 @@ V1 focuses on fast, simple tracking for one team at a time:
 - Record defensive rebounds from the player/action controls in the tracking overlay.
 - Every event stores normalized coordinates (`x`, `y`) in the range `0..100`.
 - Built-in calibration overlay and draggable handles for court-image alignment/debugging.
+- Live tracking box score uses a horizontally scrollable table with pinned player column.
 
 ### Game Detail Experience
 
@@ -69,7 +78,7 @@ V1 focuses on fast, simple tracking for one team at a time:
   - `Replay`
   - `Game Info`
 - `Box Score` tab includes:
-  - Box score table
+  - Sortable box score table
   - Shot map rendered on court image with made/missed markers
   - Zone Results table (made/missed/total by zone)
   - Play-by-play event log with stat type, zone, coordinates, and event time
@@ -81,12 +90,49 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `Replay` tab includes:
   - Event-by-event replay controls (`Previous` / `Next`)
   - Progressive shot plotting in event order
-  - Live replay box score that updates as events are stepped through, including non-shot stats such as assists and rebounds
+  - Live sortable replay box score that updates as events are stepped through, including non-shot stats such as assists and rebounds
 - `Game Info` tab includes game metadata and title/state details:
   - game title/status
   - game date/time
   - recorded at
   - finished at
+
+### Public Experience
+
+- Public team page includes:
+  - sortable player season table with games played, per-game averages, totals, and shooting splits
+  - clickable player names linking to public player profiles
+  - upcoming and recent game lists with compact expand/collapse behavior
+- Public player page includes:
+  - player header
+  - `PPG`, `RPG`, and `APG`
+  - sortable per-game stat log and season totals
+- Homepage includes an `Explore` section linking to recent public games and team pages.
+
+### Shared UI
+
+- Reusable sortable `StatsTable` component powers:
+  - public team tables
+  - public player logs
+  - game detail box scores
+  - replay box scores
+- The first column stays pinned during horizontal scrolling for easier reading on smaller screens.
+
+## Seed Data
+
+- Seed script creates 10 local users:
+  - `user1@user1.com` through `user10@user10.com`
+  - password: `password`
+- Each seeded user gets:
+  - 1 team
+  - 10 players
+  - 20 completed games
+- Total seeded sample data:
+  - 10 users
+  - 10 teams
+  - 100 players
+  - 200 games
+- Seeded game events include randomized points, rebounds, and assists.
 
 ## Stack
 
@@ -157,3 +203,12 @@ pnpm check-env
 
 - Product roadmap: `docs/product-roadmap.md`
 - Top-level milestone tracker: `ROADMAP.md`
+
+## Future Work
+
+- Fantasy stat tracking
+- Season support and season-based reporting
+- Game summaries and richer post-game recap content
+- Player profile images via uploaded media or linked Google image
+- Embedded video playback, likely via YouTube iframe support
+- Time-synced game tracking from video playback

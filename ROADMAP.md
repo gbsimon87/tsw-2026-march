@@ -6,14 +6,18 @@
 - Secure authentication baseline (email/password, Google OAuth, CSRF, rotating JWT cookies)
 - Core deployment and environment scaffolding
 - V1 backend domain scaffolding for teams and games
-- V1 frontend routes/pages for team setup, game tracking, and box scores
+- V1 frontend routes/pages for team setup, teams management, game tracking, and box scores
 - GameTrack full-court image tap flow with inferred 2PT/3PT, zone inference, and free-throw handling
 - Court image calibration/debug overlay with draggable handles and calibration value output
 - GameDetail shot map with made/missed markers, player + shot-type filters, zone overlay toggle, and zone results table
 - GameDetail tabbed UI (`Box Score`, `Replay`, `Game Info`) to reduce page length and improve navigation
 - Replay flow with sequential event playback and live-updating replay box score
 - Rebounds and assists tracked in live game flow and included across all box scores
-- Public team page aggregate box score and roster stat summaries
+- Reusable sortable stats table with pinned first column for horizontally scrollable stat views
+- Public team page sortable season player table, public game lists, and links to player profiles
+- Public player profile page with PPG/RPG/APG and sortable per-game stat logs
+- Homepage explore section with recent public games and team links
+- Expanded multi-user seed data with 10 users, 10 teams, 100 players, and 200 completed games
 
 ## In Progress
 
@@ -26,6 +30,12 @@
 
 - Opponent totals or opponent roster support per game
 - Additional basketball stats (steals, turnovers, fouls)
+- Fantasy stat tracking
+- Season support and season-based reporting
+- Game summaries and richer recap content
+- Player image support from uploaded media or linked Google images
+- Embedded video playback, likely via YouTube iframe support
+- Time-synced game tracking from video playback
 - Richer shot-zone analytics and trend summaries (heatmaps, efficiency overlays, splits)
 - Export/shareable box score views
 
