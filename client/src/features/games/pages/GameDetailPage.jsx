@@ -187,11 +187,7 @@ export function GameDetailPage() {
     <div className="space-y-4">
       <div className="overflow-x-auto rounded border bg-white">
         <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">Box Score</div>
-        <StatsTable
-          columns={boxScoreColumns}
-          rows={boxScoreRows}
-          tableClassName="min-w-full text-sm"
-        />
+        <StatsTable columns={boxScoreColumns} rows={boxScoreRows} tableClassName="w-max text-sm" />
       </div>
 
       <GameShotMap events={shotMapEvents} />

@@ -211,11 +211,7 @@ export function PublicPlayerPage() {
         ) : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <StatsTable
-            columns={gameLogColumns}
-            rows={gameLogRows}
-            tableClassName="min-w-[1040px] text-sm"
-          />
+          <StatsTable columns={gameLogColumns} rows={gameLogRows} tableClassName="w-max text-sm" />
         </div>
       </section>
     </main>

@@ -266,7 +266,7 @@ export function PublicTeamPage() {
           <StatsTable
             columns={playerColumns}
             rows={summary.boxScore.players}
-            tableClassName="min-w-[1180px] text-sm"
+            tableClassName="w-max text-sm"
           />
         </div>
       </section>

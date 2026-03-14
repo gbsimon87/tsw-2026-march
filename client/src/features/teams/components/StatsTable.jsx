@@ -4,6 +4,18 @@ function getCellAlignment(align) {
   return align === 'right' ? 'text-right' : 'text-left';
 }
 
+function getStickyColumnClasses(index, type) {
+  if (index !== 0) {
+    return '';
+  }
+
+  if (type === 'header') {
+    return 'sticky left-0 z-20 bg-slate-100 shadow-[1px_0_0_0_rgb(226_232_240)]';
+  }
+
+  return 'sticky left-0 z-10 bg-white shadow-[1px_0_0_0_rgb(226_232_240)]';
+}
+
 function getSortAccessor(column) {
   if (column.sortable === false) {
     return null;
@@ -78,7 +90,7 @@ function sortRows(rows, columns, sortConfig) {
   });
 }
 
-export function StatsTable({ columns, rows, tableClassName = 'min-w-full text-sm' }) {
+export function StatsTable({ columns, rows, tableClassName = 'w-max text-sm' }) {
   const [sortConfig, setSortConfig] = useState(null);
   const sortedRows = sortRows(rows, columns, sortConfig);
 
@@ -99,12 +111,16 @@ export function StatsTable({ columns, rows, tableClassName = 'min-w-full text-sm
     <table className={tableClassName}>
       <thead className="bg-slate-100 text-slate-600">
         <tr>
-          {columns.map((column) => {
+          {columns.map((column, index) => {
             const isSorted = sortConfig?.columnId === column.id;
             const isSortable = Boolean(getSortAccessor(column));
+            const stickyClasses = getStickyColumnClasses(index, 'header');
 
             return (
-              <th key={column.id} className={`px-2 py-1.5 ${getCellAlignment(column.align)}`}>
+              <th
+                key={column.id}
+                className={`whitespace-nowrap px-1 py-1 sm:px-1.5 sm:py-1.5 ${getCellAlignment(column.align)} ${stickyClasses}`}
+              >
                 {isSortable ? (
                   <button
                     type="button"
@@ -129,12 +145,12 @@ export function StatsTable({ columns, rows, tableClassName = 'min-w-full text-sm
       <tbody>
         {sortedRows.map((row) => (
           <tr key={row.playerId || row.id} className="border-t border-slate-200">
-            {columns.map((column) => (
+            {columns.map((column, index) => (
               <td
                 key={column.id}
-                className={`px-2 py-1.5 ${
+                className={`whitespace-nowrap px-1 py-1 sm:px-1.5 sm:py-1.5 ${
                   column.emphasis ? 'font-semibold text-slate-900' : 'text-slate-700'
-                } ${getCellAlignment(column.align)}`}
+                } ${getCellAlignment(column.align)} ${getStickyColumnClasses(index, 'cell')}`}
               >
                 {column.render(row)}
               </td>

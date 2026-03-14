@@ -254,7 +254,7 @@ export function GameReplayPanel({ events, players }) {
             <StatsTable
               columns={replayColumns}
               rows={replayBoxScore}
-              tableClassName="min-w-full text-xs"
+              tableClassName="w-max text-xs"
             />
           </div>
         </>
