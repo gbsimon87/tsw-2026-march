@@ -6,6 +6,7 @@ import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameShotMap } from '../components/GameShotMap';
+import { GameRecapPanel } from '../components/GameRecapPanel';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import gameConstants from '../constants';
 
@@ -85,6 +86,7 @@ export function GameDetailPage() {
   }
 
   const { game, team, boxScore } = data;
+  const recap = data.recap;
   const entitlements = data.teamEntitlements || team.entitlements || {};
   const canViewReplay = Boolean(entitlements.canViewReplay);
   const canViewShotMaps = Boolean(entitlements.canViewShotMaps);
@@ -285,8 +287,13 @@ export function GameDetailPage() {
   return (
     <section className="space-y-4">
       <Tabs
-        defaultValue="box-score"
+        defaultValue="recap"
         items={[
+          {
+            value: 'recap',
+            label: 'Recap',
+            content: <GameRecapPanel gameId={game.id} recap={recap} teamId={team.id} />,
+          },
           { value: 'box-score', label: 'Box Score', content: boxScoreContent },
           { value: 'replay', label: 'Replay', content: replayContent },
           { value: 'game-info', label: 'Game Info', content: gameInfoContent },

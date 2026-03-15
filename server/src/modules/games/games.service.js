@@ -11,6 +11,7 @@ const {
 const { STAT_TYPES } = require('../shared/stats.constants');
 const { summarizeEvents } = require('../shared/statSummary');
 const { getTeamEntitlements } = require('../billing/billing.service');
+const { buildGameRecap } = require('./gameRecap.service');
 
 function sanitizeEvent(event) {
   return {
@@ -227,6 +228,7 @@ async function getGameForUser(userId, gameId) {
     },
     boxScore: computeBoxScore(game, team),
     teamEntitlements: getTeamEntitlements(team),
+    recap: buildGameRecap(game, team, computeBoxScore(game, team)),
   };
 }
 
@@ -257,6 +259,7 @@ async function getPublicGame(gameId) {
     },
     boxScore: computeBoxScore(game, team),
     teamEntitlements: getTeamEntitlements(team),
+    recap: buildGameRecap(game, team, computeBoxScore(game, team)),
   };
 }
 

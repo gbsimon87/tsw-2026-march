@@ -98,6 +98,64 @@ describe('GameDetailPage', () => {
         canViewReplay: true,
         canViewShotMaps: true,
       },
+      recap: {
+        statusLabel: 'Final',
+        team: {
+          id: 'team-1',
+          name: 'TSW Team',
+          points: 4,
+        },
+        opponent: {
+          name: 'Wildcats',
+        },
+        playedAt: '2026-03-12T19:20:00.000Z',
+        topPerformers: [
+          { playerId: 'p1', displayName: 'Alex', points: 4, reb: 0, ast: 0 },
+          { playerId: 'p2', displayName: 'Jordan', points: 0, reb: 1, ast: 1 },
+        ],
+        teamStats: {
+          points: 4,
+          fg2: { made: 1, missed: 0, attempts: 1, percentage: 100 },
+          fg3: { made: 0, missed: 1, attempts: 1, percentage: 0 },
+          ft: { made: 2, missed: 0, attempts: 2, percentage: 100 },
+          reb: 1,
+          ast: 1,
+        },
+        keyMoments: [
+          {
+            eventId: 'e1',
+            playerId: 'p1',
+            playerName: 'Alex',
+            statType: 'FG2_MADE',
+            statLabel: '2PT Make',
+            occurredAt: '2026-03-12T18:03:00.000Z',
+          },
+        ],
+        shotSnapshot: {
+          made: 1,
+          missed: 1,
+          events: [
+            {
+              id: 'e1',
+              playerId: 'p1',
+              playerName: 'Alex',
+              statType: 'FG2_MADE',
+              zoneId: 'PAINT',
+              x: 51,
+              y: 78,
+            },
+            {
+              id: 'e3',
+              playerId: 'p2',
+              playerName: 'Jordan',
+              statType: 'FG3_MISS',
+              zoneId: 'ABOVE_BREAK_THREE',
+              x: 24,
+              y: 36,
+            },
+          ],
+        },
+      },
       boxScore: {
         players: [
           {
@@ -155,11 +213,21 @@ describe('GameDetailPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Recap' })).toBeInTheDocument();
 
+    expect(screen.getByRole('tab', { name: 'Recap' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Game Info' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Share Game Recap/i })).toBeInTheDocument();
+    expect(screen.getByText('TSW Team')).toBeInTheDocument();
+    expect(screen.getByText(/Wildcats/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Top Performer/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('recap-shot-snapshot')).toBeInTheDocument();
+    expect(screen.getAllByTestId('recap-shot-made-marker')).toHaveLength(1);
+    expect(screen.getAllByTestId('recap-shot-miss-marker')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
     expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
     expect(screen.queryByText(/Game Date \/ Time/i)).not.toBeInTheDocument();
