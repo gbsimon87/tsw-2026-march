@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
 
 const apiMocks = vi.hoisted(() => ({
@@ -16,6 +16,24 @@ vi.mock('../../../app/store/AuthContext', () => ({
 }));
 
 describe('GameDetailPage', () => {
+  beforeEach(() => {
+    global.File = class MockFile {
+      constructor(parts, name, options = {}) {
+        this.parts = parts;
+        this.name = name;
+        this.type = options.type;
+      }
+    };
+
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+      share: vi.fn().mockResolvedValue(undefined),
+      canShare: vi.fn(() => true),
+    });
+  });
+
   test('renders tabbed game detail sections and shot map interactions', async () => {
     apiMocks.getById.mockResolvedValue({
       game: {
@@ -219,13 +237,27 @@ describe('GameDetailPage', () => {
     expect(screen.getByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Game Info' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Share Game Recap/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Share Card/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Download Card/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Share on WhatsApp/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Share by Email/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Copy Link/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /View Team Page/i })).not.toBeInTheDocument();
+    expect(screen.getByAltText(/Shareable game recap card preview/i)).toBeInTheDocument();
     expect(screen.getByText('TSW Team')).toBeInTheDocument();
     expect(screen.getByText(/Wildcats/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Top Performer/i).length).toBeGreaterThan(0);
     expect(screen.getByTestId('recap-shot-snapshot')).toBeInTheDocument();
     expect(screen.getAllByTestId('recap-shot-made-marker')).toHaveLength(1);
     expect(screen.getAllByTestId('recap-shot-miss-marker')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /Share Card/i }));
+    expect(navigator.share).toHaveBeenCalledTimes(1);
+    const sharePayload = navigator.share.mock.calls[0][0];
+    expect(sharePayload.url).toContain('/games/game-1');
+    expect(sharePayload.text).toContain('TSW Team scored 4 points vs Wildcats');
+    expect(sharePayload.files).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();

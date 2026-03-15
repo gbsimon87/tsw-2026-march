@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { RecapShotSnapshot } from './RecapShotSnapshot';
+import { createRecapCardDataUrl, createRecapCardSvg } from '../recapCardImage';
 
 function formatDateTime(value) {
   if (!value) {
@@ -35,39 +35,51 @@ function formatMomentTime(value) {
   });
 }
 
-export function GameRecapPanel({ gameId, recap, teamId }) {
-  const [copyState, setCopyState] = useState('');
+export function GameRecapPanel({ gameId, recap }) {
+  const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
+  const recapCardDataUrl = createRecapCardDataUrl(recap);
+  const cardFilename = `${(recap?.team?.name || 'team')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')}-game-recap.svg`;
+  const shareText = `${recap?.team?.name || 'Team'} scored ${recap?.team?.points || 0} points${
+    recap?.opponent?.name ? ` vs ${recap.opponent.name}` : ''
+  }.`;
 
-  async function copyLink() {
-    if (!navigator?.clipboard?.writeText || !shareUrl) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(shareUrl);
-    setCopyState('copied');
-    window.setTimeout(() => {
-      setCopyState((current) => (current === 'copied' ? '' : current));
-    }, 1500);
-  }
-
-  async function shareRecap() {
+  function downloadCard() {
     if (!shareUrl) {
       return;
     }
 
-    if (navigator?.share) {
-      await navigator.share({
-        title: recap?.team?.name ? `${recap.team.name} Game Recap` : 'Game Recap',
-        text: `${recap?.team?.name || 'Team'} scored ${recap?.team?.points || 0} points${
-          recap?.opponent?.name ? ` vs ${recap.opponent.name}` : ''
-        }. View the recap and full stats.`,
-        url: shareUrl,
-      });
-      return;
+    const link = document.createElement('a');
+    link.href = recapCardDataUrl;
+    link.download = cardFilename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setImageState('downloaded');
+    window.setTimeout(() => {
+      setImageState((current) => (current === 'downloaded' ? '' : current));
+    }, 1500);
+  }
+
+  async function shareImageCard() {
+    const svgMarkup = createRecapCardSvg(recap);
+
+    if (navigator?.share && navigator?.canShare) {
+      const file = new File([svgMarkup], cardFilename, { type: 'image/svg+xml' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: recap?.team?.name ? `${recap.team.name} Game Recap Card` : 'Game Recap Card',
+          text: shareText,
+          url: shareUrl,
+          files: [file],
+        });
+        return;
+      }
     }
 
-    await copyLink();
+    downloadCard();
   }
 
   return (
@@ -93,28 +105,41 @@ export function GameRecapPanel({ gameId, recap, teamId }) {
             <p className="mt-2 text-5xl font-bold text-slate-900">{recap?.team?.points || 0}</p>
           </div>
         </div>
+      </section>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={shareRecap}
-            className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
-            Share Game Recap
-          </button>
-          <button
-            type="button"
-            onClick={copyLink}
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-          >
-            {copyState === 'copied' ? 'Link Copied' : 'Copy Link'}
-          </button>
-          <Link
-            to={`/teams/${teamId}`}
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-          >
-            View Team Page
-          </Link>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-900">Shareable Image Card</h3>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600">
+              A simplified share card with one short summary, top performers, team stats, and a link
+              back to the full game recap.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={shareImageCard}
+              className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+            >
+              Share Card
+            </button>
+            <button
+              type="button"
+              onClick={downloadCard}
+              className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              {imageState === 'downloaded' ? 'Card Downloaded' : 'Download Card'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <img
+            src={recapCardDataUrl}
+            alt="Shareable game recap card preview"
+            className="mx-auto block w-full max-w-[320px] rounded-xl border border-slate-200 bg-white shadow-sm"
+          />
         </div>
       </section>
 

@@ -83,4 +83,31 @@ describe('HomePage', () => {
       expect(screen.getByText(/No public games to explore yet/i)).toBeInTheDocument();
     });
   });
+
+  test('renders the three homepage audience images', async () => {
+    teamsApi.listPublicExploreGames.mockResolvedValue({ games: [] });
+
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('img', { name: /players reviewing basketball progress and development/i })
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole('img', {
+        name: /coaches and managers using basketball performance insights/i,
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', {
+        name: /friends and family following basketball team highlights/i,
+      })
+    ).toBeInTheDocument();
+  });
 });

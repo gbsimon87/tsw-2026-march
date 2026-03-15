@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Team logo placeholder">
+  <rect width="512" height="512" rx="96" fill="#f59e0b" />
+  <circle cx="256" cy="208" r="96" fill="#fef3c7" opacity="0.95" />
+  <path d="M152 376c20-58 74-96 104-96s84 38 104 96" fill="#fef3c7" opacity="0.95" />
+  <path d="M182 164h148" stroke="#92400e" stroke-width="26" stroke-linecap="round" />
+  <path d="M256 116v96" stroke="#92400e" stroke-width="26" stroke-linecap="round" />
+</svg>

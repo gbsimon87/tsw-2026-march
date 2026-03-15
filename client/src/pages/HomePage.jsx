@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
 import { teamsApi } from '../features/teams/api/teamsApi';
+import basketballImage1 from '../assets/home/basketball_image_1.png';
+import basketballImage2 from '../assets/home/basketball_image_2.png';
+import basketballImage3 from '../assets/home/basketball_image_3.png';
 
 function formatGameDate(game) {
   const rawValue = game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -16,6 +19,36 @@ function formatGameDate(game) {
 
   return parsed.toLocaleDateString();
 }
+
+const homeAudienceSections = [
+  {
+    id: 'players',
+    headingId: 'players-heading',
+    title: 'For Players: Know your game and keep improving',
+    body: 'Track your performance across games, spot strengths and weaknesses faster, and build confidence with clear evidence of your development over time.',
+    imageSrc: basketballImage1,
+    imageAlt: 'Players reviewing basketball progress and development',
+    imageOrder: 'first',
+  },
+  {
+    id: 'managers',
+    headingId: 'managers-heading',
+    title: 'For Managers and Coaches: See what matters quickly',
+    body: 'Understand team and player performance at a glance, review meaningful insights without extra noise, and make better game-time and training decisions with clearer data.',
+    imageSrc: basketballImage2,
+    imageAlt: 'Coaches and managers using basketball performance insights',
+    imageOrder: 'second',
+  },
+  {
+    id: 'family',
+    headingId: 'family-heading',
+    title: 'For Friends and Family: Stay close to every milestone',
+    body: 'Follow games, keep up with player progress, and celebrate key achievements as the team grows together throughout the season.',
+    imageSrc: basketballImage3,
+    imageAlt: 'Friends and family following basketball team highlights',
+    imageOrder: 'first',
+  },
+];
 
 export function HomePage() {
   const { user } = useAuth();
@@ -66,68 +99,35 @@ export function HomePage() {
         </div>
       </section>
 
-      <section
-        aria-labelledby="players-heading"
-        className="grid items-center gap-8 rounded-2xl border border-slate-200 p-6 md:grid-cols-2 md:p-8"
-      >
-        <div
-          aria-hidden="true"
-          className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-100 text-sm font-medium text-slate-500 md:h-72"
-        >
-          Player progress image
-        </div>
-        <div>
-          <h2 id="players-heading" className="text-2xl font-semibold text-slate-900">
-            For Players: Know your game and keep improving
-          </h2>
-          <p className="mt-3 text-slate-700">
-            Track your performance across games, spot strengths and weaknesses faster, and build
-            confidence with clear evidence of your development over time.
-          </p>
-        </div>
-      </section>
+      {homeAudienceSections.map((section) => {
+        const imageIsSecond = section.imageOrder === 'second';
 
-      <section
-        aria-labelledby="managers-heading"
-        className="grid items-center gap-8 rounded-2xl border border-slate-200 p-6 md:grid-cols-2 md:p-8"
-      >
-        <div className="order-2 md:order-1">
-          <h2 id="managers-heading" className="text-2xl font-semibold text-slate-900">
-            For Managers and Coaches: See what matters quickly
-          </h2>
-          <p className="mt-3 text-slate-700">
-            Understand team and player performance at a glance, review meaningful insights without
-            extra noise, and make better game-time and training decisions with clearer data.
-          </p>
-        </div>
-        <div
-          aria-hidden="true"
-          className="order-1 flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-100 text-sm font-medium text-slate-500 md:order-2 md:h-72"
-        >
-          Team insights image
-        </div>
-      </section>
-
-      <section
-        aria-labelledby="family-heading"
-        className="grid items-center gap-8 rounded-2xl border border-slate-200 p-6 md:grid-cols-2 md:p-8"
-      >
-        <div
-          aria-hidden="true"
-          className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-100 text-sm font-medium text-slate-500 md:h-72"
-        >
-          Community highlights image
-        </div>
-        <div>
-          <h2 id="family-heading" className="text-2xl font-semibold text-slate-900">
-            For Friends and Family: Stay close to every milestone
-          </h2>
-          <p className="mt-3 text-slate-700">
-            Follow games, keep up with player progress, and celebrate key achievements as the team
-            grows together throughout the season.
-          </p>
-        </div>
-      </section>
+        return (
+          <section
+            key={section.id}
+            aria-labelledby={section.headingId}
+            className="grid items-center gap-8 rounded-2xl border border-slate-200 p-6 md:grid-cols-2 md:p-8"
+          >
+            <div className={imageIsSecond ? 'order-2 md:order-1' : undefined}>
+              <h2 id={section.headingId} className="text-2xl font-semibold text-slate-900">
+                {section.title}
+              </h2>
+              <p className="mt-3 text-slate-700">{section.body}</p>
+            </div>
+            <div
+              className={`h-56 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 md:h-72 ${
+                imageIsSecond ? 'order-1 md:order-2' : ''
+              }`.trim()}
+            >
+              <img
+                src={section.imageSrc}
+                alt={section.imageAlt}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          </section>
+        );
+      })}
 
       <section
         aria-labelledby="explore-heading"
