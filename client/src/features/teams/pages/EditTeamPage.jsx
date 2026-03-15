@@ -240,6 +240,12 @@ export function EditTeamPage() {
             >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
+            <Link
+              to="/pricing"
+              className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              {team?.billing?.plan === 'pro' ? 'Manage Team Pro' : 'Upgrade to Team Pro'}
+            </Link>
           </div>
         </section>
       </form>

@@ -32,6 +32,11 @@ const envSchema = z.object({
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   POSTHOG_KEY: z.string().optional(),
   POSTHOG_HOST: z.string().url().default('https://app.posthog.com'),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_ID_PRO_MONTHLY: z.string().optional(),
+  STRIPE_SUCCESS_URL: z.string().url().optional(),
+  STRIPE_CANCEL_URL: z.string().url().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

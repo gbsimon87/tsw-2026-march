@@ -85,10 +85,18 @@ describe('GameDetailPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW Team',
+        entitlements: {
+          canViewReplay: true,
+          canViewShotMaps: true,
+        },
         players: [
           { id: 'p1', displayName: 'Alex', isActive: true },
           { id: 'p2', displayName: 'Jordan', isActive: true },
         ],
+      },
+      teamEntitlements: {
+        canViewReplay: true,
+        canViewShotMaps: true,
       },
       boxScore: {
         players: [

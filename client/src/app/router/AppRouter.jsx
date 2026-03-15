@@ -17,6 +17,9 @@ import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
 import { GameDetailPage } from '../../features/games/pages/GameDetailPage';
+import { PricingPage } from '../../features/billing/pages/PricingPage';
+import { BillingSuccessPage } from '../../features/billing/pages/BillingSuccessPage';
+import { BillingCancelPage } from '../../features/billing/pages/BillingCancelPage';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -42,6 +45,9 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+        <Route path="/billing/cancel" element={<BillingCancelPage />} />
         <Route
           path="/teams"
           element={

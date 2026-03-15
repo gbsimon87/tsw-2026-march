@@ -14,6 +14,18 @@ const teamSchema = new mongoose.Schema(
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true, trim: true },
     players: { type: [playerSchema], default: [] },
+    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    subscriptionStatus: {
+      type: String,
+      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
+      default: 'inactive',
+    },
+    stripeCustomerId: { type: String, default: null },
+    stripeSubscriptionId: { type: String, default: null },
+    stripePriceId: { type: String, default: null },
+    currentPeriodEnd: { type: Date, default: null },
+    cancelAtPeriodEnd: { type: Boolean, default: false },
+    billingEmail: { type: String, default: null },
   },
   { timestamps: true }
 );

@@ -4,6 +4,7 @@ import { LoginForm } from '../components/LoginForm';
 export function LoginPage() {
   const [searchParams] = useSearchParams();
   const shouldShowVerificationMessage = searchParams.get('verifyEmail') === '1';
+  const redirectTo = searchParams.get('redirectTo') || undefined;
 
   return (
     <section className="mx-auto max-w-md space-y-3">
@@ -12,7 +13,7 @@ export function LoginPage() {
           Registration successful. Check your inbox and verify your email before signing in.
         </p>
       ) : null}
-      <LoginForm />
+      <LoginForm redirectTo={redirectTo} />
     </section>
   );
 }

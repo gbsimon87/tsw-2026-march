@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
     emailVerifiedAt: { type: Date },
     authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
     roles: { type: [String], default: ['user'] },
+    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
   },
   {
     timestamps: true,
@@ -80,6 +81,7 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     user.authProvider = 'google';
     user.emailVerified = true;
     user.emailVerifiedAt = user.emailVerifiedAt || new Date();
+    user.plan = user.plan || 'free';
     if (!user.name) {
       user.name = name;
     }
@@ -95,6 +97,7 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     emailVerified: true,
     emailVerifiedAt: new Date(),
     roles: ['user'],
+    plan: 'free',
   });
 }
 
@@ -170,6 +173,10 @@ async function updateUserPassword(userId, passwordHash) {
   return User.findByIdAndUpdate(userId, { $set: { passwordHash } }, { new: true });
 }
 
+async function updateUserPlan(userId, plan) {
+  return User.findByIdAndUpdate(userId, { $set: { plan } }, { new: true });
+}
+
 module.exports = {
   createUser,
   findUserByEmail,
@@ -185,4 +192,5 @@ module.exports = {
   markAuthTokenUsed,
   markEmailVerified,
   updateUserPassword,
+  updateUserPlan,
 };

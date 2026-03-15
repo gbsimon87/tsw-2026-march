@@ -10,6 +10,7 @@ const envSchema = z.object({
     .default(false),
   VITE_POSTHOG_KEY: z.string().optional(),
   VITE_POSTHOG_HOST: z.string().url().default('https://app.posthog.com'),
+  VITE_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse({
@@ -19,6 +20,7 @@ const parsed = envSchema.safeParse({
   VITE_ENABLE_ANALYTICS: import.meta.env.VITE_ENABLE_ANALYTICS,
   VITE_POSTHOG_KEY: import.meta.env.VITE_POSTHOG_KEY,
   VITE_POSTHOG_HOST: import.meta.env.VITE_POSTHOG_HOST,
+  VITE_STRIPE_PUBLISHABLE_KEY: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY,
 });
 
 if (!parsed.success) {
@@ -32,4 +34,5 @@ export const env = {
   enableAnalytics: parsed.data.VITE_ENABLE_ANALYTICS,
   posthogKey: parsed.data.VITE_POSTHOG_KEY,
   posthogHost: parsed.data.VITE_POSTHOG_HOST,
+  stripePublishableKey: parsed.data.VITE_STRIPE_PUBLISHABLE_KEY,
 };

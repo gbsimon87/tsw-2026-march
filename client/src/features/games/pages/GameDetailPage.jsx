@@ -6,6 +6,7 @@ import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameShotMap } from '../components/GameShotMap';
+import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
@@ -84,6 +85,9 @@ export function GameDetailPage() {
   }
 
   const { game, team, boxScore } = data;
+  const entitlements = data.teamEntitlements || team.entitlements || {};
+  const canViewReplay = Boolean(entitlements.canViewReplay);
+  const canViewShotMaps = Boolean(entitlements.canViewShotMaps);
   const sortedEvents = [...game.events].sort((a, b) => {
     const aTime = new Date(a.occurredAt || 0).getTime();
     const bTime = new Date(b.occurredAt || 0).getTime();
@@ -190,7 +194,15 @@ export function GameDetailPage() {
         <StatsTable columns={boxScoreColumns} rows={boxScoreRows} tableClassName="w-max text-sm" />
       </div>
 
-      <GameShotMap events={shotMapEvents} />
+      {canViewShotMaps ? (
+        <GameShotMap events={shotMapEvents} />
+      ) : (
+        <LockedFeatureCard
+          title="Shot maps are part of Team Pro"
+          description="Upgrade this team to unlock shot locations, filters, and zone overlays on public game pages."
+          showUpgrade
+        />
+      )}
 
       <div className="rounded border bg-white">
         <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">Play by Play</div>
@@ -260,7 +272,15 @@ export function GameDetailPage() {
       </div>
     </div>
   );
-  const replayContent = <GameReplayPanel events={replayEvents} players={team.players || []} />;
+  const replayContent = canViewReplay ? (
+    <GameReplayPanel events={replayEvents} players={team.players || []} />
+  ) : (
+    <LockedFeatureCard
+      title="Replay is part of Team Pro"
+      description="Unlock interactive event replay and the live-updating replay box score with Team Pro."
+      showUpgrade
+    />
+  );
 
   return (
     <section className="space-y-4">

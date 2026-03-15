@@ -15,6 +15,7 @@ const {
 } = require('./teams.repository');
 const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
+const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
 
 function normalizeName(name) {
   return String(name || '')
@@ -27,6 +28,8 @@ function sanitizeTeam(team) {
     id: String(team._id),
     name: team.name,
     ownerUserId: String(team.ownerUserId),
+    billing: getBillingSummary(team),
+    entitlements: getTeamEntitlements(team),
     players: team.players.map((player) => ({
       id: String(player._id),
       displayName: player.displayName,
@@ -280,6 +283,7 @@ async function getPublicTeam(teamId) {
     team: {
       id: String(team._id),
       name: team.name,
+      entitlements: getTeamEntitlements(team),
       players,
     },
     summary: buildPublicTeamSummary(games, team),
@@ -309,6 +313,7 @@ async function getPublicPlayer(teamId, playerId) {
     team: {
       id: String(team._id),
       name: team.name,
+      entitlements: getTeamEntitlements(team),
     },
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),
@@ -357,6 +362,18 @@ async function listPublicExploreGames(limit = 10) {
   }
 
   return selectedGames;
+}
+
+async function getEntitlementsForUser(userId, teamId) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  return {
+    billing: getBillingSummary(team),
+    entitlements: getTeamEntitlements(team),
+  };
 }
 
 async function updateTeamForUser(userId, teamId, payload) {
@@ -467,4 +484,5 @@ module.exports = {
   addPlayerToTeam,
   updatePlayerOnTeam,
   deactivatePlayerOnTeam,
+  getEntitlementsForUser,
 };

@@ -7,6 +7,7 @@
     "start": "ENV_FILE=../env/server/.env.production node src/server.js",
     "seed": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed.js",
     "build": "echo \"No build step for Node API\"",
+    "stripe-listen": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks",
     "lint": "eslint . --ext .js",
     "test": "jest --runInBand"
   },
@@ -27,6 +28,7 @@
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
     "posthog-node": "^5.5.0",
+    "stripe": "^16.12.0",
     "uuid": "^11.0.3",
     "zod": "^3.24.1"
   },

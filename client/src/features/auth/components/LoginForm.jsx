@@ -4,7 +4,7 @@ import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
 
-export function LoginForm() {
+export function LoginForm({ redirectTo = '/dashboard' }) {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(
@@ -12,7 +12,7 @@ export function LoginForm() {
     loginSchema,
     async (payload) => {
       await login(payload);
-      navigate('/dashboard');
+      navigate(redirectTo);
     }
   );
 
@@ -67,7 +67,10 @@ export function LoginForm() {
       </a>
       <p className="text-sm text-slate-600">
         Don&apos;t have an account?{' '}
-        <Link className="text-blue-600 hover:underline" to="/register">
+        <Link
+          className="text-blue-600 hover:underline"
+          to={redirectTo ? `/register?redirectTo=${encodeURIComponent(redirectTo)}` : '/register'}
+        >
           Create one
         </Link>
       </p>

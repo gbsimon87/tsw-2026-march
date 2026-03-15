@@ -43,6 +43,9 @@ importers:
 
   client:
     dependencies:
+      '@stripe/stripe-js':
+        specifier: ^4.10.0
+        version: 4.10.0
       posthog-js:
         specifier: ^1.224.0
         version: 1.360.1
@@ -137,6 +140,9 @@ importers:
       posthog-node:
         specifier: ^5.5.0
         version: 5.28.1
+      stripe:
+        specifier: ^16.12.0
+        version: 16.12.0
       uuid:
         specifier: ^11.0.3
         version: 11.1.0
@@ -1544,6 +1550,13 @@ packages:
       {
         integrity: sha512-V4BG07kuYSUkTCSBHG8G8TNhM+F19jXFWnQtzj+we8DrkpSBCee9Z3Ms8yiGer/dlmhe35/Xdgyo3/0rQKg7YA==,
       }
+
+  '@stripe/stripe-js@4.10.0':
+    resolution:
+      {
+        integrity: sha512-KrMOL+sH69htCIXCaZ4JluJ35bchuCCznyPyrbN8JXSGQfwBI1SuIEMZNwvy8L8ykj29t6sa5BAAiL7fNoLZ8A==,
+      }
+    engines: { node: '>=12.16' }
 
   '@testing-library/dom@10.4.1':
     resolution:
@@ -6005,6 +6018,13 @@ packages:
       }
     engines: { node: '>=8' }
 
+  stripe@16.12.0:
+    resolution:
+      {
+        integrity: sha512-H7eFVLDxeTNNSn4JTRfL2//LzCbDrMSZ+2q1c7CanVWgK2qIW5TwS+0V7N9KcKZZNpYh/uCqK0PyZh/2UsaAtQ==,
+      }
+    engines: { node: '>=12.*' }
+
   sucrase@3.35.1:
     resolution:
       {
@@ -7538,6 +7558,8 @@ snapshots:
   '@sinonjs/fake-timers@10.3.0':
     dependencies:
       '@sinonjs/commons': 3.0.1
+
+  '@stripe/stripe-js@4.10.0': {}
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -10518,6 +10540,11 @@ snapshots:
       min-indent: 1.0.1
 
   strip-json-comments@3.1.1: {}
+
+  stripe@16.12.0:
+    dependencies:
+      '@types/node': 25.4.0
+      qs: 6.15.0
 
   sucrase@3.35.1:
     dependencies:

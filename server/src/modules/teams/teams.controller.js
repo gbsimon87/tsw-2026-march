@@ -49,6 +49,12 @@ async function getPublicPlayerById(req, res) {
   res.status(200).json(result);
 }
 
+async function getEntitlements(req, res) {
+  const userId = requireAuthUserId(req);
+  const result = await teamsService.getEntitlementsForUser(userId, req.params.teamId);
+  res.status(200).json(result);
+}
+
 async function update(req, res) {
   const userId = requireAuthUserId(req);
   const payload = updateTeamSchema.parse(req.body);
@@ -92,6 +98,7 @@ module.exports = {
   listPublicExploreGames,
   getPublicById,
   getPublicPlayerById,
+  getEntitlements,
   update,
   addPlayer,
   updatePlayer,

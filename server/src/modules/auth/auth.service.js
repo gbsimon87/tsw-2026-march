@@ -35,6 +35,7 @@ function sanitizeUser(user) {
     id: String(user._id),
     email: user.email,
     name: user.name,
+    plan: user.plan || 'free',
     roles: user.roles,
     emailVerified: Boolean(user.emailVerified),
     authProvider: user.authProvider,
@@ -122,6 +123,7 @@ async function register(input) {
     authProvider: 'local',
     emailVerified: false,
     roles: ['user'],
+    plan: 'free',
   });
 
   await issueEmailVerification(user);

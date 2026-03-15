@@ -13,6 +13,7 @@ teamsRouter.use(authMiddleware);
 teamsRouter.post('/', asyncHandler(controller.create));
 teamsRouter.get('/', asyncHandler(controller.list));
 teamsRouter.get('/:teamId', asyncHandler(controller.getById));
+teamsRouter.get('/:teamId/entitlements', asyncHandler(controller.getEntitlements));
 teamsRouter.patch('/:teamId', asyncHandler(controller.update));
 teamsRouter.post('/:teamId/players', asyncHandler(controller.addPlayer));
 teamsRouter.patch('/:teamId/players/:playerId', asyncHandler(controller.updatePlayer));

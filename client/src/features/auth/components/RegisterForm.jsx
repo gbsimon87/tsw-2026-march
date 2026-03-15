@@ -3,7 +3,7 @@ import { useAuth } from '../../../app/store/AuthContext';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { registerSchema } from '../schemas/authSchemas';
 
-export function RegisterForm() {
+export function RegisterForm({ redirectTo }) {
   const { register } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(
@@ -11,7 +11,10 @@ export function RegisterForm() {
     registerSchema,
     async (payload) => {
       await register(payload);
-      navigate('/login?verifyEmail=1');
+      const next = redirectTo
+        ? `/login?verifyEmail=1&redirectTo=${encodeURIComponent(redirectTo)}`
+        : '/login?verifyEmail=1';
+      navigate(next);
     }
   );
 
@@ -67,7 +70,10 @@ export function RegisterForm() {
       </p>
       <p className="text-sm text-slate-600">
         Already have an account?{' '}
-        <Link className="text-blue-600 hover:underline" to="/login">
+        <Link
+          className="text-blue-600 hover:underline"
+          to={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login'}
+        >
           Sign in
         </Link>
       </p>

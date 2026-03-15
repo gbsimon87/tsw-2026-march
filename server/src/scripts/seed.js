@@ -17,7 +17,7 @@ const seedConfig = {
   userCount: Number(process.env.SEED_USER_COUNT || 10),
   gamesPerUser: Number(process.env.SEED_GAMES_PER_USER || 20),
   playersPerTeam: Number(process.env.SEED_PLAYERS_PER_TEAM || 10),
-  password: process.env.SEED_USER_PASSWORD || 'password',
+  password: 'password',
 };
 
 const playerBlueprints = [
@@ -85,13 +85,41 @@ function randomChoice(values) {
 function createSeedUsers() {
   return Array.from({ length: seedConfig.userCount }, (_, index) => {
     const number = index + 1;
+    const plan = index % 2 === 0 ? 'pro' : 'free';
 
     return {
       email: `user${number}@user${number}.com`,
       name: `User ${number}`,
       teamName: `Team ${number}`,
+      plan,
     };
   });
+}
+
+function buildSeedBillingProfile(seedUser, index) {
+  if (seedUser.plan === 'pro') {
+    return {
+      plan: 'pro',
+      subscriptionStatus: 'active',
+      stripeCustomerId: `cus_seed_${index + 1}`,
+      stripeSubscriptionId: `sub_seed_${index + 1}`,
+      stripePriceId: process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_team_pro_monthly',
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      cancelAtPeriodEnd: false,
+      billingEmail: seedUser.email,
+    };
+  }
+
+  return {
+    plan: 'free',
+    subscriptionStatus: 'inactive',
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    stripePriceId: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    billingEmail: seedUser.email,
+  };
 }
 
 function createTrackedEvent(playerId, statType, zoneId, occurredAt, variant) {
@@ -301,6 +329,7 @@ async function upsertSeedUsers() {
         emailVerified: true,
         emailVerifiedAt: new Date(),
         roles: ['user'],
+        plan: seedUser.plan,
       });
     } else {
       user.name = seedUser.name;
@@ -309,24 +338,28 @@ async function upsertSeedUsers() {
       user.emailVerified = true;
       user.emailVerifiedAt = user.emailVerifiedAt || new Date();
       user.roles = ['user'];
+      user.plan = seedUser.plan;
       await user.save();
     }
 
     users.push({
       user,
       teamName: seedUser.teamName,
+      plan: seedUser.plan,
+      email: seedUser.email,
     });
   }
 
   return users;
 }
 
-async function resetSeedData(userIds) {
+async function resetSeedData() {
   await Promise.all([
-    Game.deleteMany({ ownerUserId: { $in: userIds } }),
-    Team.deleteMany({ ownerUserId: { $in: userIds } }),
-    Session.deleteMany({ userId: { $in: userIds } }),
-    AuthToken.deleteMany({ userId: { $in: userIds } }),
+    Game.deleteMany({}),
+    Team.deleteMany({}),
+    Session.deleteMany({}),
+    AuthToken.deleteMany({}),
+    User.deleteMany({}),
   ]);
 }
 
@@ -334,9 +367,8 @@ async function main() {
   await connectDb();
 
   try {
+    await resetSeedData();
     const seededUsers = await upsertSeedUsers();
-    const userIds = seededUsers.map((entry) => entry.user._id);
-    await resetSeedData(userIds);
 
     let teamCount = 0;
     let playerCount = 0;
@@ -347,6 +379,7 @@ async function main() {
       const team = await Team.create({
         ownerUserId: entry.user._id,
         name: entry.teamName || `Team ${index + 1}`,
+        ...buildSeedBillingProfile(entry, index),
         players: playerBlueprints.slice(0, seedConfig.playersPerTeam).map((player) => ({
           ...player,
           isActive: true,
@@ -365,12 +398,14 @@ async function main() {
     console.log(`Users: ${seededUsers.length}`);
     console.log(`Password: ${seedConfig.password}`);
     console.log(`Teams: ${teamCount}`);
+    console.log(`Free Teams: ${seededUsers.filter((entry) => entry.plan === 'free').length}`);
+    console.log(`Pro Teams: ${seededUsers.filter((entry) => entry.plan === 'pro').length}`);
     console.log(`Players: ${playerCount}`);
     console.log(`Games: ${gameCount}`);
     console.log(`Events: ${eventCount}`);
     console.log('Logins:');
     for (const entry of seededUsers) {
-      console.log(`- ${entry.user.email}`);
+      console.log(`- ${entry.email} (${entry.plan})`);
     }
   } finally {
     await mongoose.disconnect();

@@ -8,6 +8,7 @@ const { logger } = require('./config/logger');
 const { corsOptions } = require('./config/cors');
 const { configureGoogleOAuth } = require('./modules/auth/oauth.google');
 const { apiRouter } = require('./routes');
+const { billingWebhookRouter } = require('./modules/billing/billing.routes');
 const { attachCsrfToken, csrfProtection } = require('./middleware/csrf.middleware');
 const { requestIdMiddleware } = require('./middleware/requestId.middleware');
 const { apiRateLimiter } = require('./middleware/rateLimit.middleware');
@@ -29,6 +30,11 @@ function createApp() {
 
   app.use(helmet());
   app.use(cors(corsOptions));
+  app.use(
+    '/api/v1/billing/webhooks',
+    express.raw({ type: 'application/json' }),
+    billingWebhookRouter
+  );
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(passport.initialize());

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { teamsApi } from '../api/teamsApi';
 
 function nextPlayer() {
@@ -8,10 +8,12 @@ function nextPlayer() {
 
 export function NewTeamPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [teamName, setTeamName] = useState('');
   const [players, setPlayers] = useState([nextPlayer()]);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectTo = searchParams.get('redirectTo') || '';
 
   const playerRows = useMemo(
     () =>
@@ -57,7 +59,7 @@ export function NewTeamPage() {
         players: normalizedPlayers,
       });
 
-      navigate('/games/new');
+      navigate(redirectTo || '/games/new');
     } catch (submitError) {
       setError(submitError.message || 'Failed to create team');
     } finally {
