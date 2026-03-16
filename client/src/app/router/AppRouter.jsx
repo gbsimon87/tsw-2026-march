@@ -13,6 +13,7 @@ import { EditTeamPage } from '../../features/teams/pages/EditTeamPage';
 import { TeamsPage } from '../../features/teams/pages/TeamsPage';
 import { PublicTeamPage } from '../../features/teams/pages/PublicTeamPage';
 import { PublicPlayerPage } from '../../features/teams/pages/PublicPlayerPage';
+import { OpponentPlaceholderPage } from '../../features/teams/pages/OpponentPlaceholderPage';
 import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
@@ -72,6 +73,7 @@ export function AppRouter() {
             </ProtectedRoute>
           }
         />
+        <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
         <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/teams/:teamId" element={<PublicTeamPage />} />
         <Route

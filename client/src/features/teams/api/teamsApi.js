@@ -13,6 +13,9 @@ export const teamsApi = {
   listPublicExploreGames() {
     return apiClient.get('/public/teams/explore');
   },
+  getPublicOpponentBySlug(opponentSlug) {
+    return apiClient.get(`/public/opponents/${opponentSlug}`);
+  },
   getPublicPlayerById(teamId, playerId) {
     return apiClient.get(`/public/teams/${teamId}/players/${playerId}`);
   },

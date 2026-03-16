@@ -40,7 +40,7 @@ function buildSummarySentence(recap) {
 
 function buildPlayerLines(recap) {
   return (recap?.topPerformers || []).slice(0, 3).map((player, index) => {
-    const top = 850 + index * 126;
+    const top = 944 + index * 126;
     const initials = buildPlayerInitials(player.displayName);
     return `
       <rect x="56" y="${top}" width="968" height="102" rx="28" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
@@ -62,9 +62,9 @@ export function createRecapCardSvg(recap) {
   const topPerformers = (recap?.topPerformers || []).slice(0, 3);
   const playerLines = buildPlayerLines(recap).join('');
   const performersHeight = Math.max(160, topPerformers.length * 126 + 28);
-  const performersCardTop = 846;
-  const performersLabelTop = 818;
-  const cardHeight = performersCardTop + performersHeight + 112;
+  const performersLabelTop = 878;
+  const performersContentTop = 944;
+  const cardHeight = performersContentTop + performersHeight + 72;
 
   return `
   <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="${cardHeight}" viewBox="0 0 1080 ${cardHeight}" role="img" aria-label="Game recap card">
@@ -94,22 +94,21 @@ export function createRecapCardSvg(recap) {
 
     <text x="48" y="550" font-size="24" font-weight="800" fill="#64748b">TEAM STATS</text>
     <g>
-      <rect x="48" y="574" width="220" height="160" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
-      <rect x="292" y="574" width="220" height="160" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
-      <rect x="536" y="574" width="220" height="160" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
-      <rect x="780" y="574" width="220" height="160" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
-      <text x="158" y="630" text-anchor="middle" font-size="22" font-weight="700" fill="#64748b">POINTS</text>
-      <text x="158" y="696" text-anchor="middle" font-size="58" font-weight="800" fill="#0f172a">${recap?.teamStats?.points || 0}</text>
-      <text x="402" y="630" text-anchor="middle" font-size="22" font-weight="700" fill="#64748b">FG2%</text>
-      <text x="402" y="696" text-anchor="middle" font-size="58" font-weight="800" fill="#0f172a">${recap?.teamStats?.fg2?.percentage == null ? '--' : `${recap.teamStats.fg2.percentage.toFixed(0)}%`}</text>
-      <text x="646" y="630" text-anchor="middle" font-size="22" font-weight="700" fill="#64748b">FG3%</text>
-      <text x="646" y="696" text-anchor="middle" font-size="58" font-weight="800" fill="#0f172a">${recap?.teamStats?.fg3?.percentage == null ? '--' : `${recap.teamStats.fg3.percentage.toFixed(0)}%`}</text>
-      <text x="890" y="630" text-anchor="middle" font-size="22" font-weight="700" fill="#64748b">REB • AST</text>
-      <text x="890" y="696" text-anchor="middle" font-size="58" font-weight="800" fill="#0f172a">${recap?.teamStats?.reb || 0} • ${recap?.teamStats?.ast || 0}</text>
+      <rect x="48" y="574" width="300" height="140" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
+      <rect x="390" y="574" width="300" height="140" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
+      <rect x="732" y="574" width="300" height="140" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
+      <rect x="48" y="736" width="300" height="140" rx="24" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
+      <text x="76" y="626" font-size="22" font-weight="700" fill="#64748b">POINTS</text>
+      <text x="76" y="682" font-size="54" font-weight="800" fill="#0f172a">${recap?.teamStats?.points || 0}</text>
+      <text x="418" y="626" font-size="22" font-weight="700" fill="#64748b">REB • AST</text>
+      <text x="418" y="682" font-size="50" font-weight="800" fill="#0f172a">${recap?.teamStats?.reb || 0} • ${recap?.teamStats?.ast || 0}</text>
+      <text x="760" y="626" font-size="22" font-weight="700" fill="#64748b">FG2% • FG3%</text>
+      <text x="760" y="682" font-size="42" font-weight="800" fill="#0f172a">${recap?.teamStats?.fg2?.percentage == null ? '--' : `${recap.teamStats.fg2.percentage.toFixed(0)}%`} • ${recap?.teamStats?.fg3?.percentage == null ? '--' : `${recap.teamStats.fg3.percentage.toFixed(0)}%`}</text>
+      <text x="76" y="788" font-size="22" font-weight="700" fill="#64748b">FT%</text>
+      <text x="76" y="844" font-size="54" font-weight="800" fill="#0f172a">${recap?.teamStats?.ft?.percentage == null ? '--' : `${recap.teamStats.ft.percentage.toFixed(0)}%`}</text>
     </g>
 
-    <text x="48" y="${performersLabelTop}" font-size="24" font-weight="800" fill="#64748b">TOP PERFORMERS</text>
-    <rect x="48" y="${performersCardTop}" width="984" height="${performersHeight}" rx="28" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
+    <text x="48" y="${performersLabelTop + 54}" font-size="24" font-weight="800" fill="#64748b">TOP PERFORMERS</text>
     ${playerLines}
   </svg>
   `.trim();

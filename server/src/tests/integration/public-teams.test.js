@@ -2,6 +2,7 @@ const request = require('supertest');
 jest.mock('../../modules/teams/teams.service', () => ({
   getPublicTeam: jest.fn(),
   getPublicPlayer: jest.fn(),
+  getPublicOpponentBySlug: jest.fn(),
   listPublicExploreGames: jest.fn(),
 }));
 
@@ -98,6 +99,13 @@ describe('public teams routes', () => {
         {
           gameId: 'g1',
           opponent: 'Falcons',
+          opponentDestination: {
+            kind: 'opponent_placeholder',
+            href: '/opponents/falcons',
+            label: 'Falcons',
+            teamId: null,
+            opponentSlug: 'falcons',
+          },
           title: 'vs Falcons',
           date: '2026-03-10T00:00:00.000Z',
           scheduledAt: '2026-03-10T00:00:00.000Z',
@@ -133,6 +141,54 @@ describe('public teams routes', () => {
     });
     expect(response.body.summary.assistsPerGame).toBe(4);
     expect(response.body.games[0].stats.ast).toBe(4);
+    expect(response.body.games[0].opponentDestination).toEqual({
+      kind: 'opponent_placeholder',
+      href: '/opponents/falcons',
+      label: 'Falcons',
+      teamId: null,
+      opponentSlug: 'falcons',
+    });
+  });
+
+  test('allows unauthenticated access to GET /api/v1/public/opponents/:opponentSlug', async () => {
+    teamsService.getPublicOpponentBySlug.mockResolvedValue({
+      opponent: { slug: 'falcons', displayName: 'Falcons', matchedTeam: null },
+      summary: { gamesCount: 1, latestGameAt: '2026-03-10T00:00:00.000Z' },
+      relatedGames: [
+        {
+          id: 'g1',
+          title: 'vs Falcons',
+          opponent: 'Falcons',
+          scheduledAt: '2026-03-10T00:00:00.000Z',
+          completedAt: '2026-03-10T02:00:00.000Z',
+          createdAt: '2026-03-10T00:00:00.000Z',
+          teamPoints: 72,
+          team: { id: 'team-1', name: 'TSW Blue' },
+        },
+      ],
+    });
+
+    const app = createApp();
+    const response = await request(app).get('/api/v1/public/opponents/falcons');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.opponent).toEqual({
+      slug: 'falcons',
+      displayName: 'Falcons',
+      matchedTeam: null,
+    });
+    expect(response.body.relatedGames[0].team).toEqual({ id: 'team-1', name: 'TSW Blue' });
+  });
+
+  test('returns 404 for unknown public opponent slug', async () => {
+    teamsService.getPublicOpponentBySlug.mockRejectedValueOnce(
+      new ApiError(404, 'Opponent not found')
+    );
+
+    const app = createApp();
+    const response = await request(app).get('/api/v1/public/opponents/missing-team');
+
+    expect(response.statusCode).toBe(404);
   });
 
   test('keeps GET /api/v1/teams/:teamId protected without auth', async () => {

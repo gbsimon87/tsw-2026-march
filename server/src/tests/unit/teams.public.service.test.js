@@ -3,12 +3,23 @@ jest.mock('../../modules/teams/teams.repository', () => ({
   listTeamsByOwner: jest.fn(),
   findTeamByIdAndOwner: jest.fn(),
   findTeamById: jest.fn(),
+  listTeams: jest.fn(),
   saveTeam: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
   listGamesByTeamId: jest.fn(),
   listCompletedGames: jest.fn(),
+}));
+
+jest.mock('../../modules/billing/billing.service', () => ({
+  getBillingSummary: jest.fn(() => ({
+    plan: 'free',
+    subscriptionStatus: 'inactive',
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null,
+  })),
+  getTeamEntitlements: jest.fn(() => ({})),
 }));
 
 jest.mock('mongoose', () => ({
@@ -19,15 +30,17 @@ jest.mock('mongoose', () => ({
   },
 }));
 
-const { findTeamById } = require('../../modules/teams/teams.repository');
+const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
 const { listGamesByTeamId, listCompletedGames } = require('../../modules/games/games.repository');
 const {
   getPublicTeam,
   getPublicPlayer,
+  getPublicOpponentBySlug,
   listPublicExploreGames,
   buildPublicTeamSummary,
   buildPublicPlayerSummary,
   buildPublicPlayerGameRows,
+  slugifyOpponentName,
 } = require('../../modules/teams/teams.service');
 
 describe('teams public service', () => {
@@ -287,6 +300,7 @@ describe('teams public service', () => {
         { _id: 'p2', displayName: 'Chris', jerseyNumber: 4, isActive: true },
       ],
     });
+    listTeams.mockResolvedValue([{ _id: 'team-2', name: 'Hawks' }]);
     listGamesByTeamId.mockResolvedValue([
       {
         _id: 'g1',
@@ -330,7 +344,7 @@ describe('teams public service', () => {
 
     const result = await getPublicPlayer('team-1', 'p1');
 
-    expect(result.team).toEqual({ id: 'team-1', name: 'TSW Blue' });
+    expect(result.team).toEqual(expect.objectContaining({ id: 'team-1', name: 'TSW Blue' }));
     expect(result.player).toEqual({ id: 'p1', displayName: 'Alex', jerseyNumber: 12 });
     expect(result.summary).toEqual({
       gamesCount: 2,
@@ -342,6 +356,20 @@ describe('teams public service', () => {
       assistsPerGame: 0.5,
     });
     expect(result.games.map((game) => game.gameId)).toEqual(['g2', 'g1']);
+    expect(result.games[0].opponentDestination).toEqual({
+      kind: 'team',
+      href: '/teams/team-2',
+      label: 'Hawks',
+      teamId: 'team-2',
+      opponentSlug: null,
+    });
+    expect(result.games[1].opponentDestination).toEqual({
+      kind: 'opponent_placeholder',
+      href: '/opponents/falcons',
+      label: 'Falcons',
+      teamId: null,
+      opponentSlug: 'falcons',
+    });
     expect(result.games[0].stats).toEqual({
       ftm: 0,
       fta: 0,
@@ -389,6 +417,13 @@ describe('teams public service', () => {
         scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
         completedAt: new Date('2026-03-10T02:00:00.000Z'),
         createdAt: new Date('2026-03-10T00:00:00.000Z'),
+        opponentDestination: {
+          kind: 'opponent_placeholder',
+          href: '/opponents/falcons',
+          label: 'Falcons',
+          teamId: null,
+          opponentSlug: 'falcons',
+        },
         stats: {
           ftm: 0,
           fta: 0,
@@ -413,6 +448,97 @@ describe('teams public service', () => {
       pointsPerGame: 0,
       reboundsPerGame: 0,
       assistsPerGame: 0,
+    });
+  });
+
+  test('buildPublicPlayerGameRows links matching opponent names to public team pages', () => {
+    const team = {
+      _id: 'team-1',
+      players: [{ _id: 'p1', displayName: 'Alex', jerseyNumber: 12, isActive: true }],
+    };
+    const player = team.players[0];
+    const rows = buildPublicPlayerGameRows(
+      [
+        {
+          _id: 'g1',
+          title: 'vs Hawks',
+          opponent: 'hAwKs',
+          status: 'completed',
+          scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+          completedAt: new Date('2026-03-10T02:00:00.000Z'),
+          createdAt: new Date('2026-03-10T00:00:00.000Z'),
+          events: [{ playerId: 'p1', statType: 'FG2_MADE' }],
+        },
+      ],
+      team,
+      player,
+      new Map([['hawks', { id: 'team-2', name: 'Hawks' }]])
+    );
+
+    expect(rows[0].opponentDestination).toEqual({
+      kind: 'team',
+      href: '/teams/team-2',
+      label: 'Hawks',
+      teamId: 'team-2',
+      opponentSlug: null,
+    });
+  });
+
+  test('returns grouped related public games for an opponent slug', async () => {
+    listCompletedGames.mockResolvedValue([
+      {
+        _id: 'g1',
+        teamId: 'team-1',
+        title: 'vs Falcons',
+        opponent: 'Falcons',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-12T00:00:00.000Z'),
+        completedAt: new Date('2026-03-12T02:00:00.000Z'),
+        createdAt: new Date('2026-03-12T00:00:00.000Z'),
+        events: [{ statType: 'FG2_MADE' }],
+      },
+      {
+        _id: 'g2',
+        teamId: 'team-2',
+        title: 'vs Falcons',
+        opponent: 'Falcons',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+        completedAt: new Date('2026-03-10T02:00:00.000Z'),
+        createdAt: new Date('2026-03-10T00:00:00.000Z'),
+        events: [{ statType: 'FG3_MADE' }],
+      },
+    ]);
+    findTeamById
+      .mockResolvedValueOnce({ _id: 'team-1', name: 'TSW Blue' })
+      .mockResolvedValueOnce({ _id: 'team-2', name: 'TSW Red' });
+
+    const result = await getPublicOpponentBySlug(slugifyOpponentName('Falcons'));
+
+    expect(result.opponent).toEqual({
+      slug: 'falcons',
+      displayName: 'Falcons',
+      matchedTeam: null,
+    });
+    expect(result.summary.gamesCount).toBe(2);
+    expect(result.relatedGames).toEqual([
+      expect.objectContaining({
+        id: 'g1',
+        team: { id: 'team-1', name: 'TSW Blue' },
+      }),
+      expect.objectContaining({
+        id: 'g2',
+        team: { id: 'team-2', name: 'TSW Red' },
+      }),
+    ]);
+  });
+
+  test('returns 404 when no related public games exist for opponent slug', async () => {
+    listCompletedGames.mockResolvedValue([]);
+
+    await expect(getPublicOpponentBySlug('missing-team')).rejects.toMatchObject({
+      statusCode: 404,
+      message: 'Opponent not found',
     });
   });
 

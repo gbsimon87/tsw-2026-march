@@ -99,6 +99,10 @@ export function PublicPlayerPage() {
     ...data.games.map((game) => ({
       id: game.gameId,
       opponent: game.opponent || game.title || 'Opponent TBD',
+      opponentDestination: game.opponentDestination || {
+        kind: 'none',
+        href: null,
+      },
       dateLabel: formatGameDate(game),
       dateValue: game.date || game.scheduledAt || game.completedAt || game.createdAt || null,
       ...game.stats,
@@ -117,7 +121,17 @@ export function PublicPlayerPage() {
       label: 'Opponent',
       align: 'left',
       sortKey: 'opponent',
-      render: (row) => row.opponent,
+      render: (row) =>
+        row.opponentDestination?.href ? (
+          <Link
+            to={row.opponentDestination.href}
+            className="font-medium underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+          >
+            {row.opponent}
+          </Link>
+        ) : (
+          row.opponent
+        ),
     },
     {
       id: 'date',
@@ -178,7 +192,7 @@ export function PublicPlayerPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-3 gap-3">
           <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">PPG</p>
             <p className="mt-2 text-3xl font-bold text-slate-900">

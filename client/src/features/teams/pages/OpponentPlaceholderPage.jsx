@@ -1,0 +1,101 @@
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { teamsApi } from '../api/teamsApi';
+
+function formatGameDate(game) {
+  const rawValue = game.scheduledAt || game.completedAt || game.createdAt || null;
+  if (!rawValue) {
+    return 'Date unavailable';
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Date unavailable';
+  }
+
+  return parsed.toLocaleDateString();
+}
+
+export function OpponentPlaceholderPage() {
+  const { opponentSlug } = useParams();
+  const [data, setData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    teamsApi
+      .getPublicOpponentBySlug(opponentSlug)
+      .then(setData)
+      .catch((loadError) => setError(loadError.message || 'Failed to load opponent'))
+      .finally(() => setIsLoading(false));
+  }, [opponentSlug]);
+
+  if (isLoading) {
+    return <p className="text-sm">Loading opponent...</p>;
+  }
+
+  if (!data) {
+    return <p className="text-sm text-red-600">{error || 'Opponent not found'}</p>;
+  }
+
+  return (
+    <main className="mx-auto max-w-4xl space-y-6">
+      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Opponent</p>
+        <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+          {data.opponent.displayName}
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm text-slate-600">
+          This opponent does not have a public team page on TSW yet.
+        </p>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Games tracked against this opponent
+        </p>
+        <p className="mt-2 text-3xl font-bold text-slate-900">{data.summary.gamesCount}</p>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-slate-900">Related Games</h2>
+          <Link
+            to="/"
+            className="text-sm font-medium text-sky-700 underline decoration-slate-300 underline-offset-4 transition hover:decoration-sky-500"
+          >
+            Explore teams
+          </Link>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {data.relatedGames.map((game) => (
+            <article
+              key={game.id}
+              className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="space-y-1">
+                <Link
+                  to={`/teams/${game.team.id}`}
+                  className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+                >
+                  {game.team.name}
+                </Link>
+                <p className="text-sm text-slate-600">
+                  {formatGameDate(game)}
+                  {typeof game.teamPoints === 'number' ? ` • ${game.teamPoints} pts` : ''}
+                </p>
+              </div>
+              <Link
+                to={`/games/${game.id}`}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                View game
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}

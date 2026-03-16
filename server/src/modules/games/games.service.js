@@ -10,7 +10,7 @@ const {
 } = require('./games.repository');
 const { STAT_TYPES } = require('../shared/stats.constants');
 const { summarizeEvents } = require('../shared/statSummary');
-const { getTeamEntitlements } = require('../billing/billing.service');
+const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
 
 function sanitizeEvent(event) {
@@ -218,6 +218,7 @@ async function getGameForUser(userId, gameId) {
     team: {
       id: String(team._id),
       name: team.name,
+      billing: getBillingSummary(team),
       entitlements: getTeamEntitlements(team),
       players: team.players.map((player) => ({
         id: String(player._id),
@@ -249,6 +250,7 @@ async function getPublicGame(gameId) {
     team: {
       id: String(team._id),
       name: team.name,
+      billing: getBillingSummary(team),
       entitlements: getTeamEntitlements(team),
       players: team.players.map((player) => ({
         id: String(player._id),

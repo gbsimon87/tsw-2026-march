@@ -11,6 +11,7 @@ const {
   listTeamsByOwner,
   findTeamByIdAndOwner,
   findTeamById,
+  listTeams,
   saveTeam,
 } = require('./teams.repository');
 const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
@@ -21,6 +22,22 @@ function normalizeName(name) {
   return String(name || '')
     .trim()
     .toLowerCase();
+}
+
+function slugifyOpponentName(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function opponentDisplayNameFromSlug(slug) {
+  return String(slug || '')
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function sanitizeTeam(team) {
@@ -97,6 +114,47 @@ function sanitizePublicPlayer(player) {
   };
 }
 
+function buildTeamLookup(teams) {
+  return new Map(
+    (teams || []).map((team) => [
+      normalizeName(team.name),
+      { id: String(team._id), name: team.name },
+    ])
+  );
+}
+
+function buildOpponentDestination(opponentName, teamLookup) {
+  if (!opponentName) {
+    return {
+      kind: 'none',
+      href: null,
+      label: 'Opponent TBD',
+      teamId: null,
+      opponentSlug: null,
+    };
+  }
+
+  const matchedTeam = teamLookup.get(normalizeName(opponentName));
+  if (matchedTeam) {
+    return {
+      kind: 'team',
+      href: `/teams/${matchedTeam.id}`,
+      label: matchedTeam.name,
+      teamId: matchedTeam.id,
+      opponentSlug: null,
+    };
+  }
+
+  const opponentSlug = slugifyOpponentName(opponentName);
+  return {
+    kind: 'opponent_placeholder',
+    href: opponentSlug ? `/opponents/${opponentSlug}` : null,
+    label: opponentName,
+    teamId: null,
+    opponentSlug: opponentSlug || null,
+  };
+}
+
 function findPlayerById(team, playerId) {
   if (typeof team.players?.id === 'function') {
     return team.players.id(playerId);
@@ -145,7 +203,7 @@ function buildPublicTeamSummary(games, team) {
   };
 }
 
-function buildPublicPlayerGameRows(games, team, player) {
+function buildPublicPlayerGameRows(games, team, player, teamLookup = new Map()) {
   return games
     .filter((game) => game.status === 'completed' && isGamePubliclyViewable(game))
     .map((game) => {
@@ -166,14 +224,17 @@ function buildPublicPlayerGameRows(games, team, player) {
         points: 0,
       };
 
+      const opponentName = game.opponent ?? null;
+
       return {
         gameId: String(game._id),
-        opponent: game.opponent ?? null,
+        opponent: opponentName,
         title: game.title,
         date: game.scheduledAt || game.completedAt || game.createdAt || null,
         scheduledAt: game.scheduledAt ?? null,
         completedAt: game.completedAt ?? null,
         createdAt: game.createdAt ?? null,
+        opponentDestination: buildOpponentDestination(opponentName, teamLookup),
         stats: {
           ftm: playerRow.ftm,
           fta: playerRow.fta,
@@ -307,7 +368,9 @@ async function getPublicPlayer(teamId, playerId) {
   }
 
   const games = await listGamesByTeamId(teamId);
-  const gameRows = buildPublicPlayerGameRows(games, team, player);
+  const teams = await listTeams();
+  const teamLookup = buildTeamLookup(teams);
+  const gameRows = buildPublicPlayerGameRows(games, team, player, teamLookup);
 
   return {
     team: {
@@ -318,6 +381,62 @@ async function getPublicPlayer(teamId, playerId) {
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),
     games: gameRows,
+  };
+}
+
+async function getPublicOpponentBySlug(opponentSlug) {
+  const targetSlug = slugifyOpponentName(opponentSlug);
+  const games = await listCompletedGames();
+  const relatedGames = [];
+
+  for (const game of games) {
+    if (!isGamePubliclyViewable(game)) {
+      continue;
+    }
+
+    if (slugifyOpponentName(game.opponent) !== targetSlug) {
+      continue;
+    }
+
+    const team = await findTeamById(game.teamId);
+    if (!team) {
+      continue;
+    }
+
+    relatedGames.push({
+      id: String(game._id),
+      title: game.title,
+      opponent: game.opponent ?? null,
+      scheduledAt: game.scheduledAt ?? null,
+      completedAt: game.completedAt ?? null,
+      createdAt: game.createdAt ?? null,
+      teamPoints: computeTeamPoints(game),
+      team: {
+        id: String(team._id),
+        name: team.name,
+      },
+    });
+  }
+
+  relatedGames.sort((gameA, gameB) => publicGameTimeValue(gameB) - publicGameTimeValue(gameA));
+
+  if (relatedGames.length === 0) {
+    throw new ApiError(404, 'Opponent not found');
+  }
+
+  return {
+    opponent: {
+      slug: opponentSlug,
+      displayName:
+        relatedGames[0].opponent || opponentDisplayNameFromSlug(opponentSlug) || 'Unknown Opponent',
+      matchedTeam: null,
+    },
+    summary: {
+      gamesCount: relatedGames.length,
+      latestGameAt:
+        relatedGames[0].scheduledAt || relatedGames[0].completedAt || relatedGames[0].createdAt,
+    },
+    relatedGames,
   };
 }
 
@@ -476,10 +595,12 @@ module.exports = {
   getTeamForUser,
   getPublicTeam,
   getPublicPlayer,
+  getPublicOpponentBySlug,
   listPublicExploreGames,
   buildPublicTeamSummary,
   buildPublicPlayerGameRows,
   buildPublicPlayerSummary,
+  slugifyOpponentName,
   updateTeamForUser,
   addPlayerToTeam,
   updatePlayerOnTeam,

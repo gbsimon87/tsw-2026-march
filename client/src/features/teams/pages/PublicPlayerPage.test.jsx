@@ -46,6 +46,12 @@ describe('PublicPlayerPage', () => {
         {
           gameId: 'g2',
           opponent: 'Hawks',
+          opponentDestination: {
+            kind: 'team',
+            href: '/teams/team-2',
+            teamId: 'team-2',
+            opponentSlug: null,
+          },
           title: 'vs Hawks',
           date: '2026-03-12T00:00:00.000Z',
           scheduledAt: '2026-03-12T00:00:00.000Z',
@@ -68,6 +74,12 @@ describe('PublicPlayerPage', () => {
         {
           gameId: 'g1',
           opponent: 'Falcons',
+          opponentDestination: {
+            kind: 'opponent_placeholder',
+            href: '/opponents/falcons',
+            teamId: null,
+            opponentSlug: 'falcons',
+          },
           title: 'vs Falcons',
           date: '2026-03-10T00:00:00.000Z',
           scheduledAt: '2026-03-10T00:00:00.000Z',
@@ -104,6 +116,9 @@ describe('PublicPlayerPage', () => {
     expect(screen.getByText('12.0')).toBeInTheDocument();
     expect(screen.getByText('5.0')).toBeInTheDocument();
     expect(screen.getByText('4.0')).toBeInTheDocument();
+    expect(screen.getByText('PPG').closest('section').querySelector('.grid')).toHaveClass(
+      'grid-cols-3'
+    );
     expect(screen.getByText('Opponent')).toBeInTheDocument();
     expect(screen.getByText('Date')).toBeInTheDocument();
     expect(screen.getByText('FT')).toBeInTheDocument();
@@ -114,9 +129,13 @@ describe('PublicPlayerPage', () => {
     expect(screen.getByText('DREB')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
     expect(screen.getByText('PTS')).toBeInTheDocument();
-    expect(screen.getByText('Hawks')).toBeInTheDocument();
-    expect(screen.getByText('Falcons')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Hawks' })).toHaveAttribute('href', '/teams/team-2');
+    expect(screen.getByRole('link', { name: 'Falcons' })).toHaveAttribute(
+      'href',
+      '/opponents/falcons'
+    );
     expect(screen.getByText('Totals')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Totals' })).not.toBeInTheDocument();
     expect(screen.getByText('Season')).toBeInTheDocument();
     expect(screen.getByText('6/8')).toBeInTheDocument();
     expect(screen.getByText('8/12')).toBeInTheDocument();

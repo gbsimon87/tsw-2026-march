@@ -5,10 +5,12 @@ const controller = require('./teams.controller');
 
 const teamsRouter = Router();
 const publicTeamsRouter = Router();
+const publicOpponentsRouter = Router();
 
 publicTeamsRouter.get('/explore', asyncHandler(controller.listPublicExploreGames));
 publicTeamsRouter.get('/:teamId/players/:playerId', asyncHandler(controller.getPublicPlayerById));
 publicTeamsRouter.get('/:teamId', asyncHandler(controller.getPublicById));
+publicOpponentsRouter.get('/:opponentSlug', asyncHandler(controller.getPublicOpponentBySlug));
 teamsRouter.use(authMiddleware);
 teamsRouter.post('/', asyncHandler(controller.create));
 teamsRouter.get('/', asyncHandler(controller.list));
@@ -22,4 +24,5 @@ teamsRouter.delete('/:teamId/players/:playerId', asyncHandler(controller.removeP
 module.exports = {
   teamsRouter,
   publicTeamsRouter,
+  publicOpponentsRouter,
 };

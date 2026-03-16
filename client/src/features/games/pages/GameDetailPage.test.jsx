@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
@@ -7,16 +7,24 @@ const apiMocks = vi.hoisted(() => ({
   getById: vi.fn(),
 }));
 
+const authMocks = vi.hoisted(() => ({
+  useAuth: vi.fn(() => ({ user: null })),
+}));
+
 vi.mock('../api/gamesApi', () => ({
   gamesApi: apiMocks,
 }));
 
 vi.mock('../../../app/store/AuthContext', () => ({
-  useAuth: vi.fn(() => ({ user: null })),
+  useAuth: authMocks.useAuth,
 }));
 
 describe('GameDetailPage', () => {
   beforeEach(() => {
+    cleanup();
+    apiMocks.getById.mockReset();
+    authMocks.useAuth.mockReset();
+    authMocks.useAuth.mockReturnValue({ user: null });
     global.File = class MockFile {
       constructor(parts, name, options = {}) {
         this.parts = parts;
@@ -103,6 +111,10 @@ describe('GameDetailPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW Team',
+        billing: {
+          plan: 'pro',
+          subscriptionStatus: 'active',
+        },
         entitlements: {
           canViewReplay: true,
           canViewShotMaps: true,
@@ -234,9 +246,9 @@ describe('GameDetailPage', () => {
     expect(await screen.findByRole('tab', { name: 'Recap' })).toBeInTheDocument();
 
     expect(screen.getByRole('tab', { name: 'Recap' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Box Score' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Stats' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Game Info' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Game Info' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Share Card/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Download Card/i })).toBeInTheDocument();
@@ -245,12 +257,14 @@ describe('GameDetailPage', () => {
     expect(screen.queryByRole('button', { name: /Copy Link/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /View Team Page/i })).not.toBeInTheDocument();
     expect(screen.getByAltText(/Shareable game recap card preview/i)).toBeInTheDocument();
-    expect(screen.getByText('TSW Team')).toBeInTheDocument();
+    expect(screen.getAllByText('TSW Team').length).toBeGreaterThan(0);
     expect(screen.getByText(/Wildcats/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status: completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Finished:/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'TSW Team' })).toHaveAttribute('href', '/teams/team-1');
     expect(screen.getAllByText(/Top Performer/i).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('recap-shot-snapshot')).toBeInTheDocument();
-    expect(screen.getAllByTestId('recap-shot-made-marker')).toHaveLength(1);
-    expect(screen.getAllByTestId('recap-shot-miss-marker')).toHaveLength(1);
+    expect(screen.queryByTestId('recap-shot-snapshot')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Share Card/i }));
     expect(navigator.share).toHaveBeenCalledTimes(1);
@@ -259,46 +273,42 @@ describe('GameDetailPage', () => {
     expect(sharePayload.text).toContain('TSW Team scored 4 points vs Wildcats');
     expect(sharePayload.files).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
+    expect(screen.getByTestId('recap-shot-snapshot')).toBeInTheDocument();
+    expect(screen.getAllByTestId('recap-shot-made-marker')).toHaveLength(1);
+    expect(screen.getAllByTestId('recap-shot-miss-marker')).toHaveLength(1);
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
-    expect(screen.getByText(/Shot Map/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show All' })).toBeInTheDocument();
+    expect(screen.queryByText(/Shot Map/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Game Date \/ Time/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
     expect(screen.getByText(/Jordan: Assist/i)).toBeInTheDocument();
     expect(screen.getByText(/Jordan: Defensive Rebound/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Alex: 2PT Make/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
     expect(screen.getByText('AST')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /PTS/i })).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
-    expect(screen.getAllByText(/Paint/i).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('game-shot-map')).toBeInTheDocument();
-    expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
-    expect(screen.getByTestId('shot-zone-table')).toBeInTheDocument();
-    expect(screen.getByText('Zone Results')).toBeInTheDocument();
-    expect(screen.getByText('Paint')).toBeInTheDocument();
-    expect(screen.getByText('ABOVE_BREAK_THREE')).toBeInTheDocument();
-    expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
-    expect(screen.getAllByTestId('shot-miss-marker')).toHaveLength(1);
-
-    fireEvent.change(screen.getByLabelText('Player'), { target: { value: 'p1' } });
-    expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
-    expect(screen.queryByTestId('shot-miss-marker')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alex' })).toHaveAttribute(
+      'href',
+      '/teams/team-1/players/p1'
+    );
+    expect(screen.getByRole('link', { name: 'Jordan' })).toHaveAttribute(
+      'href',
+      '/teams/team-1/players/p2'
+    );
+    expect(screen.queryByRole('link', { name: 'Team Total' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('game-shot-map')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('shot-zone-overlay')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('shot-zone-table')).not.toBeInTheDocument();
+    expect(screen.queryByText('Zone Results')).not.toBeInTheDocument();
     expect(screen.queryByText('ABOVE_BREAK_THREE')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: '2PT' })[1]);
-    expect(screen.getAllByTestId('shot-made-marker')).toHaveLength(1);
-    expect(screen.queryByTestId('shot-miss-marker')).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Player'), { target: { value: 'ALL' } });
-    fireEvent.click(screen.getAllByRole('button', { name: '3PT' })[1]);
-    expect(screen.queryByTestId('shot-made-marker')).not.toBeInTheDocument();
-    expect(screen.getAllByTestId('shot-miss-marker')).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Hide Zones' }));
-    expect(screen.queryByTestId('shot-zone-overlay')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Show Zones' }));
-    expect(screen.getByTestId('shot-zone-overlay')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show All' }));
+    expect(screen.getByRole('button', { name: 'Show Last 5' })).toBeInTheDocument();
+    expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(6);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));
     expect(screen.getByText('Event 1 of 4')).toBeInTheDocument();
@@ -327,17 +337,184 @@ describe('GameDetailPage', () => {
       .closest('tr');
     expect(jordanReplayRow).toHaveTextContent('1');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Game Info' }));
-    expect(screen.getByText(/Game Date \/ Time/i)).toBeInTheDocument();
-    expect(screen.getByText(/Recorded At/i)).toBeInTheDocument();
-    expect(screen.getByText(/Finished At/i)).toBeInTheDocument();
-    expect(screen.getByText(/vs Wildcats/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'TSW Team' })).toHaveAttribute('href', '/teams/team-1');
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Box Score' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
     expect(screen.getByText(/Play by Play/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
     const boxScoreRows = within(screen.getAllByRole('table')[0]).getAllByRole('row');
     expect(within(boxScoreRows[1]).getByText('Alex')).toBeInTheDocument();
+  });
+
+  test('locks replay for non-pro teams', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-2',
+        title: 'vs Wildcats',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'TSW Team',
+        billing: {
+          plan: 'free',
+          subscriptionStatus: 'inactive',
+        },
+        entitlements: {
+          canViewReplay: false,
+          canViewShotMaps: false,
+        },
+        players: [],
+      },
+      teamEntitlements: {
+        canViewReplay: false,
+        canViewShotMaps: false,
+      },
+      recap: {
+        statusLabel: 'Final',
+        team: {
+          id: 'team-1',
+          name: 'TSW Team',
+          points: 0,
+        },
+        opponent: {
+          name: 'Wildcats',
+        },
+        playedAt: '2026-03-12T19:20:00.000Z',
+        topPerformers: [],
+        teamStats: {
+          points: 0,
+          fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
+          fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
+          ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+          reb: 0,
+          ast: 0,
+        },
+        keyMoments: [],
+        shotSnapshot: { made: 0, missed: 0, events: [] },
+      },
+      boxScore: {
+        players: [],
+        teamTotals: {
+          ftm: 0,
+          fta: 0,
+          fg2m: 0,
+          fg2a: 0,
+          fg3m: 0,
+          fg3a: 0,
+          ast: 0,
+          oreb: 0,
+          dreb: 0,
+          reb: 0,
+          points: 0,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-2']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
+    expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+  });
+
+  test('keeps replay locked for a pro user viewing a free team game', async () => {
+    authMocks.useAuth.mockReturnValue({
+      user: {
+        id: 'user-1',
+        name: 'Pro Owner',
+        plan: 'pro',
+      },
+    });
+
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-3',
+        title: 'vs Rockets',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-free',
+        name: 'Free Team',
+        billing: {
+          plan: 'free',
+          subscriptionStatus: 'inactive',
+        },
+        entitlements: {
+          canViewReplay: false,
+          canViewShotMaps: false,
+        },
+        players: [],
+      },
+      teamEntitlements: {
+        canViewReplay: false,
+        canViewShotMaps: false,
+      },
+      recap: {
+        statusLabel: 'Final',
+        team: {
+          id: 'team-free',
+          name: 'Free Team',
+          points: 0,
+        },
+        opponent: {
+          name: 'Rockets',
+        },
+        playedAt: '2026-03-12T19:20:00.000Z',
+        topPerformers: [],
+        teamStats: {
+          points: 0,
+          fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
+          fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
+          ft: { made: 0, missed: 0, attempts: 0, percentage: null },
+          reb: 0,
+          ast: 0,
+        },
+        keyMoments: [],
+        shotSnapshot: { made: 0, missed: 0, events: [] },
+      },
+      boxScore: {
+        players: [],
+        teamTotals: {
+          ftm: 0,
+          fta: 0,
+          fg2m: 0,
+          fg2a: 0,
+          fg3m: 0,
+          fg3a: 0,
+          ast: 0,
+          oreb: 0,
+          dreb: 0,
+          reb: 0,
+          points: 0,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-3']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
+    expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
   });
 });

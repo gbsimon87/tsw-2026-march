@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RecapShotSnapshot } from './RecapShotSnapshot';
+import { Link } from 'react-router-dom';
 import { createRecapCardDataUrl, createRecapCardSvg } from '../recapCardImage';
 
 function formatDateTime(value) {
@@ -35,7 +35,7 @@ function formatMomentTime(value) {
   });
 }
 
-export function GameRecapPanel({ gameId, recap }) {
+export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking = false }) {
   const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
   const recapCardDataUrl = createRecapCardDataUrl(recap);
@@ -96,7 +96,23 @@ export function GameRecapPanel({ gameId, recap }) {
             <p className="mt-2 text-base text-slate-700">
               {recap?.opponent?.name ? `vs ${recap.opponent.name}` : 'Opponent not recorded'}
             </p>
-            <p className="mt-2 text-sm text-slate-600">{formatDateTime(recap?.playedAt)}</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
+            </p>
+            <div className="mt-3 space-y-1 text-sm text-slate-600">
+              <p>
+                Team:{' '}
+                <Link
+                  to={`/teams/${team?.id}`}
+                  className="font-semibold text-blue-600 hover:underline"
+                >
+                  {team?.name || recap?.team?.name || 'Team'}
+                </Link>
+              </p>
+              <p>Status: {game?.status || 'unknown'}</p>
+              <p>Recorded: {formatDateTime(game?.createdAt)}</p>
+              <p>Finished: {formatDateTime(game?.completedAt)}</p>
+            </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-right shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -105,16 +121,23 @@ export function GameRecapPanel({ gameId, recap }) {
             <p className="mt-2 text-5xl font-bold text-slate-900">{recap?.team?.points || 0}</p>
           </div>
         </div>
+
+        {canContinueTracking ? (
+          <div className="mt-4">
+            <Link
+              className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              to={`/games/${gameId}/track`}
+            >
+              Continue Tracking
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-xl font-semibold text-slate-900">Shareable Image Card</h3>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600">
-              A simplified share card with one short summary, top performers, team stats, and a link
-              back to the full game recap.
-            </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
@@ -143,31 +166,22 @@ export function GameRecapPanel({ gameId, recap }) {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {(recap?.topPerformers || []).map((player) => (
-          <article
-            key={player.playerId}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Top Performer
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-slate-900">{player.displayName}</h3>
-            <p className="mt-3 text-sm text-slate-600">
-              {player.points} PTS • {player.reb} REB • {player.ast} AST
-            </p>
-          </article>
-        ))}
-      </section>
-
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-xl font-semibold text-slate-900">Team Stats</h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid grid-cols-3 gap-3">
           <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Points</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
               {recap?.teamStats?.points || 0}
             </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rebounds</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.reb || 0}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assists</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.ast || 0}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FG2%</p>
@@ -187,18 +201,25 @@ export function GameRecapPanel({ gameId, recap }) {
               {formatPercentage(recap?.teamStats?.ft?.percentage)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rebounds</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.reb || 0}</p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assists</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.ast || 0}</p>
-          </article>
         </div>
       </section>
 
-      <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
+      <section className="grid gap-4 md:grid-cols-3">
+        {(recap?.topPerformers || []).map((player) => (
+          <article
+            key={player.playerId}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Top Performer
+            </p>
+            <h3 className="mt-2 text-xl font-semibold text-slate-900">{player.displayName}</h3>
+            <p className="mt-3 text-sm text-slate-600">
+              {player.points} PTS • {player.reb} REB • {player.ast} AST
+            </p>
+          </article>
+        ))}
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">

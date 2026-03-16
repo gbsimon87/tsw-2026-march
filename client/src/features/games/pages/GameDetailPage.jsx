@@ -1,29 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useAuth } from '../../../app/store/AuthContext';
 import { Tabs } from '../../../components/Tabs';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameReplayPanel } from '../components/GameReplayPanel';
-import { GameShotMap } from '../components/GameShotMap';
 import { GameRecapPanel } from '../components/GameRecapPanel';
+import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
-
-function formatDateTime(value) {
-  if (!value) {
-    return 'N/A';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'N/A';
-  }
-
-  return date.toLocaleString();
-}
 
 function eventTime(value) {
   if (!value) {
@@ -57,12 +43,20 @@ function formatEventMeta(event) {
   return parts.join(' | ');
 }
 
+function canAccessReplay(team, entitlements) {
+  const billing = team?.billing || {};
+  const hasActiveProBilling =
+    billing.plan === 'pro' && ['active', 'trialing'].includes(billing.subscriptionStatus);
+
+  return hasActiveProBilling && Boolean(entitlements?.canViewReplay);
+}
+
 export function GameDetailPage() {
   const { gameId } = useParams();
-  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   useEffect(() => {
     gamesApi
@@ -88,21 +82,19 @@ export function GameDetailPage() {
   const { game, team, boxScore } = data;
   const recap = data.recap;
   const entitlements = data.teamEntitlements || team.entitlements || {};
-  const canViewReplay = Boolean(entitlements.canViewReplay);
-  const canViewShotMaps = Boolean(entitlements.canViewShotMaps);
+  const canViewReplay = canAccessReplay(team, entitlements);
   const sortedEvents = [...game.events].sort((a, b) => {
     const aTime = new Date(a.occurredAt || 0).getTime();
     const bTime = new Date(b.occurredAt || 0).getTime();
     return aTime - bTime;
   });
-  const shotMapEvents = game.events.map((event) => ({
-    ...event,
-    playerName: playersById.get(event.playerId)?.displayName || 'Unknown Player',
-  }));
   const replayEvents = sortedEvents.map((event) => ({
     ...event,
     playerName: playersById.get(event.playerId)?.displayName || 'Unknown Player',
   }));
+  const playByPlayEvents = (showAllEvents ? sortedEvents : sortedEvents.slice(-5))
+    .slice()
+    .reverse();
   const boxScoreRows = [
     ...boxScore.players,
     {
@@ -128,7 +120,17 @@ export function GameDetailPage() {
       label: 'Player',
       align: 'left',
       sortKey: 'displayName',
-      render: (row) => row.displayName,
+      render: (row) =>
+        row.isTeamTotal ? (
+          row.displayName
+        ) : (
+          <Link
+            to={`/teams/${team.id}/players/${row.playerId}`}
+            className="font-medium text-blue-700 hover:text-blue-900 hover:underline"
+          >
+            {row.displayName}
+          </Link>
+        ),
     },
     {
       id: 'pts',
@@ -189,37 +191,42 @@ export function GameDetailPage() {
     },
   ];
 
-  const boxScoreContent = (
+  const statsContent = (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded border bg-white">
         <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">Box Score</div>
         <StatsTable columns={boxScoreColumns} rows={boxScoreRows} tableClassName="w-max text-sm" />
       </div>
 
-      {canViewShotMaps ? (
-        <GameShotMap events={shotMapEvents} />
-      ) : (
-        <LockedFeatureCard
-          title="Shot maps are part of Team Pro"
-          description="Upgrade this team to unlock shot locations, filters, and zone overlays on public game pages."
-          showUpgrade
-        />
-      )}
+      <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
 
       <div className="rounded border bg-white">
-        <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">Play by Play</div>
+        <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-2">
+          <div className="text-sm font-semibold">Play by Play</div>
+          {sortedEvents.length > 5 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllEvents((value) => !value)}
+              className="text-xs font-semibold text-blue-600 hover:underline"
+            >
+              {showAllEvents ? 'Show Last 5' : 'Show All'}
+            </button>
+          ) : null}
+        </div>
         {sortedEvents.length === 0 ? (
           <p className="p-3 text-sm text-slate-600">No events recorded.</p>
         ) : (
           <ul className="divide-y text-sm">
-            {sortedEvents.map((event, index) => {
+            {playByPlayEvents.map((event, index) => {
               const player = playersById.get(event.playerId);
               const playerName = player?.displayName || 'Unknown Player';
               const statLabel = STAT_LABELS[event.statType] || event.statType;
 
               return (
                 <li key={event.id} className="grid grid-cols-[auto_1fr] gap-3 px-3 py-2">
-                  <div className="text-xs text-slate-500">#{index + 1}</div>
+                  <div className="text-xs text-slate-500">
+                    #{showAllEvents ? sortedEvents.length - index : sortedEvents.length - index}
+                  </div>
                   <div>
                     <p className="font-medium text-slate-900">
                       {playerName}: {statLabel}
@@ -234,52 +241,12 @@ export function GameDetailPage() {
       </div>
     </div>
   );
-
-  const gameInfoContent = (
-    <div className="space-y-4">
-      <div className="rounded border bg-white p-3">
-        <h2 className="text-lg font-semibold">{game.title}</h2>
-        <p className="text-sm text-slate-600">
-          Team:{' '}
-          <Link className="font-medium text-blue-600 hover:underline" to={`/teams/${team.id}`}>
-            {team.name}
-          </Link>{' '}
-          | Status: {game.status}
-        </p>
-        {game.status === 'in_progress' && user ? (
-          <Link
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-            to={`/games/${game.id}/track`}
-          >
-            Continue Tracking
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded border bg-white p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Game Date / Time</p>
-          <p className="mt-1 text-sm font-medium">
-            {formatDateTime(game.scheduledAt || game.createdAt)}
-          </p>
-        </div>
-        <div className="rounded border bg-white p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Recorded At</p>
-          <p className="mt-1 text-sm font-medium">{formatDateTime(game.createdAt)}</p>
-        </div>
-        <div className="rounded border bg-white p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Finished At</p>
-          <p className="mt-1 text-sm font-medium">{formatDateTime(game.completedAt)}</p>
-        </div>
-      </div>
-    </div>
-  );
   const replayContent = canViewReplay ? (
     <GameReplayPanel events={replayEvents} players={team.players || []} />
   ) : (
     <LockedFeatureCard
-      title="Replay is part of Team Pro"
-      description="Unlock interactive event replay and the live-updating replay box score with Team Pro."
+      title="Replay is only available for Pro users"
+      description="Upgrade to Team Pro to unlock interactive event replay and the live-updating replay box score."
       showUpgrade
     />
   );
@@ -292,11 +259,18 @@ export function GameDetailPage() {
           {
             value: 'recap',
             label: 'Recap',
-            content: <GameRecapPanel gameId={game.id} recap={recap} teamId={team.id} />,
+            content: (
+              <GameRecapPanel
+                game={game}
+                team={team}
+                gameId={game.id}
+                recap={recap}
+                canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
+              />
+            ),
           },
-          { value: 'box-score', label: 'Box Score', content: boxScoreContent },
+          { value: 'stats', label: 'Stats', content: statsContent },
           { value: 'replay', label: 'Replay', content: replayContent },
-          { value: 'game-info', label: 'Game Info', content: gameInfoContent },
         ]}
       />
 

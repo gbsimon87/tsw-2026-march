@@ -50,6 +50,10 @@ async function findTeamById(teamId) {
   return Team.findById(teamId);
 }
 
+async function listTeams() {
+  return Team.find().sort({ createdAt: -1 });
+}
+
 async function saveTeam(team) {
   return team.save();
 }
@@ -59,5 +63,6 @@ module.exports = {
   listTeamsByOwner,
   findTeamByIdAndOwner,
   findTeamById,
+  listTeams,
   saveTeam,
 };
