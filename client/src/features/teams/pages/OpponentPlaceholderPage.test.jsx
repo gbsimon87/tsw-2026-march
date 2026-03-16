@@ -58,7 +58,6 @@ describe('OpponentPlaceholderPage', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'TSW Blue' })).toHaveAttribute('href', '/teams/team-1');
     expect(screen.getByRole('link', { name: /View game/i })).toHaveAttribute('href', '/games/g1');
-    expect(screen.getByRole('link', { name: /Explore teams/i })).toHaveAttribute('href', '/');
   });
 
   test('renders error state for unknown opponents', async () => {

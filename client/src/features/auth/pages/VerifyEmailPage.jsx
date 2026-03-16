@@ -8,6 +8,7 @@ export function VerifyEmailPage() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [verificationUrl, setVerificationUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onVerifyToken(event) {
@@ -20,6 +21,7 @@ export function VerifyEmailPage() {
 
     setError('');
     setMessage('');
+    setVerificationUrl('');
     setIsSubmitting(true);
 
     try {
@@ -37,6 +39,7 @@ export function VerifyEmailPage() {
 
     setError('');
     setMessage('');
+    setVerificationUrl('');
     setIsSubmitting(true);
 
     try {
@@ -44,6 +47,7 @@ export function VerifyEmailPage() {
       setMessage(
         result.message || 'If an account exists for that email, a verification link has been sent.'
       );
+      setVerificationUrl(result.verificationUrl || '');
     } catch (submitError) {
       setError(submitError.message || 'Unable to request verification email.');
     } finally {
@@ -60,6 +64,15 @@ export function VerifyEmailPage() {
         </p>
         {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {verificationUrl ? (
+          <p className="text-sm text-slate-700">
+            Email delivery is using a local fallback. Open{' '}
+            <a className="text-blue-600 hover:underline" href={verificationUrl}>
+              this verification link
+            </a>
+            .
+          </p>
+        ) : null}
         <button
           className="rounded bg-slate-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"

@@ -4,7 +4,7 @@ import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
 
-export function LoginForm({ redirectTo = '/dashboard' }) {
+export function LoginForm({ redirectTo = '/feed' }) {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(

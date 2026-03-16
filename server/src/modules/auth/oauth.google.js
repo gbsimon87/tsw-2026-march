@@ -1,8 +1,18 @@
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const { env } = require('../../config/env');
 
+function isGoogleOAuthConfigured() {
+  return Boolean(
+    env.GOOGLE_CLIENT_ID &&
+    env.GOOGLE_CLIENT_SECRET &&
+    env.GOOGLE_CALLBACK_URL &&
+    env.GOOGLE_CLIENT_ID.endsWith('.apps.googleusercontent.com') &&
+    !env.GOOGLE_CLIENT_ID.includes('://')
+  );
+}
+
 function configureGoogleOAuth(passport) {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_CALLBACK_URL) {
+  if (!isGoogleOAuthConfigured()) {
     return;
   }
 
@@ -31,4 +41,5 @@ function configureGoogleOAuth(passport) {
 
 module.exports = {
   configureGoogleOAuth,
+  isGoogleOAuthConfigured,
 };

@@ -3,14 +3,7 @@ const { env } = require('../config/env');
 const { logger } = require('../config/logger');
 
 function hasSmtpConfiguration() {
-  return Boolean(
-    env.SMTP_HOST &&
-    env.SMTP_PORT &&
-    env.SMTP_USER &&
-    env.SMTP_PASS &&
-    env.SMTP_FROM_EMAIL &&
-    env.SMTP_FROM_NAME
-  );
+  return Boolean(env.SMTP_HOST && env.SMTP_PORT && env.SMTP_FROM_EMAIL && env.SMTP_FROM_NAME);
 }
 
 function getTransport() {
@@ -18,15 +11,20 @@ function getTransport() {
     return null;
   }
 
-  return nodemailer.createTransport({
+  const transportOptions = {
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
     secure: env.SMTP_SECURE,
-    auth: {
+  };
+
+  if (env.SMTP_USER && env.SMTP_PASS) {
+    transportOptions.auth = {
       user: env.SMTP_USER,
       pass: env.SMTP_PASS,
-    },
-  });
+    };
+  }
+
+  return nodemailer.createTransport(transportOptions);
 }
 
 async function sendTemplateEmail({ to, subject, text, html, fallbackLabel }) {
@@ -38,16 +36,30 @@ async function sendTemplateEmail({ to, subject, text, html, fallbackLabel }) {
     }
 
     logger.warn({ to, fallbackLabel, text }, 'SMTP not configured; emitting local email fallback');
-    return;
+    return { delivery: 'fallback' };
   }
 
-  await transport.sendMail({
-    from: `${env.SMTP_FROM_NAME} <${env.SMTP_FROM_EMAIL}>`,
-    to,
-    subject,
-    text,
-    html,
-  });
+  try {
+    await transport.sendMail({
+      from: `${env.SMTP_FROM_NAME} <${env.SMTP_FROM_EMAIL}>`,
+      to,
+      subject,
+      text,
+      html,
+    });
+  } catch (error) {
+    if (env.NODE_ENV === 'production') {
+      throw error;
+    }
+
+    logger.warn(
+      { err: error, to, fallbackLabel, text },
+      'SMTP delivery failed; emitting local email fallback'
+    );
+    return { delivery: 'fallback' };
+  }
+
+  return { delivery: 'smtp' };
 }
 
 async function sendVerificationEmail({ to, name, verifyUrl }) {

@@ -23,6 +23,8 @@ V1 focuses on fast, simple tracking for one team at a time:
 - Public team pages with sortable season stat tables and recent/upcoming games
 - Public player pages with per-game logs plus PPG/RPG/APG
 - Homepage explore feed with recent public games across teams
+- Public social feed with image posts and shareable game/player/team cards
+- Floating create-post action with login redirect back to feed compose flow
 
 ## Current V1 Features
 
@@ -35,6 +37,15 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `GET /api/v1/public/teams/:teamId`
 - `GET /api/v1/public/teams/:teamId/players/:playerId`
 - `GET /api/v1/public/teams/explore`
+- `GET /api/v1/feed`
+- `GET /api/v1/feed/shareable/games`
+- `GET /api/v1/feed/shareable/players`
+- `GET /api/v1/feed/shareable/teams`
+- `POST /api/v1/feed/image`
+- `POST /api/v1/feed/game-card`
+- `POST /api/v1/feed/player-card`
+- `POST /api/v1/feed/team-card`
+- `DELETE /api/v1/feed/:postId`
 - `POST /api/v1/teams/:teamId/players`
 - `PATCH /api/v1/teams/:teamId/players/:playerId`
 - `DELETE /api/v1/teams/:teamId/players/:playerId`
@@ -49,6 +60,8 @@ V1 focuses on fast, simple tracking for one team at a time:
 ### Frontend Routes
 
 - `/dashboard`
+- `/feed`
+- `/home`
 - `/teams`
 - `/teams/new`
 - `/teams/:teamId`
@@ -74,28 +87,26 @@ V1 focuses on fast, simple tracking for one team at a time:
 ### Game Detail Experience
 
 - Tabbed layout for shorter, focused views:
-  - `Box Score`
+  - `Recap`
+  - `Stats`
   - `Replay`
-  - `Game Info`
-- `Box Score` tab includes:
+- `Recap` tab includes:
+  - game summary header
+  - shareable recap card actions
+  - team stats
+  - top performers
+  - key moments
+- `Stats` tab includes:
   - Sortable box score table
-  - Shot map rendered on court image with made/missed markers
-  - Zone Results table (made/missed/total by zone)
+  - Compact shot snapshot
   - Play-by-play event log with stat type, zone, coordinates, and event time
+  - Last-five default event view with expand/collapse for the full log
   - Assists and rebound splits in all box score views
-- Shot-map filters:
-  - Player: all players or a specific player
-  - Shot type: all shots, 2PT, 3PT
-- Optional zone-outline overlay toggle (`Hide Zones` / `Show Zones`).
 - `Replay` tab includes:
   - Event-by-event replay controls (`Previous` / `Next`)
   - Progressive shot plotting in event order
   - Live sortable replay box score that updates as events are stepped through, including non-shot stats such as assists and rebounds
-- `Game Info` tab includes game metadata and title/state details:
-  - game title/status
-  - game date/time
-  - recorded at
-  - finished at
+  - Pro-only access with locked-state messaging for non-Pro teams
 
 ### Public Experience
 
@@ -108,6 +119,15 @@ V1 focuses on fast, simple tracking for one team at a time:
   - `PPG`, `RPG`, and `APG`
   - sortable per-game stat log and season totals
 - Homepage includes an `Explore` section linking to recent public games and team pages.
+- Public feed includes:
+  - image posts
+  - game card posts
+  - player card posts
+  - team card posts
+  - creator-only delete controls
+  - floating create-post action button
+  - reusable compose modal
+  - logged-out post CTA that redirects to login and returns to `/feed?compose=1`
 
 ### Shared UI
 
@@ -132,6 +152,7 @@ V1 focuses on fast, simple tracking for one team at a time:
   - 10 teams
   - 100 players
   - 200 games
+  - 50 posts
 - Seeded game events include randomized points, rebounds, and assists.
 
 ## Stack
@@ -188,6 +209,15 @@ Set at minimum:
 - `CLIENT_ORIGIN`
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_CALLBACK_URL`
 - `SMTP_*` values for auth emails
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_FOLDER`
+- `FEED_IMAGE_MAX_BYTES`
+
+Recommended feed upload value:
+
+- `FEED_IMAGE_MAX_BYTES=5242880` for a 5 MB image limit
 
 ## Commands
 
@@ -209,6 +239,7 @@ pnpm check-env
 - Fantasy stat tracking
 - Season support and season-based reporting
 - Game summaries and richer post-game recap content
+- Feed likes, reposts, comments, and moderation
 - Player profile images via uploaded media or linked Google image
 - Embedded video playback, likely via YouTube iframe support
 - Time-synced game tracking from video playback

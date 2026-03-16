@@ -60,12 +60,6 @@ export function OpponentPlaceholderPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold text-slate-900">Related Games</h2>
-          <Link
-            to="/"
-            className="text-sm font-medium text-sky-700 underline decoration-slate-300 underline-offset-4 transition hover:decoration-sky-500"
-          >
-            Explore teams
-          </Link>
         </div>
 
         <div className="mt-4 space-y-3">

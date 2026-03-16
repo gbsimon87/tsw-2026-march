@@ -2,6 +2,7 @@ const { Router } = require('express');
 const { authRouter } = require('../modules/auth/auth.routes');
 const { analyticsRouter } = require('../modules/analytics/analytics.routes');
 const { billingRouter } = require('../modules/billing/billing.routes');
+const { feedRouter } = require('../modules/feed/feed.routes');
 const { healthRouter } = require('../modules/health/health.routes');
 const {
   teamsRouter,
@@ -15,6 +16,7 @@ const apiRouter = Router();
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/analytics', analyticsRouter);
 apiRouter.use('/billing', billingRouter);
+apiRouter.use('/feed', feedRouter);
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/public/opponents', publicOpponentsRouter);
 apiRouter.use('/public/teams', publicTeamsRouter);

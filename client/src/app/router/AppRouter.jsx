@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
 import { DashboardPage } from '../../features/dashboard/DashboardPage';
+import { FeedPage } from '../../features/feed/pages/FeedPage';
 import { LoginPage } from '../../features/auth/pages/LoginPage';
 import { RegisterPage } from '../../features/auth/pages/RegisterPage';
 import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage';
@@ -36,11 +37,27 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function LandingRoute() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="p-4 text-sm">Loading session...</div>;
+  }
+
+  if (user) {
+    return <Navigate to="/feed" replace />;
+  }
+
+  return <HomePage />;
+}
+
 export function AppRouter() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<LandingRoute />} />
+        <Route path="/home" element={<HomePage />} />
+        <Route path="/feed" element={<FeedPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

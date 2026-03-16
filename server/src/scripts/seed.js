@@ -6,17 +6,20 @@ const { SHOT_ZONE_IDS, STAT_TYPES } = require('../modules/shared/stats.constants
 require('../modules/auth/auth.repository');
 require('../modules/teams/teams.repository');
 require('../modules/games/games.repository');
+require('../modules/feed/feed.repository');
 
 const User = mongoose.model('User');
 const Session = mongoose.model('Session');
 const AuthToken = mongoose.model('AuthToken');
 const Team = mongoose.model('Team');
 const Game = mongoose.model('Game');
+const Post = mongoose.model('Post');
 
 const seedConfig = {
   userCount: Number(process.env.SEED_USER_COUNT || 10),
   gamesPerUser: Number(process.env.SEED_GAMES_PER_USER || 20),
   playersPerTeam: Number(process.env.SEED_PLAYERS_PER_TEAM || 10),
+  postsCount: Number(process.env.SEED_POST_COUNT || 50),
   password: 'password',
 };
 
@@ -44,6 +47,23 @@ const opponents = [
   'Pine Street Club',
   'Summit Heat',
   'River City Rams',
+];
+
+const feedImageUrls = [
+  'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1519861531473-9200262188bf?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80',
+];
+
+const postCaptions = [
+  'Big game energy tonight.',
+  'Proud of this squad.',
+  'Strong performance from the team.',
+  'Another card worth sharing.',
+  'Great night on the court.',
+  'Locked in from start to finish.',
 ];
 
 const zoneCoordinates = {
@@ -355,12 +375,103 @@ async function upsertSeedUsers() {
 
 async function resetSeedData() {
   await Promise.all([
+    Post.deleteMany({}),
     Game.deleteMany({}),
     Team.deleteMany({}),
     Session.deleteMany({}),
     AuthToken.deleteMany({}),
     User.deleteMany({}),
   ]);
+}
+
+function buildSeedPosts(entries) {
+  const posts = [];
+  let imageCount = 0;
+  let gameCardCount = 0;
+  let playerCardCount = 0;
+  let teamCardCount = 0;
+
+  for (let index = 0; index < seedConfig.postsCount; index += 1) {
+    const entry = entries[index % entries.length];
+    const createdAt = new Date(Date.now() - index * 2 * 60 * 60 * 1000);
+    const caption = postCaptions[index % postCaptions.length];
+    const slot = index % 10;
+
+    if (slot < 4) {
+      imageCount += 1;
+      posts.push({
+        creatorUserId: entry.user._id,
+        type: 'image',
+        caption,
+        image: {
+          url: feedImageUrls[index % feedImageUrls.length],
+          publicId: `seed/image/${index + 1}`,
+          width: 1200,
+          height: 800,
+          mimeType: 'image/jpeg',
+        },
+        createdAt,
+        updatedAt: createdAt,
+      });
+      continue;
+    }
+
+    if (slot < 7) {
+      const game = entry.games[index % entry.games.length];
+      gameCardCount += 1;
+      posts.push({
+        creatorUserId: entry.user._id,
+        type: 'game_card',
+        caption,
+        gameCard: {
+          gameId: game._id,
+          teamId: entry.team._id,
+        },
+        createdAt,
+        updatedAt: createdAt,
+      });
+      continue;
+    }
+
+    if (slot < 9) {
+      const player = entry.team.players[index % entry.team.players.length];
+      playerCardCount += 1;
+      posts.push({
+        creatorUserId: entry.user._id,
+        type: 'player_card',
+        caption,
+        playerCard: {
+          teamId: entry.team._id,
+          playerId: player._id,
+        },
+        createdAt,
+        updatedAt: createdAt,
+      });
+      continue;
+    }
+
+    teamCardCount += 1;
+    posts.push({
+      creatorUserId: entry.user._id,
+      type: 'team_card',
+      caption,
+      teamCard: {
+        teamId: entry.team._id,
+      },
+      createdAt,
+      updatedAt: createdAt,
+    });
+  }
+
+  return {
+    posts,
+    counts: {
+      imageCount,
+      gameCardCount,
+      playerCardCount,
+      teamCardCount,
+    },
+  };
 }
 
 async function main() {
@@ -374,6 +485,14 @@ async function main() {
     let playerCount = 0;
     let gameCount = 0;
     let eventCount = 0;
+    let postCount = 0;
+    let postTypeCounts = {
+      imageCount: 0,
+      gameCardCount: 0,
+      playerCardCount: 0,
+      teamCardCount: 0,
+    };
+    const seededFeedEntries = [];
 
     for (const [index, entry] of seededUsers.entries()) {
       const team = await Team.create({
@@ -387,12 +506,22 @@ async function main() {
       });
 
       const games = await Game.insertMany(buildGameDocs(entry.user._id, team), { ordered: true });
+      seededFeedEntries.push({
+        ...entry,
+        team,
+        games,
+      });
 
       teamCount += 1;
       playerCount += team.players.length;
       gameCount += games.length;
       eventCount += games.reduce((total, game) => total + game.events.length, 0);
     }
+
+    const seededPosts = buildSeedPosts(seededFeedEntries);
+    await Post.insertMany(seededPosts.posts, { ordered: true });
+    postCount = seededPosts.posts.length;
+    postTypeCounts = seededPosts.counts;
 
     console.log('Seed complete');
     console.log(`Users: ${seededUsers.length}`);
@@ -403,6 +532,11 @@ async function main() {
     console.log(`Players: ${playerCount}`);
     console.log(`Games: ${gameCount}`);
     console.log(`Events: ${eventCount}`);
+    console.log(`Posts: ${postCount}`);
+    console.log(`Image Posts: ${postTypeCounts.imageCount}`);
+    console.log(`Game Card Posts: ${postTypeCounts.gameCardCount}`);
+    console.log(`Player Card Posts: ${postTypeCounts.playerCardCount}`);
+    console.log(`Team Card Posts: ${postTypeCounts.teamCardCount}`);
     console.log('Logins:');
     for (const entry of seededUsers) {
       console.log(`- ${entry.email} (${entry.plan})`);

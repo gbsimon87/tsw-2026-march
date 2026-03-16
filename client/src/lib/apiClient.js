@@ -10,10 +10,14 @@ async function request(path, options = {}) {
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
     (options.method || 'GET').toUpperCase()
   );
+  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
+
+  if (!isFormDataBody && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (isMutation) {
     const csrfToken = readCookie('XSRF-TOKEN');
@@ -46,6 +50,12 @@ export const apiClient = {
     return request(path, {
       method: 'POST',
       body: JSON.stringify(body || {}),
+    });
+  },
+  postFormData(path, formData) {
+    return request(path, {
+      method: 'POST',
+      body: formData,
     });
   },
   put(path, body) {

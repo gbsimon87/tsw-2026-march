@@ -10,10 +10,15 @@ export function RegisterForm({ redirectTo }) {
     { name: '', email: '', password: '' },
     registerSchema,
     async (payload) => {
-      await register(payload);
+      const result = await register(payload);
+      if (result.verificationUrl) {
+        window.location.assign(result.verificationUrl);
+        return;
+      }
+
       const next = redirectTo
         ? `/login?verifyEmail=1&redirectTo=${encodeURIComponent(redirectTo)}`
-        : '/login?verifyEmail=1';
+        : '/login?verifyEmail=1&redirectTo=%2Ffeed';
       navigate(next);
     }
   );
@@ -72,7 +77,11 @@ export function RegisterForm({ redirectTo }) {
         Already have an account?{' '}
         <Link
           className="text-blue-600 hover:underline"
-          to={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login'}
+          to={
+            redirectTo
+              ? `/login?redirectTo=${encodeURIComponent(redirectTo)}`
+              : '/login?redirectTo=%2Ffeed'
+          }
         >
           Sign in
         </Link>

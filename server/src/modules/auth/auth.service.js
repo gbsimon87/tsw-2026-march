@@ -77,6 +77,7 @@ async function issueEmailVerification(user) {
   await invalidateTokensForUserByType(user._id, 'email_verification');
 
   const rawToken = generateRawToken();
+  const verifyUrl = buildClientUrl('/verify-email', rawToken);
   await createAuthToken({
     userId: user._id,
     type: 'email_verification',
@@ -84,11 +85,16 @@ async function issueEmailVerification(user) {
     expiresAt: buildTokenExpiry('email_verification'),
   });
 
-  await sendVerificationEmail({
+  const emailResult = await sendVerificationEmail({
     to: user.email,
     name: user.name,
-    verifyUrl: buildClientUrl('/verify-email', rawToken),
+    verifyUrl,
   });
+
+  return {
+    delivery: emailResult?.delivery || 'smtp',
+    verificationUrl: emailResult?.delivery === 'fallback' ? verifyUrl : null,
+  };
 }
 
 async function issuePasswordReset(user) {
@@ -126,11 +132,12 @@ async function register(input) {
     plan: 'free',
   });
 
-  await issueEmailVerification(user);
+  const verification = await issueEmailVerification(user);
 
   return {
     user: sanitizeUser(user),
     message: 'Registration successful. Verify your email before logging in.',
+    verificationUrl: verification.verificationUrl,
   };
 }
 
@@ -209,11 +216,16 @@ async function requestEmailVerification(email) {
   const user = await findUserByEmail(email);
 
   if (user && user.authProvider === 'local' && !user.emailVerified) {
-    await issueEmailVerification(user);
+    const verification = await issueEmailVerification(user);
+    return {
+      message: 'If an account exists for that email, a verification link has been sent.',
+      verificationUrl: verification.verificationUrl,
+    };
   }
 
   return {
     message: 'If an account exists for that email, a verification link has been sent.',
+    verificationUrl: null,
   };
 }
 

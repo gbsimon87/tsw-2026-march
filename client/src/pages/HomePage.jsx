@@ -75,10 +75,10 @@ export function HomePage() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           {user ? (
             <Link
-              to="/dashboard"
+              to="/feed"
               className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
             >
-              Go to Dashboard
+              Go to Feed
             </Link>
           ) : (
             <>

@@ -15,18 +15,23 @@ const mobileNavLinkClass = ({ isActive }) =>
 export function AppLayout() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const homeHref = user ? '/home' : '/';
+  const brandHref = user ? '/feed' : '/';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
-          <Link to="/" className="text-lg font-semibold">
+          <Link to={brandHref} className="text-lg font-semibold">
             {import.meta.env.VITE_APP_NAME || 'TSW'}
           </Link>
 
           <nav className="ml-auto hidden items-center gap-4 md:flex">
-            <NavLink to="/" end className={desktopNavLinkClass}>
+            <NavLink to={homeHref} end className={desktopNavLinkClass}>
               Home
+            </NavLink>
+            <NavLink to="/feed" className={desktopNavLinkClass}>
+              Feed
             </NavLink>
             <NavLink to="/pricing" className={desktopNavLinkClass}>
               Pricing
@@ -120,12 +125,19 @@ export function AppLayout() {
 
           <div className="flex flex-col gap-4">
             <NavLink
-              to="/"
+              to={homeHref}
               end
               className={mobileNavLinkClass}
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Home
+            </NavLink>
+            <NavLink
+              to="/feed"
+              className={mobileNavLinkClass}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Feed
             </NavLink>
             <NavLink
               to="/pricing"
