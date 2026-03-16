@@ -279,7 +279,7 @@ export function PublicTeamPage() {
           <img
             src={data.team.logo?.url || placeholderLogo}
             alt={`${data.team.name} logo`}
-            className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
+            className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
           />
           <div className="min-w-0">
             <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">

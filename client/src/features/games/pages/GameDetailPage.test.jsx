@@ -268,7 +268,13 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Recorded:/i)).toBeInTheDocument();
     expect(screen.getByText(/Finished:/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'TSW Team' })).toHaveAttribute('href', '/teams/team-1');
+    expect(screen.queryByText(/^Team:/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Top Performer/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('link', {
+        name: /Top Performer\s+Alex\s+4 PTS • 0 REB • 0 AST/i,
+      })
+    ).toHaveAttribute('href', '/teams/team-1/players/p1');
     expect(screen.queryByTestId('recap-shot-snapshot')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Share Card/i }));
@@ -286,8 +292,13 @@ describe('GameDetailPage', () => {
     expect(screen.getByRole('button', { name: 'Show All' })).toBeInTheDocument();
     expect(screen.queryByText(/Shot Map/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Game Date \/ Time/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Jordan: Assist/i)).toBeInTheDocument();
-    expect(screen.getByText(/Jordan: Defensive Rebound/i)).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Jordan' })
+        .some((link) => link.getAttribute('href') === '/teams/team-1/players/p2')
+    ).toBe(true);
+    expect(screen.getAllByText(/: Assist/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/: Defensive Rebound/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Alex: 2PT Make/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
     expect(screen.getByText('AST')).toBeInTheDocument();
@@ -295,14 +306,16 @@ describe('GameDetailPage', () => {
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
     expect(screen.getByText('REB')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Alex' })).toHaveAttribute(
-      'href',
-      '/teams/team-1/players/p1'
-    );
-    expect(screen.getByRole('link', { name: 'Jordan' })).toHaveAttribute(
-      'href',
-      '/teams/team-1/players/p2'
-    );
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Alex' })
+        .some((link) => link.getAttribute('href') === '/teams/team-1/players/p1')
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole('link', { name: 'Jordan' })
+        .some((link) => link.getAttribute('href') === '/teams/team-1/players/p2')
+    ).toBe(true);
     expect(screen.queryByRole('link', { name: 'Team Total' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('game-shot-map')).not.toBeInTheDocument();
     expect(screen.queryByTestId('shot-zone-overlay')).not.toBeInTheDocument();
@@ -312,7 +325,7 @@ describe('GameDetailPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show All' }));
     expect(screen.getByRole('button', { name: 'Show Last 5' })).toBeInTheDocument();
-    expect(screen.getByText(/Alex: 2PT Make/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/: 2PT Make/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('listitem')).toHaveLength(6);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));

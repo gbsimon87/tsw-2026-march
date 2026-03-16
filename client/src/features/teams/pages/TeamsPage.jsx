@@ -141,7 +141,7 @@ export function TeamsPage() {
                   <img
                     src={team.logo?.url || placeholderLogo}
                     alt={`${team.name || 'Team'} logo`}
-                    className="h-12 w-12 rounded-xl border border-slate-200 bg-white object-cover"
+                    className="h-12 w-12 rounded-full border border-slate-200 bg-white object-cover"
                   />
                   <div>
                     <p className="text-sm font-medium text-slate-900">

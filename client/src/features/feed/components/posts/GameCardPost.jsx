@@ -18,11 +18,11 @@ export function GameCardPost({ gameCard }) {
       <div className="relative">
         <img src={previewSrc} alt={`${gameCard.teamName} game card`} className="w-full" />
         {teamLogo ? (
-          <div className="absolute left-4 top-4 rounded-2xl border border-white/70 bg-white/90 p-2 shadow-sm">
+          <div className="absolute left-4 top-4 rounded-full border border-white/70 bg-white/90 p-2 shadow-sm">
             <img
               src={teamLogo}
               alt={`${gameCard.teamName} logo badge`}
-              className="h-14 w-14 rounded-xl object-cover"
+              className="h-14 w-14 rounded-full object-cover"
             />
           </div>
         ) : null}

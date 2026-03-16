@@ -229,7 +229,19 @@ export function GameDetailPage() {
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">
-                      {playerName}: {statLabel}
+                      {player?.id && team?.id ? (
+                        <>
+                          <Link
+                            to={`/teams/${team.id}/players/${player.id}`}
+                            className="text-blue-700 hover:text-blue-900 hover:underline"
+                          >
+                            {playerName}
+                          </Link>
+                          {`: ${statLabel}`}
+                        </>
+                      ) : (
+                        `${playerName}: ${statLabel}`
+                      )}
                     </p>
                     <p className="text-xs text-slate-600">{formatEventMeta(event)}</p>
                   </div>

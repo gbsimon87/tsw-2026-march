@@ -94,12 +94,21 @@ export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking 
             <img
               src={getGameHeaderImage(team)}
               alt={`${team?.name || recap?.team?.name || 'Team'} logo`}
-              className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
+              className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
             />
             <div>
-              <h2 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-                {recap?.team?.name || 'Team'}
-              </h2>
+              {team?.id ? (
+                <Link
+                  to={`/teams/${team.id}`}
+                  className="text-3xl font-bold leading-tight text-slate-900 transition hover:text-sky-700 hover:underline focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-sky-500 md:text-4xl"
+                >
+                  {recap?.team?.name || 'Team'}
+                </Link>
+              ) : (
+                <h2 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+                  {recap?.team?.name || 'Team'}
+                </h2>
+              )}
               <p className="mt-2 text-base text-slate-700">
                 {recap?.opponent?.name ? `vs ${recap.opponent.name}` : 'Opponent not recorded'}
               </p>
@@ -107,15 +116,6 @@ export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking 
                 {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
               </p>
               <div className="mt-3 space-y-1 text-sm text-slate-600">
-                <p>
-                  Team:{' '}
-                  <Link
-                    to={`/teams/${team?.id}`}
-                    className="font-semibold text-blue-600 hover:underline"
-                  >
-                    {team?.name || recap?.team?.name || 'Team'}
-                  </Link>
-                </p>
                 <p>Status: {game?.status || 'unknown'}</p>
                 <p>Recorded: {formatDateTime(game?.createdAt)}</p>
                 <p>Finished: {formatDateTime(game?.completedAt)}</p>
@@ -213,20 +213,36 @@ export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking 
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        {(recap?.topPerformers || []).map((player) => (
-          <article
-            key={player.playerId}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Top Performer
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-slate-900">{player.displayName}</h3>
-            <p className="mt-3 text-sm text-slate-600">
-              {player.points} PTS • {player.reb} REB • {player.ast} AST
-            </p>
-          </article>
-        ))}
+        {(recap?.topPerformers || []).map((player) =>
+          player.playerId && team?.id ? (
+            <Link
+              key={player.playerId}
+              to={`/teams/${team.id}/players/${player.playerId}`}
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Top Performer
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-900">{player.displayName}</h3>
+              <p className="mt-3 text-sm text-slate-600">
+                {player.points} PTS • {player.reb} REB • {player.ast} AST
+              </p>
+            </Link>
+          ) : (
+            <article
+              key={player.playerId || player.displayName}
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Top Performer
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-900">{player.displayName}</h3>
+              <p className="mt-3 text-sm text-slate-600">
+                {player.points} PTS • {player.reb} REB • {player.ast} AST
+              </p>
+            </article>
+          )
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -320,7 +320,7 @@ export function EditTeamPage() {
               <img
                 src={logoUrl}
                 alt={`${team?.name || 'Team'} logo`}
-                className="h-40 w-40 rounded-2xl border border-slate-200 bg-slate-50 object-cover"
+                className="h-40 w-40 rounded-full border border-slate-200 bg-slate-50 object-cover"
               />
               <input
                 type="file"

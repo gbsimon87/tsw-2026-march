@@ -19,7 +19,7 @@ export function TeamCardPost({ teamCard }) {
         <img
           src={imageSrc}
           alt={`${teamCard.teamName} card logo`}
-          className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
+          className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
           onError={() => setImageSrc(getTeamCardImage({}))}
         />
         <div className="min-w-0">
