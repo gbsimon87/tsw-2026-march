@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
+import { getPlayerHeaderImage } from '../../feed/cardImage';
 
 function formatGameDate(game) {
   const rawValue = game.date || game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -189,8 +189,8 @@ export function PublicPlayerPage() {
         </p>
         <div className="mt-3 flex items-start gap-4">
           <img
-            src={data.team.logo?.url || placeholderLogo}
-            alt={`${data.team.name} logo`}
+            src={getPlayerHeaderImage(data)}
+            alt={`${data.player.displayName} profile`}
             className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
           />
           <div>

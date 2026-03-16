@@ -52,7 +52,12 @@ function buildPlayerLines(recap) {
   });
 }
 
-export function createRecapCardSvg(recap) {
+export function createRecapCardSvg(recap, options = {}) {
+  let teamLogoMarkup = '';
+  const teamLogoUrl =
+    typeof options.teamLogoUrl === 'string' && options.teamLogoUrl
+      ? escapeXml(options.teamLogoUrl)
+      : '';
   const teamName = recap?.team?.name || 'Team';
   const opponentName = recap?.opponent?.name
     ? `vs ${recap.opponent.name}`
@@ -66,6 +71,13 @@ export function createRecapCardSvg(recap) {
   const performersContentTop = 944;
   const cardHeight = performersContentTop + performersHeight + 72;
 
+  if (teamLogoUrl) {
+    teamLogoMarkup = `
+      <rect x="64" y="74" width="104" height="104" rx="28" fill="#ffffff" stroke="#e2e8f0" stroke-width="3" />
+      <image href="${teamLogoUrl}" x="72" y="82" width="88" height="88" preserveAspectRatio="xMidYMid slice" />
+    `;
+  }
+
   return `
   <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="${cardHeight}" viewBox="0 0 1080 ${cardHeight}" role="img" aria-label="Game recap card">
     <defs>
@@ -78,8 +90,11 @@ export function createRecapCardSvg(recap) {
     <rect width="1080" height="${cardHeight}" fill="url(#bg)" />
     <rect x="32" y="32" width="1016" height="${cardHeight - 64}" rx="44" fill="#ffffff" stroke="#e2e8f0" stroke-width="4" />
 
-    <circle cx="116" cy="126" r="52" fill="#f59e0b" />
-    <text x="116" y="145" text-anchor="middle" font-size="42" font-weight="800" fill="#fef3c7">${teamInitial}</text>
+    ${
+      teamLogoMarkup ||
+      `<circle cx="116" cy="126" r="52" fill="#f59e0b" />
+    <text x="116" y="145" text-anchor="middle" font-size="42" font-weight="800" fill="#fef3c7">${teamInitial}</text>`
+    }
     <text x="188" y="104" font-size="28" font-weight="800" fill="#64748b">${escapeXml(recap?.statusLabel || 'GAME RECAP')}</text>
     <text x="188" y="176" font-size="64" font-weight="800" fill="#0f172a">${escapeXml(teamName)}</text>
     <text x="188" y="226" font-size="32" fill="#475569">${escapeXml(opponentName)}</text>
@@ -114,6 +129,6 @@ export function createRecapCardSvg(recap) {
   `.trim();
 }
 
-export function createRecapCardDataUrl(recap) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createRecapCardSvg(recap))}`;
+export function createRecapCardDataUrl(recap, options = {}) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createRecapCardSvg(recap, options))}`;
 }

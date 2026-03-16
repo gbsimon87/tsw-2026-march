@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createRecapCardDataUrl, createRecapCardSvg } from '../recapCardImage';
+import { getGameHeaderImage } from '../../feed/cardImage';
 
 function formatDateTime(value) {
   if (!value) {
@@ -38,7 +39,7 @@ function formatMomentTime(value) {
 export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking = false }) {
   const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
-  const recapCardDataUrl = createRecapCardDataUrl(recap);
+  const recapCardDataUrl = createRecapCardDataUrl(recap, { teamLogoUrl: team?.logo?.url || null });
   const cardFilename = `${(recap?.team?.name || 'team')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}-game-recap.svg`;
@@ -64,7 +65,7 @@ export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking 
   }
 
   async function shareImageCard() {
-    const svgMarkup = createRecapCardSvg(recap);
+    const svgMarkup = createRecapCardSvg(recap, { teamLogoUrl: team?.logo?.url || null });
 
     if (navigator?.share && navigator?.canShare) {
       const file = new File([svgMarkup], cardFilename, { type: 'image/svg+xml' });
@@ -89,29 +90,36 @@ export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking 
           {recap?.statusLabel || 'Game Recap'}
         </p>
         <div className="mt-3 grid gap-4 md:grid-cols-[1.5fr,1fr] md:items-end">
-          <div>
-            <h2 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-              {recap?.team?.name || 'Team'}
-            </h2>
-            <p className="mt-2 text-base text-slate-700">
-              {recap?.opponent?.name ? `vs ${recap.opponent.name}` : 'Opponent not recorded'}
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
-            </p>
-            <div className="mt-3 space-y-1 text-sm text-slate-600">
-              <p>
-                Team:{' '}
-                <Link
-                  to={`/teams/${team?.id}`}
-                  className="font-semibold text-blue-600 hover:underline"
-                >
-                  {team?.name || recap?.team?.name || 'Team'}
-                </Link>
+          <div className="flex items-start gap-4">
+            <img
+              src={getGameHeaderImage(team)}
+              alt={`${team?.name || recap?.team?.name || 'Team'} logo`}
+              className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
+            />
+            <div>
+              <h2 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+                {recap?.team?.name || 'Team'}
+              </h2>
+              <p className="mt-2 text-base text-slate-700">
+                {recap?.opponent?.name ? `vs ${recap.opponent.name}` : 'Opponent not recorded'}
               </p>
-              <p>Status: {game?.status || 'unknown'}</p>
-              <p>Recorded: {formatDateTime(game?.createdAt)}</p>
-              <p>Finished: {formatDateTime(game?.completedAt)}</p>
+              <p className="mt-2 text-sm text-slate-600">
+                {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
+              </p>
+              <div className="mt-3 space-y-1 text-sm text-slate-600">
+                <p>
+                  Team:{' '}
+                  <Link
+                    to={`/teams/${team?.id}`}
+                    className="font-semibold text-blue-600 hover:underline"
+                  >
+                    {team?.name || recap?.team?.name || 'Team'}
+                  </Link>
+                </p>
+                <p>Status: {game?.status || 'unknown'}</p>
+                <p>Recorded: {formatDateTime(game?.createdAt)}</p>
+                <p>Finished: {formatDateTime(game?.completedAt)}</p>
+              </div>
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-right shadow-sm">

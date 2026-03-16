@@ -25,6 +25,18 @@ function sanitizeEvent(event) {
   };
 }
 
+function sanitizeLogo(logo) {
+  if (!logo?.url) {
+    return null;
+  }
+
+  return {
+    url: logo.url,
+    width: logo.width ?? null,
+    height: logo.height ?? null,
+  };
+}
+
 function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
@@ -218,6 +230,7 @@ async function getGameForUser(userId, gameId) {
     team: {
       id: String(team._id),
       name: team.name,
+      logo: sanitizeLogo(team.logo),
       billing: getBillingSummary(team),
       entitlements: getTeamEntitlements(team),
       players: team.players.map((player) => ({
@@ -250,6 +263,7 @@ async function getPublicGame(gameId) {
     team: {
       id: String(team._id),
       name: team.name,
+      logo: sanitizeLogo(team.logo),
       billing: getBillingSummary(team),
       entitlements: getTeamEntitlements(team),
       players: team.players.map((player) => ({

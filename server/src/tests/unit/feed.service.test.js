@@ -40,7 +40,7 @@ const { findUserById } = require('../../modules/auth/auth.repository');
 const { listCompletedGames } = require('../../modules/games/games.repository');
 const { getPublicGame } = require('../../modules/games/games.service');
 const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
-const { getPublicTeam } = require('../../modules/teams/teams.service');
+const { getPublicTeam, getPublicPlayer } = require('../../modules/teams/teams.service');
 const service = require('../../modules/feed/feed.service');
 
 describe('feed service', () => {
@@ -118,7 +118,7 @@ describe('feed service', () => {
       .mockResolvedValueOnce({ _id: 'user-2', name: 'Jordan' });
     getPublicGame.mockResolvedValue({
       game: { id: 'g1', opponent: 'Falcons' },
-      team: { id: 't1', name: 'TSW Blue' },
+      team: { id: 't1', name: 'TSW Blue', logo: { url: 'https://example.com/team-logo.png' } },
       recap: { team: { name: 'TSW Blue', points: 70 }, opponent: { name: 'Falcons' } },
     });
     getPublicTeam.mockRejectedValue(new Error('missing'));
@@ -127,6 +127,51 @@ describe('feed service', () => {
 
     expect(result.posts).toHaveLength(1);
     expect(result.posts[0].id).toBe('post-2');
+    expect(result.posts[0].gameCard.teamLogo).toEqual({
+      url: 'https://example.com/team-logo.png',
+    });
+  });
+
+  test('player cards include team logo fallback metadata', async () => {
+    listPosts.mockResolvedValue([
+      {
+        _id: 'post-3',
+        creatorUserId: 'user-1',
+        type: 'player_card',
+        caption: null,
+        playerCard: { teamId: 't1', playerId: 'p1' },
+        createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      },
+    ]);
+    findUserById.mockResolvedValue({ _id: 'user-1', name: 'Alex' });
+    getPublicPlayer.mockResolvedValue({
+      team: {
+        id: 't1',
+        name: 'TSW Blue',
+        logo: { url: 'https://example.com/team-logo.png', width: 128, height: 128 },
+      },
+      player: {
+        id: 'p1',
+        displayName: 'Jordan',
+        jerseyNumber: 23,
+        image: null,
+      },
+      summary: {
+        gamesCount: 10,
+        pointsPerGame: 12,
+        reboundsPerGame: 5,
+        assistsPerGame: 4,
+      },
+    });
+
+    const result = await service.listFeedPosts('user-1', { limit: 20 });
+
+    expect(result.posts[0].playerCard.teamLogo).toEqual({
+      url: 'https://example.com/team-logo.png',
+      width: 128,
+      height: 128,
+    });
+    expect(result.posts[0].playerCard.imageFallback).toBe('team_logo');
   });
 
   test('only allows creators to delete posts', async () => {

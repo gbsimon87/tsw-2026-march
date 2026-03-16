@@ -52,6 +52,7 @@ describe('teams public service', () => {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
       name: 'TSW Blue',
+      logo: { url: 'https://example.com/team-logo.png', width: 128, height: 128 },
       players: [
         { _id: 'p1', displayName: 'Chris', jerseyNumber: null, isActive: true },
         { _id: 'p2', displayName: 'Alex', jerseyNumber: 4, isActive: true },
@@ -62,9 +63,14 @@ describe('teams public service', () => {
 
     const result = await getPublicTeam('team-1');
 
+    expect(result.team.logo).toEqual({
+      url: 'https://example.com/team-logo.png',
+      width: 128,
+      height: 128,
+    });
     expect(result.team.players).toEqual([
-      { id: 'p2', displayName: 'Alex', jerseyNumber: 4 },
-      { id: 'p1', displayName: 'Chris', jerseyNumber: null },
+      { id: 'p2', displayName: 'Alex', jerseyNumber: 4, position: null },
+      { id: 'p1', displayName: 'Chris', jerseyNumber: null, position: null },
     ]);
   });
 
@@ -133,6 +139,7 @@ describe('teams public service', () => {
             dreb: 0,
             reb: 0,
             points: 3,
+            position: null,
             gamesPlayed: 1,
             pointsPerGame: 3,
             assistsPerGame: 1,
@@ -152,6 +159,7 @@ describe('teams public service', () => {
             dreb: 1,
             reb: 1,
             points: 3,
+            position: null,
             gamesPlayed: 1,
             pointsPerGame: 3,
             assistsPerGame: 0,
@@ -295,6 +303,7 @@ describe('teams public service', () => {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
       name: 'TSW Blue',
+      logo: { url: 'https://example.com/team-logo.png', width: 128, height: 128 },
       players: [
         { _id: 'p1', displayName: 'Alex', jerseyNumber: 12, isActive: true },
         { _id: 'p2', displayName: 'Chris', jerseyNumber: 4, isActive: true },
@@ -344,8 +353,23 @@ describe('teams public service', () => {
 
     const result = await getPublicPlayer('team-1', 'p1');
 
-    expect(result.team).toEqual(expect.objectContaining({ id: 'team-1', name: 'TSW Blue' }));
-    expect(result.player).toEqual({ id: 'p1', displayName: 'Alex', jerseyNumber: 12 });
+    expect(result.team).toEqual(
+      expect.objectContaining({
+        id: 'team-1',
+        name: 'TSW Blue',
+        logo: {
+          url: 'https://example.com/team-logo.png',
+          width: 128,
+          height: 128,
+        },
+      })
+    );
+    expect(result.player).toEqual({
+      id: 'p1',
+      displayName: 'Alex',
+      jerseyNumber: 12,
+      position: null,
+    });
     expect(result.summary).toEqual({
       gamesCount: 2,
       points: 5,

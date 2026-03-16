@@ -111,6 +111,7 @@ describe('GameDetailPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW Team',
+        logo: { url: 'https://example.com/team-logo.png' },
         billing: {
           plan: 'pro',
           subscriptionStatus: 'active',
@@ -257,6 +258,10 @@ describe('GameDetailPage', () => {
     expect(screen.queryByRole('button', { name: /Copy Link/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /View Team Page/i })).not.toBeInTheDocument();
     expect(screen.getByAltText(/Shareable game recap card preview/i)).toBeInTheDocument();
+    expect(screen.getByAltText('TSW Team logo')).toHaveAttribute(
+      'src',
+      'https://example.com/team-logo.png'
+    );
     expect(screen.getAllByText('TSW Team').length).toBeGreaterThan(0);
     expect(screen.getByText(/Wildcats/i)).toBeInTheDocument();
     expect(screen.getByText(/Status: completed/i)).toBeInTheDocument();

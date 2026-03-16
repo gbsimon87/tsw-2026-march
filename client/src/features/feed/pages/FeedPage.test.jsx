@@ -45,6 +45,7 @@ describe('FeedPage', () => {
           teamCard: {
             teamId: 'team-1',
             teamName: 'TSW Blue',
+            teamLogo: { url: 'https://example.com/team-logo.png', width: 128, height: 128 },
             teamUrl: '/teams/team-1',
             summary: {
               gamesCount: 12,
@@ -80,6 +81,10 @@ describe('FeedPage', () => {
       expect(screen.getByText(/Log in to post images/i)).toBeInTheDocument();
     });
 
+    expect(screen.getByAltText('TSW Blue card logo')).toHaveAttribute(
+      'src',
+      'https://example.com/team-logo.png'
+    );
     expect(screen.getByRole('button', { name: 'Create post' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
   });

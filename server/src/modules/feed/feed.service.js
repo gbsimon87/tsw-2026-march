@@ -71,6 +71,7 @@ async function resolveGameCardPayload(post) {
       gameUrl: `/games/${payload.game.id}`,
       teamId: payload.team.id,
       teamName: payload.team.name,
+      teamLogo: payload.team.logo ?? null,
       opponent: payload.game.opponent,
       recap: payload.recap,
     },
@@ -84,6 +85,9 @@ async function resolvePlayerCardPayload(post) {
     String(post.playerCard.teamId),
     String(post.playerCard.playerId)
   );
+  const playerImage = payload.player.image ?? null;
+  const teamLogo = payload.team.logo ?? null;
+  const imageFallback = playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder';
 
   return {
     image: null,
@@ -94,6 +98,9 @@ async function resolvePlayerCardPayload(post) {
       playerId: payload.player.id,
       playerName: payload.player.displayName,
       jerseyNumber: payload.player.jerseyNumber ?? null,
+      playerImage,
+      teamLogo,
+      imageFallback,
       summary: {
         gamesCount: payload.summary.gamesCount,
         pointsPerGame: payload.summary.pointsPerGame,
@@ -116,6 +123,7 @@ async function resolveTeamCardPayload(post) {
     teamCard: {
       teamId: payload.team.id,
       teamName: payload.team.name,
+      teamLogo: payload.team.logo ?? null,
       summary: {
         gamesCount: payload.summary.gamesCount,
         points: payload.summary.points,
