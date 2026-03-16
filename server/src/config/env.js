@@ -41,6 +41,11 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
   CLOUDINARY_FOLDER: z.string().default('tsw/feed'),
+  TEAM_LOGO_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(2 * 1024 * 1024),
   FEED_IMAGE_MAX_BYTES: z.coerce
     .number()
     .int()

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 
@@ -186,9 +187,23 @@ export function PublicPlayerPage() {
             {data.team.name}
           </Link>
         </p>
-        <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-          {playerLabel}
-        </h1>
+        <div className="mt-3 flex items-start gap-4">
+          <img
+            src={data.team.logo?.url || placeholderLogo}
+            alt={`${data.team.name} logo`}
+            className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
+          />
+          <div>
+            <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+              {playerLabel}
+            </h1>
+            {data.player.position ? (
+              <p className="mt-2 inline-flex rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                {data.player.position}
+              </p>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

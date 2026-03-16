@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { teamsApi } from '../api/teamsApi';
 
 export function TeamsPage() {
@@ -136,13 +137,35 @@ export function TeamsPage() {
                 key={team.id || team._id || team.name}
                 className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2"
               >
-                <div>
-                  <p className="text-sm font-medium text-slate-900">
-                    {team.name || 'Unnamed Team'}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Active roster: {(team.players || []).filter((player) => player.isActive).length}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={team.logo?.url || placeholderLogo}
+                    alt={`${team.name || 'Team'} logo`}
+                    className="h-12 w-12 rounded-xl border border-slate-200 bg-white object-cover"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      {team.name || 'Unnamed Team'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Active roster:{' '}
+                      {(team.players || []).filter((player) => player.isActive).length}
+                    </p>
+                    {team.colors?.length ? (
+                      <div
+                        className="mt-1 flex gap-1"
+                        aria-label={`${team.name || 'Team'} colours`}
+                      >
+                        {team.colors.map((color) => (
+                          <span
+                            key={color}
+                            className="h-3 w-3 rounded-full border border-slate-300"
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 {team.id ? (
                   <Link

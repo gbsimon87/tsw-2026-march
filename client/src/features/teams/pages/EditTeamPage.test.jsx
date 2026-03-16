@@ -18,6 +18,8 @@ vi.mock('../api/teamsApi', () => ({
   teamsApi: {
     getById: vi.fn(),
     update: vi.fn(),
+    uploadLogo: vi.fn(),
+    removeLogo: vi.fn(),
     updatePlayer: vi.fn(),
     removePlayer: vi.fn(),
   },
@@ -47,8 +49,21 @@ describe('EditTeamPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW A',
+        logo: null,
+        colors: ['#112233'],
+        homeVenue: {
+          arenaName: 'Main Gym',
+          addressLine1: '123 Court St',
+          addressLine2: null,
+          city: 'Toronto',
+          state: 'ON',
+          postalCode: 'M5V 1A1',
+          country: 'Canada',
+        },
         updatedAt: '2026-03-11T00:00:00.000Z',
-        players: [{ id: 'p1', displayName: 'Jordan', jerseyNumber: 23, isActive: true }],
+        players: [
+          { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, position: 'PG', isActive: true },
+        ],
       },
     });
     teamsApi.update.mockResolvedValue({
@@ -74,6 +89,16 @@ describe('EditTeamPage', () => {
     await waitFor(() => {
       expect(teamsApi.update).toHaveBeenCalledWith('team-1', {
         name: 'TSW Blue',
+        colors: ['#112233'],
+        homeVenue: {
+          arenaName: 'Main Gym',
+          addressLine1: '123 Court St',
+          addressLine2: '',
+          city: 'Toronto',
+          state: 'ON',
+          postalCode: 'M5V 1A1',
+          country: 'Canada',
+        },
       });
     });
 
@@ -85,8 +110,13 @@ describe('EditTeamPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW A',
+        logo: null,
+        colors: [],
+        homeVenue: null,
         updatedAt: '2026-03-11T00:00:00.000Z',
-        players: [{ id: 'p1', displayName: 'Jordan', jerseyNumber: 23, isActive: true }],
+        players: [
+          { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, position: 'PG', isActive: true },
+        ],
       },
     });
     teamsApi.updatePlayer.mockResolvedValue({
@@ -94,7 +124,15 @@ describe('EditTeamPage', () => {
         id: 'team-1',
         name: 'TSW A',
         updatedAt: '2026-03-11T00:00:00.000Z',
-        players: [{ id: 'p1', displayName: 'Jordan Bell', jerseyNumber: 45, isActive: true }],
+        players: [
+          {
+            id: 'p1',
+            displayName: 'Jordan Bell',
+            jerseyNumber: 45,
+            position: 'SG',
+            isActive: true,
+          },
+        ],
       },
     });
 
@@ -111,17 +149,22 @@ describe('EditTeamPage', () => {
     fireEvent.change(screen.getByLabelText(/Jersey Number/i), {
       target: { value: '45' },
     });
+    fireEvent.change(screen.getByLabelText(/Position/i), {
+      target: { value: 'SG' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Save player Jordan Bell/i }));
 
     await waitFor(() => {
       expect(teamsApi.updatePlayer).toHaveBeenCalledWith('team-1', 'p1', {
         displayName: 'Jordan Bell',
         jerseyNumber: 45,
+        position: 'SG',
       });
     });
 
     expect(screen.getByDisplayValue('Jordan Bell')).toBeInTheDocument();
     expect(screen.getByDisplayValue('45')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SG')).toBeInTheDocument();
   });
 
   test('allows removing a player from the visible roster', async () => {
@@ -129,10 +172,13 @@ describe('EditTeamPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW A',
+        logo: null,
+        colors: [],
+        homeVenue: null,
         updatedAt: '2026-03-11T00:00:00.000Z',
         players: [
-          { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, isActive: true },
-          { id: 'p2', displayName: 'Casey', jerseyNumber: 4, isActive: true },
+          { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, position: null, isActive: true },
+          { id: 'p2', displayName: 'Casey', jerseyNumber: 4, position: null, isActive: true },
         ],
       },
     });
@@ -142,8 +188,8 @@ describe('EditTeamPage', () => {
         name: 'TSW A',
         updatedAt: '2026-03-11T00:00:00.000Z',
         players: [
-          { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, isActive: false },
-          { id: 'p2', displayName: 'Casey', jerseyNumber: 4, isActive: true },
+          { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, position: null, isActive: false },
+          { id: 'p2', displayName: 'Casey', jerseyNumber: 4, position: null, isActive: true },
         ],
       },
     });

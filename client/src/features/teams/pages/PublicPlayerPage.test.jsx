@@ -31,8 +31,8 @@ describe('PublicPlayerPage', () => {
 
   test('renders player hero, averages, and game log table', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
-      team: { id: 'team-1', name: 'TSW Varsity' },
-      player: { id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12 },
+      team: { id: 'team-1', name: 'TSW Varsity', logo: { url: 'https://example.com/logo.png' } },
+      player: { id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12, position: 'PG' },
       summary: {
         gamesCount: 2,
         points: 24,
@@ -109,6 +109,11 @@ describe('PublicPlayerPage', () => {
     });
 
     expect(teamsApi.getPublicPlayerById).toHaveBeenCalledWith('team-1', 'p1');
+    expect(screen.getByAltText('TSW Varsity logo')).toHaveAttribute(
+      'src',
+      'https://example.com/logo.png'
+    );
+    expect(screen.getByText('PG')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'TSW Varsity' })).toHaveAttribute(
       'href',
       '/teams/team-1'
@@ -153,8 +158,8 @@ describe('PublicPlayerPage', () => {
 
   test('renders zero-state game log when the player has no completed public games', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
-      team: { id: 'team-1', name: 'TSW Varsity' },
-      player: { id: 'p1', displayName: 'Alex Carter', jerseyNumber: null },
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null },
+      player: { id: 'p1', displayName: 'Alex Carter', jerseyNumber: null, position: null },
       summary: {
         gamesCount: 0,
         points: 0,

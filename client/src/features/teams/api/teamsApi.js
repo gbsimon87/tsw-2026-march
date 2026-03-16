@@ -25,6 +25,12 @@ export const teamsApi = {
   create(payload) {
     return apiClient.post('/teams', payload);
   },
+  uploadLogo(teamId, formData) {
+    return apiClient.postFormData(`/teams/${teamId}/logo`, formData);
+  },
+  removeLogo(teamId) {
+    return apiClient.delete(`/teams/${teamId}/logo`);
+  },
   addPlayer(teamId, payload) {
     return apiClient.post(`/teams/${teamId}/players`, payload);
   },

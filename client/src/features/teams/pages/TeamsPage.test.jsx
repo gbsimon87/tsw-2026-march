@@ -46,13 +46,19 @@ describe('TeamsPage', () => {
   test('renders team snapshot cards and edit links', async () => {
     teamsApi.list.mockResolvedValue({
       teams: [
-        { id: 't1', name: 'TSW A', players: [{ isActive: true }, { isActive: false }] },
-        { id: 't2', name: 'TSW B', players: [{ isActive: true }] },
-        { id: 't3', name: 'TSW C', players: [{ isActive: true }] },
-        { id: 't4', name: 'TSW D', players: [{ isActive: true }] },
-        { id: 't5', name: 'TSW E', players: [{ isActive: true }] },
-        { id: 't6', name: 'TSW F', players: [{ isActive: true }] },
-        { id: 't7', name: 'TSW G', players: [{ isActive: true }] },
+        {
+          id: 't1',
+          name: 'TSW A',
+          logo: { url: 'https://example.com/a.png' },
+          colors: ['#112233'],
+          players: [{ isActive: true }, { isActive: false }],
+        },
+        { id: 't2', name: 'TSW B', logo: null, colors: [], players: [{ isActive: true }] },
+        { id: 't3', name: 'TSW C', logo: null, colors: [], players: [{ isActive: true }] },
+        { id: 't4', name: 'TSW D', logo: null, colors: [], players: [{ isActive: true }] },
+        { id: 't5', name: 'TSW E', logo: null, colors: [], players: [{ isActive: true }] },
+        { id: 't6', name: 'TSW F', logo: null, colors: [], players: [{ isActive: true }] },
+        { id: 't7', name: 'TSW G', logo: null, colors: [], players: [{ isActive: true }] },
       ],
     });
 
@@ -64,6 +70,7 @@ describe('TeamsPage', () => {
 
     expect(screen.getByText('TSW F')).toBeInTheDocument();
     expect(screen.queryByText('TSW G')).not.toBeInTheDocument();
+    expect(screen.getByAltText('TSW A logo')).toHaveAttribute('src', 'https://example.com/a.png');
     expect(screen.getByRole('link', { name: /Edit TSW A/i })).toHaveAttribute(
       'href',
       '/teams/t1/edit'

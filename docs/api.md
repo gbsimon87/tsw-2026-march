@@ -74,9 +74,50 @@ Base path: `/api/v1`
 - `POST /teams`
 - `GET /teams`
 - `GET /teams/:teamId`
+- `POST /teams/:teamId/logo`
+- `DELETE /teams/:teamId/logo`
 - `POST /teams/:teamId/players`
 - `PATCH /teams/:teamId/players/:playerId`
 - `DELETE /teams/:teamId/players/:playerId`
+
+### Team Payload (`POST /teams`, `PATCH /teams/:teamId`)
+
+```json
+{
+  "name": "TSW Varsity",
+  "colors": ["#112233", "#d4af37"],
+  "homeVenue": {
+    "arenaName": "Scotiabank Arena",
+    "addressLine1": "40 Bay St",
+    "addressLine2": "",
+    "city": "Toronto",
+    "state": "ON",
+    "postalCode": "M5J 2X2",
+    "country": "Canada"
+  },
+  "players": [
+    {
+      "displayName": "Jane Doe",
+      "jerseyNumber": 12,
+      "position": "PG"
+    }
+  ]
+}
+```
+
+- `colors` accepts up to 3 hex values.
+- `homeVenue` is optional, but if present requires arena name, address line 1, city, state, postal code, and country.
+- `position` supports `PG`, `SG`, `SF`, `PF`, `C`.
+
+### Team Logo Upload (`POST /teams/:teamId/logo`)
+
+- Multipart form-data
+- Field name: `logo`
+- Accepted mime types: `image/jpeg`, `image/png`, `image/webp`
+
+### Team Logo Delete (`DELETE /teams/:teamId/logo`)
+
+- Removes the team logo metadata and attempts Cloudinary cleanup.
 
 ## Games
 

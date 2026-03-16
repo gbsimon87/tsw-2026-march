@@ -67,6 +67,18 @@ async function update(req, res) {
   res.status(200).json({ team });
 }
 
+async function uploadLogo(req, res) {
+  const userId = requireAuthUserId(req);
+  const team = await teamsService.uploadLogoForTeam(userId, req.params.teamId, req.file);
+  res.status(200).json({ team });
+}
+
+async function removeLogo(req, res) {
+  const userId = requireAuthUserId(req);
+  const team = await teamsService.removeLogoFromTeam(userId, req.params.teamId);
+  res.status(200).json({ team });
+}
+
 async function addPlayer(req, res) {
   const userId = requireAuthUserId(req);
   const payload = addPlayerSchema.parse(req.body);
@@ -106,6 +118,8 @@ module.exports = {
   getPublicOpponentBySlug,
   getEntitlements,
   update,
+  uploadLogo,
+  removeLogo,
   addPlayer,
   updatePlayer,
   removePlayer,

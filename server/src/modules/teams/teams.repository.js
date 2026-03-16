@@ -1,9 +1,34 @@
 const mongoose = require('mongoose');
 
+const logoSchema = new mongoose.Schema(
+  {
+    url: { type: String, default: null },
+    publicId: { type: String, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    mimeType: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+const homeVenueSchema = new mongoose.Schema(
+  {
+    arenaName: { type: String, trim: true, default: null },
+    addressLine1: { type: String, trim: true, default: null },
+    addressLine2: { type: String, trim: true, default: null },
+    city: { type: String, trim: true, default: null },
+    state: { type: String, trim: true, default: null },
+    postalCode: { type: String, trim: true, default: null },
+    country: { type: String, trim: true, default: null },
+  },
+  { _id: false }
+);
+
 const playerSchema = new mongoose.Schema(
   {
     displayName: { type: String, required: true, trim: true },
     jerseyNumber: { type: Number },
+    position: { type: String, enum: ['PG', 'SG', 'SF', 'PF', 'C'], default: null },
     isActive: { type: Boolean, default: true },
   },
   { _id: true }
@@ -13,6 +38,9 @@ const teamSchema = new mongoose.Schema(
   {
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true, trim: true },
+    logo: { type: logoSchema, default: null },
+    colors: { type: [String], default: [] },
+    homeVenue: { type: homeVenueSchema, default: null },
     players: { type: [playerSchema], default: [] },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     subscriptionStatus: {

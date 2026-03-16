@@ -35,9 +35,20 @@ describe('PublicTeamPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW Varsity',
+        logo: { url: 'https://example.com/logo.png' },
+        colors: ['#112233', '#d4af37'],
+        homeVenue: {
+          arenaName: 'Main Gym',
+          addressLine1: '123 Court St',
+          addressLine2: null,
+          city: 'Toronto',
+          state: 'ON',
+          postalCode: 'M5V 1A1',
+          country: 'Canada',
+        },
         players: [
-          { id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12 },
-          { id: 'p2', displayName: 'Jordan Lee', jerseyNumber: null },
+          { id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12, position: 'PG' },
+          { id: 'p2', displayName: 'Jordan Lee', jerseyNumber: null, position: 'C' },
         ],
       },
       summary: {
@@ -62,6 +73,7 @@ describe('PublicTeamPage', () => {
               dreb: 4,
               reb: 6,
               points: 23,
+              position: 'PG',
               gamesPlayed: 1,
               pointsPerGame: 23,
               assistsPerGame: 4,
@@ -81,6 +93,7 @@ describe('PublicTeamPage', () => {
               dreb: 5,
               reb: 6,
               points: 2,
+              position: 'C',
               gamesPlayed: 1,
               pointsPerGame: 2,
               assistsPerGame: 2,
@@ -201,6 +214,12 @@ describe('PublicTeamPage', () => {
     });
 
     expect(screen.queryByRole('heading', { name: 'Roster' })).not.toBeInTheDocument();
+    expect(screen.getByAltText('TSW Varsity logo')).toHaveAttribute(
+      'src',
+      'https://example.com/logo.png'
+    );
+    expect(screen.getByText('Main Gym')).toBeInTheDocument();
+    expect(screen.getByLabelText('Team colours').children).toHaveLength(2);
     expect(screen.getByRole('link', { name: 'Alex Carter' })).toHaveAttribute(
       'href',
       '/teams/team-1/players/p1'
@@ -211,6 +230,7 @@ describe('PublicTeamPage', () => {
       '/teams/team-1/players/p2'
     );
     expect(screen.getByText('Completed Public Games')).toBeInTheDocument();
+    expect(screen.getByText('POS')).toBeInTheDocument();
     expect(screen.getByText('GP')).toBeInTheDocument();
     expect(screen.getByText('PPG')).toBeInTheDocument();
     expect(screen.getByText('PTS')).toBeInTheDocument();
@@ -231,6 +251,7 @@ describe('PublicTeamPage', () => {
     const headerCells = within(screen.getByRole('table')).getAllByRole('columnheader');
     expect(headerCells.map((cell) => cell.textContent.replace(/[↕▲▼]/g, '').trim())).toEqual([
       'Player',
+      'POS',
       'GP',
       'PPG',
       'PTS',
@@ -273,7 +294,10 @@ describe('PublicTeamPage', () => {
       team: {
         id: 'team-1',
         name: 'TSW Varsity',
-        players: [{ id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12 }],
+        logo: null,
+        colors: [],
+        homeVenue: null,
+        players: [{ id: 'p1', displayName: 'Alex Carter', jerseyNumber: 12, position: null }],
       },
       summary: {
         gamesCount: 0,
@@ -297,6 +321,7 @@ describe('PublicTeamPage', () => {
               dreb: 0,
               reb: 0,
               points: 0,
+              position: null,
               gamesPlayed: 0,
               pointsPerGame: 0,
               assistsPerGame: 0,

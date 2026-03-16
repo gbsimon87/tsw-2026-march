@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 
@@ -39,6 +40,26 @@ function gameTimeValue(game) {
 
 function formatPerGameValue(value) {
   return Number.isFinite(value) ? value.toFixed(1) : '0.0';
+}
+
+function formatVenue(homeVenue) {
+  if (!homeVenue?.arenaName) {
+    return null;
+  }
+
+  const addressParts = [
+    homeVenue.addressLine1,
+    homeVenue.addressLine2,
+    homeVenue.city,
+    homeVenue.state,
+    homeVenue.postalCode,
+    homeVenue.country,
+  ].filter(Boolean);
+
+  return {
+    arenaName: homeVenue.arenaName,
+    address: addressParts.join(', '),
+  };
 }
 
 function PublicGameRow({ game }) {
@@ -155,6 +176,13 @@ export function PublicTeamPage() {
       ),
     },
     {
+      id: 'pos',
+      label: 'POS',
+      align: 'left',
+      sortValue: (row) => row.position || '',
+      render: (row) => row.position || '—',
+    },
+    {
       id: 'gp',
       label: 'GP',
       align: 'right',
@@ -247,9 +275,38 @@ export function PublicTeamPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
           Public Team Page
         </p>
-        <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-          {data.team.name}
-        </h1>
+        <div className="mt-3 flex items-start gap-4">
+          <img
+            src={data.team.logo?.url || placeholderLogo}
+            alt={`${data.team.name} logo`}
+            className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover"
+          />
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+              {data.team.name}
+            </h1>
+            {data.team.colors?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2" aria-label="Team colours">
+                {data.team.colors.map((color) => (
+                  <span
+                    key={color}
+                    className="h-5 w-5 rounded-full border border-slate-300"
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {formatVenue(data.team.homeVenue) ? (
+              <div className="mt-3 text-sm text-slate-600">
+                <p className="font-medium text-slate-800">
+                  {formatVenue(data.team.homeVenue).arenaName}
+                </p>
+                <p>{formatVenue(data.team.homeVenue).address}</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

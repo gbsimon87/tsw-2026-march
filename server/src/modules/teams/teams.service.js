@@ -17,6 +17,15 @@ const {
 const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
+const {
+  uploadImageBuffer,
+  destroyImage,
+  isCloudinaryConfigured,
+} = require('../feed/cloudinary.client');
+const { env } = require('../../config/env');
+
+const PLAYER_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C']);
+const TEAM_LOGO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function normalizeName(name) {
   return String(name || '')
@@ -45,16 +54,90 @@ function sanitizeTeam(team) {
     id: String(team._id),
     name: team.name,
     ownerUserId: String(team.ownerUserId),
+    logo: sanitizeLogo(team.logo),
+    colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
+    homeVenue: sanitizeVenue(team.homeVenue),
     billing: getBillingSummary(team),
     entitlements: getTeamEntitlements(team),
     players: team.players.map((player) => ({
       id: String(player._id),
       displayName: player.displayName,
       jerseyNumber: player.jerseyNumber ?? null,
+      position: normalizePlayerPosition(player.position),
       isActive: Boolean(player.isActive),
     })),
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
+  };
+}
+
+function normalizeHexColor(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+function normalizePlayerPosition(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return PLAYER_POSITIONS.has(normalized) ? normalized : null;
+}
+
+function normalizeVenue(input) {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+
+  const normalized = {
+    arenaName: String(input.arenaName || '').trim(),
+    addressLine1: String(input.addressLine1 || '').trim(),
+    addressLine2: String(input.addressLine2 || '').trim(),
+    city: String(input.city || '').trim(),
+    state: String(input.state || '').trim(),
+    postalCode: String(input.postalCode || '').trim(),
+    country: String(input.country || '').trim(),
+  };
+
+  const hasAnyValue = Object.values(normalized).some(Boolean);
+  if (!hasAnyValue) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function sanitizeVenue(input) {
+  const normalized = normalizeVenue(input);
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    arenaName: normalized.arenaName,
+    addressLine1: normalized.addressLine1,
+    addressLine2: normalized.addressLine2 || null,
+    city: normalized.city,
+    state: normalized.state,
+    postalCode: normalized.postalCode,
+    country: normalized.country,
+  };
+}
+
+function sanitizeLogo(logo) {
+  if (!logo?.url) {
+    return null;
+  }
+
+  return {
+    url: logo.url,
+    width: logo.width ?? null,
+    height: logo.height ?? null,
   };
 }
 
@@ -111,6 +194,7 @@ function sanitizePublicPlayer(player) {
     id: String(player._id),
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
+    position: normalizePlayerPosition(player.position),
   };
 }
 
@@ -185,8 +269,10 @@ function buildPublicTeamSummary(games, team) {
     { includeInactivePlayers: true }
   );
 
+  const playersById = new Map((team.players || []).map((player) => [String(player._id), player]));
   const playerSummaries = boxScore.players.map((row) => ({
     ...row,
+    position: normalizePlayerPosition(playersById.get(String(row.playerId))?.position),
     gamesPlayed: gamesCount,
     pointsPerGame: gamesCount > 0 ? row.points / gamesCount : 0,
     assistsPerGame: gamesCount > 0 ? row.ast / gamesCount : 0,
@@ -277,6 +363,7 @@ async function createTeamForUser(userId, payload) {
   const players = (payload.players || []).map((player) => ({
     displayName: player.displayName.trim(),
     jerseyNumber: player.jerseyNumber,
+    position: normalizePlayerPosition(player.position),
     isActive: true,
   }));
 
@@ -285,6 +372,8 @@ async function createTeamForUser(userId, payload) {
   const team = await createTeam({
     ownerUserId: userId,
     name: payload.name.trim(),
+    colors: (payload.colors || []).map(normalizeHexColor).filter(Boolean),
+    homeVenue: normalizeVenue(payload.homeVenue),
     players,
   });
 
@@ -338,12 +427,16 @@ async function getPublicTeam(teamId) {
       id: String(player._id),
       displayName: player.displayName,
       jerseyNumber: player.jerseyNumber ?? null,
+      position: normalizePlayerPosition(player.position),
     }));
 
   return {
     team: {
       id: String(team._id),
       name: team.name,
+      logo: sanitizeLogo(team.logo),
+      colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
+      homeVenue: sanitizeVenue(team.homeVenue),
       entitlements: getTeamEntitlements(team),
       players,
     },
@@ -376,6 +469,9 @@ async function getPublicPlayer(teamId, playerId) {
     team: {
       id: String(team._id),
       name: team.name,
+      logo: sanitizeLogo(team.logo),
+      colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
+      homeVenue: sanitizeVenue(team.homeVenue),
       entitlements: getTeamEntitlements(team),
     },
     player: sanitizePublicPlayer(player),
@@ -505,7 +601,87 @@ async function updateTeamForUser(userId, teamId, payload) {
     team.name = payload.name.trim();
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, 'colors')) {
+    team.colors = (payload.colors || []).map(normalizeHexColor).filter(Boolean);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'homeVenue')) {
+    team.homeVenue = normalizeVenue(payload.homeVenue);
+  }
+
+  if (payload.removeLogo && team.logo?.publicId) {
+    const previousLogoPublicId = team.logo.publicId;
+    team.logo = null;
+    await saveTeam(team);
+    await destroyImage(previousLogoPublicId).catch(() => null);
+    return sanitizeTeam(team);
+  }
+
   await saveTeam(team);
+  return sanitizeTeam(team);
+}
+
+async function uploadLogoForTeam(userId, teamId, file) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  if (!file) {
+    throw new ApiError(400, 'Logo file is required');
+  }
+
+  if (file.size > env.TEAM_LOGO_MAX_BYTES) {
+    throw new ApiError(400, 'Logo exceeds upload size limit');
+  }
+
+  if (!TEAM_LOGO_MIME_TYPES.has(file.mimetype)) {
+    throw new ApiError(400, 'Unsupported image type');
+  }
+
+  if (!isCloudinaryConfigured()) {
+    throw new ApiError(500, 'Cloudinary is not configured');
+  }
+
+  const previousLogo = team.logo
+    ? {
+        publicId: team.logo.publicId || null,
+      }
+    : null;
+
+  const upload = await uploadImageBuffer(file);
+
+  try {
+    team.logo = {
+      url: upload.secure_url,
+      publicId: upload.public_id,
+      width: upload.width ?? null,
+      height: upload.height ?? null,
+      mimeType: file.mimetype,
+    };
+    await saveTeam(team);
+  } catch (error) {
+    await destroyImage(upload.public_id).catch(() => null);
+    throw error;
+  }
+
+  if (previousLogo?.publicId && previousLogo.publicId !== upload.public_id) {
+    await destroyImage(previousLogo.publicId).catch(() => null);
+  }
+
+  return sanitizeTeam(team);
+}
+
+async function removeLogoFromTeam(userId, teamId) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) {
+    throw new ApiError(404, 'Team not found');
+  }
+
+  const previousLogoPublicId = team.logo?.publicId || null;
+  team.logo = null;
+  await saveTeam(team);
+  await destroyImage(previousLogoPublicId).catch(() => null);
   return sanitizeTeam(team);
 }
 
@@ -527,6 +703,7 @@ async function addPlayerToTeam(userId, teamId, payload) {
   team.players.push({
     displayName: payload.displayName.trim(),
     jerseyNumber: payload.jerseyNumber,
+    position: normalizePlayerPosition(payload.position),
     isActive: true,
   });
 
@@ -563,6 +740,10 @@ async function updatePlayerOnTeam(userId, teamId, playerId, payload) {
 
   if (Object.prototype.hasOwnProperty.call(payload, 'jerseyNumber')) {
     player.jerseyNumber = payload.jerseyNumber ?? undefined;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'position')) {
+    player.position = normalizePlayerPosition(payload.position);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'isActive')) {
@@ -602,6 +783,8 @@ module.exports = {
   buildPublicPlayerSummary,
   slugifyOpponentName,
   updateTeamForUser,
+  uploadLogoForTeam,
+  removeLogoFromTeam,
   addPlayerToTeam,
   updatePlayerOnTeam,
   deactivatePlayerOnTeam,
