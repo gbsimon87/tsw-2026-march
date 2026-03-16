@@ -8,42 +8,105 @@ const tabs = [
   { value: 'team', label: 'Team' },
 ];
 
-export function FeedComposer({ onCreated, onCancel }) {
-  const [activeTab, setActiveTab] = useState('image');
+function mergeInitialGameOption(games, initialGameOption) {
+  if (!initialGameOption?.id) {
+    return games || [];
+  }
+
+  const currentGames = games || [];
+  if (currentGames.some((game) => game.id === initialGameOption.id)) {
+    return currentGames;
+  }
+
+  return [initialGameOption, ...currentGames];
+}
+
+function mergeInitialTeamOption(teams, initialTeamOption) {
+  if (!initialTeamOption?.id) {
+    return teams || [];
+  }
+
+  const currentTeams = teams || [];
+  if (currentTeams.some((team) => team.id === initialTeamOption.id)) {
+    return currentTeams;
+  }
+
+  return [initialTeamOption, ...currentTeams];
+}
+
+function mergeInitialPlayerOption(players, initialPlayerOption) {
+  if (!initialPlayerOption?.id) {
+    return players || [];
+  }
+
+  const currentPlayers = players || [];
+  if (currentPlayers.some((player) => player.id === initialPlayerOption.id)) {
+    return currentPlayers;
+  }
+
+  return [initialPlayerOption, ...currentPlayers];
+}
+
+export function FeedComposer({
+  onCreated,
+  onCancel,
+  initialTab = 'image',
+  initialSelectedGameId = '',
+  initialGameOption = null,
+  initialSelectedTeamId = '',
+  initialTeamOption = null,
+  initialSelectedPlayer = { teamId: '', playerId: '' },
+  initialPlayerOption = null,
+}) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [caption, setCaption] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState({ game: '', player: '', team: '' });
-  const [options, setOptions] = useState({ games: [], players: [], teams: [] });
-  const [selectedGameId, setSelectedGameId] = useState('');
-  const [selectedPlayer, setSelectedPlayer] = useState({ teamId: '', playerId: '' });
-  const [selectedTeamId, setSelectedTeamId] = useState('');
+  const [options, setOptions] = useState({
+    games: mergeInitialGameOption([], initialGameOption),
+    players: mergeInitialPlayerOption([], initialPlayerOption),
+    teams: mergeInitialTeamOption([], initialTeamOption),
+  });
+  const [selectedGameId, setSelectedGameId] = useState(initialSelectedGameId);
+  const [selectedPlayer, setSelectedPlayer] = useState(initialSelectedPlayer);
+  const [selectedTeamId, setSelectedTeamId] = useState(initialSelectedTeamId);
 
   useEffect(() => {
-    feedApi
-      .listShareableGames(search.game)
-      .then((result) => setOptions((current) => ({ ...current, games: result.games || [] })));
+    feedApi.listShareableGames(search.game).then((result) =>
+      setOptions((current) => ({
+        ...current,
+        games: mergeInitialGameOption(result.games || [], initialGameOption),
+      }))
+    );
   }, [search.game]);
 
   useEffect(() => {
-    feedApi
-      .listShareablePlayers(search.player)
-      .then((result) => setOptions((current) => ({ ...current, players: result.players || [] })));
+    feedApi.listShareablePlayers(search.player).then((result) =>
+      setOptions((current) => ({
+        ...current,
+        players: mergeInitialPlayerOption(result.players || [], initialPlayerOption),
+      }))
+    );
   }, [search.player]);
 
   useEffect(() => {
-    feedApi
-      .listShareableTeams(search.team)
-      .then((result) => setOptions((current) => ({ ...current, teams: result.teams || [] })));
+    feedApi.listShareableTeams(search.team).then((result) =>
+      setOptions((current) => ({
+        ...current,
+        teams: mergeInitialTeamOption(result.teams || [], initialTeamOption),
+      }))
+    );
   }, [search.team]);
 
   function reset() {
+    setActiveTab(initialTab);
     setCaption('');
     setImageFile(null);
-    setSelectedGameId('');
-    setSelectedPlayer({ teamId: '', playerId: '' });
-    setSelectedTeamId('');
+    setSelectedGameId(initialSelectedGameId);
+    setSelectedPlayer(initialSelectedPlayer);
+    setSelectedTeamId(initialSelectedTeamId);
     setError('');
   }
 

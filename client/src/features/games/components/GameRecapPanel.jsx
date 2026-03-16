@@ -36,7 +36,70 @@ function formatMomentTime(value) {
   });
 }
 
-export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking = false }) {
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M12.5 4.5h3v3M8 12l7.5-7.5M15.5 10.5v4a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DownloadIcon({ downloaded = false }) {
+  if (downloaded) {
+    return (
+      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+        <path
+          d="m5 10 3.2 3.2L15 6.5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13.5v1a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FeedIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M4 14.5V5.5a1 1 0 0 1 1-1h7.2a1 1 0 0 1 .6.2l2.2 1.7a1 1 0 0 1 .4.8v7.3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1ZM7 8h5.5M7 11h5.5M7 14h3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function GameRecapPanel({
+  gameId,
+  game,
+  team,
+  recap,
+  canContinueTracking = false,
+  onShareToFeed,
+}) {
   const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
   const recapCardDataUrl = createRecapCardDataUrl(recap, { teamLogoUrl: team?.logo?.url || null });
@@ -151,16 +214,29 @@ export function GameRecapPanel({ gameId, game, team, recap, canContinueTracking 
             <button
               type="button"
               onClick={shareImageCard}
-              className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+              aria-label="Share image card"
+              title="Share image card"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
-              Share Card
+              <ShareIcon />
             </button>
             <button
               type="button"
               onClick={downloadCard}
-              className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
+              aria-label="Download image card"
+              title={imageState === 'downloaded' ? 'Downloaded' : 'Download image card'}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
-              {imageState === 'downloaded' ? 'Card Downloaded' : 'Download Card'}
+              <DownloadIcon downloaded={imageState === 'downloaded'} />
+            </button>
+            <button
+              type="button"
+              onClick={onShareToFeed}
+              aria-label="Share to feed"
+              title="Share to feed"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              <FeedIcon />
             </button>
           </div>
         </div>

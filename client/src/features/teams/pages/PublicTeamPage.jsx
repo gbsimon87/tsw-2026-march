@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../../app/store/AuthContext';
+import { Modal } from '../../../components/ui/Modal';
+import { FeedComposer } from '../../feed/components/FeedComposer';
+import { TeamCardPost } from '../../feed/components/posts/TeamCardPost';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
+import { buildTeamCardPreview } from '../shareCardPayloads';
 
 function formatGameDate(game) {
   const rawValue = game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -98,10 +103,14 @@ function PublicGameRow({ game }) {
 
 export function PublicTeamPage() {
   const { teamId } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [areAllGamesVisible, setAreAllGamesVisible] = useState(false);
   const [error, setError] = useState('');
+  const [feedPostState, setFeedPostState] = useState('');
 
   useEffect(() => {
     teamsApi
@@ -127,6 +136,17 @@ export function PublicTeamPage() {
 
   const visibleUpcomingGames = areAllGamesVisible ? upcomingGames : upcomingGames.slice(0, 5);
   const visibleRecentGames = areAllGamesVisible ? recentGames : recentGames.slice(0, 5);
+  const isFeedComposerOpen = searchParams.get('composeFeedTeam') === '1';
+
+  function updateSearchParam(name, value) {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value == null) {
+      nextParams.delete(name);
+    } else {
+      nextParams.set(name, value);
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
 
   if (isLoading) {
     return <p className="text-sm">Loading team...</p>;
@@ -159,6 +179,29 @@ export function PublicTeamPage() {
       },
     },
   };
+  const teamCardPreview = buildTeamCardPreview(data);
+
+  function closeFeedComposer() {
+    updateSearchParam('composeFeedTeam', null);
+  }
+
+  function openFeedComposer() {
+    if (user) {
+      updateSearchParam('composeFeedTeam', '1');
+      return;
+    }
+
+    const returnUrl = `/teams/${teamId}?composeFeedTeam=1`;
+    navigate(`/login?redirectTo=${encodeURIComponent(returnUrl)}`);
+  }
+
+  function onFeedPostCreated() {
+    closeFeedComposer();
+    setFeedPostState('posted');
+    window.setTimeout(() => {
+      setFeedPostState((current) => (current === 'posted' ? '' : current));
+    }, 1500);
+  }
 
   const playerColumns = [
     {
@@ -310,6 +353,24 @@ export function PublicTeamPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Shareable Team Card</h2>
+          </div>
+          <button
+            type="button"
+            onClick={openFeedComposer}
+            className="inline-flex rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+          >
+            Post to Feed
+          </button>
+        </div>
+        <div className="mt-5">
+          <TeamCardPost teamCard={teamCardPreview} interactive={false} />
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2">
           <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -382,6 +443,20 @@ export function PublicTeamPage() {
           </div>
         </div>
       </section>
+
+      {feedPostState === 'posted' ? (
+        <p className="text-sm font-medium text-emerald-700">Posted to feed</p>
+      ) : null}
+
+      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to Feed">
+        <FeedComposer
+          initialTab="team"
+          initialSelectedTeamId={data.team.id}
+          initialTeamOption={{ id: data.team.id, name: data.team.name }}
+          onCreated={onFeedPostCreated}
+          onCancel={closeFeedComposer}
+        />
+      </Modal>
     </main>
   );
 }

@@ -5,10 +5,32 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PublicTeamPage } from './PublicTeamPage';
 import { teamsApi } from '../api/teamsApi';
 
+const authMocks = vi.hoisted(() => ({
+  useAuth: vi.fn(() => ({ user: null })),
+}));
+
+const feedApiMocks = vi.hoisted(() => ({
+  listShareableGames: vi.fn(),
+  listShareablePlayers: vi.fn(),
+  listShareableTeams: vi.fn(),
+  createImagePost: vi.fn(),
+  createGameCardPost: vi.fn(),
+  createPlayerCardPost: vi.fn(),
+  createTeamCardPost: vi.fn(),
+}));
+
 vi.mock('../api/teamsApi', () => ({
   teamsApi: {
     getPublicById: vi.fn(),
   },
+}));
+
+vi.mock('../../../app/store/AuthContext', () => ({
+  useAuth: authMocks.useAuth,
+}));
+
+vi.mock('../../feed/api/feedApi', () => ({
+  feedApi: feedApiMocks,
 }));
 
 function renderPage() {
@@ -24,6 +46,11 @@ function renderPage() {
 describe('PublicTeamPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authMocks.useAuth.mockReturnValue({ user: null });
+    feedApiMocks.listShareableGames.mockResolvedValue({ games: [] });
+    feedApiMocks.listShareablePlayers.mockResolvedValue({ players: [] });
+    feedApiMocks.listShareableTeams.mockResolvedValue({ teams: [] });
+    feedApiMocks.createTeamCardPost.mockResolvedValue({ post: { id: 'post-1' } });
   });
 
   afterEach(() => {
@@ -210,7 +237,7 @@ describe('PublicTeamPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('TSW Varsity')).toBeInTheDocument();
+      expect(screen.getAllByText('TSW Varsity').length).toBeGreaterThan(0);
     });
 
     expect(screen.queryByRole('heading', { name: 'Roster' })).not.toBeInTheDocument();
@@ -218,6 +245,8 @@ describe('PublicTeamPage', () => {
       'src',
       'https://example.com/logo.png'
     );
+    expect(screen.getByText('Shareable Team Card')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Post to Feed' })).toBeInTheDocument();
     expect(screen.getByText('Main Gym')).toBeInTheDocument();
     expect(screen.getByLabelText('Team colours').children).toHaveLength(2);
     expect(screen.getByRole('link', { name: 'Alex Carter' })).toHaveAttribute(
@@ -367,5 +396,71 @@ describe('PublicTeamPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Team not found/i)).toBeInTheDocument();
     });
+  });
+
+  test('opens prefilled team composer for logged-in users', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
+    teamsApi.getPublicById.mockResolvedValue({
+      team: {
+        id: 'team-1',
+        name: 'TSW Varsity',
+        logo: null,
+        colors: [],
+        homeVenue: null,
+        players: [],
+      },
+      summary: {
+        gamesCount: 1,
+        points: 72,
+        fg2: { made: 20, missed: 12, attempts: 32, percentage: 62.5 },
+        fg3: { made: 8, missed: 10, attempts: 18, percentage: 44.444 },
+        ft: { made: 8, missed: 3, attempts: 11, percentage: 72.727 },
+        boxScore: { players: [], teamTotals: {} },
+      },
+      games: [],
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Post to Feed' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Post to Feed' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Team' })).toHaveClass('bg-slate-900');
+    expect(screen.getByRole('combobox')).toHaveValue('team-1');
+  });
+
+  test('redirects logged-out users to login when posting to feed', async () => {
+    teamsApi.getPublicById.mockResolvedValue({
+      team: {
+        id: 'team-1',
+        name: 'TSW Varsity',
+        logo: null,
+        colors: [],
+        homeVenue: null,
+        players: [],
+      },
+      summary: {
+        gamesCount: 1,
+        points: 72,
+        fg2: { made: 20, missed: 12, attempts: 32, percentage: 62.5 },
+        fg3: { made: 8, missed: 10, attempts: 18, percentage: 44.444 },
+        ft: { made: 8, missed: 3, attempts: 11, percentage: 72.727 },
+        boxScore: { players: [], teamTotals: {} },
+      },
+      games: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/teams/team-1']}>
+        <Routes>
+          <Route path="/teams/:teamId" element={<PublicTeamPage />} />
+          <Route path="/login" element={<p>Login Page</p>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: 'Post to Feed' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Post to Feed' }));
+    expect(await screen.findByText('Login Page')).toBeInTheDocument();
   });
 });

@@ -1,10 +1,20 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
 
 const apiMocks = vi.hoisted(() => ({
   getById: vi.fn(),
+}));
+
+const feedApiMocks = vi.hoisted(() => ({
+  listShareableGames: vi.fn(),
+  listShareablePlayers: vi.fn(),
+  listShareableTeams: vi.fn(),
+  createImagePost: vi.fn(),
+  createGameCardPost: vi.fn(),
+  createPlayerCardPost: vi.fn(),
+  createTeamCardPost: vi.fn(),
 }));
 
 const authMocks = vi.hoisted(() => ({
@@ -15,16 +25,37 @@ vi.mock('../api/gamesApi', () => ({
   gamesApi: apiMocks,
 }));
 
+vi.mock('../../feed/api/feedApi', () => ({
+  feedApi: feedApiMocks,
+}));
+
 vi.mock('../../../app/store/AuthContext', () => ({
   useAuth: authMocks.useAuth,
 }));
 
 describe('GameDetailPage', () => {
+  function LocationProbe() {
+    const location = useLocation();
+
+    return (
+      <div data-testid="location-probe">
+        {location.pathname}
+        {location.search}
+      </div>
+    );
+  }
+
   beforeEach(() => {
     cleanup();
     apiMocks.getById.mockReset();
     authMocks.useAuth.mockReset();
     authMocks.useAuth.mockReturnValue({ user: null });
+    feedApiMocks.listShareableGames.mockResolvedValue({ games: [] });
+    feedApiMocks.listShareablePlayers.mockResolvedValue({ players: [] });
+    feedApiMocks.listShareableTeams.mockResolvedValue({ teams: [] });
+    feedApiMocks.createGameCardPost.mockResolvedValue({
+      post: { id: 'post-1', type: 'game_card' },
+    });
     global.File = class MockFile {
       constructor(parts, name, options = {}) {
         this.parts = parts;
@@ -43,6 +74,7 @@ describe('GameDetailPage', () => {
   });
 
   test('renders tabbed game detail sections and shot map interactions', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
     apiMocks.getById.mockResolvedValue({
       game: {
         id: 'game-1',
@@ -251,8 +283,11 @@ describe('GameDetailPage', () => {
     expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Game Info' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Share Card/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Download Card/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share image card' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download image card' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
+    expect(screen.queryByText('Share Card')).not.toBeInTheDocument();
+    expect(screen.queryByText('Download Card')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Share on WhatsApp/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Share by Email/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy Link/i })).not.toBeInTheDocument();
@@ -277,12 +312,26 @@ describe('GameDetailPage', () => {
     ).toHaveAttribute('href', '/teams/team-1/players/p1');
     expect(screen.queryByTestId('recap-shot-snapshot')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Share Card/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share image card' }));
     expect(navigator.share).toHaveBeenCalledTimes(1);
     const sharePayload = navigator.share.mock.calls[0][0];
     expect(sharePayload.url).toContain('/games/game-1');
     expect(sharePayload.text).toContain('TSW Team scored 4 points vs Wildcats');
     expect(sharePayload.files).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Game' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Game' })).toHaveClass('bg-slate-900');
+    expect(screen.getByRole('combobox')).toHaveValue('game-1');
+    fireEvent.change(screen.getByPlaceholderText('Write a caption (optional)'), {
+      target: { value: 'What a finish' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }));
+    expect(feedApiMocks.createGameCardPost).toHaveBeenCalledWith({
+      gameId: 'game-1',
+      caption: 'What a finish',
+    });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
     expect(screen.getByTestId('recap-shot-snapshot')).toBeInTheDocument();
@@ -360,6 +409,85 @@ describe('GameDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
     const boxScoreRows = within(screen.getAllByRole('table')[0]).getAllByRole('row');
     expect(within(boxScoreRows[1]).getByText('Alex')).toBeInTheDocument();
+  });
+
+  test('redirects logged-out users to login and preserves the resume share URL', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-1',
+        title: 'vs Wildcats',
+        status: 'completed',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'TSW Team',
+        players: [],
+        entitlements: { canViewReplay: false, canViewShotMaps: false },
+      },
+      teamEntitlements: {
+        canViewReplay: false,
+        canViewShotMaps: false,
+      },
+      recap: {
+        statusLabel: 'Final',
+        team: { id: 'team-1', name: 'TSW Team', points: 0 },
+        opponent: { name: 'Wildcats' },
+        topPerformers: [],
+        teamStats: {
+          points: 0,
+          fg2: { percentage: null },
+          fg3: { percentage: null },
+          ft: { percentage: null },
+          reb: 0,
+          ast: 0,
+        },
+        keyMoments: [],
+      },
+      boxScore: {
+        players: [],
+        teamTotals: {
+          ftm: 0,
+          fta: 0,
+          fg2m: 0,
+          fg2a: 0,
+          fg3m: 0,
+          fg3a: 0,
+          ast: 0,
+          oreb: 0,
+          dreb: 0,
+          reb: 0,
+          points: 0,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-1']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+          <Route
+            path="/login"
+            element={
+              <>
+                <p>Login Page</p>
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByText('Login Page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/login');
+    expect(decodeURIComponent(screen.getByTestId('location-probe').textContent || '')).toContain(
+      'redirectTo=/games/game-1?composeFeedGame=1'
+    );
   });
 
   test('locks replay for non-pro teams', async () => {

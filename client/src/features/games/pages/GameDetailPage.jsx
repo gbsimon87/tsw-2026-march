@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../../app/store/AuthContext';
 import { Tabs } from '../../../components/Tabs';
+import { Modal } from '../../../components/ui/Modal';
+import { FeedComposer } from '../../feed/components/FeedComposer';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameReplayPanel } from '../components/GameReplayPanel';
@@ -53,10 +56,16 @@ function canAccessReplay(team, entitlements) {
 
 export function GameDetailPage() {
   const { gameId } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAllEvents, setShowAllEvents] = useState(false);
+  const [feedPostState, setFeedPostState] = useState('');
+
+  const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
 
   useEffect(() => {
     gamesApi
@@ -263,6 +272,47 @@ export function GameDetailPage() {
     />
   );
 
+  function updateSearchParam(name, value) {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value == null) {
+      nextParams.delete(name);
+    } else {
+      nextParams.set(name, value);
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function closeFeedComposer() {
+    updateSearchParam('composeFeedGame', null);
+  }
+
+  function openFeedComposer() {
+    if (user) {
+      updateSearchParam('composeFeedGame', '1');
+      return;
+    }
+
+    const returnUrl = `/games/${gameId}?composeFeedGame=1`;
+    navigate(`/login?redirectTo=${encodeURIComponent(returnUrl)}`);
+  }
+
+  function onFeedPostCreated() {
+    closeFeedComposer();
+    setFeedPostState('posted');
+    window.setTimeout(() => {
+      setFeedPostState((current) => (current === 'posted' ? '' : current));
+    }, 1500);
+  }
+
+  const initialGameOption =
+    game?.id && team?.name
+      ? {
+          id: game.id,
+          team: { name: team.name },
+          opponent: game.opponent || game.title || recap?.opponent?.name || 'Opponent',
+        }
+      : null;
+
   return (
     <section className="space-y-4">
       <Tabs
@@ -278,6 +328,7 @@ export function GameDetailPage() {
                 gameId={game.id}
                 recap={recap}
                 canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
+                onShareToFeed={openFeedComposer}
               />
             ),
           },
@@ -286,7 +337,20 @@ export function GameDetailPage() {
         ]}
       />
 
+      {feedPostState === 'posted' ? (
+        <p className="text-sm font-medium text-emerald-700">Posted to feed</p>
+      ) : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to Feed">
+        <FeedComposer
+          initialTab="game"
+          initialSelectedGameId={game.id}
+          initialGameOption={initialGameOption}
+          onCreated={onFeedPostCreated}
+          onCancel={closeFeedComposer}
+        />
+      </Modal>
     </section>
   );
 }

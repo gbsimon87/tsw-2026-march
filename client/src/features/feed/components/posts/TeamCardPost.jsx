@@ -6,21 +6,16 @@ function formatPercentage(value) {
   return value == null ? '--' : `${value.toFixed(0)}%`;
 }
 
-export function TeamCardPost({ teamCard }) {
-  const [imageSrc, setImageSrc] = useState(() => getTeamCardImage(teamCard));
-
+function TeamCardContent({ imageSrc, teamCard, onImageError }) {
   return (
-    <Link
-      to={teamCard.teamUrl}
-      className="block rounded-2xl border border-slate-200 bg-gradient-to-br from-amber-50 via-white to-sky-50 p-5 transition hover:border-sky-300"
-    >
+    <>
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Team Card</p>
       <div className="mt-3 flex items-center gap-4">
         <img
           src={imageSrc}
           alt={`${teamCard.teamName} card logo`}
           className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
-          onError={() => setImageSrc(getTeamCardImage({}))}
+          onError={onImageError}
         />
         <div className="min-w-0">
           <h3 className="text-2xl font-bold text-slate-900">{teamCard.teamName}</h3>
@@ -53,6 +48,34 @@ export function TeamCardPost({ teamCard }) {
           </p>
         </article>
       </div>
+    </>
+  );
+}
+
+export function TeamCardPost({ teamCard, interactive = true }) {
+  const [imageSrc, setImageSrc] = useState(() => getTeamCardImage(teamCard));
+  const className =
+    'block rounded-2xl border border-slate-200 bg-gradient-to-br from-amber-50 via-white to-sky-50 p-5';
+
+  if (!interactive) {
+    return (
+      <article className={className}>
+        <TeamCardContent
+          imageSrc={imageSrc}
+          teamCard={teamCard}
+          onImageError={() => setImageSrc(getTeamCardImage({}))}
+        />
+      </article>
+    );
+  }
+
+  return (
+    <Link to={teamCard.teamUrl} className={`${className} transition hover:border-sky-300`}>
+      <TeamCardContent
+        imageSrc={imageSrc}
+        teamCard={teamCard}
+        onImageError={() => setImageSrc(getTeamCardImage({}))}
+      />
     </Link>
   );
 }

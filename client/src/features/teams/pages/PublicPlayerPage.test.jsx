@@ -4,10 +4,32 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PublicPlayerPage } from './PublicPlayerPage';
 import { teamsApi } from '../api/teamsApi';
 
+const authMocks = vi.hoisted(() => ({
+  useAuth: vi.fn(() => ({ user: null })),
+}));
+
+const feedApiMocks = vi.hoisted(() => ({
+  listShareableGames: vi.fn(),
+  listShareablePlayers: vi.fn(),
+  listShareableTeams: vi.fn(),
+  createImagePost: vi.fn(),
+  createGameCardPost: vi.fn(),
+  createPlayerCardPost: vi.fn(),
+  createTeamCardPost: vi.fn(),
+}));
+
 vi.mock('../api/teamsApi', () => ({
   teamsApi: {
     getPublicPlayerById: vi.fn(),
   },
+}));
+
+vi.mock('../../../app/store/AuthContext', () => ({
+  useAuth: authMocks.useAuth,
+}));
+
+vi.mock('../../feed/api/feedApi', () => ({
+  feedApi: feedApiMocks,
 }));
 
 function renderPage() {
@@ -23,6 +45,11 @@ function renderPage() {
 describe('PublicPlayerPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authMocks.useAuth.mockReturnValue({ user: null });
+    feedApiMocks.listShareableGames.mockResolvedValue({ games: [] });
+    feedApiMocks.listShareablePlayers.mockResolvedValue({ players: [] });
+    feedApiMocks.listShareableTeams.mockResolvedValue({ teams: [] });
+    feedApiMocks.createPlayerCardPost.mockResolvedValue({ post: { id: 'post-1' } });
   });
 
   afterEach(() => {
@@ -119,6 +146,8 @@ describe('PublicPlayerPage', () => {
       'src',
       'https://example.com/logo.png'
     );
+    expect(screen.queryByText('Shareable Player Card')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
     expect(screen.getByText('PG')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'TSW Varsity' })).toHaveAttribute(
       'href',
@@ -127,9 +156,9 @@ describe('PublicPlayerPage', () => {
     expect(screen.getByText('12.0')).toBeInTheDocument();
     expect(screen.getByText('5.0')).toBeInTheDocument();
     expect(screen.getByText('4.0')).toBeInTheDocument();
-    expect(screen.getByText('PPG').closest('section').querySelector('.grid')).toHaveClass(
-      'grid-cols-3'
-    );
+    expect(screen.getByText('PPG')).toBeInTheDocument();
+    expect(screen.getByText('RPG')).toBeInTheDocument();
+    expect(screen.getByText('APG')).toBeInTheDocument();
     expect(screen.getByText('Opponent')).toBeInTheDocument();
     expect(screen.getByText('Date')).toBeInTheDocument();
     expect(screen.getByText('FT')).toBeInTheDocument();
@@ -187,7 +216,7 @@ describe('PublicPlayerPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Alex Carter')).toBeInTheDocument();
+      expect(screen.getAllByText('Alex Carter').length).toBeGreaterThan(0);
     });
 
     expect(screen.getByText(/No completed public games yet/i)).toBeInTheDocument();
@@ -203,5 +232,73 @@ describe('PublicPlayerPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Player not found/i)).toBeInTheDocument();
     });
+  });
+
+  test('opens prefilled player composer for logged-in users', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null },
+      player: {
+        id: 'p1',
+        displayName: 'Alex Carter',
+        jerseyNumber: 12,
+        position: 'PG',
+        image: null,
+      },
+      summary: {
+        gamesCount: 2,
+        points: 24,
+        reb: 10,
+        ast: 8,
+        pointsPerGame: 12,
+        reboundsPerGame: 5,
+        assistsPerGame: 4,
+      },
+      games: [],
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Player' })).toHaveClass('bg-slate-900');
+    expect(screen.getByRole('combobox')).toHaveValue('p1');
+  });
+
+  test('redirects logged-out users to login when posting to feed', async () => {
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null },
+      player: {
+        id: 'p1',
+        displayName: 'Alex Carter',
+        jerseyNumber: null,
+        position: null,
+        image: null,
+      },
+      summary: {
+        gamesCount: 0,
+        points: 0,
+        reb: 0,
+        ast: 0,
+        pointsPerGame: 0,
+        reboundsPerGame: 0,
+        assistsPerGame: 0,
+      },
+      games: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/teams/team-1/players/p1']}>
+        <Routes>
+          <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
+          <Route path="/login" element={<p>Login Page</p>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByText('Login Page')).toBeInTheDocument();
   });
 });
