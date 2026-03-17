@@ -1,6 +1,7 @@
 services:
   - type: web
     name: tsw-2026-march-api-prod
+    plan: free
     runtime: node
     branch: main
     autoDeployTrigger: off
@@ -17,6 +18,8 @@ services:
         sync: false
       - key: MONGO_URI
         sync: false
+      - key: MONGO_DB_NAME
+        sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
@@ -28,9 +31,9 @@ services:
       - key: GOOGLE_CALLBACK_URL
         sync: false
       - key: SMTP_HOST
-        sync: false
+        value: smtp.gmail.com
       - key: SMTP_PORT
-        sync: false
+        value: 587
       - key: SMTP_SECURE
         value: false
       - key: SMTP_USER
@@ -49,9 +52,34 @@ services:
         sync: false
       - key: POSTHOG_HOST
         value: https://app.posthog.com
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_PRO_MONTHLY
+        sync: false
+      - key: STRIPE_SUCCESS_URL
+        sync: false
+      - key: STRIPE_CANCEL_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: tsw/feed/prod
+      - key: TEAM_LOGO_MAX_BYTES
+        value: 2097152
+      - key: FEED_IMAGE_MAX_BYTES
+        value: 5242880
+      - key: COOKIE_DOMAIN
+        sync: false
 
   - type: web
     name: tsw-2026-march-client-prod
+    plan: free
     runtime: static
     branch: main
     autoDeployTrigger: off
@@ -71,9 +99,12 @@ services:
         sync: false
       - key: VITE_POSTHOG_HOST
         value: https://app.posthog.com
+      - key: VITE_STRIPE_PUBLISHABLE_KEY
+        sync: false
 
   - type: web
     name: tsw-2026-march-api-dev
+    plan: free
     runtime: node
     branch: dev
     autoDeployTrigger: commit
@@ -90,6 +121,8 @@ services:
         sync: false
       - key: MONGO_URI
         sync: false
+      - key: MONGO_DB_NAME
+        sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
@@ -101,9 +134,9 @@ services:
       - key: GOOGLE_CALLBACK_URL
         sync: false
       - key: SMTP_HOST
-        sync: false
+        value: smtp.gmail.com
       - key: SMTP_PORT
-        sync: false
+        value: 587
       - key: SMTP_SECURE
         value: false
       - key: SMTP_USER
@@ -122,9 +155,34 @@ services:
         sync: false
       - key: POSTHOG_HOST
         value: https://app.posthog.com
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_PRO_MONTHLY
+        sync: false
+      - key: STRIPE_SUCCESS_URL
+        sync: false
+      - key: STRIPE_CANCEL_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: tsw/feed/dev
+      - key: TEAM_LOGO_MAX_BYTES
+        value: 2097152
+      - key: FEED_IMAGE_MAX_BYTES
+        value: 5242880
+      - key: COOKIE_DOMAIN
+        sync: false
 
   - type: web
     name: tsw-2026-march-client-dev
+    plan: free
     runtime: static
     branch: dev
     autoDeployTrigger: commit
@@ -144,3 +202,5 @@ services:
         sync: false
       - key: VITE_POSTHOG_HOST
         value: https://app.posthog.com
+      - key: VITE_STRIPE_PUBLISHABLE_KEY
+        sync: false

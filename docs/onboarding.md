@@ -17,7 +17,7 @@ bash scripts/bootstrap.sh
   - `env/server/.env.development`
   - `env/server/.env.production`
 - Use Atlas SRV MongoDB URI in both server env files.
-- Use `MONGO_DB_NAME=tsw_2026_dev` for development and `MONGO_DB_NAME=tsw_2026_main` for production.
+- Use `MONGO_DB_NAME=tsw_2026_dev` for development and `MONGO_DB_NAME=tsw_2026_prod` for production.
 - Optional: for local-only dev, set development `MONGO_URI` to `mongodb://127.0.0.1:27017`.
 - Configure separate prod/dev Google OAuth callback URLs.
 - Configure SMTP credentials for verification and password reset emails.

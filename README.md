@@ -224,7 +224,7 @@ Important Mongo setup:
 - Use Atlas SRV URI in both server env files.
 - Set different database names with `MONGO_DB_NAME`:
   - `env/server/.env.development` -> `MONGO_DB_NAME=tsw_2026_dev`
-  - `env/server/.env.production` -> `MONGO_DB_NAME=tsw_2026_main`
+  - `env/server/.env.production` -> `MONGO_DB_NAME=tsw_2026_prod`
 - Optional: for fully local Mongo, set development `MONGO_URI` to `mongodb://127.0.0.1:27017`
 
 Set at minimum:
