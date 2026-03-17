@@ -1,5 +1,17 @@
 # V1 Monetization Plan: Pricing Page + Stripe Billing Integration
 
+## Status
+
+Historical planning document.
+
+This plan captured the original monetization implementation scope before checkout/portal flows, webhook replay protection, team-level billing status refresh, and current billing docs were finalized in the app. Use it for background context only.
+
+Current billing guidance lives in:
+
+- [docs/billing.md](/Users/simoncordova/Desktop/Simon/tsw-2026-march/docs/billing.md)
+- [docs/stripe-development-setup.md](/Users/simoncordova/Desktop/Simon/tsw-2026-march/docs/stripe-development-setup.md)
+- [docs/status-snapshot-2026-03-17.md](/Users/simoncordova/Desktop/Simon/tsw-2026-march/docs/status-snapshot-2026-03-17.md)
+
 ## Summary
 
 Implement a first-pass monetization system for the app with:

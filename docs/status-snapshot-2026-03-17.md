@@ -167,7 +167,7 @@ Print mode already exists. The remaining work is to make it clean enough for act
 
 ### Milestone 4: Documentation Alignment
 
-Status: `In Progress`
+Status: `Done`
 
 #### Why it matters
 
@@ -192,7 +192,7 @@ The repo currently understates shipped scope and leaves contradictory implementa
 
 #### Next update
 
-- Mark the milestone done once README, roadmap, and historical plan docs no longer conflict with shipped behavior.
+- Revisit only when a later product milestone changes the current public product framing.
 
 ### Milestone 5: Reporting and Analytics Expansion
 
