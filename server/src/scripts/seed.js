@@ -23,17 +23,146 @@ const seedConfig = {
   password: 'password',
 };
 
-const playerBlueprints = [
-  { displayName: 'Avery Brooks', jerseyNumber: 1 },
-  { displayName: 'Jordan Hayes', jerseyNumber: 2 },
-  { displayName: 'Micah Reed', jerseyNumber: 3 },
-  { displayName: 'Drew Turner', jerseyNumber: 4 },
-  { displayName: 'Kai Bennett', jerseyNumber: 5 },
-  { displayName: 'Noah Foster', jerseyNumber: 6 },
-  { displayName: 'Evan Price', jerseyNumber: 7 },
-  { displayName: 'Blake Cooper', jerseyNumber: 8 },
-  { displayName: 'Logan Perry', jerseyNumber: 9 },
-  { displayName: 'Riley Morgan', jerseyNumber: 10 },
+const seedIdentityBlueprints = [
+  { userName: 'Mason Carter', teamName: 'Northside Falcons' },
+  { userName: 'Elena Brooks', teamName: 'Harbor Knights' },
+  { userName: 'Julian Price', teamName: 'Summit Rangers' },
+  { userName: 'Naomi Turner', teamName: 'Cedar Storm' },
+  { userName: 'Isaiah Reed', teamName: 'River City Owls' },
+  { userName: 'Camila Foster', teamName: 'Lakeshore Titans' },
+  { userName: 'Gabriel Hayes', teamName: 'Westbrook Blaze' },
+  { userName: 'Sienna Cooper', teamName: 'Pine Valley Wolves' },
+  { userName: 'Dominic Bennett', teamName: 'Eastview Comets' },
+  { userName: 'Ari Morgan', teamName: 'Metro Guardians' },
+  { userName: 'Leah Collins', teamName: 'Granite Eagles' },
+  { userName: 'Micah Sullivan', teamName: 'Hillcrest Vipers' },
+  { userName: 'Zoe Ramirez', teamName: 'Canyon Strikers' },
+  { userName: 'Caleb Ward', teamName: 'Southport Jets' },
+  { userName: 'Mila Jenkins', teamName: 'Redwood Waves' },
+  { userName: 'Owen Hughes', teamName: 'Stonebridge Royals' },
+];
+
+const playerNamePool = [
+  'Avery Brooks',
+  'Jordan Hayes',
+  'Micah Reed',
+  'Drew Turner',
+  'Kai Bennett',
+  'Noah Foster',
+  'Evan Price',
+  'Blake Cooper',
+  'Logan Perry',
+  'Riley Morgan',
+  'Tessa Coleman',
+  'Miles Griffin',
+  'Nora Simmons',
+  'Jace Bryant',
+  'Lila Warren',
+  'Calvin Ross',
+  'Sadie Webb',
+  'Theo Murphy',
+  'Maya Stone',
+  'Asher Bell',
+  'Layla Ortiz',
+  'Hudson James',
+  'Ruby Powell',
+  'Nathan Cruz',
+  'Clara Hughes',
+  'Roman Sanders',
+  'Ivy Jenkins',
+  'Declan Long',
+  'Hazel Perry',
+  'Eli Fisher',
+  'Kendall Diaz',
+  'Silas Ward',
+  'Aria Nichols',
+  'Jonah Brooks',
+  'Piper Graham',
+  'Xavier West',
+  'Autumn Ford',
+  'Colin Bryant',
+  'Sydney Cook',
+  'Lincoln Barnes',
+  'Violet Stone',
+  'Maddox Ruiz',
+  'Stella Lawson',
+  'Carter Dean',
+  'Keira Ellis',
+  'Rowan Burke',
+  'Paisley Holt',
+  'Wesley Wade',
+  'Reese Dunn',
+  'Sawyer Kelley',
+  'Aaliyah Burke',
+  'Landon Hart',
+  'Vivian Lowe',
+  'Emmett Miles',
+  'Delilah Fox',
+  'Grayson Lane',
+  'Penelope Shaw',
+  'Nolan Bishop',
+  'Willow Reid',
+  'Easton Kim',
+];
+
+const fallbackFirstNames = [
+  'Aiden',
+  'Bella',
+  'Carson',
+  'Daphne',
+  'Emerson',
+  'Finley',
+  'Gianna',
+  'Holden',
+  'Isla',
+  'Jasper',
+  'Kiera',
+  'Luca',
+];
+
+const fallbackLastNames = [
+  'Adams',
+  'Bishop',
+  'Clark',
+  'Dawson',
+  'Ellis',
+  'Franklin',
+  'Griffin',
+  'Hawkins',
+  'Irwin',
+  'Jamison',
+  'Keller',
+  'Lawson',
+];
+
+const fallbackTeamPrefixes = [
+  'Summit',
+  'Harbor',
+  'Cedar',
+  'Granite',
+  'Southport',
+  'Redwood',
+  'Hillcrest',
+  'Stonebridge',
+  'Riverview',
+  'Northgate',
+  'Westfield',
+  'Easton',
+];
+
+const fallbackTeamMascots = [
+  'Rangers',
+  'Knights',
+  'Storm',
+  'Titans',
+  'Guardians',
+  'Royals',
+  'Falcons',
+  'Wolves',
+  'Blaze',
+  'Comets',
+  'Owls',
+  'Jets',
 ];
 
 const opponents = [
@@ -102,15 +231,45 @@ function randomChoice(values) {
   return values[randomInt(0, values.length - 1)];
 }
 
+function buildFallbackUserName(index) {
+  const firstName = fallbackFirstNames[index % fallbackFirstNames.length];
+  const lastName =
+    fallbackLastNames[Math.floor(index / fallbackFirstNames.length) % fallbackLastNames.length];
+  const cycle = Math.floor(index / (fallbackFirstNames.length * fallbackLastNames.length));
+
+  return cycle > 0 ? `${firstName} ${lastName} ${cycle + 1}` : `${firstName} ${lastName}`;
+}
+
+function buildFallbackTeamName(index) {
+  const prefix = fallbackTeamPrefixes[index % fallbackTeamPrefixes.length];
+  const mascot =
+    fallbackTeamMascots[
+      Math.floor(index / fallbackTeamPrefixes.length) % fallbackTeamMascots.length
+    ];
+  const cycle = Math.floor(index / (fallbackTeamPrefixes.length * fallbackTeamMascots.length));
+
+  return cycle > 0 ? `${prefix} ${mascot} ${cycle + 1}` : `${prefix} ${mascot}`;
+}
+
+function buildFallbackPlayerName(index) {
+  const firstName = fallbackFirstNames[index % fallbackFirstNames.length];
+  const lastName =
+    fallbackLastNames[Math.floor(index / fallbackFirstNames.length) % fallbackLastNames.length];
+  const cycle = Math.floor(index / (fallbackFirstNames.length * fallbackLastNames.length));
+
+  return cycle > 0 ? `${firstName} ${lastName} ${cycle + 1}` : `${firstName} ${lastName}`;
+}
+
 function createSeedUsers() {
   return Array.from({ length: seedConfig.userCount }, (_, index) => {
     const number = index + 1;
     const plan = index % 2 === 0 ? 'pro' : 'free';
+    const identity = seedIdentityBlueprints[index];
 
     return {
       email: `user${number}@user${number}.com`,
-      name: `User ${number}`,
-      teamName: `Team ${number}`,
+      name: identity?.userName || buildFallbackUserName(index - seedIdentityBlueprints.length),
+      teamName: identity?.teamName || buildFallbackTeamName(index - seedIdentityBlueprints.length),
       plan,
     };
   });
@@ -171,6 +330,46 @@ function createAssistEvent(playerId, occurredAt) {
   };
 }
 
+function createSimplePlayerEvent(playerId, statType, occurredAt) {
+  return {
+    playerId,
+    statType,
+    occurredAt,
+  };
+}
+
+function createOpponentEvent(statType, occurredAt) {
+  return {
+    statType,
+    occurredAt,
+  };
+}
+
+function buildPlayerBlueprints(teamIndex) {
+  const names = [];
+  const baseOffset = (teamIndex * seedConfig.playersPerTeam) % playerNamePool.length;
+
+  for (let index = 0; index < seedConfig.playersPerTeam; index += 1) {
+    let displayName = playerNamePool[(baseOffset + index) % playerNamePool.length];
+
+    if (names.includes(displayName)) {
+      displayName = buildFallbackPlayerName(teamIndex * seedConfig.playersPerTeam + index);
+    }
+
+    while (names.includes(displayName)) {
+      displayName = `${displayName} ${index + 1}`;
+    }
+
+    names.push(displayName);
+  }
+
+  return names.map((displayName, index) => ({
+    displayName,
+    jerseyNumber: index + 1,
+    isActive: true,
+  }));
+}
+
 function buildGameEvents(players, scheduledAt) {
   const events = [];
   let minuteOffset = 0;
@@ -200,6 +399,9 @@ function buildGameEvents(players, scheduledAt) {
     const ftMiss = randomInt(0, 2);
     const oreb = randomInt(0, 3);
     const dreb = randomInt(0, 4);
+    const stl = randomInt(0, 3);
+    const tov = randomInt(0, 4);
+    const foul = randomInt(0, 4);
 
     for (let index = 0; index < fg2Made; index += 1) {
       events.push(
@@ -294,6 +496,39 @@ function buildGameEvents(players, scheduledAt) {
     for (let index = 0; index < dreb; index += 1) {
       events.push(createReboundEvent(playerId, STAT_TYPES.DREB, nextOccurredAt()));
     }
+
+    for (let index = 0; index < stl; index += 1) {
+      events.push(createSimplePlayerEvent(playerId, STAT_TYPES.STL, nextOccurredAt()));
+    }
+
+    for (let index = 0; index < tov; index += 1) {
+      events.push(createSimplePlayerEvent(playerId, STAT_TYPES.TOV, nextOccurredAt()));
+    }
+
+    for (let index = 0; index < foul; index += 1) {
+      events.push(createSimplePlayerEvent(playerId, STAT_TYPES.FOUL, nextOccurredAt()));
+    }
+  }
+
+  const oppFtMade = randomInt(4, 16);
+  const oppFg2Made = randomInt(8, 24);
+  const oppFg3Made = randomInt(1, 10);
+  const oppReb = randomInt(4, 14);
+
+  for (let index = 0; index < oppFtMade; index += 1) {
+    events.push(createOpponentEvent(STAT_TYPES.OPP_FT_MADE, nextOccurredAt()));
+  }
+
+  for (let index = 0; index < oppFg2Made; index += 1) {
+    events.push(createOpponentEvent(STAT_TYPES.OPP_FG2_MADE, nextOccurredAt()));
+  }
+
+  for (let index = 0; index < oppFg3Made; index += 1) {
+    events.push(createOpponentEvent(STAT_TYPES.OPP_FG3_MADE, nextOccurredAt()));
+  }
+
+  for (let index = 0; index < oppReb; index += 1) {
+    events.push(createOpponentEvent(STAT_TYPES.OPP_REB, nextOccurredAt()));
   }
 
   return events.sort((eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt));
@@ -499,10 +734,7 @@ async function main() {
         ownerUserId: entry.user._id,
         name: entry.teamName || `Team ${index + 1}`,
         ...buildSeedBillingProfile(entry, index),
-        players: playerBlueprints.slice(0, seedConfig.playersPerTeam).map((player) => ({
-          ...player,
-          isActive: true,
-        })),
+        players: buildPlayerBlueprints(index),
       });
 
       const games = await Game.insertMany(buildGameDocs(entry.user._id, team), { ordered: true });
