@@ -55,6 +55,23 @@ function eventActorLabel(event, playersById) {
   return playersById.get(event.playerId)?.displayName || 'Unknown Player';
 }
 
+function formatGameDate(value) {
+  if (!value) {
+    return 'Date unavailable';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Date unavailable';
+  }
+
+  return parsed.toLocaleDateString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function canAccessReplay(team, entitlements) {
   const billing = team?.billing || {};
   const hasActiveProBilling =
@@ -236,6 +253,28 @@ export function GameDetailPage() {
     },
   ];
 
+  const printBoxScoreColumns = [
+    {
+      id: 'player',
+      label: 'Player',
+      align: 'left',
+      headerClassName: 'w-[28%] min-w-[12rem]',
+      cellClassName: 'max-w-[14rem] whitespace-normal break-words pr-3 text-left',
+      render: (row) => row.displayName,
+    },
+    { id: 'pts', label: 'PTS', align: 'right', render: (row) => row.points },
+    { id: 'reb', label: 'REB', align: 'right', render: (row) => row.reb },
+    { id: 'ast', label: 'AST', align: 'right', render: (row) => row.ast },
+    { id: 'stl', label: 'STL', align: 'right', render: (row) => row.stl },
+    { id: 'tov', label: 'TOV', align: 'right', render: (row) => row.tov },
+    { id: 'foul', label: 'FOUL', align: 'right', render: (row) => row.foul },
+    { id: 'ft', label: 'FT', align: 'right', render: (row) => `${row.ftm}/${row.fta}` },
+    { id: 'fg2', label: '2PT', align: 'right', render: (row) => `${row.fg2m}/${row.fg2a}` },
+    { id: 'fg3', label: '3PT', align: 'right', render: (row) => `${row.fg3m}/${row.fg3a}` },
+    { id: 'oreb', label: 'OREB', align: 'right', render: (row) => row.oreb },
+    { id: 'dreb', label: 'DREB', align: 'right', render: (row) => row.dreb },
+  ];
+
   const statsContent = (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded border bg-white">
@@ -349,18 +388,118 @@ export function GameDetailPage() {
         }
       : null;
 
+  const printContent = (
+    <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 text-slate-900 print:mx-auto print:max-w-[7.35in] print:space-y-2 print:rounded-none print:border-0 print:p-0">
+      <div className="flex flex-wrap justify-end gap-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+        >
+          Print
+        </button>
+        <button
+          type="button"
+          onClick={() => updateSearchParam('print', null)}
+          className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+        >
+          Exit Print View
+        </button>
+      </div>
+
+      <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 print:break-inside-avoid print:gap-3 print:pb-2">
+        <div className="min-w-0 space-y-1.5">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Printable Box Score
+          </p>
+          <h1 className="text-2xl font-bold text-slate-900 print:text-[1.35rem]">
+            {team?.name || recap?.team?.name || game?.title || 'Team'}
+          </h1>
+          <p className="text-sm text-slate-700 print:text-xs">
+            vs {recap?.opponent?.name || game?.opponent || 'Opponent'}
+          </p>
+          <div className="grid gap-1 text-xs text-slate-600 sm:grid-cols-2 sm:gap-x-6 print:gap-y-0.5">
+            <p>Date: {formatGameDate(recap?.playedAt || game?.scheduledAt || game?.createdAt)}</p>
+            <p>Status: {game?.status || 'unknown'}</p>
+            <p>Recorded: {formatGameDate(game?.createdAt)}</p>
+            <p>Finished: {formatGameDate(game?.completedAt)}</p>
+          </div>
+        </div>
+        <div className="min-w-[11rem] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right print:min-w-[8.35rem] print:px-3 print:py-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Final Score
+          </p>
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 print:mt-1.5">
+            <div className="text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {team?.name || 'Team'}
+              </p>
+              <p className="text-3xl font-bold leading-none print:text-[1.7rem]">
+                {gameSummary.teamPoints}
+              </p>
+            </div>
+            <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Final
+            </p>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {recap?.opponent?.name || game?.opponent || 'Opponent'}
+              </p>
+              <p className="text-3xl font-bold leading-none print:text-[1.7rem]">
+                {gameSummary.opponentPoints}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto print:overflow-visible">
+        <table className="w-full table-fixed border-collapse text-sm print:text-[11px]">
+          <thead>
+            <tr className="border-b-2 border-slate-300 text-slate-600">
+              {printBoxScoreColumns.map((column) => (
+                <th
+                  key={column.id}
+                  className={`px-2 py-2 font-semibold print:px-1.5 print:py-1.5 ${column.align === 'right' ? 'text-right' : 'text-left'} ${column.headerClassName || ''}`}
+                >
+                  {column.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {boxScoreRows.map((row) => (
+              <tr
+                key={row.playerId}
+                className={`${row.isTeamTotal ? 'border-t-2 border-slate-300 bg-slate-50 font-semibold' : 'border-t border-slate-200'} print:break-inside-avoid`}
+              >
+                {printBoxScoreColumns.map((column) => (
+                  <td
+                    key={column.id}
+                    className={`px-2 py-2 align-top print:px-1.5 print:py-1.5 ${column.align === 'right' ? 'text-right' : 'text-left'} ${column.cellClassName || ''}`}
+                  >
+                    {column.render(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
   return (
     <section className="space-y-4">
-      <GameDetailHeader
-        gameId={game.id}
-        game={game}
-        team={team}
-        recap={recap}
-        gameSummary={gameSummary}
-        canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
-        className={isPrintMode ? 'print:rounded-none print:p-0' : ''}
-        actions={
-          !isPrintMode ? (
+      {!isPrintMode ? (
+        <GameDetailHeader
+          gameId={game.id}
+          game={game}
+          team={team}
+          recap={recap}
+          gameSummary={gameSummary}
+          canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
+          actions={
             <button
               type="button"
               onClick={() => updateSearchParam('print', '1')}
@@ -368,36 +507,11 @@ export function GameDetailPage() {
             >
               Print Box Score
             </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-              >
-                Print
-              </button>
-              <button
-                type="button"
-                onClick={() => updateSearchParam('print', null)}
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-              >
-                Exit Print View
-              </button>
-            </>
-          )
-        }
-      />
-
-      {isPrintMode ? (
-        <div className="overflow-x-auto rounded border bg-white p-4 print:overflow-visible print:rounded-none print:border-0 print:bg-white print:p-0">
-          <StatsTable
-            columns={boxScoreColumns}
-            rows={boxScoreRows}
-            tableClassName="w-full text-sm print:text-xs"
-          />
-        </div>
+          }
+        />
       ) : null}
+
+      {isPrintMode ? printContent : null}
 
       {!isPrintMode ? (
         <Tabs

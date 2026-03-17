@@ -663,4 +663,115 @@ describe('GameDetailPage', () => {
     expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
     expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
   });
+
+  test('renders a simplified print mode layout', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-1',
+        title: 'vs Wildcats',
+        opponent: 'Wildcats',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'TSW Team',
+        logo: { url: 'https://example.com/team-logo.png' },
+        billing: {
+          plan: 'pro',
+          subscriptionStatus: 'active',
+        },
+        entitlements: {
+          canViewReplay: true,
+          canViewShotMaps: true,
+        },
+        players: [
+          { id: 'p1', displayName: 'Alex', isActive: true },
+          { id: 'p2', displayName: 'Jordan', isActive: true },
+        ],
+      },
+      teamEntitlements: {
+        canViewReplay: true,
+        canViewShotMaps: true,
+      },
+      recap: {
+        statusLabel: 'Final',
+        team: {
+          id: 'team-1',
+          name: 'TSW Team',
+          points: 54,
+        },
+        opponent: {
+          name: 'Wildcats',
+        },
+        playedAt: '2026-03-12T19:20:00.000Z',
+      },
+      boxScore: {
+        players: [
+          {
+            playerId: 'p1',
+            displayName: 'Alexandria Montgomery-Santiago the Third',
+            ftm: 2,
+            fta: 2,
+            fg2m: 4,
+            fg2a: 7,
+            fg3m: 1,
+            fg3a: 3,
+            ast: 5,
+            oreb: 1,
+            dreb: 4,
+            reb: 5,
+            points: 13,
+            stl: 2,
+            tov: 1,
+            foul: 2,
+          },
+        ],
+        teamTotals: {
+          ftm: 8,
+          fta: 10,
+          fg2m: 15,
+          fg2a: 28,
+          fg3m: 4,
+          fg3a: 12,
+          ast: 11,
+          oreb: 6,
+          dreb: 18,
+          reb: 24,
+          points: 54,
+          stl: 7,
+          tov: 9,
+          foul: 12,
+        },
+        opponentTotals: {
+          points: 47,
+        },
+      },
+      gameSummary: {
+        teamPoints: 54,
+        opponentPoints: 47,
+        hasOpponentScore: true,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-1?print=1']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Printable Box Score/i)).toBeInTheDocument();
+    expect(screen.getByText(/Final Score/i)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Recap/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Play by Play/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Print$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Exit Print View/i })).toBeInTheDocument();
+    expect(screen.getByText('Alexandria Montgomery-Santiago the Third')).toBeInTheDocument();
+    expect(screen.getByText('Team Total')).toBeInTheDocument();
+  });
 });
