@@ -1,5 +1,11 @@
 # Game Recap MVP Plan: Share-Friendly Recap Inside Game Detail
 
+## Status
+
+Historical planning document.
+
+This plan described the original recap MVP assumptions before opponent score totals, expanded stat categories, print mode, and billing hardening landed in the app. Use it for background context only. Current execution status lives in [docs/status-snapshot-2026-03-17.md](/Users/simoncordova/Desktop/Simon/tsw-2026-march/docs/status-snapshot-2026-03-17.md), and current product framing lives in [README.md](/Users/simoncordova/Desktop/Simon/tsw-2026-march/README.md) plus [ROADMAP.md](/Users/simoncordova/Desktop/Simon/tsw-2026-march/ROADMAP.md).
+
 ## Summary
 
 Implement a first version of automatic game recaps as a new section inside the existing game detail experience, optimized for parents and families, and designed to become a sharing surface.
@@ -10,7 +16,7 @@ This MVP should:
 - live inside the current game detail page as a new `Recap` tab
 - be free at the basic level to preserve virality
 - use deterministic summary rules, not AI-written copy
-- show only the tracked team score in v1
+- show final score based on the current derived score model
 - provide a share-friendly public experience first
 - defer downloadable image export and richer premium visuals to a later phase
 
@@ -55,7 +61,7 @@ For v1:
 
 Free recap should include:
 
-- tracked team score
+- final score when opponent totals exist
 - top performers
 - team stat summary
 - key moments
@@ -82,13 +88,13 @@ Key moments should be selected from existing events and timestamps using explici
 
 ### Score Model
 
-Because the current app tracks only one team’s event stream, the recap should show:
+Original MVP assumption:
 
 - tracked team score prominently
 - opponent name if available
 - no opponent score in v1
 
-Do not invent or imply opponent scoring.
+Current product state has moved past that assumption. Opponent score totals are now tracked through dedicated opponent events and recaps can render a true final scoreline when those totals exist.
 
 ## User Experience
 
@@ -119,7 +125,7 @@ Show:
 - opponent name if present
 - game date
 - status badge like `Final`
-- tracked team score only
+- final score when available from the current game summary
 
 #### 2. Top Performers
 
@@ -239,6 +245,5 @@ Add tests for:
 
 ### Phase 3
 
-- opponent-aware final score
 - season recap collections
 - premium recap templates

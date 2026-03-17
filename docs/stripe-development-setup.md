@@ -10,6 +10,7 @@ Required local result:
 - webhook events reach the local API
 - team billing state updates in MongoDB
 - replay and shot maps unlock for the upgraded team
+- billing success redirect confirms the upgraded team status after webhook processing
 
 ## 1. Work in Stripe Test Mode
 
@@ -108,8 +109,9 @@ Keep the Stripe webhook forwarding command running in a separate terminal.
 5. Select the team to upgrade
 6. Complete checkout with Stripe test payment details
 7. Confirm redirect to the success page
-8. Confirm webhook processing updates the team to Pro
-9. Reload a game page and verify replay and shot maps are unlocked
+8. Confirm the success page is checking the specific upgraded team
+9. Confirm webhook processing updates the team to Pro
+10. Reload a game page and verify replay and shot maps are unlocked
 
 ## 10. Failure Checks
 
@@ -118,9 +120,26 @@ Verify these cases as well:
 - checkout canceled returns to `/billing/cancel`
 - failed invoice does not activate Pro
 - canceled subscription removes entitlements after webhook processing
+- replaying the same Stripe webhook does not create duplicate state transitions
+- a `past_due` team is not treated like fully active Team Pro in pricing or gated surfaces
 
 ## Troubleshooting
 
 - If checkout creation fails, verify `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID_PRO_MONTHLY`
 - If webhook verification fails, verify `STRIPE_WEBHOOK_SECRET` came from the current `stripe listen` session
 - If billing state does not update, inspect server logs and Stripe CLI output for event delivery errors
+- If checkout finishes but the success page stays pending, confirm the returned `teamId` matches an owned team and the webhook event reached the API
+
+## Deployment Checklist
+
+Before validating billing in staging or production:
+
+- Confirm `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO_MONTHLY`, `STRIPE_SUCCESS_URL`, and `STRIPE_CANCEL_URL` are set for the correct environment.
+- Confirm `STRIPE_SUCCESS_URL` and `STRIPE_CANCEL_URL` point to the deployed client origin, not localhost.
+- Confirm the Stripe webhook endpoint is configured to hit `/api/v1/billing/webhooks` on the deployed API.
+- Confirm Cloudinary env vars are present if feed uploads are enabled in that environment:
+  - `CLOUDINARY_CLOUD_NAME`
+  - `CLOUDINARY_API_KEY`
+  - `CLOUDINARY_API_SECRET`
+  - `CLOUDINARY_FOLDER`
+- Replay a recent Stripe test webhook in the target environment and verify the team billing state remains stable.

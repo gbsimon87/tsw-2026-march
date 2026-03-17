@@ -1,20 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createRecapCardDataUrl, createRecapCardSvg } from '../recapCardImage';
-import { getGameHeaderImage } from '../../feed/cardImage';
-
-function formatDateTime(value) {
-  if (!value) {
-    return 'Date unavailable';
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Date unavailable';
-  }
-
-  return parsed.toLocaleString();
-}
 
 function formatPercentage(value) {
   return value == null ? '--' : `${value.toFixed(0)}%`;
@@ -92,23 +78,16 @@ function FeedIcon() {
   );
 }
 
-export function GameRecapPanel({
-  gameId,
-  game,
-  team,
-  recap,
-  canContinueTracking = false,
-  onShareToFeed,
-}) {
+export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
   const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
   const recapCardDataUrl = createRecapCardDataUrl(recap, { teamLogoUrl: team?.logo?.url || null });
   const cardFilename = `${(recap?.team?.name || 'team')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}-game-recap.svg`;
-  const shareText = `${recap?.team?.name || 'Team'} scored ${recap?.team?.points || 0} points${
+  const shareText = `${recap?.team?.name || 'Team'}${
     recap?.opponent?.name ? ` vs ${recap.opponent.name}` : ''
-  }.`;
+  } final: ${recap?.team?.points || 0}-${recap?.opponent?.points || 0}.`;
 
   function downloadCard() {
     if (!shareUrl) {
@@ -148,63 +127,6 @@ export function GameRecapPanel({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          {recap?.statusLabel || 'Game Recap'}
-        </p>
-        <div className="mt-3 grid gap-4 md:grid-cols-[1.5fr,1fr] md:items-end">
-          <div className="flex items-start gap-4">
-            <img
-              src={getGameHeaderImage(team)}
-              alt={`${team?.name || recap?.team?.name || 'Team'} logo`}
-              className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
-            />
-            <div>
-              {team?.id ? (
-                <Link
-                  to={`/teams/${team.id}`}
-                  className="text-3xl font-bold leading-tight text-slate-900 transition hover:text-sky-700 hover:underline focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-sky-500 md:text-4xl"
-                >
-                  {recap?.team?.name || 'Team'}
-                </Link>
-              ) : (
-                <h2 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-                  {recap?.team?.name || 'Team'}
-                </h2>
-              )}
-              <p className="mt-2 text-base text-slate-700">
-                {recap?.opponent?.name ? `vs ${recap.opponent.name}` : 'Opponent not recorded'}
-              </p>
-              <p className="mt-2 text-sm text-slate-600">
-                {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
-              </p>
-              <div className="mt-3 space-y-1 text-sm text-slate-600">
-                <p>Status: {game?.status || 'unknown'}</p>
-                <p>Recorded: {formatDateTime(game?.createdAt)}</p>
-                <p>Finished: {formatDateTime(game?.completedAt)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-right shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Team Score
-            </p>
-            <p className="mt-2 text-5xl font-bold text-slate-900">{recap?.team?.points || 0}</p>
-          </div>
-        </div>
-
-        {canContinueTracking ? (
-          <div className="mt-4">
-            <Link
-              className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-              to={`/games/${gameId}/track`}
-            >
-              Continue Tracking
-            </Link>
-          </div>
-        ) : null}
-      </section>
-
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -266,6 +188,20 @@ export function GameRecapPanel({
           <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assists</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.ast || 0}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Steals</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.stl || 0}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Turnovers
+            </p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.tov || 0}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fouls</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{recap?.teamStats?.foul || 0}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FG2%</p>

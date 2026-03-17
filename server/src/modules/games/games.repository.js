@@ -3,7 +3,7 @@ const { STAT_TYPES, SHOT_ZONE_IDS } = require('../shared/stats.constants');
 
 const shotEventSchema = new mongoose.Schema(
   {
-    playerId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    playerId: { type: mongoose.Schema.Types.ObjectId, required: false },
     statType: {
       type: String,
       enum: [
@@ -13,9 +13,15 @@ const shotEventSchema = new mongoose.Schema(
         STAT_TYPES.FG2_MISS,
         STAT_TYPES.FG3_MADE,
         STAT_TYPES.FG3_MISS,
+        STAT_TYPES.OPP_FT_MADE,
+        STAT_TYPES.OPP_FG2_MADE,
+        STAT_TYPES.OPP_FG3_MADE,
         STAT_TYPES.AST,
         STAT_TYPES.OREB,
         STAT_TYPES.DREB,
+        STAT_TYPES.STL,
+        STAT_TYPES.TOV,
+        STAT_TYPES.FOUL,
       ],
       required: true,
     },

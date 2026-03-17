@@ -16,7 +16,7 @@ const { buildGameRecap } = require('./gameRecap.service');
 function sanitizeEvent(event) {
   return {
     id: String(event._id),
-    playerId: String(event.playerId),
+    playerId: event.playerId ? String(event.playerId) : null,
     statType: event.statType,
     zoneId: event.zoneId ?? null,
     x: event.x ?? null,
@@ -66,6 +66,9 @@ function emptyStats(playerId, displayName) {
     ast: 0,
     oreb: 0,
     dreb: 0,
+    stl: 0,
+    tov: 0,
+    foul: 0,
     reb: 0,
     points: 0,
   };
@@ -122,7 +125,39 @@ function applyEventToRow(row, statType) {
   if (statType === STAT_TYPES.DREB) {
     row.dreb += 1;
     row.reb += 1;
+    return;
   }
+
+  if (statType === STAT_TYPES.STL) {
+    row.stl += 1;
+    return;
+  }
+
+  if (statType === STAT_TYPES.TOV) {
+    row.tov += 1;
+    return;
+  }
+
+  if (statType === STAT_TYPES.FOUL) {
+    row.foul += 1;
+  }
+}
+
+function isOpponentEvent(statType) {
+  return (
+    statType === STAT_TYPES.OPP_FT_MADE ||
+    statType === STAT_TYPES.OPP_FG2_MADE ||
+    statType === STAT_TYPES.OPP_FG3_MADE
+  );
+}
+
+function buildGameSummary(game) {
+  const summary = summarizeEvents(game.events);
+  return {
+    teamPoints: summary.points,
+    opponentPoints: summary.opponentPoints || 0,
+    hasOpponentScore: (summary.opponentPoints || 0) > 0,
+  };
 }
 
 function computeBoxScore(game, team, options = {}) {
@@ -137,6 +172,10 @@ function computeBoxScore(game, team, options = {}) {
   );
 
   for (const event of game.events) {
+    if (isOpponentEvent(event.statType)) {
+      continue;
+    }
+
     const key = String(event.playerId);
     if (!map.has(key)) {
       const fallbackName = `Unknown (${key.slice(-6)})`;
@@ -163,8 +202,14 @@ function computeBoxScore(game, team, options = {}) {
       ast: players.reduce((total, row) => total + row.ast, 0),
       oreb: players.reduce((total, row) => total + row.oreb, 0),
       dreb: players.reduce((total, row) => total + row.dreb, 0),
+      stl: players.reduce((total, row) => total + row.stl, 0),
+      tov: players.reduce((total, row) => total + row.tov, 0),
+      foul: players.reduce((total, row) => total + row.foul, 0),
       reb: players.reduce((total, row) => total + row.reb, 0),
       points: summary.points,
+    },
+    opponentTotals: {
+      points: summary.opponentPoints || 0,
     },
   };
 }
@@ -243,6 +288,7 @@ async function getGameForUser(userId, gameId) {
     boxScore: computeBoxScore(game, team),
     teamEntitlements: getTeamEntitlements(team),
     recap: buildGameRecap(game, team, computeBoxScore(game, team)),
+    gameSummary: buildGameSummary(game),
   };
 }
 
@@ -276,6 +322,7 @@ async function getPublicGame(gameId) {
     boxScore: computeBoxScore(game, team),
     teamEntitlements: getTeamEntitlements(team),
     recap: buildGameRecap(game, team, computeBoxScore(game, team)),
+    gameSummary: buildGameSummary(game),
   };
 }
 
@@ -290,14 +337,16 @@ async function appendEventForUser(userId, gameId, payload) {
   }
 
   const team = await assertTeamOwnership(userId, game.teamId);
-  const player = team.players.id(payload.playerId);
+  if (payload.playerId) {
+    const player = team.players.id(payload.playerId);
 
-  if (!player || !player.isActive) {
-    throw new ApiError(400, 'Player is not active on this team');
+    if (!player || !player.isActive) {
+      throw new ApiError(400, 'Player is not active on this team');
+    }
   }
 
   game.events.push({
-    playerId: payload.playerId,
+    ...(payload.playerId ? { playerId: payload.playerId } : {}),
     statType: payload.statType,
     zoneId: payload.zoneId,
     x: payload.x,
@@ -310,6 +359,7 @@ async function appendEventForUser(userId, gameId, payload) {
   return {
     game: sanitizeGame(game),
     boxScore: computeBoxScore(game, team),
+    gameSummary: buildGameSummary(game),
   };
 }
 
@@ -331,6 +381,7 @@ async function removeEventForUser(userId, gameId, eventId) {
   return {
     game: sanitizeGame(game),
     boxScore: computeBoxScore(game, team),
+    gameSummary: buildGameSummary(game),
   };
 }
 
@@ -353,6 +404,7 @@ async function finishGameForUser(userId, gameId) {
   return {
     game: sanitizeGame(game),
     boxScore: computeBoxScore(game, team),
+    gameSummary: buildGameSummary(game),
   };
 }
 
@@ -365,4 +417,5 @@ module.exports = {
   removeEventForUser,
   finishGameForUser,
   computeBoxScore,
+  buildGameSummary,
 };

@@ -17,14 +17,17 @@ V1 focuses on fast, simple tracking for one team at a time:
   - Free throws from dedicated FT buttons
   - Offensive/defensive rebounds
   - Assists on made 2PT and 3PT baskets
+  - Opponent scoring totals via dedicated opponent events
+  - Steals, turnovers, and fouls
 - Court location stored per event (`zoneId`, `x`, `y`)
 - Game finish/save flow
 - Previous game history + derived box scores
 - Public team pages with sortable season stat tables and recent/upcoming games
-- Public player pages with per-game logs plus PPG/RPG/APG
+- Public player pages with per-game logs plus PPG/RPG/APG and expanded stat columns
 - Homepage explore feed with recent public games across teams
 - Public social feed with image posts and shareable game/player/team cards
 - Floating create-post action with login redirect back to feed compose flow
+- Team-scoped billing for Pro replay and public shot-map access
 
 ## Current V1 Features
 
@@ -36,6 +39,7 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `PATCH /api/v1/teams/:teamId`
 - `GET /api/v1/public/teams/:teamId`
 - `GET /api/v1/public/teams/:teamId/players/:playerId`
+- `GET /api/v1/public/opponents/:opponentSlug`
 - `GET /api/v1/public/teams/explore`
 - `GET /api/v1/feed`
 - `GET /api/v1/feed/shareable/games`
@@ -56,6 +60,9 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `POST /api/v1/games/:gameId/events`
 - `DELETE /api/v1/games/:gameId/events/:eventId`
 - `POST /api/v1/games/:gameId/finish`
+- `POST /api/v1/billing/checkout-session`
+- `POST /api/v1/billing/customer-portal`
+- `POST /api/v1/billing/webhooks`
 
 ### Frontend Routes
 
@@ -71,6 +78,10 @@ V1 focuses on fast, simple tracking for one team at a time:
 - `/games`
 - `/games/:gameId/track`
 - `/games/:gameId`
+- `/pricing`
+- `/billing/success`
+- `/billing/cancel`
+- `/opponents/:opponentSlug`
 
 ### Tracking Interaction
 
@@ -80,9 +91,12 @@ V1 focuses on fast, simple tracking for one team at a time:
 - After made 2PT/3PT baskets, prompt for an optional assist from a teammate or `No Assist`.
 - After missed shots/free throws, prompt for an optional offensive rebound or `No Rebound`.
 - Record defensive rebounds from the player/action controls in the tracking overlay.
+- Record steals, turnovers, and fouls from quick stat controls.
+- Record opponent `+1`, `+2`, and `+3` scoring events without selecting a player.
 - Every event stores normalized coordinates (`x`, `y`) in the range `0..100`.
 - Built-in calibration overlay and draggable handles for court-image alignment/debugging.
 - Live tracking box score uses a horizontally scrollable table with pinned player column.
+- Recent-event recovery supports undo/delete flows instead of inline event editing.
 
 ### Game Detail Experience
 
@@ -91,7 +105,7 @@ V1 focuses on fast, simple tracking for one team at a time:
   - `Stats`
   - `Replay`
 - `Recap` tab includes:
-  - game summary header
+  - game summary header with opponent-aware final score when available
   - shareable recap card actions
   - team stats
   - top performers
@@ -101,23 +115,25 @@ V1 focuses on fast, simple tracking for one team at a time:
   - Compact shot snapshot
   - Play-by-play event log with stat type, zone, coordinates, and event time
   - Last-five default event view with expand/collapse for the full log
-  - Assists and rebound splits in all box score views
+  - Assists, rebound splits, steals, turnovers, and fouls in all box score views
 - `Replay` tab includes:
   - Event-by-event replay controls (`Previous` / `Next`)
   - Progressive shot plotting in event order
   - Live sortable replay box score that updates as events are stepped through, including non-shot stats such as assists and rebounds
   - Pro-only access with locked-state messaging for non-Pro teams
+- Print mode is available on game detail through `?print=1`.
 
 ### Public Experience
 
 - Public team page includes:
-  - sortable player season table with games played, per-game averages, totals, and shooting splits
+  - sortable player season table with games played, per-game averages, totals, shooting splits, and expanded stat columns
   - clickable player names linking to public player profiles
-  - upcoming and recent game lists with compact expand/collapse behavior
+  - upcoming and recent game lists with compact expand/collapse behavior and scorelines for completed games
 - Public player page includes:
   - player header
   - `PPG`, `RPG`, and `APG`
-  - sortable per-game stat log and season totals
+  - sortable per-game stat log and season totals, including `STL`, `TOV`, and `FOUL`
+- Opponent placeholder pages group public games against an opponent name even when no full public team page exists.
 - Homepage includes an `Explore` section linking to recent public games and team pages.
 - Public feed includes:
   - image posts
@@ -137,6 +153,14 @@ V1 focuses on fast, simple tracking for one team at a time:
   - game detail box scores
   - replay box scores
 - The first column stays pinned during horizontal scrolling for easier reading on smaller screens.
+
+### Billing
+
+- Pricing page supports team-level checkout and billing management.
+- Stripe Checkout starts Team Pro subscriptions.
+- Stripe Billing Portal manages existing subscriptions.
+- Billing success now re-checks the selected team after redirect instead of assuming webhooks already completed.
+- Replay and public shot maps remain gated by backend entitlement state.
 
 ## Seed Data
 
@@ -214,6 +238,11 @@ Set at minimum:
 - `CLOUDINARY_API_SECRET`
 - `CLOUDINARY_FOLDER`
 - `FEED_IMAGE_MAX_BYTES`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID_PRO_MONTHLY`
+- `STRIPE_SUCCESS_URL`
+- `STRIPE_CANCEL_URL`
 
 Recommended feed upload value:
 
@@ -238,8 +267,10 @@ pnpm check-env
 
 - Fantasy stat tracking
 - Season support and season-based reporting
-- Game summaries and richer post-game recap content
+- Richer trend summaries and season-level recap/reporting
+- CSV export and broader reporting pipelines
 - Feed likes, reposts, comments, and moderation
 - Player profile images via uploaded media or linked Google image
 - Embedded video playback, likely via YouTube iframe support
 - Time-synced game tracking from video playback
+- Opponent player/roster tracking beyond score totals

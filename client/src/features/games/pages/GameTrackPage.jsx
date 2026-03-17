@@ -27,8 +27,8 @@ function formatEventMeta(event) {
 }
 
 function formatEventLabel(event, playersById) {
-  const player = playersById.get(event.playerId);
-  const playerName = player?.displayName || 'Unknown';
+  const player = event.playerId ? playersById.get(event.playerId) : null;
+  const playerName = event.playerId ? player?.displayName || 'Unknown' : 'Opponent';
   const statLabel = STAT_LABELS[event.statType] || event.statType;
   return `${playerName} - ${statLabel}${formatEventMeta(event)}`;
 }
@@ -63,6 +63,7 @@ export function GameTrackPage() {
     typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false
   );
   const [error, setError] = useState('');
+  const [lastActionLabel, setLastActionLabel] = useState('');
 
   useEffect(() => {
     gamesApi
@@ -149,6 +150,7 @@ export function GameTrackPage() {
         statType,
       });
       setData((current) => ({ ...current, ...response }));
+      setLastActionLabel(STAT_LABELS[statType] || statType);
       clearEventPicker();
     } catch (submitError) {
       setError(submitError.message || 'Failed to add rebound event');
@@ -184,6 +186,9 @@ export function GameTrackPage() {
         statType: pendingFollowUpPrompt.statType,
       });
       setData((current) => ({ ...current, ...response }));
+      setLastActionLabel(
+        STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType
+      );
       clearEventPicker();
     } catch (submitError) {
       setError(
@@ -221,6 +226,7 @@ export function GameTrackPage() {
 
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
+      setLastActionLabel(STAT_LABELS[payload.statType] || payload.statType);
       if (outcome === 'miss') {
         setPendingFollowUpPrompt({
           kind: 'rebound',
@@ -271,6 +277,7 @@ export function GameTrackPage() {
 
       const response = await gamesApi.appendEvent(gameId, payload);
       setData((current) => ({ ...current, ...response }));
+      setLastActionLabel(STAT_LABELS[payload.statType] || payload.statType);
       if (outcome === 'miss') {
         setPendingFollowUpPrompt({
           kind: 'rebound',
@@ -292,9 +299,57 @@ export function GameTrackPage() {
     try {
       const response = await gamesApi.removeEvent(gameId, eventId);
       setData((current) => ({ ...current, ...response }));
+      setLastActionLabel('Event removed');
     } catch (removeError) {
       setError(removeError.message || 'Failed to remove event');
     }
+  }
+
+  async function addQuickStatEvent(statType) {
+    if (!requirePlayerSelection()) {
+      return;
+    }
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const response = await gamesApi.appendEvent(gameId, {
+        playerId: selectedPlayerId,
+        statType,
+      });
+      setData((current) => ({ ...current, ...response }));
+      setLastActionLabel(STAT_LABELS[statType] || statType);
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to add event');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function addOpponentScore(statType) {
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const response = await gamesApi.appendEvent(gameId, { statType });
+      setData((current) => ({ ...current, ...response }));
+      setLastActionLabel(STAT_LABELS[statType] || statType);
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to add opponent score');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function undoLastEvent() {
+    const lastEvent = data?.game?.events?.[data.game.events.length - 1];
+    if (!lastEvent) {
+      setError('No event to undo');
+      return;
+    }
+
+    await removeEvent(lastEvent.id);
   }
 
   async function finishGame() {
@@ -315,6 +370,11 @@ export function GameTrackPage() {
   }
 
   const { game, boxScore } = data;
+  const scoreSummary = data.gameSummary || {
+    teamPoints: boxScore.teamTotals.points,
+    opponentPoints: boxScore.opponentTotals?.points || 0,
+  };
+  const recentEvents = [...game.events].slice(-5).reverse();
 
   if (game.status === 'completed') {
     return (
@@ -578,6 +638,9 @@ export function GameTrackPage() {
             </button>
           </div>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {lastActionLabel ? (
+            <p className="text-sm text-emerald-700">Last action: {lastActionLabel}</p>
+          ) : null}
 
           <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
             <p className="font-semibold">Tracking Flow</p>
@@ -590,12 +653,101 @@ export function GameTrackPage() {
           <div className="flex gap-2">
             <button
               type="button"
+              className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+              disabled={isSaving}
+              onClick={undoLastEvent}
+            >
+              Undo Last
+            </button>
+            <button
+              type="button"
               className="rounded bg-emerald-800 px-4 py-2 text-white disabled:opacity-60"
               disabled={isSaving}
               onClick={finishGame}
             >
               Finish Game
             </button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Live Score
+              </p>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{data.team?.name || 'Team'}</p>
+                  <p className="text-3xl font-bold text-slate-900">{scoreSummary.teamPoints}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-slate-900">{game.opponent || 'Opponent'}</p>
+                  <p className="text-3xl font-bold text-slate-900">{scoreSummary.opponentPoints}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Opponent Quick Score
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-rose-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={() => addOpponentScore('OPP_FT_MADE')}
+                >
+                  Opponent +1
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-rose-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={() => addOpponentScore('OPP_FG2_MADE')}
+                >
+                  Opponent +2
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-rose-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={() => addOpponentScore('OPP_FG3_MADE')}
+                >
+                  Opponent +3
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Quick Player Stats
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                disabled={isSaving}
+                onClick={() => addQuickStatEvent('STL')}
+              >
+                STL
+              </button>
+              <button
+                type="button"
+                className="rounded bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                disabled={isSaving}
+                onClick={() => addQuickStatEvent('TOV')}
+              >
+                TOV
+              </button>
+              <button
+                type="button"
+                className="rounded bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                disabled={isSaving}
+                onClick={() => addQuickStatEvent('FOUL')}
+              >
+                FOUL
+              </button>
+            </div>
           </div>
         </div>
 
@@ -610,6 +762,9 @@ export function GameTrackPage() {
                     <th className="px-3 py-2 text-right">PTS</th>
                     <th className="px-3 py-2 text-right">REB</th>
                     <th className="px-3 py-2 text-right">AST</th>
+                    <th className="px-3 py-2 text-right">STL</th>
+                    <th className="px-3 py-2 text-right">TOV</th>
+                    <th className="px-3 py-2 text-right">FOUL</th>
                     <th className="px-3 py-2 text-right">2PT FG</th>
                     <th className="px-3 py-2 text-right">2PT FG%</th>
                     <th className="px-3 py-2 text-right">3PT FG</th>
@@ -626,6 +781,9 @@ export function GameTrackPage() {
                       <td className="px-3 py-2 text-right">{row.points}</td>
                       <td className="px-3 py-2 text-right">{row.reb}</td>
                       <td className="px-3 py-2 text-right">{row.ast}</td>
+                      <td className="px-3 py-2 text-right">{row.stl}</td>
+                      <td className="px-3 py-2 text-right">{row.tov}</td>
+                      <td className="px-3 py-2 text-right">{row.foul}</td>
                       <td className="px-3 py-2 text-right">
                         {row.fg2m}/{row.fg2a}
                       </td>
@@ -650,6 +808,9 @@ export function GameTrackPage() {
                     <td className="px-3 py-2 text-right">{boxScore.teamTotals.points}</td>
                     <td className="px-3 py-2 text-right">{boxScore.teamTotals.reb}</td>
                     <td className="px-3 py-2 text-right">{boxScore.teamTotals.ast}</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.stl}</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.tov}</td>
+                    <td className="px-3 py-2 text-right">{boxScore.teamTotals.foul}</td>
                     <td className="px-3 py-2 text-right">
                       {boxScore.teamTotals.fg2m}/{boxScore.teamTotals.fg2a}
                     </td>
@@ -677,12 +838,15 @@ export function GameTrackPage() {
           </div>
 
           <div className="rounded border bg-white p-4">
-            <h2 className="mb-2 text-lg font-semibold">Play by Play</h2>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">Recent Events</h2>
+              <p className="text-xs text-slate-500">{game.events.length} total</p>
+            </div>
             {game.events.length === 0 ? (
               <p className="text-sm text-slate-600">No events yet.</p>
             ) : null}
             <ul className="space-y-2 text-sm">
-              {[...game.events].reverse().map((event) => (
+              {recentEvents.map((event) => (
                 <li
                   key={event.id}
                   className="flex items-center justify-between gap-2 rounded border p-2"

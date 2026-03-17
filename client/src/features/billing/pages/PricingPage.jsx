@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { billingApi } from '../api/billingApi';
 import { teamsApi } from '../../teams/api/teamsApi';
+
+const ACTIVE_BILLING_STATUSES = new Set(['active', 'trialing']);
+
+function hasActiveProBilling(team) {
+  return (
+    team?.billing?.plan === 'pro' && ACTIVE_BILLING_STATUSES.has(team?.billing?.subscriptionStatus)
+  );
+}
 
 const FREE_FEATURES = [
   'Team and roster setup',
@@ -43,6 +51,7 @@ function PlanCard({ title, price, description, features, children, accent = 'sla
 export function PricingPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [teams, setTeams] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
@@ -61,12 +70,23 @@ export function PricingPage() {
       .list()
       .then((response) => {
         const nextTeams = response.teams || [];
+        const requestedTeamId = searchParams.get('teamId');
         setTeams(nextTeams);
-        setSelectedTeamId((current) => current || nextTeams[0]?.id || '');
+        setSelectedTeamId((current) => {
+          if (current) {
+            return current;
+          }
+
+          if (requestedTeamId && nextTeams.some((team) => team.id === requestedTeamId)) {
+            return requestedTeamId;
+          }
+
+          return nextTeams[0]?.id || '';
+        });
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load teams'))
       .finally(() => setIsLoadingTeams(false));
-  }, [user]);
+  }, [searchParams, user]);
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) || null,
@@ -93,7 +113,7 @@ export function PricingPage() {
 
     setIsSubmitting(true);
     try {
-      if (selectedTeam?.billing?.plan === 'pro') {
+      if (hasActiveProBilling(selectedTeam)) {
         const portal = await billingApi.createCustomerPortalSession(selectedTeamId);
         if (!portal.url) {
           throw new Error('Billing portal URL missing');
@@ -179,13 +199,16 @@ export function PricingPage() {
                     {teams.map((team) => (
                       <option key={team.id} value={team.id}>
                         {team.name}
-                        {team.billing?.plan === 'pro' ? ' (Already Pro)' : ''}
+                        {hasActiveProBilling(team) ? ' (Already Pro)' : ''}
                       </option>
                     ))}
                   </select>
                   {selectedTeam ? (
                     <span className="mt-1 block text-xs text-slate-500">
                       Current plan: {selectedTeam.billing?.plan || 'free'}
+                      {selectedTeam.billing?.subscriptionStatus
+                        ? ` • ${selectedTeam.billing.subscriptionStatus}`
+                        : ''}
                     </span>
                   ) : null}
                 </label>
@@ -208,7 +231,7 @@ export function PricingPage() {
             >
               {isSubmitting
                 ? 'Redirecting to Stripe...'
-                : selectedTeam?.billing?.plan === 'pro'
+                : hasActiveProBilling(selectedTeam)
                   ? 'Manage Team Pro Billing'
                   : 'Choose Team Pro'}
             </button>

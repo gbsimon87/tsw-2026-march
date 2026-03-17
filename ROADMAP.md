@@ -13,17 +13,23 @@
 - Simplified GameDetail tabbed UI (`Recap`, `Stats`, `Replay`) with reduced redundancy
 - Replay flow with sequential event playback, live-updating replay box score, and Pro-only gating
 - Rebounds and assists tracked in live game flow and included across all box scores
+- Opponent total scoring with final scoreline rendering across game detail, recap, and public surfaces
+- Additional stat categories in the current model: steals, turnovers, fouls
 - Reusable sortable stats table with pinned first column for horizontally scrollable stat views
 - Public team page sortable season player table, public game lists, and links to player profiles
 - Public player profile page with PPG/RPG/APG and sortable per-game stat logs
+- Public opponent placeholder pages for grouped opponent-name viewing
 - Homepage explore section with recent public games and team links
 - Expanded multi-user seed data with 10 users, 10 teams, 100 players, and 200 completed games
 - Public feed with authenticated posting, image uploads, shareable game/player/team cards, creator-only delete, and a floating compose modal flow
+- Team billing foundation with pricing page, Stripe checkout, customer portal, webhook-driven entitlements, and billing success/cancel routes
+- Browser print mode for game detail box scores
 
 ## In Progress
 
 - Teams and roster UX refinement
-- Live game tracking UX polish (event entry speed, error states)
+- Live game tracking UX polish (event entry speed, recovery, mobile ergonomics)
+- Billing reliability and deployment readiness in staging/production
 - Expanded automated test coverage for teams/games workflows
 - Documentation alignment for API and onboarding
 - Feed UX polish beyond the floating composer flow
@@ -31,16 +37,15 @@
 
 ## Planned
 
-- Opponent totals or opponent roster support per game
-- Additional basketball stats (steals, turnovers, fouls)
 - Fantasy stat tracking
 - Season support and season-based reporting
-- Game summaries and richer recap content
+- Opponent roster/player support beyond score totals
+- Richer recap/reporting content and trend summaries
 - Player image support from uploaded media or linked Google images
 - Embedded video playback, likely via YouTube iframe support
 - Time-synced game tracking from video playback
 - Richer shot-zone analytics and trend summaries (heatmaps, efficiency overlays, splits)
-- Export/shareable box score views
+- CSV/export pipelines beyond the current print mode
 - Feed likes, reposts, comments, moderation, and richer creator profiles
 
 ## Ideas

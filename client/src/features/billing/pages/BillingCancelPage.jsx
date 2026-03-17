@@ -1,6 +1,10 @@
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 export function BillingCancelPage() {
+  const [searchParams] = useSearchParams();
+  const teamId = searchParams.get('teamId');
+  const pricingHref = teamId ? `/pricing?teamId=${encodeURIComponent(teamId)}` : '/pricing';
+
   return (
     <main className="mx-auto max-w-2xl space-y-6">
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
@@ -17,7 +21,7 @@ export function BillingCancelPage() {
 
       <div className="flex flex-wrap gap-3">
         <Link
-          to="/pricing"
+          to={pricingHref}
           className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
         >
           Return to Pricing

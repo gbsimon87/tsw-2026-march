@@ -19,6 +19,7 @@ describe('statSummary', () => {
 
     expect(result).toEqual({
       points: 6,
+      opponentPoints: 0,
       fg2: { made: 1, missed: 1, attempts: 2, percentage: 50 },
       fg3: { made: 1, missed: 1, attempts: 2, percentage: 50 },
       ft: { made: 1, missed: 1, attempts: 2, percentage: 50 },
@@ -32,6 +33,7 @@ describe('statSummary', () => {
 
     expect(finalizeTeamStatSummary(summary)).toEqual({
       points: 0,
+      opponentPoints: 0,
       fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
       fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
       ft: { made: 0, missed: 0, attempts: 0, percentage: null },

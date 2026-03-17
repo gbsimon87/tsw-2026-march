@@ -43,6 +43,9 @@ function emptyLine(player) {
     ast: 0,
     oreb: 0,
     dreb: 0,
+    stl: 0,
+    tov: 0,
+    foul: 0,
     reb: 0,
     points: 0,
   };
@@ -91,6 +94,18 @@ function applyEventToLine(line, statType) {
   if (statType === 'DREB') {
     line.dreb += 1;
     line.reb += 1;
+    return;
+  }
+  if (statType === 'STL') {
+    line.stl += 1;
+    return;
+  }
+  if (statType === 'TOV') {
+    line.tov += 1;
+    return;
+  }
+  if (statType === 'FOUL') {
+    line.foul += 1;
   }
 }
 
@@ -124,6 +139,10 @@ export function GameReplayPanel({ events, players }) {
       currentSourceIndex >= 0 ? (events || []).slice(0, currentSourceIndex + 1) : [];
 
     for (const event of countableEvents) {
+      if (!event.playerId) {
+        continue;
+      }
+
       if (!byId.has(event.playerId)) {
         const fallback = emptyLine({
           id: event.playerId,
@@ -155,6 +174,9 @@ export function GameReplayPanel({ events, players }) {
     },
     { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
     { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast },
+    { id: 'stl', label: 'STL', align: 'right', sortKey: 'stl', render: (row) => row.stl },
+    { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov },
+    { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul },
     {
       id: 'ft',
       label: 'FT',
@@ -218,8 +240,8 @@ export function GameReplayPanel({ events, players }) {
 
           <div className="rounded border bg-slate-50 p-2 text-xs text-slate-700">
             <p className="font-medium">
-              {currentEvent?.playerName || 'Unknown Player'}:{' '}
-              {STAT_LABELS[currentEvent?.statType] || currentEvent?.statType}
+              {currentEvent?.playerName || (currentEvent?.playerId ? 'Unknown Player' : 'Opponent')}
+              : {STAT_LABELS[currentEvent?.statType] || currentEvent?.statType}
             </p>
             <p>
               {ZONE_LABELS[currentEvent?.zoneId] || currentEvent?.zoneId} | (

@@ -206,9 +206,15 @@ describe('PublicPlayerPage', () => {
         points: 0,
         reb: 0,
         ast: 0,
+        stl: 0,
+        tov: 0,
+        foul: 0,
         pointsPerGame: 0,
         reboundsPerGame: 0,
         assistsPerGame: 0,
+        stealsPerGame: 0,
+        turnoversPerGame: 0,
+        foulsPerGame: 0,
       },
       games: [],
     });
@@ -220,7 +226,7 @@ describe('PublicPlayerPage', () => {
     });
 
     expect(screen.getByText(/No completed public games yet/i)).toBeInTheDocument();
-    expect(screen.getAllByText('0.0')).toHaveLength(3);
+    expect(screen.getAllByText('0.0')).toHaveLength(6);
     expect(screen.getAllByText('0/0')).toHaveLength(3);
   });
 

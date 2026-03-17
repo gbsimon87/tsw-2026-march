@@ -10,6 +10,19 @@ jest.mock('../../modules/games/games.repository', () => ({
   saveGame: jest.fn(),
 }));
 
+jest.mock('../../modules/billing/billing.service', () => ({
+  getBillingSummary: jest.fn(() => ({
+    plan: 'free',
+    subscriptionStatus: 'inactive',
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null,
+  })),
+  getTeamEntitlements: jest.fn(() => ({
+    canViewReplay: false,
+    canViewShotMaps: false,
+  })),
+}));
+
 jest.mock('mongoose', () => ({
   Types: {
     ObjectId: {

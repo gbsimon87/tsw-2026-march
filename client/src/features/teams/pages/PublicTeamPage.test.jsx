@@ -270,8 +270,14 @@ describe('PublicTeamPage', () => {
     expect(screen.getByText('3PT')).toBeInTheDocument();
     expect(screen.getByText('FT')).toBeInTheDocument();
     expect(screen.getByText('AST')).toBeInTheDocument();
+    expect(screen.getByText('SPG')).toBeInTheDocument();
+    expect(screen.getByText('STL')).toBeInTheDocument();
     expect(screen.getByText('OREB')).toBeInTheDocument();
     expect(screen.getByText('DREB')).toBeInTheDocument();
+    expect(screen.getByText('TOPG')).toBeInTheDocument();
+    expect(screen.getByText('TOV')).toBeInTheDocument();
+    expect(screen.getByText('FPG')).toBeInTheDocument();
+    expect(screen.getByText('FOUL')).toBeInTheDocument();
     expect(screen.getByText('23.0')).toBeInTheDocument();
     expect(screen.getByText('4.0')).toBeInTheDocument();
     expect(screen.getByText('4/6')).toBeInTheDocument();
@@ -286,10 +292,16 @@ describe('PublicTeamPage', () => {
       'PTS',
       'APG',
       'AST',
+      'SPG',
+      'STL',
       'RPG',
       'REB',
       'OREB',
       'DREB',
+      'TOPG',
+      'TOV',
+      'FPG',
+      'FOUL',
       'FT',
       '2PT',
       '3PT',
@@ -298,7 +310,7 @@ describe('PublicTeamPage', () => {
     const gamesSection = gamesHeading.closest('section');
     const headings = within(gamesSection).getAllByRole('heading', { level: 3 });
     expect(headings.map((heading) => heading.textContent)).toEqual(['Upcoming', 'Recent']);
-    expect(screen.getByText(/72 pts/i)).toBeInTheDocument();
+    expect(screen.getByText(/72-0/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open details for Falcons/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open details for Hawks/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Open details for Lions/i })).not.toBeInTheDocument();

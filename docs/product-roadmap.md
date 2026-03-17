@@ -8,22 +8,32 @@ Provide a fast, reliable basketball stat tracking workflow for real games: creat
 
 | Milestone | Scope                                                                    | Status      |
 | --------- | ------------------------------------------------------------------------ | ----------- |
-| M1        | Teams and roster management                                              | In Progress |
-| M2        | Game lifecycle (create, track, finish)                                   | In Progress |
-| M3        | Event-based shot tracking with court location (`zoneId`, optional `x/y`) | In Progress |
-| M4        | Previous games list + box score views                                    | In Progress |
+| M1        | Teams and roster management                                              | Complete    |
+| M2        | Game lifecycle (create, track, finish)                                   | Complete    |
+| M3        | Event-based shot tracking with court location (`zoneId`, optional `x/y`) | Complete    |
+| M4        | Previous games list + box score views                                    | Complete    |
 | M5        | Validation, tests, and onboarding docs hardening                         | In Progress |
+
+## Current Product State
+
+Shipped beyond the original milestone framing:
+
+- opponent score totals and derived final scorelines
+- steals, turnovers, and fouls in core stat summaries
+- recap tab and recap card generation
+- replay gating through team billing entitlements
+- printable browser box score via game detail print mode
+- public opponent placeholder pages
+- Stripe checkout, customer portal, webhook handling, and post-checkout billing refresh flow
 
 ## Future Milestones
 
 - Opponent support:
-  - opponent total scoring
   - full opponent roster tracking
 - Additional stat categories:
-  - rebounds, assists, steals, turnovers, fouls
+  - any categories beyond the current scoring/rebound/assist/steal/turnover/foul model
 - Visual shot chart analytics and trends
 - Export/share:
-  - printable box score
   - CSV export
 - Team management improvements:
   - season-level views
@@ -33,3 +43,4 @@ Provide a fast, reliable basketball stat tracking workflow for real games: creat
 
 - Auth is considered baseline complete and reused for all new basketball features.
 - V1 remains intentionally narrow for speed: one tracked team per game, event-sourced scoring, and minimal UI complexity.
+- Opponent support remains intentionally limited to score totals in the near term; opponent player tracking is not part of the current scope.

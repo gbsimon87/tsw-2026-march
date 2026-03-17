@@ -1,18 +1,24 @@
 const { summarizeEvents } = require('../shared/statSummary');
 
 const MOMENT_PRIORITY = {
+  OPP_FG3_MADE: 5,
   FG3_MADE: 5,
+  OPP_FG2_MADE: 4,
   FG2_MADE: 4,
   AST: 3,
+  OPP_FT_MADE: 2,
   FT_MADE: 2,
   DREB: 1,
   OREB: 1,
 };
 
 const MOMENT_LABELS = {
+  OPP_FG3_MADE: 'Opponent 3PT Make',
   FG3_MADE: '3PT Make',
+  OPP_FG2_MADE: 'Opponent 2PT Make',
   FG2_MADE: '2PT Make',
   AST: 'Assist',
+  OPP_FT_MADE: 'Opponent FT Make',
   FT_MADE: 'FT Make',
   DREB: 'Defensive Rebound',
   OREB: 'Offensive Rebound',
@@ -66,8 +72,10 @@ function buildKeyMoments(events, playersById) {
     .slice(0, 5)
     .map((event) => ({
       eventId: String(event._id || event.id),
-      playerId: String(event.playerId),
-      playerName: playersById.get(String(event.playerId)) || 'Unknown Player',
+      playerId: event.playerId ? String(event.playerId) : null,
+      playerName: event.playerId
+        ? playersById.get(String(event.playerId)) || 'Unknown Player'
+        : 'Opponent',
       statType: event.statType,
       statLabel: MOMENT_LABELS[event.statType] || event.statType,
       occurredAt: event.occurredAt || null,
@@ -115,6 +123,7 @@ function buildGameRecap(game, team, boxScore) {
     },
     opponent: {
       name: game?.opponent ?? null,
+      points: boxScore?.opponentTotals?.points || 0,
     },
     playedAt: game?.completedAt || game?.scheduledAt || game?.createdAt || null,
     topPerformers: buildTopPerformers(boxScore),
@@ -125,6 +134,9 @@ function buildGameRecap(game, team, boxScore) {
       ft: teamSummary.ft,
       reb: boxScore?.teamTotals?.reb || 0,
       ast: boxScore?.teamTotals?.ast || 0,
+      stl: boxScore?.teamTotals?.stl || 0,
+      tov: boxScore?.teamTotals?.tov || 0,
+      foul: boxScore?.teamTotals?.foul || 0,
     },
     keyMoments: buildKeyMoments(game?.events || [], playersById),
     shotSnapshot: buildShotSnapshot(game?.events || [], playersById),

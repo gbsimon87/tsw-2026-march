@@ -36,6 +36,9 @@ function emptyStats() {
     ast: 0,
     oreb: 0,
     dreb: 0,
+    stl: 0,
+    tov: 0,
+    foul: 0,
     reb: 0,
     points: 0,
   };
@@ -85,11 +88,14 @@ export function PublicPlayerPage() {
         fg2a: summary.fg2a + game.stats.fg2a,
         fg3m: summary.fg3m + game.stats.fg3m,
         fg3a: summary.fg3a + game.stats.fg3a,
-        ast: summary.ast + game.stats.ast,
-        oreb: summary.oreb + game.stats.oreb,
-        dreb: summary.dreb + game.stats.dreb,
-        reb: summary.reb + game.stats.reb,
-        points: summary.points + game.stats.points,
+        ast: summary.ast + (game.stats.ast || 0),
+        oreb: summary.oreb + (game.stats.oreb || 0),
+        dreb: summary.dreb + (game.stats.dreb || 0),
+        stl: summary.stl + (game.stats.stl || 0),
+        tov: summary.tov + (game.stats.tov || 0),
+        foul: summary.foul + (game.stats.foul || 0),
+        reb: summary.reb + (game.stats.reb || 0),
+        points: summary.points + (game.stats.points || 0),
       }),
       zeroTotals
     );
@@ -108,9 +114,15 @@ export function PublicPlayerPage() {
     points: 0,
     reb: 0,
     ast: 0,
+    stl: 0,
+    tov: 0,
+    foul: 0,
     pointsPerGame: 0,
     reboundsPerGame: 0,
     assistsPerGame: 0,
+    stealsPerGame: 0,
+    turnoversPerGame: 0,
+    foulsPerGame: 0,
   };
 
   const playerLabel =
@@ -217,6 +229,9 @@ export function PublicPlayerPage() {
       render: (row) => `${row.fg3m}/${row.fg3a}`,
     },
     { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast },
+    { id: 'stl', label: 'STL', align: 'right', sortKey: 'stl', render: (row) => row.stl },
+    { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov },
+    { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul },
     { id: 'oreb', label: 'OREB', align: 'right', sortKey: 'oreb', render: (row) => row.oreb },
     { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
     { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
@@ -256,7 +271,7 @@ export function PublicPlayerPage() {
                 {data.player.position}
               </p>
             ) : null}
-            <div className="mt-4 grid grid-cols-3 gap-3 sm:max-w-md">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-2xl sm:grid-cols-3">
               <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">PPG</p>
                 <p className="mt-2 text-2xl font-bold text-slate-900">
@@ -273,6 +288,24 @@ export function PublicPlayerPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">APG</p>
                 <p className="mt-2 text-2xl font-bold text-slate-900">
                   {formatAverage(summary.assistsPerGame)}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">SPG</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {formatAverage(summary.stealsPerGame)}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">TOPG</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {formatAverage(summary.turnoversPerGame)}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FPG</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {formatAverage(summary.foulsPerGame)}
                 </p>
               </article>
             </div>

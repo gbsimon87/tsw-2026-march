@@ -15,9 +15,15 @@ const statTypeSchema = z.enum([
   STAT_TYPES.FG2_MISS,
   STAT_TYPES.FG3_MADE,
   STAT_TYPES.FG3_MISS,
+  STAT_TYPES.OPP_FT_MADE,
+  STAT_TYPES.OPP_FG2_MADE,
+  STAT_TYPES.OPP_FG3_MADE,
   STAT_TYPES.AST,
   STAT_TYPES.OREB,
   STAT_TYPES.DREB,
+  STAT_TYPES.STL,
+  STAT_TYPES.TOV,
+  STAT_TYPES.FOUL,
 ]);
 
 const zoneIdSchema = z.enum([
@@ -42,7 +48,20 @@ const trackedShotStatTypeSchema = z.enum([
   STAT_TYPES.FG3_MISS,
 ]);
 
-const nonShotStatTypeSchema = z.enum([STAT_TYPES.AST, STAT_TYPES.OREB, STAT_TYPES.DREB]);
+const nonShotStatTypeSchema = z.enum([
+  STAT_TYPES.AST,
+  STAT_TYPES.OREB,
+  STAT_TYPES.DREB,
+  STAT_TYPES.STL,
+  STAT_TYPES.TOV,
+  STAT_TYPES.FOUL,
+]);
+
+const opponentStatTypeSchema = z.enum([
+  STAT_TYPES.OPP_FT_MADE,
+  STAT_TYPES.OPP_FG2_MADE,
+  STAT_TYPES.OPP_FG3_MADE,
+]);
 
 const baseEventSchema = z.object({
   playerId: z.string().min(1),
@@ -60,7 +79,16 @@ const appendNonShotEventSchema = baseEventSchema.extend({
   statType: nonShotStatTypeSchema,
 });
 
-const appendEventSchema = z.union([appendTrackedShotEventSchema, appendNonShotEventSchema]);
+const appendOpponentEventSchema = z.object({
+  statType: opponentStatTypeSchema,
+  occurredAt: z.string().datetime().optional(),
+});
+
+const appendEventSchema = z.union([
+  appendTrackedShotEventSchema,
+  appendNonShotEventSchema,
+  appendOpponentEventSchema,
+]);
 
 module.exports = {
   createGameSchema,

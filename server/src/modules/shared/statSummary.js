@@ -12,6 +12,7 @@ function createEmptyShotSummary() {
 function createEmptyTeamStatSummary() {
   return {
     points: 0,
+    opponentPoints: 0,
     fg2: createEmptyShotSummary(),
     fg3: createEmptyShotSummary(),
     ft: createEmptyShotSummary(),
@@ -62,6 +63,21 @@ function applyEventToTeamStatSummary(summary, statType) {
 
   if (statType === STAT_TYPES.FG3_MISS) {
     summary.fg3.missed += 1;
+    return summary;
+  }
+
+  if (statType === STAT_TYPES.OPP_FT_MADE) {
+    summary.opponentPoints += 1;
+    return summary;
+  }
+
+  if (statType === STAT_TYPES.OPP_FG2_MADE) {
+    summary.opponentPoints += 2;
+    return summary;
+  }
+
+  if (statType === STAT_TYPES.OPP_FG3_MADE) {
+    summary.opponentPoints += 3;
   }
 
   return summary;

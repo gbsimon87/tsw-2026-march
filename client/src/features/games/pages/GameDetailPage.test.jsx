@@ -298,7 +298,7 @@ describe('GameDetailPage', () => {
       'https://example.com/team-logo.png'
     );
     expect(screen.getAllByText('TSW Team').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Wildcats/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Wildcats/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Status: completed/i)).toBeInTheDocument();
     expect(screen.getByText(/Recorded:/i)).toBeInTheDocument();
     expect(screen.getByText(/Finished:/i)).toBeInTheDocument();
@@ -316,7 +316,7 @@ describe('GameDetailPage', () => {
     expect(navigator.share).toHaveBeenCalledTimes(1);
     const sharePayload = navigator.share.mock.calls[0][0];
     expect(sharePayload.url).toContain('/games/game-1');
-    expect(sharePayload.text).toContain('TSW Team scored 4 points vs Wildcats');
+    expect(sharePayload.text).toContain('TSW Team vs Wildcats final: 4-0');
     expect(sharePayload.files).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));

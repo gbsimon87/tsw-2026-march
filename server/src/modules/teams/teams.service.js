@@ -156,6 +156,10 @@ function computeTeamPoints(game) {
   return summarizeEvents(game.events).points;
 }
 
+function computeOpponentPoints(game) {
+  return summarizeEvents(game.events).opponentPoints || 0;
+}
+
 function isGamePubliclyViewable(game) {
   const now = Date.now();
   const scheduledTime = game.scheduledAt ? new Date(game.scheduledAt).getTime() : null;
@@ -174,6 +178,7 @@ function sanitizePublicGame(game) {
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
     teamPoints: game.status === 'completed' ? computeTeamPoints(game) : null,
+    opponentPoints: game.status === 'completed' ? computeOpponentPoints(game) : null,
     isPubliclyViewable: isGamePubliclyViewable(game),
     createdAt: game.createdAt,
   };
@@ -277,6 +282,9 @@ function buildPublicTeamSummary(games, team) {
     pointsPerGame: gamesCount > 0 ? row.points / gamesCount : 0,
     assistsPerGame: gamesCount > 0 ? row.ast / gamesCount : 0,
     reboundsPerGame: gamesCount > 0 ? row.reb / gamesCount : 0,
+    stealsPerGame: gamesCount > 0 ? row.stl / gamesCount : 0,
+    turnoversPerGame: gamesCount > 0 ? row.tov / gamesCount : 0,
+    foulsPerGame: gamesCount > 0 ? row.foul / gamesCount : 0,
   }));
 
   return {
@@ -331,6 +339,9 @@ function buildPublicPlayerGameRows(games, team, player, teamLookup = new Map()) 
           ast: playerRow.ast,
           oreb: playerRow.oreb,
           dreb: playerRow.dreb,
+          stl: playerRow.stl,
+          tov: playerRow.tov,
+          foul: playerRow.foul,
           reb: playerRow.reb,
           points: playerRow.points,
         },
@@ -345,8 +356,11 @@ function buildPublicPlayerSummary(gameRows) {
       points: summary.points + game.stats.points,
       reb: summary.reb + game.stats.reb,
       ast: summary.ast + game.stats.ast,
+      stl: summary.stl + game.stats.stl,
+      tov: summary.tov + game.stats.tov,
+      foul: summary.foul + game.stats.foul,
     }),
-    { points: 0, reb: 0, ast: 0 }
+    { points: 0, reb: 0, ast: 0, stl: 0, tov: 0, foul: 0 }
   );
   const gamesCount = gameRows.length;
 
@@ -356,6 +370,9 @@ function buildPublicPlayerSummary(gameRows) {
     pointsPerGame: gamesCount > 0 ? totals.points / gamesCount : 0,
     reboundsPerGame: gamesCount > 0 ? totals.reb / gamesCount : 0,
     assistsPerGame: gamesCount > 0 ? totals.ast / gamesCount : 0,
+    stealsPerGame: gamesCount > 0 ? totals.stl / gamesCount : 0,
+    turnoversPerGame: gamesCount > 0 ? totals.tov / gamesCount : 0,
+    foulsPerGame: gamesCount > 0 ? totals.foul / gamesCount : 0,
   };
 }
 

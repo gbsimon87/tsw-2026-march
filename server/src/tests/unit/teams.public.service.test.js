@@ -120,6 +120,7 @@ describe('teams public service', () => {
     expect(result.summary).toEqual({
       gamesCount: 1,
       points: 6,
+      opponentPoints: 0,
       fg2: { made: 1, missed: 1, attempts: 2, percentage: 50 },
       fg3: { made: 1, missed: 1, attempts: 2, percentage: 50 },
       ft: { made: 1, missed: 1, attempts: 2, percentage: 50 },
@@ -137,6 +138,9 @@ describe('teams public service', () => {
             ast: 1,
             oreb: 0,
             dreb: 0,
+            stl: 0,
+            tov: 0,
+            foul: 0,
             reb: 0,
             points: 3,
             position: null,
@@ -144,6 +148,9 @@ describe('teams public service', () => {
             pointsPerGame: 3,
             assistsPerGame: 1,
             reboundsPerGame: 0,
+            stealsPerGame: 0,
+            turnoversPerGame: 0,
+            foulsPerGame: 0,
           },
           {
             playerId: 'p2',
@@ -157,6 +164,9 @@ describe('teams public service', () => {
             ast: 0,
             oreb: 0,
             dreb: 1,
+            stl: 0,
+            tov: 0,
+            foul: 0,
             reb: 1,
             points: 3,
             position: null,
@@ -164,6 +174,9 @@ describe('teams public service', () => {
             pointsPerGame: 3,
             assistsPerGame: 0,
             reboundsPerGame: 1,
+            stealsPerGame: 0,
+            turnoversPerGame: 0,
+            foulsPerGame: 0,
           },
         ],
         teamTotals: {
@@ -176,8 +189,14 @@ describe('teams public service', () => {
           ast: 1,
           oreb: 0,
           dreb: 1,
+          stl: 0,
+          tov: 0,
+          foul: 0,
           reb: 1,
           points: 6,
+        },
+        opponentTotals: {
+          points: 0,
         },
       },
     });
@@ -216,6 +235,7 @@ describe('teams public service', () => {
     expect(result).toEqual({
       gamesCount: 0,
       points: 0,
+      opponentPoints: 0,
       fg2: { made: 0, missed: 0, attempts: 0, percentage: null },
       fg3: { made: 0, missed: 0, attempts: 0, percentage: null },
       ft: { made: 0, missed: 0, attempts: 0, percentage: null },
@@ -231,7 +251,13 @@ describe('teams public service', () => {
           ast: 0,
           oreb: 0,
           dreb: 0,
+          stl: 0,
+          tov: 0,
+          foul: 0,
           reb: 0,
+          points: 0,
+        },
+        opponentTotals: {
           points: 0,
         },
       },
@@ -272,6 +298,9 @@ describe('teams public service', () => {
         pointsPerGame: 2.5,
         assistsPerGame: 0,
         reboundsPerGame: 1,
+        stealsPerGame: 0,
+        turnoversPerGame: 0,
+        foulsPerGame: 0,
       }),
     ]);
 
@@ -295,6 +324,9 @@ describe('teams public service', () => {
         pointsPerGame: 0,
         assistsPerGame: 0,
         reboundsPerGame: 0,
+        stealsPerGame: 0,
+        turnoversPerGame: 0,
+        foulsPerGame: 0,
       }),
     ]);
   });
@@ -375,9 +407,15 @@ describe('teams public service', () => {
       points: 5,
       reb: 2,
       ast: 1,
+      stl: 0,
+      tov: 0,
+      foul: 0,
       pointsPerGame: 2.5,
       reboundsPerGame: 1,
       assistsPerGame: 0.5,
+      stealsPerGame: 0,
+      turnoversPerGame: 0,
+      foulsPerGame: 0,
     });
     expect(result.games.map((game) => game.gameId)).toEqual(['g2', 'g1']);
     expect(result.games[0].opponentDestination).toEqual({
@@ -404,6 +442,9 @@ describe('teams public service', () => {
       ast: 1,
       oreb: 0,
       dreb: 1,
+      stl: 0,
+      tov: 0,
+      foul: 0,
       reb: 1,
       points: 3,
     });
@@ -458,6 +499,9 @@ describe('teams public service', () => {
           ast: 0,
           oreb: 0,
           dreb: 0,
+          stl: 0,
+          tov: 0,
+          foul: 0,
           reb: 0,
           points: 0,
         },
@@ -469,9 +513,15 @@ describe('teams public service', () => {
       points: 0,
       reb: 0,
       ast: 0,
+      stl: 0,
+      tov: 0,
+      foul: 0,
       pointsPerGame: 0,
       reboundsPerGame: 0,
       assistsPerGame: 0,
+      stealsPerGame: 0,
+      turnoversPerGame: 0,
+      foulsPerGame: 0,
     });
   });
 

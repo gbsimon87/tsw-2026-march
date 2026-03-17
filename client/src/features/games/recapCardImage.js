@@ -32,6 +32,10 @@ function buildPlayerInitials(name) {
 
 function buildSummarySentence(recap) {
   if (recap?.opponent?.name) {
+    const opponentPoints = recap?.opponent?.points;
+    if (typeof opponentPoints === 'number') {
+      return `${recap?.team?.name || 'Team'} finished ${recap?.team?.points || 0}-${opponentPoints} vs ${recap.opponent.name}.`;
+    }
     return `${recap?.team?.name || 'Team'} scored ${recap?.team?.points || 0} points vs ${recap.opponent.name}.`;
   }
 
@@ -100,9 +104,12 @@ export function createRecapCardSvg(recap, options = {}) {
     <text x="188" y="226" font-size="32" fill="#475569">${escapeXml(opponentName)}</text>
     <text x="188" y="270" font-size="24" fill="#64748b">${escapeXml(formatDate(recap?.playedAt))}</text>
 
-    <rect x="732" y="88" width="276" height="216" rx="34" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
-    <text x="870" y="142" text-anchor="middle" font-size="24" font-weight="700" fill="#64748b">TEAM SCORE</text>
-    <text x="870" y="246" text-anchor="middle" font-size="120" font-weight="800" fill="#0f172a">${recap?.team?.points || 0}</text>
+    <rect x="692" y="88" width="316" height="216" rx="34" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
+    <text x="850" y="132" text-anchor="middle" font-size="20" font-weight="700" fill="#64748b">FINAL SCORE</text>
+    <text x="780" y="182" text-anchor="middle" font-size="24" font-weight="700" fill="#64748b">${escapeXml(teamName)}</text>
+    <text x="920" y="182" text-anchor="middle" font-size="24" font-weight="700" fill="#64748b">${escapeXml(recap?.opponent?.name || 'Opponent')}</text>
+    <text x="780" y="252" text-anchor="middle" font-size="92" font-weight="800" fill="#0f172a">${recap?.team?.points || 0}</text>
+    <text x="920" y="252" text-anchor="middle" font-size="92" font-weight="800" fill="#0f172a">${recap?.opponent?.points || 0}</text>
 
     <rect x="48" y="356" width="984" height="120" rx="28" fill="#f8fafc" stroke="#e2e8f0" stroke-width="3" />
     <text x="84" y="428" font-size="30" font-weight="700" fill="#0f172a">${summarySentence}</text>

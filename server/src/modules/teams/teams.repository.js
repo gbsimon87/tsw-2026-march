@@ -54,6 +54,8 @@ const teamSchema = new mongoose.Schema(
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     billingEmail: { type: String, default: null },
+    lastWebhookEventId: { type: String, default: null },
+    processedWebhookEventIds: { type: [String], default: [] },
   },
   { timestamps: true }
 );

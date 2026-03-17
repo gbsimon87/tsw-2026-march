@@ -76,7 +76,9 @@ function PublicGameRow({ game }) {
         <p className="font-medium text-slate-900">{primaryText}</p>
         <p className="text-sm text-slate-600">
           {formatGameDate(game)} • {formatStatus(game.status)}
-          {typeof game.teamPoints === 'number' ? ` • ${game.teamPoints} pts` : ''}
+          {typeof game.teamPoints === 'number'
+            ? ` • ${game.teamPoints}-${game.opponentPoints || 0}`
+            : ''}
         </p>
       </div>
       {game.isPubliclyViewable ? (
@@ -174,6 +176,9 @@ export function PublicTeamPage() {
         ast: 0,
         oreb: 0,
         dreb: 0,
+        stl: 0,
+        tov: 0,
+        foul: 0,
         reb: 0,
         points: 0,
       },
@@ -262,6 +267,20 @@ export function PublicTeamPage() {
       render: (row) => row.ast,
     },
     {
+      id: 'spg',
+      label: 'SPG',
+      align: 'right',
+      sortValue: (row) => row.stealsPerGame,
+      render: (row) => formatPerGameValue(row.stealsPerGame),
+    },
+    {
+      id: 'stl',
+      label: 'STL',
+      align: 'right',
+      sortValue: (row) => row.stl,
+      render: (row) => row.stl,
+    },
+    {
       id: 'rpg',
       label: 'RPG',
       align: 'right',
@@ -288,6 +307,34 @@ export function PublicTeamPage() {
       align: 'right',
       sortValue: (row) => row.dreb,
       render: (row) => row.dreb,
+    },
+    {
+      id: 'topg',
+      label: 'TOPG',
+      align: 'right',
+      sortValue: (row) => row.turnoversPerGame,
+      render: (row) => formatPerGameValue(row.turnoversPerGame),
+    },
+    {
+      id: 'tov',
+      label: 'TOV',
+      align: 'right',
+      sortValue: (row) => row.tov,
+      render: (row) => row.tov,
+    },
+    {
+      id: 'fpg',
+      label: 'FPG',
+      align: 'right',
+      sortValue: (row) => row.foulsPerGame,
+      render: (row) => formatPerGameValue(row.foulsPerGame),
+    },
+    {
+      id: 'foul',
+      label: 'FOUL',
+      align: 'right',
+      sortValue: (row) => row.foul,
+      render: (row) => row.foul,
     },
     {
       id: 'ft',

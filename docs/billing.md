@@ -43,7 +43,16 @@ Entitlements must be enforced server-side for premium data and mirrored client-s
 - Stripe Billing Portal for subscription management
 - Express webhook endpoint for subscription lifecycle updates
 - Team document stores billing state
+- Team billing success page polls owner team data to confirm access after redirect
+- Webhook replay protection is keyed by Stripe webhook `event.id` and stored on the team document as a bounded recent-event history
 
 ## Source of Truth
 
 Stripe webhooks are the source of truth for plan activation and cancellation. The client never promotes a team to Pro directly.
+
+## Operational Notes
+
+- Checkout success and cancel redirects include the relevant `teamId` so the client can return the user to the correct billing context.
+- Pricing should only route a team to the billing portal when that team is already `pro` with an `active` or `trialing` subscription status.
+- Non-active Pro-like states such as `past_due` should not be treated as fully upgraded access.
+- Replay and public shot-map gating should always follow the backend entitlement result, not just client route assumptions.

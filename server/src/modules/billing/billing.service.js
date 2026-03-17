@@ -10,6 +10,17 @@ const { updateUserPlan } = require('../auth/auth.repository');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
+const MAX_PROCESSED_WEBHOOK_EVENT_IDS = 25;
+
+function appendQueryParam(urlString, key, value) {
+  if (!urlString || value === undefined || value === null || value === '') {
+    return urlString;
+  }
+
+  const nextUrl = new URL(urlString);
+  nextUrl.searchParams.set(key, String(value));
+  return nextUrl.toString();
+}
 
 let stripeClient = null;
 
@@ -56,6 +67,36 @@ function getBillingSummary(team) {
   };
 }
 
+function getProcessedWebhookEventIds(team) {
+  return Array.isArray(team.processedWebhookEventIds) ? team.processedWebhookEventIds : [];
+}
+
+function hasProcessedWebhookEvent(team, eventId) {
+  if (!eventId) {
+    return false;
+  }
+
+  return team.lastWebhookEventId === eventId || getProcessedWebhookEventIds(team).includes(eventId);
+}
+
+function markWebhookEventProcessed(team, eventId) {
+  if (!eventId) {
+    return;
+  }
+
+  const processedIds = getProcessedWebhookEventIds(team);
+  if (!processedIds.includes(eventId)) {
+    processedIds.push(eventId);
+  }
+
+  if (processedIds.length > MAX_PROCESSED_WEBHOOK_EVENT_IDS) {
+    processedIds.splice(0, processedIds.length - MAX_PROCESSED_WEBHOOK_EVENT_IDS);
+  }
+
+  team.processedWebhookEventIds = processedIds;
+  team.lastWebhookEventId = eventId;
+}
+
 async function syncOwnerPlan(ownerUserId) {
   const teams = await listTeamsByOwner(ownerUserId);
   const hasProTeam = teams.some((team) => {
@@ -92,8 +133,16 @@ async function createCheckoutSession(userId, teamId) {
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
-    success_url: env.STRIPE_SUCCESS_URL,
-    cancel_url: env.STRIPE_CANCEL_URL,
+    success_url: appendQueryParam(
+      appendQueryParam(env.STRIPE_SUCCESS_URL, 'teamId', team._id),
+      'checkout',
+      'success'
+    ),
+    cancel_url: appendQueryParam(
+      appendQueryParam(env.STRIPE_CANCEL_URL, 'teamId', team._id),
+      'checkout',
+      'canceled'
+    ),
     customer_email: team.billingEmail || undefined,
     line_items: [
       {
@@ -157,7 +206,7 @@ function applySubscriptionState(team, subscription) {
   team.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
 }
 
-async function markTeamFromCheckoutSession(session) {
+async function markTeamFromCheckoutSession(session, eventId) {
   const teamId = session.metadata?.teamId;
   if (!teamId) {
     return;
@@ -168,14 +217,19 @@ async function markTeamFromCheckoutSession(session) {
     return;
   }
 
+  if (hasProcessedWebhookEvent(team, eventId)) {
+    return;
+  }
+
   team.stripeCustomerId =
     typeof session.customer === 'string' ? session.customer : team.stripeCustomerId || null;
   team.billingEmail = session.customer_details?.email || team.billingEmail || null;
+  markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
 
-async function updateTeamFromSubscription(subscription) {
+async function updateTeamFromSubscription(subscription, eventId) {
   const teamId = subscription.metadata?.teamId;
   if (!teamId) {
     return;
@@ -186,12 +240,17 @@ async function updateTeamFromSubscription(subscription) {
     return;
   }
 
+  if (hasProcessedWebhookEvent(team, eventId)) {
+    return;
+  }
+
   applySubscriptionState(team, subscription);
+  markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
 
-async function markInvoiceFailure(invoice) {
+async function markInvoiceFailure(invoice, eventId) {
   const teamId =
     invoice.parent?.subscription_details?.metadata?.teamId ||
     invoice.lines?.data?.[0]?.metadata?.teamId;
@@ -204,7 +263,12 @@ async function markInvoiceFailure(invoice) {
     return;
   }
 
+  if (hasProcessedWebhookEvent(team, eventId)) {
+    return;
+  }
+
   team.subscriptionStatus = 'past_due';
+  markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
@@ -221,19 +285,27 @@ async function handleWebhookEvent(signature, rawBody) {
 
   switch (event.type) {
     case 'checkout.session.completed':
-      await markTeamFromCheckoutSession(event.data.object);
+      await markTeamFromCheckoutSession(event.data.object, event.id);
       break;
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
-      await updateTeamFromSubscription(event.data.object);
+      await updateTeamFromSubscription(event.data.object, event.id);
       break;
     case 'invoice.payment_failed':
-      await markInvoiceFailure(event.data.object);
+      await markInvoiceFailure(event.data.object, event.id);
       break;
     case 'invoice.paid':
     default:
       break;
+  }
+
+  if (event.data?.object?.metadata?.teamId) {
+    const team = await findTeamById(event.data.object.metadata.teamId);
+    if (team && !hasProcessedWebhookEvent(team, event.id)) {
+      markWebhookEventProcessed(team, event.id);
+      await saveTeam(team);
+    }
   }
 
   return { received: true };

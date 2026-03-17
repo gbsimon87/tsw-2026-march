@@ -6,6 +6,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
+import { GameDetailHeader } from '../components/GameDetailHeader';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameRecapPanel } from '../components/GameRecapPanel';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
@@ -46,6 +47,14 @@ function formatEventMeta(event) {
   return parts.join(' | ');
 }
 
+function eventActorLabel(event, playersById) {
+  if (!event.playerId) {
+    return 'Opponent';
+  }
+
+  return playersById.get(event.playerId)?.displayName || 'Unknown Player';
+}
+
 function canAccessReplay(team, entitlements) {
   const billing = team?.billing || {};
   const hasActiveProBilling =
@@ -66,6 +75,7 @@ export function GameDetailPage() {
   const [feedPostState, setFeedPostState] = useState('');
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
+  const isPrintMode = searchParams.get('print') === '1';
 
   useEffect(() => {
     gamesApi
@@ -90,6 +100,11 @@ export function GameDetailPage() {
 
   const { game, team, boxScore } = data;
   const recap = data.recap;
+  const gameSummary = data.gameSummary || {
+    teamPoints: boxScore?.teamTotals?.points || 0,
+    opponentPoints: boxScore?.opponentTotals?.points || 0,
+    hasOpponentScore: (boxScore?.opponentTotals?.points || 0) > 0,
+  };
   const entitlements = data.teamEntitlements || team.entitlements || {};
   const canViewReplay = canAccessReplay(team, entitlements);
   const sortedEvents = [...game.events].sort((a, b) => {
@@ -164,6 +179,27 @@ export function GameDetailPage() {
       render: (row) => row.ast,
     },
     {
+      id: 'stl',
+      label: 'STL',
+      align: 'right',
+      sortKey: 'stl',
+      render: (row) => row.stl,
+    },
+    {
+      id: 'tov',
+      label: 'TOV',
+      align: 'right',
+      sortKey: 'tov',
+      render: (row) => row.tov,
+    },
+    {
+      id: 'foul',
+      label: 'FOUL',
+      align: 'right',
+      sortKey: 'foul',
+      render: (row) => row.foul,
+    },
+    {
       id: 'ft',
       label: 'FT',
       align: 'right',
@@ -227,8 +263,8 @@ export function GameDetailPage() {
         ) : (
           <ul className="divide-y text-sm">
             {playByPlayEvents.map((event, index) => {
-              const player = playersById.get(event.playerId);
-              const playerName = player?.displayName || 'Unknown Player';
+              const player = event.playerId ? playersById.get(event.playerId) : null;
+              const playerName = eventActorLabel(event, playersById);
               const statLabel = STAT_LABELS[event.statType] || event.statType;
 
               return (
@@ -315,34 +351,86 @@ export function GameDetailPage() {
 
   return (
     <section className="space-y-4">
-      <Tabs
-        defaultValue="recap"
-        items={[
-          {
-            value: 'recap',
-            label: 'Recap',
-            content: (
-              <GameRecapPanel
-                game={game}
-                team={team}
-                gameId={game.id}
-                recap={recap}
-                canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
-                onShareToFeed={openFeedComposer}
-              />
-            ),
-          },
-          { value: 'stats', label: 'Stats', content: statsContent },
-          { value: 'replay', label: 'Replay', content: replayContent },
-        ]}
+      <GameDetailHeader
+        gameId={game.id}
+        game={game}
+        team={team}
+        recap={recap}
+        gameSummary={gameSummary}
+        canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
+        className={isPrintMode ? 'print:rounded-none print:p-0' : ''}
+        actions={
+          !isPrintMode ? (
+            <button
+              type="button"
+              onClick={() => updateSearchParam('print', '1')}
+              className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            >
+              Print Box Score
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              >
+                Print
+              </button>
+              <button
+                type="button"
+                onClick={() => updateSearchParam('print', null)}
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+              >
+                Exit Print View
+              </button>
+            </>
+          )
+        }
       />
 
-      {feedPostState === 'posted' ? (
+      {isPrintMode ? (
+        <div className="overflow-x-auto rounded border bg-white p-4 print:overflow-visible print:rounded-none print:border-0 print:bg-white print:p-0">
+          <StatsTable
+            columns={boxScoreColumns}
+            rows={boxScoreRows}
+            tableClassName="w-full text-sm print:text-xs"
+          />
+        </div>
+      ) : null}
+
+      {!isPrintMode ? (
+        <Tabs
+          defaultValue="recap"
+          items={[
+            {
+              value: 'recap',
+              label: 'Recap',
+              content: (
+                <GameRecapPanel
+                  team={team}
+                  gameId={game.id}
+                  recap={recap}
+                  onShareToFeed={openFeedComposer}
+                />
+              ),
+            },
+            { value: 'stats', label: 'Stats', content: statsContent },
+            { value: 'replay', label: 'Replay', content: replayContent },
+          ]}
+        />
+      ) : null}
+
+      {!isPrintMode && feedPostState === 'posted' ? (
         <p className="text-sm font-medium text-emerald-700">Posted to feed</p>
       ) : null}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {!isPrintMode && error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to Feed">
+      <Modal
+        open={!isPrintMode && isFeedComposerOpen}
+        onClose={closeFeedComposer}
+        title="Share to Feed"
+      >
         <FeedComposer
           initialTab="game"
           initialSelectedGameId={game.id}
