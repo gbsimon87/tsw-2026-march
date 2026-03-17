@@ -20,19 +20,19 @@ The main near-term risk is no longer missing baseline functionality. It is drift
 - Opponent scoring totals were added through event-derived scoring rather than a second opponent roster model.
 - Final scorelines now flow through game detail, recap, recap cards, and public score surfaces.
 - `STL`, `TOV`, and `FOUL` are supported in core stat summaries and public reporting surfaces.
-- Game detail includes a baseline print mode via `/games/:gameId?print=1`.
+- Game detail print mode now uses a simplified print-first layout with tighter spacing and cleaner browser print-to-PDF output.
 - Billing has checkout, customer portal, webhook handling, entitlement resolution, and local replay/idempotency test coverage.
 - Public opponent placeholder routing already exists and should remain the base for any future opponent identity expansion.
 - Tracker lineup state now supports starting five selection, current on-court players, and event-based substitutions.
 - Full-screen tracking now uses on-court players only, includes modal quick stats/opponent scoring, and supports explicit `Opponent Rebound`.
-- Recent-event removal is intended to allow removing substitution events as normal corrections; lineup state recalculates from the remaining event history.
+- Recent-event removal allows removing substitution events as normal corrections; lineup state recalculates from the remaining event history.
 
 ## Current Priorities
 
 1. Harden billing reliability and deployment readiness.
-2. Refine live tracking recovery and in-game reliability.
-3. Finish print output polish for usable browser print-to-PDF.
-4. Align README, roadmap, and older planning docs with the real product state.
+2. Align README, roadmap, and older planning docs with the real product state.
+3. Re-check live tracking UX during real-device/manual validation.
+4. Prepare the next reporting/analytics phase after docs are aligned.
 
 ## Milestones
 
@@ -101,7 +101,7 @@ Replay and public shot maps are already monetized surfaces. Billing failures or 
 
 ### Milestone 2: Tracking Workflow Reliability
 
-Status: `In Progress`
+Status: `Done`
 
 #### Why it matters
 
@@ -130,15 +130,15 @@ Live tracking is the highest-frequency user workflow and still has the biggest r
 
 - Event chronology and summary recalculation regressions.
 - Tracker controls can become slower if the UI grows without restraint.
-- Remaining work is mostly UX polish and live-use validation, not missing core tracker capability.
+- Remaining work is mostly live-use validation and follow-up polish, not missing core tracker capability.
 
 #### Next update
 
-- Re-check tracker UX during real live-use/manual validation and then update milestone status.
+- Fold any issues found during real live-use/manual validation into a follow-up polish pass rather than reopening the milestone scope.
 
 ### Milestone 3: Output Polish, Not Output Expansion
 
-Status: `Ready Next`
+Status: `Done`
 
 #### Why it matters
 
@@ -159,15 +159,15 @@ Print mode already exists. The remaining work is to make it clean enough for act
 
 #### Open risks
 
-- Print CSS can turn into a time sink if it tries to mirror the interactive page too closely.
+- Browser-specific print quirks still need occasional manual validation, but the baseline print-first layout is now in place.
 
 #### Next update
 
-- Validate print output against a completed game with a long roster.
+- Keep print mode stable while broader reporting/export work remains deferred.
 
 ### Milestone 4: Documentation Alignment
 
-Status: `Ready Next`
+Status: `In Progress`
 
 #### Why it matters
 
@@ -192,7 +192,7 @@ The repo currently understates shipped scope and leaves contradictory implementa
 
 #### Next update
 
-- Clean up roadmap wording once the next product milestone is validated.
+- Mark the milestone done once README, roadmap, and historical plan docs no longer conflict with shipped behavior.
 
 ### Milestone 5: Reporting and Analytics Expansion
 

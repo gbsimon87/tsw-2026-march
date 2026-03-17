@@ -15,6 +15,8 @@
 - Rebounds and assists tracked in live game flow and included across all box scores
 - Opponent total scoring with final scoreline rendering across game detail, recap, and public surfaces
 - Additional stat categories in the current model: steals, turnovers, fouls
+- Starting five setup, on-court lineup tracking, and event-based substitutions in live tracking
+- Full-screen tracking consolidation around on-court players, modal quick stats, and opponent rebound flow
 - Reusable sortable stats table with pinned first column for horizontally scrollable stat views
 - Public team page sortable season player table, public game lists, and links to player profiles
 - Public player profile page with PPG/RPG/APG and sortable per-game stat logs
@@ -24,23 +26,24 @@
 - Public feed with authenticated posting, image uploads, shareable game/player/team cards, creator-only delete, and a floating compose modal flow
 - Team billing foundation with pricing page, Stripe checkout, customer portal, webhook-driven entitlements, and billing success/cancel routes
 - Browser print mode for game detail box scores
+- Print-first box score polish for cleaner browser print-to-PDF output
 
 ## In Progress
 
 - Teams and roster UX refinement
-- Live game tracking UX polish (event entry speed, recovery, mobile ergonomics)
+- Live game tracking UX polish from real-device/manual validation
 - Billing reliability and deployment readiness in staging/production
 - Expanded automated test coverage for teams/games workflows
-- Documentation alignment for API and onboarding
+- Documentation alignment for README, roadmap, and historical planning docs
 - Feed UX polish beyond the floating composer flow
 - Cloudinary setup/documentation follow-through in deployed environments
 
 ## Planned
 
-- Fantasy stat tracking
 - Season support and season-based reporting
 - Opponent roster/player support beyond score totals
 - Richer recap/reporting content and trend summaries
+- Fantasy stat tracking
 - Player image support from uploaded media or linked Google images
 - Embedded video playback, likely via YouTube iframe support
 - Time-synced game tracking from video playback

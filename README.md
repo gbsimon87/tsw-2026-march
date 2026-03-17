@@ -4,8 +4,8 @@ Basketball team stat tracking app built on a MERN monorepo.
 
 ## Product Overview
 
-TSW helps coaches/managers track live game stats and review box scores later.
-V1 focuses on fast, simple tracking for one team at a time:
+TSW helps coaches/managers track live game stats, manage on-court lineups during games, and review shareable box scores later.
+The current product still focuses on one tracked team at a time, but it now includes a more complete live-game workflow:
 
 - Authenticated user accounts (email/password + Google OAuth)
 - Team and player roster setup
@@ -17,9 +17,11 @@ V1 focuses on fast, simple tracking for one team at a time:
   - Free throws from dedicated FT buttons
   - Offensive/defensive rebounds
   - Assists on made 2PT and 3PT baskets
+  - Opponent rebounds as explicit events
   - Opponent scoring totals via dedicated opponent events
   - Steals, turnovers, and fouls
 - Court location stored per event (`zoneId`, `x`, `y`)
+- Starting five setup, current on-court lineup tracking, and event-based substitutions
 - Game finish/save flow
 - Previous game history + derived box scores
 - Public team pages with sortable season stat tables and recent/upcoming games
@@ -85,18 +87,20 @@ V1 focuses on fast, simple tracking for one team at a time:
 
 ### Tracking Interaction
 
-- Tap/click on full court image to infer `zoneId`, nearest hoop, and shot family (`FG2` or `FG3`).
+- Set a starting five before entering full-screen tracking.
+- Manage current on-court players from the track page with event-based substitutions.
+- Tap/click on the full court image to infer `zoneId`, nearest hoop, and shot family (`FG2` or `FG3`).
 - Record shot outcomes with `Shot Make` / `Shot Miss`.
-- Record free throws with `FT Make` / `FT Miss` using fixed free-throw-line coordinates.
-- After made 2PT/3PT baskets, prompt for an optional assist from a teammate or `No Assist`.
-- After missed shots/free throws, prompt for an optional offensive rebound or `No Rebound`.
-- Record defensive rebounds from the player/action controls in the tracking overlay.
-- Record steals, turnovers, and fouls from quick stat controls.
+- Record free throws with dedicated `FT+` / `FT-` actions using fixed free-throw-line coordinates.
+- After made 2PT/3PT baskets, prompt for an assist from the other 4 on-court teammates or `No Assist`.
+- After missed shots/free throws, prompt for a rebound from the 5 on-court teammates or `Opponent Rebound`.
+- Record defensive rebounds from the action controls in the full-screen tracking overlay.
+- Record steals, turnovers, and fouls from full-screen quick stat controls.
 - Record opponent `+1`, `+2`, and `+3` scoring events without selecting a player.
 - Every event stores normalized coordinates (`x`, `y`) in the range `0..100`.
 - Built-in calibration overlay and draggable handles for court-image alignment/debugging.
 - Live tracking box score uses a horizontally scrollable table with pinned player column.
-- Recent-event recovery supports undo/delete flows instead of inline event editing.
+- Recent-event recovery supports removal of normal stat events and substitution events instead of inline event editing.
 
 ### Game Detail Experience
 
@@ -121,7 +125,7 @@ V1 focuses on fast, simple tracking for one team at a time:
   - Progressive shot plotting in event order
   - Live sortable replay box score that updates as events are stepped through, including non-shot stats such as assists and rebounds
   - Pro-only access with locked-state messaging for non-Pro teams
-- Print mode is available on game detail through `?print=1`.
+- Print mode is available on game detail through `?print=1` with a simplified print-first layout for browser print-to-PDF output.
 
 ### Public Experience
 
