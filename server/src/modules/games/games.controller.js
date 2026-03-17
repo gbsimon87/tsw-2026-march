@@ -1,6 +1,6 @@
 const { ApiError } = require('../../utils/apiError');
 const gamesService = require('./games.service');
-const { createGameSchema, appendEventSchema } = require('./games.validation');
+const { createGameSchema, appendEventSchema, setLineupSchema } = require('./games.validation');
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -45,6 +45,13 @@ async function appendEvent(req, res) {
   res.status(200).json(result);
 }
 
+async function setLineup(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = setLineupSchema.parse(req.body);
+  const result = await gamesService.setGameLineup(userId, req.params.gameId, payload.playerIds);
+  res.status(200).json(result);
+}
+
 async function removeEvent(req, res) {
   const userId = requireAuthUserId(req);
   const result = await gamesService.removeEventForUser(
@@ -67,6 +74,7 @@ module.exports = {
   getById,
   getPublicById,
   appendEvent,
+  setLineup,
   removeEvent,
   finish,
 };

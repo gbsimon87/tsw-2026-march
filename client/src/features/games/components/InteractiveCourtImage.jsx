@@ -35,6 +35,7 @@ export function InteractiveCourtImage({
   helperText = 'Tap/click the court image to select shot location.',
   imageClassName = '',
   rotate90 = false,
+  topControls = null,
 }) {
   const [showCalibration, setShowCalibration] = useState(false);
   const [draftRect, setDraftRect] = useState(calibration.courtRect);
@@ -209,13 +210,16 @@ export function InteractiveCourtImage({
     >
       <div className="pointer-events-none absolute" />
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
-        <button
-          type="button"
-          className="absolute right-0 top-0 z-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm"
-          onClick={() => setShowCalibration((value) => !value)}
-        >
-          {showCalibration ? 'Hide calibration' : 'Show calibration'}
-        </button>
+        <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-sm font-medium text-slate-900 shadow-lg transition hover:bg-slate-100"
+            onClick={() => setShowCalibration((value) => !value)}
+          >
+            {showCalibration ? 'Hide calibration' : 'Show calibration'}
+          </button>
+          {topControls}
+        </div>
 
         <div
           ref={stageRef}

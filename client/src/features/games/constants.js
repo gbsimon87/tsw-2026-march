@@ -21,12 +21,15 @@ export const STAT_LABELS = {
   OPP_FT_MADE: 'Opponent FT Make',
   OPP_FG2_MADE: 'Opponent 2PT Make',
   OPP_FG3_MADE: 'Opponent 3PT Make',
+  OPP_REB: 'Opponent Rebound',
   AST: 'Assist',
   OREB: 'Offensive Rebound',
   DREB: 'Defensive Rebound',
   STL: 'Steal',
   TOV: 'Turnover',
   FOUL: 'Foul',
+  SUB_IN: 'Sub In',
+  SUB_OUT: 'Sub Out',
 };
 
 export default {

@@ -23,6 +23,9 @@ The main near-term risk is no longer missing baseline functionality. It is drift
 - Game detail includes a baseline print mode via `/games/:gameId?print=1`.
 - Billing has checkout, customer portal, webhook handling, entitlement resolution, and local replay/idempotency test coverage.
 - Public opponent placeholder routing already exists and should remain the base for any future opponent identity expansion.
+- Tracker lineup state now supports starting five selection, current on-court players, and event-based substitutions.
+- Full-screen tracking now uses on-court players only, includes modal quick stats/opponent scoring, and supports explicit `Opponent Rebound`.
+- Recent-event removal is intended to allow removing substitution events as normal corrections; lineup state recalculates from the remaining event history.
 
 ## Current Priorities
 
@@ -98,7 +101,7 @@ Replay and public shot maps are already monetized surfaces. Billing failures or 
 
 ### Milestone 2: Tracking Workflow Reliability
 
-Status: `Ready Next`
+Status: `In Progress`
 
 #### Why it matters
 
@@ -112,11 +115,13 @@ Live tracking is the highest-frequency user workflow and still has the biggest r
 - Improve duplicate-tap prevention and save-state messaging.
 - Improve mobile ergonomics.
 - Keep correction scoped to delete-and-reenter, not inline event editing.
+- Keep substitutions event-based through the normal game event stream, not a separate mutation endpoint.
 
 #### Acceptance criteria
 
 - Undo works consistently for team and opponent events.
 - Recent event deletion remains safe and understandable.
+- Substitution events can be removed like other recent events and lineup state recalculates correctly.
 - Prompt cancellation is explicit and recoverable.
 - Save failures leave the tracker usable.
 - Mobile tracking remains fast and readable.
@@ -125,10 +130,11 @@ Live tracking is the highest-frequency user workflow and still has the biggest r
 
 - Event chronology and summary recalculation regressions.
 - Tracker controls can become slower if the UI grows without restraint.
+- Remaining work is mostly UX polish and live-use validation, not missing core tracker capability.
 
 #### Next update
 
-- Re-check tracker UX once billing reliability work is stable.
+- Re-check tracker UX during real live-use/manual validation and then update milestone status.
 
 ### Milestone 3: Output Polish, Not Output Expansion
 

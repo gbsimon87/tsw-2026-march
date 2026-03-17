@@ -41,6 +41,25 @@ describe('games validation', () => {
     expect(parsed.statType).toBe('AST');
   });
 
+  test('accepts opponent rebound without player id', () => {
+    const parsed = appendEventSchema.parse({
+      statType: 'OPP_REB',
+    });
+
+    expect(parsed.statType).toBe('OPP_REB');
+  });
+
+  test('accepts substitution event with related player id', () => {
+    const parsed = appendEventSchema.parse({
+      playerId: 'player-1',
+      relatedPlayerId: 'player-6',
+      statType: 'SUB_OUT',
+    });
+
+    expect(parsed.statType).toBe('SUB_OUT');
+    expect(parsed.relatedPlayerId).toBe('player-6');
+  });
+
   test('accepts optional opponent when creating game', () => {
     const parsed = createGameSchema.parse({
       teamId: 'team-1',

@@ -21,12 +21,15 @@ const STAT_TYPES = {
   OPP_FT_MADE: 'OPP_FT_MADE',
   OPP_FG2_MADE: 'OPP_FG2_MADE',
   OPP_FG3_MADE: 'OPP_FG3_MADE',
+  OPP_REB: 'OPP_REB',
   AST: 'AST',
   OREB: 'OREB',
   DREB: 'DREB',
   STL: 'STL',
   TOV: 'TOV',
   FOUL: 'FOUL',
+  SUB_IN: 'SUB_IN',
+  SUB_OUT: 'SUB_OUT',
 };
 
 module.exports = {

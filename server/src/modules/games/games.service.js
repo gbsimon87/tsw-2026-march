@@ -17,6 +17,7 @@ function sanitizeEvent(event) {
   return {
     id: String(event._id),
     playerId: event.playerId ? String(event.playerId) : null,
+    relatedPlayerId: event.relatedPlayerId ? String(event.relatedPlayerId) : null,
     statType: event.statType,
     zoneId: event.zoneId ?? null,
     x: event.x ?? null,
@@ -45,6 +46,12 @@ function sanitizeGame(game, options = {}) {
     title: game.title,
     opponent: game.opponent ?? null,
     status: game.status,
+    startingLineupPlayerIds: Array.isArray(game.startingLineupPlayerIds)
+      ? game.startingLineupPlayerIds.map(String)
+      : [],
+    currentLineupPlayerIds: Array.isArray(game.currentLineupPlayerIds)
+      ? game.currentLineupPlayerIds.map(String)
+      : [],
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
     createdAt: game.createdAt,
@@ -128,6 +135,14 @@ function applyEventToRow(row, statType) {
     return;
   }
 
+  if (
+    statType === STAT_TYPES.OPP_REB ||
+    statType === STAT_TYPES.SUB_IN ||
+    statType === STAT_TYPES.SUB_OUT
+  ) {
+    return;
+  }
+
   if (statType === STAT_TYPES.STL) {
     row.stl += 1;
     return;
@@ -147,8 +162,47 @@ function isOpponentEvent(statType) {
   return (
     statType === STAT_TYPES.OPP_FT_MADE ||
     statType === STAT_TYPES.OPP_FG2_MADE ||
-    statType === STAT_TYPES.OPP_FG3_MADE
+    statType === STAT_TYPES.OPP_FG3_MADE ||
+    statType === STAT_TYPES.OPP_REB
   );
+}
+
+function recalculateCurrentLineup(game) {
+  let lineup = Array.isArray(game.startingLineupPlayerIds)
+    ? game.startingLineupPlayerIds.map(String)
+    : [];
+
+  for (const event of game.events) {
+    if (event.statType === STAT_TYPES.SUB_OUT && event.playerId) {
+      lineup = lineup.filter((id) => id !== String(event.playerId));
+      continue;
+    }
+
+    if (event.statType === STAT_TYPES.SUB_IN && event.playerId) {
+      const playerId = String(event.playerId);
+      if (!lineup.includes(playerId)) {
+        lineup.push(playerId);
+      }
+    }
+  }
+
+  game.currentLineupPlayerIds = lineup;
+}
+
+function validateLineupPlayers(team, playerIds) {
+  const uniquePlayerIds = [...new Set(playerIds.map(String))];
+  if (uniquePlayerIds.length !== 5) {
+    throw new ApiError(400, 'Starting lineup must include exactly 5 unique players');
+  }
+
+  for (const playerId of uniquePlayerIds) {
+    const player = team.players.id(playerId);
+    if (!player || !player.isActive) {
+      throw new ApiError(400, 'Starting lineup must use active team players');
+    }
+  }
+
+  return uniquePlayerIds;
 }
 
 function buildGameSummary(game) {
@@ -345,8 +399,47 @@ async function appendEventForUser(userId, gameId, payload) {
     }
   }
 
+  if (
+    payload.statType === STAT_TYPES.AST ||
+    payload.statType === STAT_TYPES.OREB ||
+    payload.statType === STAT_TYPES.DREB ||
+    payload.statType === STAT_TYPES.STL ||
+    payload.statType === STAT_TYPES.TOV ||
+    payload.statType === STAT_TYPES.FOUL
+  ) {
+    const lineupIds = (game.currentLineupPlayerIds || []).map(String);
+    if (payload.playerId && lineupIds.length > 0 && !lineupIds.includes(String(payload.playerId))) {
+      throw new ApiError(400, 'Player is not currently on the court');
+    }
+  }
+
+  if (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN) {
+    const lineupIds = (game.currentLineupPlayerIds || []).map(String);
+    if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
+      throw new ApiError(400, 'Set starting five before making substitutions');
+    }
+
+    if (payload.statType === STAT_TYPES.SUB_OUT) {
+      if (!payload.playerId || !lineupIds.includes(String(payload.playerId))) {
+        throw new ApiError(400, 'Outgoing player is not currently on the court');
+      }
+      game.currentLineupPlayerIds = lineupIds.filter((id) => id !== String(payload.playerId));
+    }
+
+    if (payload.statType === STAT_TYPES.SUB_IN) {
+      if (!payload.playerId) {
+        throw new ApiError(400, 'Incoming player is required');
+      }
+      if (lineupIds.includes(String(payload.playerId))) {
+        throw new ApiError(400, 'Incoming player is already on the court');
+      }
+      game.currentLineupPlayerIds = [...lineupIds, String(payload.playerId)];
+    }
+  }
+
   game.events.push({
     ...(payload.playerId ? { playerId: payload.playerId } : {}),
+    ...(payload.relatedPlayerId ? { relatedPlayerId: payload.relatedPlayerId } : {}),
     statType: payload.statType,
     zoneId: payload.zoneId,
     x: payload.x,
@@ -354,6 +447,30 @@ async function appendEventForUser(userId, gameId, payload) {
     occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
   });
 
+  await saveGame(game);
+
+  return {
+    game: sanitizeGame(game),
+    boxScore: computeBoxScore(game, team),
+    gameSummary: buildGameSummary(game),
+  };
+}
+
+async function setGameLineup(userId, gameId, playerIds) {
+  const game = await findGameByIdAndOwner(gameId, userId);
+  if (!game) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  if (game.status !== 'in_progress') {
+    throw new ApiError(400, 'Cannot change lineup on a completed game');
+  }
+
+  const team = await assertTeamOwnership(userId, game.teamId);
+  const validIds = validateLineupPlayers(team, playerIds);
+
+  game.startingLineupPlayerIds = validIds;
+  game.currentLineupPlayerIds = validIds;
   await saveGame(game);
 
   return {
@@ -375,6 +492,7 @@ async function removeEventForUser(userId, gameId, eventId) {
   }
 
   event.deleteOne();
+  recalculateCurrentLineup(game);
   await saveGame(game);
 
   const team = await assertTeamOwnership(userId, game.teamId);
@@ -414,6 +532,7 @@ module.exports = {
   getGameForUser,
   getPublicGame,
   appendEventForUser,
+  setGameLineup,
   removeEventForUser,
   finishGameForUser,
   computeBoxScore,
