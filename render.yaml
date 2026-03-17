@@ -79,7 +79,6 @@ services:
 
   - type: web
     name: tsw-2026-march-client-prod
-    plan: free
     runtime: static
     branch: main
     autoDeployTrigger: off
@@ -182,7 +181,6 @@ services:
 
   - type: web
     name: tsw-2026-march-client-dev
-    plan: free
     runtime: static
     branch: dev
     autoDeployTrigger: commit
