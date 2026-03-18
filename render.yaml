@@ -5,9 +5,8 @@ services:
     runtime: node
     branch: main
     autoDeployTrigger: off
-    rootDir: server
-    buildCommand: pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm start
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter server build
+    startCommand: pnpm --filter server start
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
@@ -82,9 +81,8 @@ services:
     runtime: static
     branch: main
     autoDeployTrigger: off
-    rootDir: client
-    buildCommand: pnpm install --frozen-lockfile && pnpm build
-    staticPublishPath: dist
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter client build
+    staticPublishPath: client/dist
     routes:
       - type: rewrite
         source: /*
@@ -111,9 +109,8 @@ services:
     runtime: node
     branch: dev
     autoDeployTrigger: commit
-    rootDir: server
-    buildCommand: pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm start
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter server build
+    startCommand: pnpm --filter server start
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
@@ -188,9 +185,8 @@ services:
     runtime: static
     branch: dev
     autoDeployTrigger: commit
-    rootDir: client
-    buildCommand: pnpm install --frozen-lockfile && pnpm build
-    staticPublishPath: dist
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter client build
+    staticPublishPath: client/dist
     routes:
       - type: rewrite
         source: /*
