@@ -85,6 +85,10 @@ services:
     rootDir: client
     buildCommand: pnpm install --frozen-lockfile && pnpm build
     staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_APP_NAME
         value: tsw-2026-march
@@ -187,6 +191,10 @@ services:
     rootDir: client
     buildCommand: pnpm install --frozen-lockfile && pnpm build
     staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_APP_NAME
         value: tsw-2026-march (Dev)
