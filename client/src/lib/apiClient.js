@@ -1,10 +1,6 @@
 import { env } from './env';
 
-function readCookie(name) {
-  const all = document.cookie.split(';').map((entry) => entry.trim());
-  const target = all.find((entry) => entry.startsWith(`${name}=`));
-  return target ? decodeURIComponent(target.split('=')[1]) : null;
-}
+let csrfToken = null;
 
 async function request(path, options = {}) {
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
@@ -19,11 +15,8 @@ async function request(path, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  if (isMutation) {
-    const csrfToken = readCookie('XSRF-TOKEN');
-    if (csrfToken) {
-      headers['x-csrf-token'] = csrfToken;
-    }
+  if (isMutation && csrfToken) {
+    headers['x-csrf-token'] = csrfToken;
   }
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
@@ -31,6 +24,11 @@ async function request(path, options = {}) {
     ...options,
     headers,
   });
+
+  const nextCsrfToken = response.headers.get('x-csrf-token');
+  if (nextCsrfToken) {
+    csrfToken = nextCsrfToken;
+  }
 
   const data = await response.json().catch(() => ({}));
 

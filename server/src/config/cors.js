@@ -14,6 +14,7 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+  exposedHeaders: ['x-csrf-token'],
 };
 
 module.exports = {

@@ -20,6 +20,7 @@ function attachCsrfToken(req, res, next) {
   const secret = getOrCreateSecret(req, res);
   const token = tokens.create(secret);
   res.cookie('XSRF-TOKEN', token, csrfTokenCookieOptions());
+  res.set('x-csrf-token', token);
   next();
 }
 

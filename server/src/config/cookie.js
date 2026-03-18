@@ -1,12 +1,13 @@
 const { env } = require('./env');
 
 const isProduction = env.NODE_ENV === 'production';
+const sameSite = isProduction ? 'none' : 'lax';
 
 function cookieBase() {
   return {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite,
     domain: env.COOKIE_DOMAIN || undefined,
   };
 }
@@ -39,7 +40,7 @@ function csrfTokenCookieOptions() {
   return {
     httpOnly: false,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite,
     domain: env.COOKIE_DOMAIN || undefined,
     maxAge: 24 * 60 * 60 * 1000,
     path: '/',
