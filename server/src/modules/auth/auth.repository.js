@@ -10,7 +10,6 @@ const userSchema = new mongoose.Schema(
     emailVerifiedAt: { type: Date },
     authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
     roles: { type: [String], default: ['user'] },
-    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
   },
   {
     timestamps: true,
@@ -56,7 +55,6 @@ authTokenSchema.index({ userId: 1, type: 1 });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema);
 const AuthToken = mongoose.models.AuthToken || mongoose.model('AuthToken', authTokenSchema);
-
 async function createUser(input) {
   return User.create(input);
 }
@@ -81,7 +79,6 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     user.authProvider = 'google';
     user.emailVerified = true;
     user.emailVerifiedAt = user.emailVerifiedAt || new Date();
-    user.plan = user.plan || 'free';
     if (!user.name) {
       user.name = name;
     }
@@ -97,7 +94,6 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     emailVerified: true,
     emailVerifiedAt: new Date(),
     roles: ['user'],
-    plan: 'free',
   });
 }
 
@@ -173,10 +169,6 @@ async function updateUserPassword(userId, passwordHash) {
   return User.findByIdAndUpdate(userId, { $set: { passwordHash } }, { new: true });
 }
 
-async function updateUserPlan(userId, plan) {
-  return User.findByIdAndUpdate(userId, { $set: { plan } }, { new: true });
-}
-
 module.exports = {
   createUser,
   findUserByEmail,
@@ -192,5 +184,4 @@ module.exports = {
   markAuthTokenUsed,
   markEmailVerified,
   updateUserPassword,
-  updateUserPlan,
 };
