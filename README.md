@@ -7,6 +7,8 @@ Basketball team stat tracking app built on a MERN monorepo.
 TSW helps coaches/managers track live game stats, manage on-court lineups during games, and review shareable box scores later.
 The current product still focuses on one tracked team at a time, but it now includes a more complete live-game workflow:
 
+For a durable technical orientation guide, start with [`docs/app-overview.md`](docs/app-overview.md).
+
 - Authenticated user accounts (email/password + Google OAuth)
 - Team and player roster setup
 - Teams and games management pages for authenticated users
