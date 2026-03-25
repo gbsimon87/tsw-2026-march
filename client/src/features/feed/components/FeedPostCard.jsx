@@ -41,17 +41,21 @@ export function FeedPostCard({ post, onDelete }) {
   }
 
   return (
-    <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-slate-900">{post.creator.name}</p>
-          <p className="text-xs text-slate-500">{formatTimestamp(post.createdAt)}</p>
+          <p className="text-sm font-bold uppercase tracking-[0.14em] text-slate-900">
+            {post.creator.name}
+          </p>
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            {formatTimestamp(post.createdAt)}
+          </p>
         </div>
         {post.canDelete ? (
           <button
             type="button"
             onClick={() => onDelete(post.id)}
-            className="text-xs font-semibold text-red-600 hover:underline"
+            className="rounded-full border border-red-200 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-red-600 hover:bg-red-50"
           >
             Delete
           </button>

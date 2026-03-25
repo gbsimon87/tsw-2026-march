@@ -72,6 +72,7 @@ async function resolveGameCardPayload(post) {
       teamId: payload.team.id,
       teamName: payload.team.name,
       teamLogo: payload.team.logo ?? null,
+      teamColors: payload.team.colors ?? [],
       opponent: payload.game.opponent,
       recap: payload.recap,
     },
@@ -100,6 +101,7 @@ async function resolvePlayerCardPayload(post) {
       jerseyNumber: payload.player.jerseyNumber ?? null,
       playerImage,
       teamLogo,
+      teamColors: payload.team.colors ?? [],
       imageFallback,
       summary: {
         gamesCount: payload.summary.gamesCount,
@@ -124,6 +126,7 @@ async function resolveTeamCardPayload(post) {
       teamId: payload.team.id,
       teamName: payload.team.name,
       teamLogo: payload.team.logo ?? null,
+      teamColors: payload.team.colors ?? [],
       summary: {
         gamesCount: payload.summary.gamesCount,
         points: payload.summary.points,

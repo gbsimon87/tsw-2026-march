@@ -81,7 +81,10 @@ function FeedIcon() {
 export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
   const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
-  const recapCardDataUrl = createRecapCardDataUrl(recap, { teamLogoUrl: team?.logo?.url || null });
+  const recapCardDataUrl = createRecapCardDataUrl(recap, {
+    teamLogoUrl: team?.logo?.url || null,
+    teamColors: team?.colors || [],
+  });
   const cardFilename = `${(recap?.team?.name || 'team')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}-game-recap.svg`;
@@ -107,7 +110,10 @@ export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
   }
 
   async function shareImageCard() {
-    const svgMarkup = createRecapCardSvg(recap, { teamLogoUrl: team?.logo?.url || null });
+    const svgMarkup = createRecapCardSvg(recap, {
+      teamLogoUrl: team?.logo?.url || null,
+      teamColors: team?.colors || [],
+    });
 
     if (navigator?.share && navigator?.canShare) {
       const file = new File([svgMarkup], cardFilename, { type: 'image/svg+xml' });
@@ -163,11 +169,11 @@ export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
           </div>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-3">
           <img
             src={recapCardDataUrl}
             alt="Shareable game recap card preview"
-            className="mx-auto block w-full max-w-[320px] rounded-xl border border-slate-200 bg-white shadow-sm"
+            className="mx-auto block w-full max-w-[320px] rounded-xl border border-slate-800 bg-slate-950 shadow-sm"
           />
         </div>
       </section>

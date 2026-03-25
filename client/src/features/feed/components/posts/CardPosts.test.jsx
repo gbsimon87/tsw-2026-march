@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { GameCardPost } from './GameCardPost';
 import { PlayerCardPost } from './PlayerCardPost';
 import { TeamCardPost } from './TeamCardPost';
+import { gameCardFixture, playerCardFixture, teamCardFixture } from './cardFixtures';
 
 describe('feed card posts', () => {
   afterEach(() => {
@@ -15,16 +16,10 @@ describe('feed card posts', () => {
       <MemoryRouter>
         <PlayerCardPost
           playerCard={{
-            playerUrl: '/teams/t1/players/p1',
+            ...playerCardFixture,
             playerName: 'Jordan',
-            teamName: 'TSW Blue',
             playerImage: null,
             teamLogo: { url: 'https://example.com/team-logo.png' },
-            summary: {
-              pointsPerGame: 12,
-              reboundsPerGame: 5,
-              assistsPerGame: 4,
-            },
           }}
         />
       </MemoryRouter>
@@ -39,20 +34,7 @@ describe('feed card posts', () => {
   test('team card renders logo', () => {
     render(
       <MemoryRouter>
-        <TeamCardPost
-          teamCard={{
-            teamUrl: '/teams/t1',
-            teamName: 'TSW Blue',
-            teamLogo: { url: 'https://example.com/team-logo.png' },
-            summary: {
-              gamesCount: 12,
-              points: 88,
-              fg2: { percentage: 50 },
-              fg3: { percentage: 40 },
-              ft: { percentage: 75 },
-            },
-          }}
-        />
+        <TeamCardPost teamCard={teamCardFixture} />
       </MemoryRouter>
     );
 
@@ -60,6 +42,7 @@ describe('feed card posts', () => {
       'src',
       'https://example.com/team-logo.png'
     );
+    expect(screen.getByText('Points')).toBeInTheDocument();
   });
 
   test('player preview mode renders a non-link card', () => {
@@ -68,16 +51,10 @@ describe('feed card posts', () => {
         <PlayerCardPost
           interactive={false}
           playerCard={{
-            playerUrl: '/teams/t1/players/p1',
+            ...playerCardFixture,
             playerName: 'Jordan',
-            teamName: 'TSW Blue',
             playerImage: null,
             teamLogo: { url: 'https://example.com/team-logo.png' },
-            summary: {
-              pointsPerGame: 12,
-              reboundsPerGame: 5,
-              assistsPerGame: 4,
-            },
           }}
         />
       </MemoryRouter>
@@ -85,56 +62,25 @@ describe('feed card posts', () => {
 
     expect(screen.queryByRole('link', { name: 'Jordan' })).not.toBeInTheDocument();
     expect(screen.getByText('Jordan')).toBeInTheDocument();
+    expect(screen.getByText('PPG')).toBeInTheDocument();
   });
 
   test('team preview mode renders a non-link card', () => {
     render(
       <MemoryRouter>
-        <TeamCardPost
-          interactive={false}
-          teamCard={{
-            teamUrl: '/teams/t1',
-            teamName: 'TSW Blue',
-            teamLogo: { url: 'https://example.com/team-logo.png' },
-            summary: {
-              gamesCount: 12,
-              points: 88,
-              fg2: { percentage: 50 },
-              fg3: { percentage: 40 },
-              ft: { percentage: 75 },
-            },
-          }}
-        />
+        <TeamCardPost interactive={false} teamCard={teamCardFixture} />
       </MemoryRouter>
     );
 
     expect(screen.queryByRole('link', { name: 'TSW Blue' })).not.toBeInTheDocument();
     expect(screen.getByText('TSW Blue')).toBeInTheDocument();
+    expect(screen.getByText('FG2%')).toBeInTheDocument();
   });
 
   test('game card renders logo badge when available', () => {
     render(
       <MemoryRouter>
-        <GameCardPost
-          gameCard={{
-            gameUrl: '/games/g1',
-            teamName: 'TSW Blue',
-            teamLogo: { url: 'https://example.com/team-logo.png' },
-            recap: {
-              team: { name: 'TSW Blue', points: 70 },
-              opponent: { name: 'Falcons' },
-              teamStats: {
-                points: 70,
-                reb: 10,
-                ast: 12,
-                fg2: { percentage: 50 },
-                fg3: { percentage: 40 },
-                ft: { percentage: 75 },
-              },
-              topPerformers: [],
-            },
-          }}
-        />
+        <GameCardPost gameCard={gameCardFixture} />
       </MemoryRouter>
     );
 
@@ -142,5 +88,40 @@ describe('feed card posts', () => {
       'src',
       'https://example.com/team-logo.png'
     );
+    expect(screen.getAllByText('70')).toHaveLength(2);
+    expect(screen.getByText('61')).toBeInTheDocument();
+    expect(screen.getByText('PTS')).toBeInTheDocument();
+  });
+
+  test('player card falls back to initials when both player image and team logo are missing', () => {
+    render(
+      <MemoryRouter>
+        <PlayerCardPost
+          playerCard={{
+            ...playerCardFixture,
+            playerName: 'Jordan Miles',
+            playerImage: null,
+            teamLogo: null,
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('JM')).toBeInTheDocument();
+    expect(screen.getByText('PLAYER SPOTLIGHT')).toBeInTheDocument();
+  });
+
+  test('rendered card trio matches the broadcast card fixture snapshot', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <div className="space-y-4">
+          <GameCardPost gameCard={gameCardFixture} />
+          <PlayerCardPost playerCard={playerCardFixture} />
+          <TeamCardPost teamCard={teamCardFixture} />
+        </div>
+      </MemoryRouter>
+    );
+
+    expect(container.firstChild).toMatchSnapshot();
   });
 });

@@ -1,0 +1,464 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`feed card posts > rendered card trio matches the broadcast card fixture snapshot 1`] = `
+<div
+  class="space-y-4"
+>
+  <a
+    class="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    href="/games/g1"
+  >
+    <div
+      class="relative overflow-hidden rounded-[24px] border border-white/10 shadow-[0_20px_40px_rgba(15,23,42,0.35)] min-h-[19rem]"
+    >
+      <div
+        class="absolute inset-0 bg-[#0f172a]"
+      />
+      <div
+        class="absolute inset-0"
+        style="background-image: linear-gradient(135deg, rgba(17, 34, 51, 0.32) 0%, rgba(212, 175, 55, 0.14) 55%, rgba(56, 189, 248, 0.2) 100%);"
+      />
+      <div
+        class="absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl"
+        style="background-color: rgba(17, 34, 51, 0.16);"
+      />
+      <div
+        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/6"
+      />
+      <div
+        class="absolute inset-x-0 top-0 h-px bg-white/20"
+      />
+      <div
+        class="absolute inset-x-0 bottom-16 h-px bg-white/8"
+      />
+      <div
+        class="absolute inset-y-0 right-[34%] w-px bg-white/8"
+      />
+      <div
+        class="relative z-10 flex min-h-[18rem] flex-col p-5 text-white"
+      >
+        <div
+          class="flex items-start justify-between gap-3"
+        >
+          <p
+            class="text-[11px] font-black uppercase tracking-[0.32em]"
+            style="color: rgb(212, 175, 55);"
+          >
+            Game Recap
+          </p>
+          <div
+            class="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+          >
+            Mar 12
+          </div>
+        </div>
+        <div
+          class="mt-5 flex items-start gap-4"
+        >
+          <div
+            class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/12 bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] "
+          >
+            <img
+              alt="TSW Blue logo badge"
+              class="h-full w-full object-cover"
+              src="https://example.com/team-logo.png"
+            />
+          </div>
+          <div
+            class="min-w-0 flex-1"
+          >
+            <div
+              class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-4 border-b border-white/10 pb-4"
+            >
+              <p
+                class="min-w-0 text-lg font-black uppercase tracking-[0.08em] text-white"
+              >
+                TSW Blue
+              </p>
+              <p
+                class="text-[2.7rem] font-black leading-none text-white"
+              >
+                70
+              </p>
+              <p
+                class="min-w-0 text-base font-semibold uppercase tracking-[0.08em] text-slate-300"
+              >
+                Falcons
+              </p>
+              <p
+                class="text-[2.2rem] font-black leading-none text-slate-200"
+              >
+                61
+              </p>
+            </div>
+            <div
+              class="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em]"
+              style="color: rgb(212, 175, 55);"
+            >
+              <span>
+                Final
+              </span>
+              <span
+                class="h-1 w-1 rounded-full"
+                style="background-color: rgb(56, 189, 248);"
+              />
+              <span>
+                Live Box Score
+              </span>
+            </div>
+          </div>
+        </div>
+        <div
+          class="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+        >
+          <div
+            class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+          >
+            <p
+              class="text-sm text-slate-200"
+              style="display: -webkit-box; -webkit-line-clamp: 1; overflow: hidden;"
+            >
+              Jordan Miles led the way with 24 PTS.
+            </p>
+            <div
+              class="grid grid-cols-3 gap-2"
+            >
+              <div
+                class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              >
+                <p
+                  class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                >
+                  PTS
+                </p>
+                <p
+                  class="mt-1 font-black text-xl text-slate-100"
+                >
+                  70
+                </p>
+              </div>
+              <div
+                class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              >
+                <p
+                  class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                >
+                  REB
+                </p>
+                <p
+                  class="mt-1 font-black text-xl text-slate-100"
+                >
+                  10
+                </p>
+              </div>
+              <div
+                class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              >
+                <p
+                  class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                >
+                  AST
+                </p>
+                <p
+                  class="mt-1 font-black text-xl text-slate-100"
+                >
+                  12
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </a>
+  <a
+    class="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    href="/teams/t1/players/p1"
+  >
+    <div
+      class="relative overflow-hidden rounded-[24px] border border-white/10 shadow-[0_20px_40px_rgba(15,23,42,0.35)] "
+    >
+      <div
+        class="absolute inset-0 bg-[#0f172a]"
+      />
+      <div
+        class="absolute inset-0"
+        style="background-image: linear-gradient(135deg, rgba(17, 34, 51, 0.32) 0%, rgba(212, 175, 55, 0.14) 55%, rgba(56, 189, 248, 0.2) 100%);"
+      />
+      <div
+        class="absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl"
+        style="background-color: rgba(17, 34, 51, 0.16);"
+      />
+      <div
+        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/6"
+      />
+      <div
+        class="absolute inset-x-0 top-0 h-px bg-white/20"
+      />
+      <div
+        class="absolute inset-x-0 bottom-16 h-px bg-white/8"
+      />
+      <div
+        class="absolute inset-y-0 right-[34%] w-px bg-white/8"
+      />
+      <div
+        class="relative z-10 flex min-h-[18rem] flex-col p-5 text-white"
+      >
+        <div
+          class="flex items-start justify-between gap-3"
+        >
+          <p
+            class="text-[11px] font-black uppercase tracking-[0.32em]"
+            style="color: rgb(212, 175, 55);"
+          >
+            Player Spotlight
+          </p>
+          <div
+            class="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+          >
+            #7
+          </div>
+        </div>
+        <div
+          class="mt-5 grid flex-1 grid-cols-[7.5rem_minmax(0,1fr)] gap-4"
+        >
+          <div
+            class="relative overflow-hidden rounded-[22px] border border-white/10 bg-gradient-to-br from-white/16 via-white/6 to-transparent shadow-[0_16px_32px_rgba(15,23,42,0.28)]"
+          >
+            <div
+              class="absolute inset-x-0 top-0 h-1.5"
+              style="background-image: linear-gradient(90deg, #112233, #d4af37, #38bdf8);"
+            />
+            <img
+              alt="Jordan Miles card avatar"
+              class="h-full min-h-[9.5rem] w-full object-cover"
+              src="https://example.com/team-logo.png"
+            />
+          </div>
+          <div
+            class="min-w-0"
+          >
+            <h3
+              class="text-[1.9rem] font-black leading-[1.02] text-white "
+              style="display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;"
+            >
+              Jordan Miles
+            </h3>
+            <p
+              class="text-sm font-medium text-slate-300 mt-2 uppercase tracking-[0.18em] text-slate-300"
+            >
+              TSW Blue
+            </p>
+            <p
+              class="mt-4 text-sm text-slate-300"
+              style="display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;"
+            >
+              Live tracking spotlight built from public player averages.
+            </p>
+          </div>
+        </div>
+        <div
+          class="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+        >
+          <div
+            class="grid grid-cols-3 gap-2"
+          >
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                PPG
+              </p>
+              <p
+                class="mt-1 font-black text-xl text-slate-100"
+              >
+                12.0
+              </p>
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                RPG
+              </p>
+              <p
+                class="mt-1 font-black text-xl text-slate-100"
+              >
+                5.0
+              </p>
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                APG
+              </p>
+              <p
+                class="mt-1 font-black text-xl text-slate-100"
+              >
+                4.0
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </a>
+  <a
+    class="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    href="/teams/t1"
+  >
+    <div
+      class="relative overflow-hidden rounded-[24px] border border-white/10 shadow-[0_20px_40px_rgba(15,23,42,0.35)] "
+    >
+      <div
+        class="absolute inset-0 bg-[#0f172a]"
+      />
+      <div
+        class="absolute inset-0"
+        style="background-image: linear-gradient(135deg, rgba(17, 34, 51, 0.32) 0%, rgba(212, 175, 55, 0.14) 55%, rgba(56, 189, 248, 0.2) 100%);"
+      />
+      <div
+        class="absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl"
+        style="background-color: rgba(17, 34, 51, 0.16);"
+      />
+      <div
+        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/6"
+      />
+      <div
+        class="absolute inset-x-0 top-0 h-px bg-white/20"
+      />
+      <div
+        class="absolute inset-x-0 bottom-16 h-px bg-white/8"
+      />
+      <div
+        class="absolute inset-y-0 right-[34%] w-px bg-white/8"
+      />
+      <div
+        class="relative z-10 flex min-h-[18rem] flex-col p-5 text-white"
+      >
+        <div
+          class="flex items-start justify-between gap-3"
+        >
+          <p
+            class="text-[11px] font-black uppercase tracking-[0.32em]"
+            style="color: rgb(212, 175, 55);"
+          >
+            Team Report
+          </p>
+          <div
+            class="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+          >
+            12 Games
+          </div>
+        </div>
+        <div
+          class="mt-5 flex flex-1 items-start gap-4"
+        >
+          <div
+            class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/12 bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] h-24 w-24"
+          >
+            <img
+              alt="TSW Blue card logo"
+              class="h-full w-full object-cover"
+              src="https://example.com/team-logo.png"
+            />
+          </div>
+          <div
+            class="min-w-0 flex-1"
+          >
+            <h3
+              class="text-[1.9rem] font-black leading-[1.02] text-white "
+              style="display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;"
+            >
+              TSW Blue
+            </h3>
+            <p
+              class="text-sm font-medium text-slate-300 mt-3"
+            >
+              12
+               completed public games
+            </p>
+            <p
+              class="mt-4 text-[11px] font-bold uppercase tracking-[0.24em]"
+              style="color: rgb(212, 175, 55);"
+            >
+              Public Team Snapshot
+            </p>
+          </div>
+        </div>
+        <div
+          class="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+        >
+          <div
+            class="grid grid-cols-2 gap-2"
+          >
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                Points
+              </p>
+              <p
+                class="mt-1 font-black text-2xl text-white"
+              >
+                88
+              </p>
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                FG2%
+              </p>
+              <p
+                class="mt-1 font-black text-xl text-slate-100"
+              >
+                50%
+              </p>
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                FG3%
+              </p>
+              <p
+                class="mt-1 font-black text-xl text-slate-100"
+              >
+                40%
+              </p>
+            </div>
+            <div
+              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+            >
+              <p
+                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+              >
+                FT%
+              </p>
+              <p
+                class="mt-1 font-black text-xl text-slate-100"
+              >
+                75%
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </a>
+</div>
+`;

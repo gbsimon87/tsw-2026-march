@@ -5,7 +5,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
-import { getPlayerHeaderImage } from '../../feed/cardImage';
+import { PlayerCardPost } from '../../feed/components/posts/PlayerCardPost';
 
 function formatGameDate(game) {
   const rawValue = game.date || game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -247,71 +247,47 @@ export function PublicPlayerPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Public Player Profile
-        </p>
-        <p className="mt-2 text-sm font-medium text-slate-600">
-          <Link className="transition hover:text-sky-700 hover:underline" to={`/teams/${teamId}`}>
-            {data.team.name}
-          </Link>
-        </p>
-        <div className="mt-3 flex items-start gap-4">
-          <img
-            src={getPlayerHeaderImage(data)}
-            alt={`${data.player.displayName} profile`}
-            className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
-          />
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-              {playerLabel}
-            </h1>
-            {data.player.position ? (
-              <p className="mt-2 inline-flex rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
-                {data.player.position}
-              </p>
-            ) : null}
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-2xl sm:grid-cols-3">
-              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">PPG</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatAverage(summary.pointsPerGame)}
-                </p>
-              </article>
-              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">RPG</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatAverage(summary.reboundsPerGame)}
-                </p>
-              </article>
-              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">APG</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatAverage(summary.assistsPerGame)}
-                </p>
-              </article>
-              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">SPG</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatAverage(summary.stealsPerGame)}
-                </p>
-              </article>
-              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">TOPG</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatAverage(summary.turnoversPerGame)}
-                </p>
-              </article>
-              <article className="rounded-2xl border border-slate-200 bg-white/80 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FPG</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatAverage(summary.foulsPerGame)}
-                </p>
-              </article>
-            </div>
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Public Player Profile
+            </p>
+            <p className="mt-2 text-sm font-medium text-slate-600">
+              <Link
+                className="transition hover:text-sky-700 hover:underline"
+                to={`/teams/${teamId}`}
+              >
+                {data.team.name}
+              </Link>
+            </p>
           </div>
+          {data.player.position ? (
+            <p className="inline-flex w-fit rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+              {data.player.position}
+            </p>
+          ) : null}
         </div>
-        <div className="mt-5 flex justify-end">
+
+        <PlayerCardPost
+          interactive={false}
+          playerCard={{
+            playerUrl: `/teams/${teamId}/players/${playerId}`,
+            playerName: playerLabel,
+            teamName: data.team.name,
+            jerseyNumber: data.player.jerseyNumber ?? null,
+            playerImage: data.player.image ?? null,
+            teamLogo: data.team.logo ?? null,
+            teamColors: data.team.colors ?? [],
+            summary: {
+              pointsPerGame: summary.pointsPerGame,
+              reboundsPerGame: summary.reboundsPerGame,
+              assistsPerGame: summary.assistsPerGame,
+            },
+          }}
+        />
+
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={openFeedComposer}
@@ -322,6 +298,45 @@ export function PublicPlayerPage() {
             <FeedIcon />
           </button>
         </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">PPG</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatAverage(summary.pointsPerGame)}
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">RPG</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatAverage(summary.reboundsPerGame)}
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">APG</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatAverage(summary.assistsPerGame)}
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">SPG</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatAverage(summary.stealsPerGame)}
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">TOPG</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatAverage(summary.turnoversPerGame)}
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FPG</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {formatAverage(summary.foulsPerGame)}
+          </p>
+        </article>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -58,7 +58,12 @@ describe('PublicPlayerPage', () => {
 
   test('renders player hero, averages, and game log table', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
-      team: { id: 'team-1', name: 'TSW Varsity', logo: { url: 'https://example.com/logo.png' } },
+      team: {
+        id: 'team-1',
+        name: 'TSW Varsity',
+        logo: { url: 'https://example.com/logo.png' },
+        colors: ['#112233', '#d4af37'],
+      },
       player: {
         id: 'p1',
         displayName: 'Alex Carter',
@@ -142,7 +147,7 @@ describe('PublicPlayerPage', () => {
     });
 
     expect(teamsApi.getPublicPlayerById).toHaveBeenCalledWith('team-1', 'p1');
-    expect(screen.getByAltText('Alex Carter profile')).toHaveAttribute(
+    expect(screen.getByAltText('#12 Alex Carter card avatar')).toHaveAttribute(
       'src',
       'https://example.com/logo.png'
     );
@@ -153,12 +158,12 @@ describe('PublicPlayerPage', () => {
       'href',
       '/teams/team-1'
     );
-    expect(screen.getByText('12.0')).toBeInTheDocument();
-    expect(screen.getByText('5.0')).toBeInTheDocument();
-    expect(screen.getByText('4.0')).toBeInTheDocument();
-    expect(screen.getByText('PPG')).toBeInTheDocument();
-    expect(screen.getByText('RPG')).toBeInTheDocument();
-    expect(screen.getByText('APG')).toBeInTheDocument();
+    expect(screen.getAllByText('12.0').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('5.0').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('4.0').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('PPG').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('RPG').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('APG').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Opponent')).toBeInTheDocument();
     expect(screen.getByText('Date')).toBeInTheDocument();
     expect(screen.getByText('FT')).toBeInTheDocument();
@@ -193,7 +198,7 @@ describe('PublicPlayerPage', () => {
 
   test('renders zero-state game log when the player has no completed public games', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
-      team: { id: 'team-1', name: 'TSW Varsity', logo: null },
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null, colors: [] },
       player: {
         id: 'p1',
         displayName: 'Alex Carter',
@@ -226,7 +231,7 @@ describe('PublicPlayerPage', () => {
     });
 
     expect(screen.getByText(/No completed public games yet/i)).toBeInTheDocument();
-    expect(screen.getAllByText('0.0')).toHaveLength(6);
+    expect(screen.getAllByText('0.0').length).toBeGreaterThanOrEqual(6);
     expect(screen.getAllByText('0/0')).toHaveLength(3);
   });
 
@@ -243,7 +248,7 @@ describe('PublicPlayerPage', () => {
   test('opens prefilled player composer for logged-in users', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
     teamsApi.getPublicPlayerById.mockResolvedValue({
-      team: { id: 'team-1', name: 'TSW Varsity', logo: null },
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null, colors: [] },
       player: {
         id: 'p1',
         displayName: 'Alex Carter',
@@ -274,7 +279,7 @@ describe('PublicPlayerPage', () => {
 
   test('redirects logged-out users to login when posting to feed', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
-      team: { id: 'team-1', name: 'TSW Varsity', logo: null },
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null, colors: [] },
       player: {
         id: 'p1',
         displayName: 'Alex Carter',

@@ -118,7 +118,12 @@ describe('feed service', () => {
       .mockResolvedValueOnce({ _id: 'user-2', name: 'Jordan' });
     getPublicGame.mockResolvedValue({
       game: { id: 'g1', opponent: 'Falcons' },
-      team: { id: 't1', name: 'TSW Blue', logo: { url: 'https://example.com/team-logo.png' } },
+      team: {
+        id: 't1',
+        name: 'TSW Blue',
+        logo: { url: 'https://example.com/team-logo.png' },
+        colors: ['#112233', '#d4af37'],
+      },
       recap: { team: { name: 'TSW Blue', points: 70 }, opponent: { name: 'Falcons' } },
     });
     getPublicTeam.mockRejectedValue(new Error('missing'));
@@ -130,6 +135,7 @@ describe('feed service', () => {
     expect(result.posts[0].gameCard.teamLogo).toEqual({
       url: 'https://example.com/team-logo.png',
     });
+    expect(result.posts[0].gameCard.teamColors).toEqual(['#112233', '#d4af37']);
   });
 
   test('player cards include team logo fallback metadata', async () => {
@@ -149,6 +155,7 @@ describe('feed service', () => {
         id: 't1',
         name: 'TSW Blue',
         logo: { url: 'https://example.com/team-logo.png', width: 128, height: 128 },
+        colors: ['#112233', '#d4af37'],
       },
       player: {
         id: 'p1',
@@ -172,6 +179,7 @@ describe('feed service', () => {
       height: 128,
     });
     expect(result.posts[0].playerCard.imageFallback).toBe('team_logo');
+    expect(result.posts[0].playerCard.teamColors).toEqual(['#112233', '#d4af37']);
   });
 
   test('only allows creators to delete posts', async () => {

@@ -1,65 +1,75 @@
-import { Link } from 'react-router-dom';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getTeamCardImage } from '../../cardImage';
+import {
+  ShareCardHeader,
+  ShareCardLogoBadge,
+  ShareCardMetaStrip,
+  ShareCardShell,
+  ShareCardStatPill,
+  ShareCardSubtitle,
+  ShareCardTitle,
+} from '../cards/ShareCardPrimitives';
+import { buildInitials, formatPercentage } from './cardUtils';
 
-function formatPercentage(value) {
-  return value == null ? '--' : `${value.toFixed(0)}%`;
-}
+function TeamCardContent({ imageSrc, teamCard }) {
+  const teamColors = teamCard?.teamColors || [];
 
-function TeamCardContent({ imageSrc, teamCard, onImageError }) {
   return (
-    <>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Team Card</p>
-      <div className="mt-3 flex items-center gap-4">
-        <img
+    <ShareCardShell accent="cyan" teamColors={teamColors}>
+      <ShareCardHeader
+        kicker="Team Report"
+        badge={`${teamCard.summary.gamesCount} Games`}
+        accentColor={teamColors[1] || teamColors[0] || '#67e8f9'}
+      />
+
+      <div className="mt-5 flex flex-1 items-start gap-4">
+        <ShareCardLogoBadge
           src={imageSrc}
           alt={`${teamCard.teamName} card logo`}
-          className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
-          onError={onImageError}
+          initials={buildInitials(teamCard.teamName, 'TM')}
+          teamColors={teamColors}
+          accent="cyan"
+          className="h-24 w-24"
         />
-        <div className="min-w-0">
-          <h3 className="text-2xl font-bold text-slate-900">{teamCard.teamName}</h3>
-          <p className="mt-1 text-sm text-slate-600">
+        <div className="min-w-0 flex-1">
+          <ShareCardTitle>{teamCard.teamName}</ShareCardTitle>
+          <ShareCardSubtitle className="mt-3">
             {teamCard.summary.gamesCount} completed public games
+          </ShareCardSubtitle>
+          <p
+            className="mt-4 text-[11px] font-bold uppercase tracking-[0.24em]"
+            style={{ color: teamColors[1] || teamColors[0] || '#a5f3fc' }}
+          >
+            Public Team Snapshot
           </p>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <article className="rounded-xl border border-slate-200 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Points</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{teamCard.summary.points}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FG2%</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatPercentage(teamCard.summary.fg2.percentage)}
-          </p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FG3%</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatPercentage(teamCard.summary.fg3.percentage)}
-          </p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FT%</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatPercentage(teamCard.summary.ft.percentage)}
-          </p>
-        </article>
-      </div>
-    </>
+
+      <ShareCardMetaStrip>
+        <div className="grid grid-cols-2 gap-2">
+          <ShareCardStatPill label="Points" value={teamCard.summary.points} emphasis />
+          <ShareCardStatPill
+            label="FG2%"
+            value={formatPercentage(teamCard.summary.fg2.percentage)}
+          />
+          <ShareCardStatPill
+            label="FG3%"
+            value={formatPercentage(teamCard.summary.fg3.percentage)}
+          />
+          <ShareCardStatPill label="FT%" value={formatPercentage(teamCard.summary.ft.percentage)} />
+        </div>
+      </ShareCardMetaStrip>
+    </ShareCardShell>
   );
 }
 
 export function TeamCardPost({ teamCard, interactive = true }) {
   const [imageSrc, setImageSrc] = useState(() => getTeamCardImage(teamCard));
-  const className =
-    'block rounded-2xl border border-slate-200 bg-gradient-to-br from-amber-50 via-white to-sky-50 p-5';
 
   if (!interactive) {
     return (
-      <article className={className}>
+      <article>
         <TeamCardContent
           imageSrc={imageSrc}
           teamCard={teamCard}
@@ -70,7 +80,10 @@ export function TeamCardPost({ teamCard, interactive = true }) {
   }
 
   return (
-    <Link to={teamCard.teamUrl} className={`${className} transition hover:border-sky-300`}>
+    <Link
+      to={teamCard.teamUrl}
+      className="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    >
       <TeamCardContent
         imageSrc={imageSrc}
         teamCard={teamCard}
