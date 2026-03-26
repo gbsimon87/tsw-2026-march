@@ -10,6 +10,7 @@ Core product capabilities today:
 
 - Create and manage teams and rosters.
 - Create games and track live events during a game.
+- Optionally attach a YouTube link to a game and render it on the game detail page.
 - Capture shots by tapping or clicking a calibrated full-court image.
 - Track lineup state, substitutions, rebounds, assists, steals, turnovers, fouls, and opponent scoring.
 - Finish games and derive box scores, recaps, replay views, and public-facing summaries from saved events.
@@ -111,14 +112,15 @@ The live tracking experience is the most application-specific part of the produc
 How it works:
 
 1. A user creates a game for one of their teams.
-2. The track page loads the team roster and current game state.
-3. The user must set a starting five.
-4. The user taps the court image to choose a location.
-5. Court inference logic classifies the selection into a zone and shot family (`FG2` or `FG3`).
-6. The user records make or miss, or uses direct quick actions for free throws and non-shot stats.
-7. The client may prompt for a follow-up event such as assist or rebound.
-8. Each event is posted to the API and stored on the game document.
-9. Box score, recap, replay, and public summaries are all derived from the saved event list.
+2. The user can optionally attach a YouTube URL during game creation for low-cost video playback.
+3. The track page loads the team roster and current game state.
+4. The user must set a starting five.
+5. The user taps the court image to choose a location.
+6. Court inference logic classifies the selection into a zone and shot family (`FG2` or `FG3`).
+7. The user records make or miss, or uses direct quick actions for free throws and non-shot stats.
+8. The client may prompt for a follow-up event such as assist or rebound.
+9. Each event is posted to the API and stored on the game document.
+10. Box score, recap, replay, and public summaries are all derived from the saved event list.
 
 Key tracking code:
 

@@ -9,6 +9,7 @@ import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameRecapPanel } from '../components/GameRecapPanel';
+import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import gameConstants from '../constants';
@@ -512,6 +513,10 @@ export function GameDetailPage() {
       ) : null}
 
       {isPrintMode ? printContent : null}
+
+      {!isPrintMode && game.videoUrl ? (
+        <GameVideoEmbed videoUrl={game.videoUrl} title={game.title} />
+      ) : null}
 
       {!isPrintMode ? (
         <Tabs

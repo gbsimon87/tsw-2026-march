@@ -79,6 +79,7 @@ describe('GameDetailPage', () => {
       game: {
         id: 'game-1',
         title: 'vs Wildcats',
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         status: 'completed',
         scheduledAt: '2026-03-12T18:00:00.000Z',
         createdAt: '2026-03-12T17:45:00.000Z',
@@ -281,6 +282,10 @@ describe('GameDetailPage', () => {
     expect(screen.getByRole('tab', { name: 'Recap' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Stats' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
+    expect(screen.getByTitle('vs Wildcats')).toHaveAttribute(
+      'src',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ'
+    );
     expect(screen.queryByRole('tab', { name: 'Game Info' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share image card' })).toBeInTheDocument();

@@ -79,4 +79,24 @@ describe('games validation', () => {
       })
     ).toThrow();
   });
+
+  test('accepts YouTube video URL when creating game', () => {
+    const parsed = createGameSchema.parse({
+      teamId: 'team-1',
+      title: 'Playoff game',
+      videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    });
+
+    expect(parsed.videoUrl).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  test('rejects non-YouTube video URL when creating game', () => {
+    expect(() =>
+      createGameSchema.parse({
+        teamId: 'team-1',
+        title: 'Playoff game',
+        videoUrl: 'https://vimeo.com/123456',
+      })
+    ).toThrow('Video URL must be a valid YouTube link');
+  });
 });

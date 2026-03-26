@@ -1,11 +1,44 @@
 const { z } = require('zod');
 const { SHOT_ZONE_IDS, STAT_TYPES } = require('../shared/stats.constants');
 
+function isSupportedYouTubeUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+
+    if (host === 'youtu.be' || host === 'www.youtu.be') {
+      return url.pathname.split('/').filter(Boolean).length > 0;
+    }
+
+    if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com') {
+      if (url.pathname === '/watch') {
+        return Boolean(url.searchParams.get('v'));
+      }
+
+      if (url.pathname.startsWith('/embed/') || url.pathname.startsWith('/shorts/')) {
+        return url.pathname.split('/').filter(Boolean).length >= 2;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+const youtubeUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine(isSupportedYouTubeUrl, 'Video URL must be a valid YouTube link');
+
 const createGameSchema = z.object({
   teamId: z.string().min(1),
   title: z.string().trim().min(1).max(120),
   opponent: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
+  videoUrl: youtubeUrlSchema.optional(),
 });
 
 const statTypeSchema = z.enum([

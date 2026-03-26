@@ -13,6 +13,7 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 - Team and player roster setup
 - Teams and games management pages for authenticated users
 - Game creation and in-progress tracking
+- Optional YouTube video link saved per game for low-cost playback testing
 - Full-court visual tracking (tap/click on calibrated court image)
 - Event-based stat capture for:
   - Inferred 2-pointers or 3-pointers from court selection + make/miss action
@@ -122,6 +123,7 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
   - Play-by-play event log with stat type, zone, coordinates, and event time
   - Last-five default event view with expand/collapse for the full log
   - Assists, rebound splits, steals, turnovers, and fouls in all box score views
+- Game detail can render an embedded YouTube video when the game includes a `videoUrl`
 - `Replay` tab includes:
   - Event-by-event replay controls (`Previous` / `Next`)
   - Progressive shot plotting in event order
@@ -277,6 +279,6 @@ pnpm check-env
 - CSV export and broader reporting pipelines
 - Feed likes, reposts, comments, and moderation
 - Player profile images via uploaded media or linked Google image
-- Embedded video playback, likely via YouTube iframe support
+- Editing/replacing a saved game video URL after game creation
 - Time-synced game tracking from video playback
 - Opponent player/roster tracking beyond score totals

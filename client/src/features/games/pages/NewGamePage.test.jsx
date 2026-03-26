@@ -102,4 +102,36 @@ describe('NewGamePage', () => {
       });
     });
   });
+
+  test('submits an optional YouTube video URL', async () => {
+    teamsApi.list.mockResolvedValue({ teams: [{ id: 't1', name: 'Team One' }] });
+    gamesApi.list.mockResolvedValue({ games: [] });
+    gamesApi.create.mockResolvedValue({ game: { id: 'game-789' } });
+
+    render(
+      <MemoryRouter>
+        <NewGamePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Create Game/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats - March 12/i), {
+      target: { value: 'Film Session' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/https:\/\/www\.youtube\.com\/watch\?v=/i), {
+      target: { value: 'https://youtu.be/dQw4w9WgXcQ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Create and Start Tracking/i }));
+
+    await waitFor(() => {
+      expect(gamesApi.create).toHaveBeenCalledWith({
+        teamId: 't1',
+        title: 'Film Session',
+        videoUrl: 'https://youtu.be/dQw4w9WgXcQ',
+      });
+    });
+  });
 });

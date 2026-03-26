@@ -3,6 +3,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
+  createGame: jest.fn(),
   findGameByIdAndOwner: jest.fn(),
   saveGame: jest.fn(),
 }));
@@ -33,8 +34,16 @@ jest.mock('mongoose', () => ({
 }));
 
 const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
-const { findGameByIdAndOwner, saveGame } = require('../../modules/games/games.repository');
-const { computeBoxScore, setGameLineup } = require('../../modules/games/games.service');
+const {
+  createGame,
+  findGameByIdAndOwner,
+  saveGame,
+} = require('../../modules/games/games.repository');
+const {
+  computeBoxScore,
+  createGameForUser,
+  setGameLineup,
+} = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 
 function buildPlayers(players) {
@@ -139,6 +148,48 @@ describe('games service box score', () => {
     expect(box.teamTotals.reb).toBe(0);
     expect(box.teamTotals.stl).toBe(1);
     expect(box.players.find((row) => row.displayName === 'Alex').stl).toBe(1);
+  });
+});
+
+describe('games service create game', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('persists a trimmed YouTube video URL', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Friday Night',
+      opponent: 'Wildcats',
+      videoUrl: 'https://youtu.be/dQw4w9WgXcQ',
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      scheduledAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-03-12T17:45:00.000Z'),
+      updatedAt: new Date('2026-03-12T17:45:00.000Z'),
+      events: [],
+    });
+
+    const result = await createGameForUser('user-1', {
+      teamId: 'team-1',
+      title: '  Friday Night  ',
+      opponent: ' Wildcats ',
+      videoUrl: ' https://youtu.be/dQw4w9WgXcQ ',
+    });
+
+    expect(createGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Friday Night',
+        opponent: 'Wildcats',
+        videoUrl: 'https://youtu.be/dQw4w9WgXcQ',
+      })
+    );
+    expect(result.videoUrl).toBe('https://youtu.be/dQw4w9WgXcQ');
   });
 });
 

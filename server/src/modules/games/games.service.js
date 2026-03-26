@@ -45,6 +45,7 @@ function sanitizeGame(game, options = {}) {
     teamId: String(game.teamId),
     title: game.title,
     opponent: game.opponent ?? null,
+    videoUrl: game.videoUrl ?? null,
     status: game.status,
     startingLineupPlayerIds: Array.isArray(game.startingLineupPlayerIds)
       ? game.startingLineupPlayerIds.map(String)
@@ -290,6 +291,7 @@ async function createGameForUser(userId, payload) {
     title: payload.title.trim(),
     opponent: payload.opponent?.trim() ? payload.opponent.trim() : undefined,
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+    videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
     status: 'in_progress',
   });
 
@@ -303,6 +305,7 @@ async function listGamesForUser(userId, filter = {}) {
     teamId: String(game.teamId),
     title: game.title,
     opponent: game.opponent ?? null,
+    videoUrl: game.videoUrl ?? null,
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,

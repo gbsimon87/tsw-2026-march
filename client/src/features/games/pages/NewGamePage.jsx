@@ -13,6 +13,7 @@ export function NewGamePage() {
   const [selectedOpponent, setSelectedOpponent] = useState('');
   const [newOpponent, setNewOpponent] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -78,6 +79,10 @@ export function NewGamePage() {
 
       if (scheduledAt) {
         payload.scheduledAt = new Date(scheduledAt).toISOString();
+      }
+
+      if (videoUrl.trim()) {
+        payload.videoUrl = videoUrl.trim();
       }
 
       const response = await gamesApi.create(payload);
@@ -252,6 +257,25 @@ export function NewGamePage() {
               onChange={(event) => setScheduledAt(event.target.value)}
             />
           </label>
+        </section>
+
+        <section aria-labelledby="video-heading" className="space-y-3">
+          <h2 id="video-heading" className="text-xl font-semibold text-slate-900">
+            Video
+          </h2>
+          <label className="block">
+            <span className="mb-1 block text-sm text-slate-700">YouTube URL (optional)</span>
+            <input
+              type="url"
+              className="w-full rounded border border-slate-300 px-3 py-2"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={videoUrl}
+              onChange={(event) => setVideoUrl(event.target.value)}
+            />
+          </label>
+          <p className="text-sm text-slate-600">
+            Use an unlisted YouTube link to test playback without paying for app-side video storage.
+          </p>
         </section>
 
         <div className="flex flex-wrap items-center gap-3">

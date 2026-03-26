@@ -16,6 +16,7 @@
 - Opponent total scoring with final scoreline rendering across game detail, recap, and public surfaces
 - Additional stat categories in the current model: steals, turnovers, fouls
 - Starting five setup, on-court lineup tracking, and event-based substitutions in live tracking
+- Optional per-game YouTube video URLs with embedded playback on game detail
 - Full-screen tracking consolidation around on-court players, modal quick stats, and opponent rebound flow
 - Reusable sortable stats table with pinned first column for horizontally scrollable stat views
 - Public team page sortable season player table, public game lists, and links to player profiles
@@ -45,7 +46,7 @@
 - Richer recap/reporting content and trend summaries
 - Fantasy stat tracking
 - Player image support from uploaded media or linked Google images
-- Embedded video playback, likely via YouTube iframe support
+- Editing/replacing saved game video links after initial creation
 - Time-synced game tracking from video playback
 - Richer shot-zone analytics and trend summaries (heatmaps, efficiency overlays, splits)
 - CSV/export pipelines beyond the current print mode
