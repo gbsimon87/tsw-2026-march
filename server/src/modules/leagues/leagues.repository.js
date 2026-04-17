@@ -1,0 +1,301 @@
+const mongoose = require('mongoose');
+
+const logoSchema = new mongoose.Schema(
+  {
+    url: { type: String, default: null },
+    publicId: { type: String, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    mimeType: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+const leagueSchema = new mongoose.Schema(
+  {
+    ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, trim: true, unique: true, index: true },
+    description: { type: String, trim: true, default: null },
+    seasonLabel: { type: String, trim: true, default: null },
+    status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
+    isPublic: { type: Boolean, default: true },
+    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    subscriptionStatus: {
+      type: String,
+      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
+      default: 'inactive',
+    },
+    stripeCustomerId: { type: String, default: null },
+    stripeSubscriptionId: { type: String, default: null },
+    stripePriceId: { type: String, default: null },
+    currentPeriodEnd: { type: Date, default: null },
+    cancelAtPeriodEnd: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+leagueSchema.index({ ownerUserId: 1, status: 1 });
+
+const leagueTeamSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, trim: true },
+    logo: { type: logoSchema, default: null },
+    colors: { type: [String], default: [] },
+    status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
+  },
+  { timestamps: true }
+);
+
+leagueTeamSchema.index({ leagueId: 1, slug: 1 }, { unique: true });
+
+const leaguePlayerSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: true,
+      index: true,
+    },
+    displayName: { type: String, required: true, trim: true },
+    jerseyNumber: { type: Number, default: null },
+    position: { type: String, enum: ['PG', 'SG', 'SF', 'PF', 'C'], default: null },
+    isActive: { type: Boolean, default: true },
+    claimedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+  },
+  { timestamps: true }
+);
+
+const leagueTeamMemberSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: true,
+      index: true,
+    },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    role: { type: String, enum: ['manager', 'helper', 'player'], required: true },
+    leaguePlayerId: { type: mongoose.Schema.Types.ObjectId, ref: 'LeaguePlayer', default: null },
+    status: { type: String, enum: ['active', 'removed'], default: 'active', index: true },
+    createdByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { timestamps: true }
+);
+
+leagueTeamMemberSchema.index({ leagueTeamId: 1, userId: 1, status: 1 });
+
+const leagueJoinRequestSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: true,
+      index: true,
+    },
+    requesterUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    requestedRole: { type: String, enum: ['player', 'helper'], required: true },
+    requestedLeaguePlayerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeaguePlayer',
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected', 'canceled'],
+      default: 'pending',
+      index: true,
+    },
+    reviewedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reviewedAt: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
+
+leagueJoinRequestSchema.index({ leagueTeamId: 1, requesterUserId: 1, status: 1 });
+
+const League = mongoose.models.League || mongoose.model('League', leagueSchema);
+const LeagueTeam = mongoose.models.LeagueTeam || mongoose.model('LeagueTeam', leagueTeamSchema);
+const LeaguePlayer =
+  mongoose.models.LeaguePlayer || mongoose.model('LeaguePlayer', leaguePlayerSchema);
+const LeagueTeamMember =
+  mongoose.models.LeagueTeamMember || mongoose.model('LeagueTeamMember', leagueTeamMemberSchema);
+const LeagueJoinRequest =
+  mongoose.models.LeagueJoinRequest || mongoose.model('LeagueJoinRequest', leagueJoinRequestSchema);
+
+function createLeague(input) {
+  return League.create(input);
+}
+
+function listLeaguesByOwner(ownerUserId) {
+  return League.find({ ownerUserId }).sort({ createdAt: -1 });
+}
+
+function listPublicLeagues() {
+  return League.find({ isPublic: true }).sort({ createdAt: -1 });
+}
+
+function findLeagueById(leagueId) {
+  return League.findById(leagueId);
+}
+
+function findLeagueByIdAndOwner(leagueId, ownerUserId) {
+  return League.findOne({ _id: leagueId, ownerUserId });
+}
+
+function findLeagueBySlug(slug) {
+  return League.findOne({ slug });
+}
+
+function listLeaguesByIds(leagueIds) {
+  return League.find({ _id: { $in: leagueIds } }).sort({ createdAt: -1 });
+}
+
+function saveLeague(league) {
+  return league.save();
+}
+
+function createLeagueTeam(input) {
+  return LeagueTeam.create(input);
+}
+
+function listLeagueTeams(leagueId) {
+  return LeagueTeam.find({ leagueId }).sort({ createdAt: 1 });
+}
+
+function findLeagueTeamById(leagueTeamId) {
+  return LeagueTeam.findById(leagueTeamId);
+}
+
+function findLeagueTeamByIdAndLeague(leagueTeamId, leagueId) {
+  return LeagueTeam.findOne({ _id: leagueTeamId, leagueId });
+}
+
+function findLeagueTeamByLeagueAndSlug(leagueId, slug) {
+  return LeagueTeam.findOne({ leagueId, slug });
+}
+
+function saveLeagueTeam(leagueTeam) {
+  return leagueTeam.save();
+}
+
+function createLeaguePlayer(input) {
+  return LeaguePlayer.create(input);
+}
+
+function findLeaguePlayerById(leaguePlayerId) {
+  return LeaguePlayer.findById(leaguePlayerId);
+}
+
+function findLeaguePlayerByIdAndTeam(leaguePlayerId, leagueTeamId) {
+  return LeaguePlayer.findOne({ _id: leaguePlayerId, leagueTeamId });
+}
+
+function listLeaguePlayers(leagueTeamId) {
+  return LeaguePlayer.find({ leagueTeamId }).sort({ createdAt: 1 });
+}
+
+function saveLeaguePlayer(leaguePlayer) {
+  return leaguePlayer.save();
+}
+
+function createLeagueTeamMember(input) {
+  return LeagueTeamMember.create(input);
+}
+
+function findActiveLeagueTeamMember(leagueTeamId, userId) {
+  return LeagueTeamMember.findOne({ leagueTeamId, userId, status: 'active' });
+}
+
+function findLeagueTeamMemberById(memberId) {
+  return LeagueTeamMember.findById(memberId);
+}
+
+function listLeagueTeamMembers(leagueTeamId) {
+  return LeagueTeamMember.find({ leagueTeamId, status: 'active' }).sort({ createdAt: 1 });
+}
+
+function listLeagueMembershipsForUser(userId) {
+  return LeagueTeamMember.find({ userId, status: 'active' }).sort({ createdAt: -1 });
+}
+
+function saveLeagueTeamMember(member) {
+  return member.save();
+}
+
+function createLeagueJoinRequest(input) {
+  return LeagueJoinRequest.create(input);
+}
+
+function findLeagueJoinRequestById(requestId) {
+  return LeagueJoinRequest.findById(requestId);
+}
+
+function findPendingLeagueJoinRequest(leagueTeamId, requesterUserId) {
+  return LeagueJoinRequest.findOne({
+    leagueTeamId,
+    requesterUserId,
+    status: 'pending',
+  });
+}
+
+function listLeagueJoinRequests(leagueTeamId) {
+  return LeagueJoinRequest.find({ leagueTeamId }).sort({ createdAt: -1 });
+}
+
+function saveLeagueJoinRequest(request) {
+  return request.save();
+}
+
+module.exports = {
+  League,
+  LeagueTeam,
+  LeaguePlayer,
+  LeagueTeamMember,
+  LeagueJoinRequest,
+  createLeague,
+  listLeaguesByOwner,
+  listPublicLeagues,
+  findLeagueById,
+  findLeagueByIdAndOwner,
+  findLeagueBySlug,
+  listLeaguesByIds,
+  saveLeague,
+  createLeagueTeam,
+  listLeagueTeams,
+  findLeagueTeamById,
+  findLeagueTeamByIdAndLeague,
+  findLeagueTeamByLeagueAndSlug,
+  saveLeagueTeam,
+  createLeaguePlayer,
+  findLeaguePlayerById,
+  findLeaguePlayerByIdAndTeam,
+  listLeaguePlayers,
+  saveLeaguePlayer,
+  createLeagueTeamMember,
+  findActiveLeagueTeamMember,
+  findLeagueTeamMemberById,
+  listLeagueTeamMembers,
+  listLeagueMembershipsForUser,
+  saveLeagueTeamMember,
+  createLeagueJoinRequest,
+  findLeagueJoinRequestById,
+  findPendingLeagueJoinRequest,
+  listLeagueJoinRequests,
+  saveLeagueJoinRequest,
+};

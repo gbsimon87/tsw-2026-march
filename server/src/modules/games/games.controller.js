@@ -1,6 +1,11 @@
 const { ApiError } = require('../../utils/apiError');
 const gamesService = require('./games.service');
-const { createGameSchema, appendEventSchema, setLineupSchema } = require('./games.validation');
+const {
+  createGameSchema,
+  updateGameSchema,
+  appendEventSchema,
+  setLineupSchema,
+} = require('./games.validation');
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -25,6 +30,13 @@ async function list(req, res) {
   };
   const games = await gamesService.listGamesForUser(userId, filter);
   res.status(200).json({ games });
+}
+
+async function update(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = updateGameSchema.parse(req.body);
+  const result = await gamesService.updateGameForUser(userId, req.params.gameId, payload);
+  res.status(200).json(result);
 }
 
 async function getById(req, res) {
@@ -71,6 +83,7 @@ async function finish(req, res) {
 module.exports = {
   create,
   list,
+  update,
   getById,
   getPublicById,
   appendEvent,

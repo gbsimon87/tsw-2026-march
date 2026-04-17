@@ -51,10 +51,52 @@ const shotEventSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const rosterSnapshotPlayerSchema = new mongoose.Schema(
+  {
+    leaguePlayerId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    displayName: { type: String, required: true, trim: true },
+    jerseyNumber: { type: Number, default: null },
+    position: {
+      type: String,
+      enum: ['PG', 'SG', 'SF', 'PF', 'C'],
+      default: null,
+    },
+    claimedByUserId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    isClaimed: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
+  },
+  { _id: true }
+);
+
 const gameSchema = new mongoose.Schema(
   {
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, index: true },
+    gameContext: {
+      type: String,
+      enum: ['standalone', 'league'],
+      default: 'standalone',
+      index: true,
+    },
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
+    homeLeagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      default: null,
+      index: true,
+    },
+    awayLeagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      default: null,
+      index: true,
+    },
+    trackedLeagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      default: null,
+      index: true,
+    },
     title: { type: String, required: true, trim: true },
     opponent: { type: String, trim: true, default: null },
     videoUrl: { type: String, trim: true, default: null },
@@ -68,6 +110,7 @@ const gameSchema = new mongoose.Schema(
     currentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     scheduledAt: { type: Date },
     completedAt: { type: Date },
+    rosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     events: { type: [shotEventSchema], default: [] },
   },
   { timestamps: true }
@@ -115,6 +158,18 @@ async function listCompletedGames() {
   });
 }
 
+async function listLeagueGamesByLeagueId(leagueId) {
+  return Game.find({ gameContext: 'league', leagueId }).sort({
+    scheduledAt: -1,
+    completedAt: -1,
+    createdAt: -1,
+  });
+}
+
+async function findGameByLeagueIdAndId(leagueId, gameId) {
+  return Game.findOne({ _id: gameId, leagueId, gameContext: 'league' });
+}
+
 async function saveGame(game) {
   return game.save();
 }
@@ -126,5 +181,7 @@ module.exports = {
   findGameById,
   listGamesByTeamId,
   listCompletedGames,
+  listLeagueGamesByLeagueId,
+  findGameByLeagueIdAndId,
   saveGame,
 };

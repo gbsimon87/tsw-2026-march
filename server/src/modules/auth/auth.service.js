@@ -36,9 +36,43 @@ function sanitizeUser(user) {
     email: user.email,
     name: user.name,
     plan: user.plan || 'free',
+    leagueBilling: getUserLeagueBillingSummary(user),
+    leagueEntitlements: getUserLeagueEntitlements(user),
     roles: user.roles,
     emailVerified: Boolean(user.emailVerified),
     authProvider: user.authProvider,
+  };
+}
+
+function normalizeLeagueSubscriptionStatus(value) {
+  if (!value) {
+    return 'inactive';
+  }
+
+  if (['trialing', 'active', 'past_due', 'canceled'].includes(value)) {
+    return value;
+  }
+
+  return 'inactive';
+}
+
+function getUserLeagueBillingSummary(user) {
+  return {
+    plan: user.leaguePlan || 'free',
+    subscriptionStatus: normalizeLeagueSubscriptionStatus(user.leagueSubscriptionStatus),
+    cancelAtPeriodEnd: Boolean(user.leagueCancelAtPeriodEnd),
+    currentPeriodEnd: user.leagueCurrentPeriodEnd ?? null,
+  };
+}
+
+function getUserLeagueEntitlements(user) {
+  const billing = getUserLeagueBillingSummary(user);
+  const hasLeagueAccess =
+    billing.plan === 'pro' && ['active', 'trialing'].includes(billing.subscriptionStatus);
+
+  return {
+    canCreateLeague: hasLeagueAccess,
+    canOwnAnotherLeague: hasLeagueAccess,
   };
 }
 
@@ -304,4 +338,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   loginWithGoogle,
+  getUserLeagueBillingSummary,
+  getUserLeagueEntitlements,
 };

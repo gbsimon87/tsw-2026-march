@@ -9,6 +9,7 @@
   "scripts": {
     "bootstrap": "bash scripts/bootstrap.sh",
     "dev": "pnpm --parallel --filter client --filter server dev",
+    "seed": "pnpm --filter server seed",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",

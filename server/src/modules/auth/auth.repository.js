@@ -9,6 +9,18 @@ const userSchema = new mongoose.Schema(
     emailVerified: { type: Boolean, default: false },
     emailVerifiedAt: { type: Date },
     authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
+    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    leaguePlan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    leagueSubscriptionStatus: {
+      type: String,
+      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
+      default: 'inactive',
+    },
+    leagueCurrentPeriodEnd: { type: Date, default: null },
+    leagueCancelAtPeriodEnd: { type: Boolean, default: false },
+    leagueStripeCustomerId: { type: String, default: null },
+    leagueStripeSubscriptionId: { type: String, default: null },
+    leagueStripePriceId: { type: String, default: null },
     roles: { type: [String], default: ['user'] },
   },
   {
@@ -169,6 +181,10 @@ async function updateUserPassword(userId, passwordHash) {
   return User.findByIdAndUpdate(userId, { $set: { passwordHash } }, { new: true });
 }
 
+async function updateUserPlan(userId, plan) {
+  return User.findByIdAndUpdate(userId, { $set: { plan } }, { new: true });
+}
+
 module.exports = {
   createUser,
   findUserByEmail,
@@ -184,4 +200,5 @@ module.exports = {
   markAuthTokenUsed,
   markEmailVerified,
   updateUserPassword,
+  updateUserPlan,
 };

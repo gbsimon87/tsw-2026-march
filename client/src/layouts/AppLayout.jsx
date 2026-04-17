@@ -41,6 +41,11 @@ export function AppLayout() {
                 Dashboard
               </NavLink>
             ) : null}
+            {user ? (
+              <NavLink to="/leagues" className={desktopNavLinkClass}>
+                Leagues
+              </NavLink>
+            ) : null}
             {user ? null : null}
             {!user ? (
               <>
@@ -153,6 +158,15 @@ export function AppLayout() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Dashboard
+              </NavLink>
+            ) : null}
+            {user ? (
+              <NavLink
+                to="/leagues"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Leagues
               </NavLink>
             ) : null}
             {user ? null : null}

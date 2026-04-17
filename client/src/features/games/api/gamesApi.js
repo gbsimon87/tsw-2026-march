@@ -4,6 +4,9 @@ export const gamesApi = {
   create(payload) {
     return apiClient.post('/games', payload);
   },
+  update(gameId, payload) {
+    return apiClient.patch(`/games/${gameId}`, payload);
+  },
   list(params = {}) {
     const query = new URLSearchParams();
     if (params.teamId) {

@@ -11,6 +11,7 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 
 - Authenticated user accounts (email/password + Google OAuth)
 - Team and player roster setup
+- Premium league management with league teams, league rosters, standings, join requests, and league game scheduling
 - Teams and games management pages for authenticated users
 - Game creation and in-progress tracking
 - Optional YouTube video link saved per game for low-cost playback testing
@@ -58,10 +59,38 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 - `POST /api/v1/teams/:teamId/players`
 - `PATCH /api/v1/teams/:teamId/players/:playerId`
 - `DELETE /api/v1/teams/:teamId/players/:playerId`
+- `POST /api/v1/leagues`
+- `GET /api/v1/leagues`
+- `GET /api/v1/leagues/:leagueId`
+- `PATCH /api/v1/leagues/:leagueId`
+- `POST /api/v1/leagues/:leagueId/archive`
+- `GET /api/v1/leagues/:leagueId/standings`
+- `GET /api/v1/leagues/:leagueId/games`
+- `POST /api/v1/leagues/:leagueId/teams`
+- `GET /api/v1/leagues/:leagueId/teams`
+- `GET /api/v1/leagues/:leagueId/teams/:leagueTeamId`
+- `PATCH /api/v1/leagues/:leagueId/teams/:leagueTeamId`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/archive`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/logo`
+- `DELETE /api/v1/leagues/:leagueId/teams/:leagueTeamId/logo`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/players`
+- `PATCH /api/v1/leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId`
+- `DELETE /api/v1/leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId/unclaim`
+- `GET /api/v1/leagues/:leagueId/teams/:leagueTeamId/members`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/managers`
+- `PATCH /api/v1/leagues/:leagueId/teams/:leagueTeamId/members/:memberId`
+- `DELETE /api/v1/leagues/:leagueId/teams/:leagueTeamId/members/:memberId`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/join-requests`
+- `GET /api/v1/leagues/:leagueId/teams/:leagueTeamId/join-requests`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/join-requests/:requestId/approve`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/join-requests/:requestId/reject`
+- `POST /api/v1/leagues/:leagueId/teams/:leagueTeamId/join-requests/:requestId/cancel`
 
 - `POST /api/v1/games`
 - `GET /api/v1/games`
 - `GET /api/v1/games/:gameId`
+- `PATCH /api/v1/games/:gameId`
 - `POST /api/v1/games/:gameId/events`
 - `DELETE /api/v1/games/:gameId/events/:eventId`
 - `POST /api/v1/games/:gameId/finish`
@@ -79,6 +108,16 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 - `/teams/:teamId`
 - `/teams/:teamId/edit`
 - `/teams/:teamId/players/:playerId`
+- `/leagues`
+- `/leagues/new`
+- `/leagues/:leagueId`
+- `/leagues/:leagueId/manage`
+- `/leagues/:leagueId/teams/:leagueTeamId`
+- `/leagues/:leagueId/games/new`
+- `/league/:leagueSlug`
+- `/league/:leagueSlug/standings`
+- `/league/:leagueSlug/games`
+- `/league/:leagueSlug/teams/:teamSlug`
 - `/games/new`
 - `/games`
 - `/games/:gameId/track`
@@ -133,6 +172,10 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 
 ### Public Experience
 
+- Public league pages include:
+  - standings with record, points for, points against, and differential
+  - league game listings linked through the shared public game detail route
+  - public league team pages with roster, claimed-profile badges, and a player stats table
 - Public team page includes:
   - sortable player season table with games played, per-game averages, totals, shooting splits, and expanded stat columns
   - clickable player names linking to public player profiles
@@ -169,6 +212,7 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 - Stripe Billing Portal manages existing subscriptions.
 - Billing success now re-checks the selected team after redirect instead of assuming webhooks already completed.
 - Replay and public shot maps remain gated by backend entitlement state.
+- League creation uses separate league-premium entitlement fields on the user account and league billing state on the league record.
 
 ## Seed Data
 
@@ -179,6 +223,11 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
   - 1 team
   - 10 players
   - 20 completed games
+- `user1@user1.com` also gets:
+  - league premium enabled
+  - 1 seeded league: `Metro Spring League`
+  - 4 seeded league teams
+  - 10 league players per league team
 - Total seeded sample data:
   - 10 users
   - 10 teams

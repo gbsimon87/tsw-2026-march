@@ -1,0 +1,1408 @@
+const mongoose = require('mongoose');
+const { ApiError } = require('../../utils/apiError');
+const { env } = require('../../config/env');
+const { summarizeEvents } = require('../shared/statSummary');
+const {
+  createLeague,
+  listLeaguesByOwner,
+  listPublicLeagues: listPublicLeaguesRepo,
+  findLeagueById,
+  findLeagueByIdAndOwner,
+  findLeagueBySlug,
+  listLeaguesByIds,
+  saveLeague,
+  createLeagueTeam,
+  listLeagueTeams,
+  findLeagueTeamByIdAndLeague,
+  findLeagueTeamByLeagueAndSlug,
+  saveLeagueTeam,
+  createLeaguePlayer,
+  findLeaguePlayerById,
+  findLeaguePlayerByIdAndTeam,
+  listLeaguePlayers,
+  saveLeaguePlayer,
+  createLeagueTeamMember,
+  findActiveLeagueTeamMember,
+  findLeagueTeamMemberById,
+  listLeagueTeamMembers,
+  listLeagueMembershipsForUser,
+  saveLeagueTeamMember,
+  createLeagueJoinRequest,
+  findLeagueJoinRequestById,
+  findPendingLeagueJoinRequest,
+  listLeagueJoinRequests,
+  saveLeagueJoinRequest,
+} = require('./leagues.repository');
+const { findUserByEmail, findUserById } = require('../auth/auth.repository');
+const { listLeagueGamesByLeagueId } = require('../games/games.repository');
+const {
+  uploadImageBuffer,
+  destroyImage,
+  isCloudinaryConfigured,
+} = require('../feed/cloudinary.client');
+const { getUserLeagueEntitlements } = require('../auth/auth.service');
+
+const PLAYER_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C']);
+const TEAM_LOGO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+function normalizeName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase();
+}
+
+function slugify(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function normalizeHexColor(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+function normalizePosition(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return PLAYER_POSITIONS.has(normalized) ? normalized : null;
+}
+
+function sanitizeLogo(logo) {
+  if (!logo?.url) {
+    return null;
+  }
+
+  return {
+    url: logo.url,
+    width: logo.width ?? null,
+    height: logo.height ?? null,
+  };
+}
+
+function normalizeLeagueBilling(league) {
+  return {
+    plan: league.plan || 'free',
+    subscriptionStatus: league.subscriptionStatus || 'inactive',
+    cancelAtPeriodEnd: Boolean(league.cancelAtPeriodEnd),
+    currentPeriodEnd: league.currentPeriodEnd ?? null,
+  };
+}
+
+function sanitizeLeague(league, options = {}) {
+  return {
+    id: String(league._id),
+    ownerUserId: String(league.ownerUserId),
+    name: league.name,
+    slug: league.slug,
+    description: league.description ?? null,
+    seasonLabel: league.seasonLabel ?? null,
+    status: league.status,
+    isPublic: Boolean(league.isPublic),
+    billing: normalizeLeagueBilling(league),
+    createdAt: league.createdAt,
+    updatedAt: league.updatedAt,
+    ...(options.includeTeams ? { teams: options.includeTeams } : {}),
+    ...(options.includeStandings ? { standings: options.includeStandings } : {}),
+    ...(options.includeGames ? { games: options.includeGames } : {}),
+  };
+}
+
+function sanitizeLeaguePlayer(player, usersById = new Map(), options = {}) {
+  const claimedUser = player.claimedByUserId ? usersById.get(String(player.claimedByUserId)) : null;
+
+  return {
+    id: String(player._id),
+    leaguePlayerId: player.leaguePlayerId ? String(player.leaguePlayerId) : String(player._id),
+    leagueTeamId: String(player.leagueTeamId),
+    displayName: player.displayName,
+    jerseyNumber: player.jerseyNumber ?? null,
+    position: normalizePosition(player.position),
+    isActive: Boolean(player.isActive),
+    isClaimed: Boolean(player.claimedByUserId),
+    claimedBadgeLabel: player.claimedByUserId ? 'Claimed profile' : null,
+    ...(options.includePrivateClaim
+      ? {
+          claimedBy: player.claimedByUserId
+            ? {
+                id: String(player.claimedByUserId),
+                name: claimedUser?.name || 'Claimed account',
+              }
+            : null,
+        }
+      : {}),
+  };
+}
+
+function sanitizeLeagueMember(member, usersById = new Map()) {
+  const user = usersById.get(String(member.userId));
+
+  return {
+    id: String(member._id),
+    leagueTeamId: String(member.leagueTeamId),
+    userId: String(member.userId),
+    role: member.role,
+    leaguePlayerId: member.leaguePlayerId ? String(member.leaguePlayerId) : null,
+    status: member.status,
+    userName: user?.name || null,
+    userEmail: user?.email || null,
+    createdAt: member.createdAt,
+  };
+}
+
+function sanitizeLeagueJoinRequest(request, usersById = new Map()) {
+  const requester = usersById.get(String(request.requesterUserId));
+  const reviewer = request.reviewedByUserId
+    ? usersById.get(String(request.reviewedByUserId))
+    : null;
+
+  return {
+    id: String(request._id),
+    requesterUserId: String(request.requesterUserId),
+    requesterName: requester?.name || null,
+    requestedRole: request.requestedRole,
+    requestedLeaguePlayerId: request.requestedLeaguePlayerId
+      ? String(request.requestedLeaguePlayerId)
+      : null,
+    status: request.status,
+    reviewedByUserId: request.reviewedByUserId ? String(request.reviewedByUserId) : null,
+    reviewedByName: reviewer?.name || null,
+    reviewedAt: request.reviewedAt ?? null,
+    createdAt: request.createdAt,
+  };
+}
+
+function sanitizeLeagueTeam(team, options = {}) {
+  return {
+    id: String(team._id),
+    leagueId: String(team.leagueId),
+    name: team.name,
+    slug: team.slug,
+    logo: sanitizeLogo(team.logo),
+    colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
+    status: team.status,
+    createdAt: team.createdAt,
+    updatedAt: team.updatedAt,
+    ...(options.includeRoster ? { roster: options.includeRoster } : {}),
+    ...(options.includeMembers ? { members: options.includeMembers } : {}),
+    ...(options.includeJoinRequests ? { joinRequests: options.includeJoinRequests } : {}),
+    ...(options.includeStats ? { stats: options.includeStats } : {}),
+    ...(options.includeGames ? { games: options.includeGames } : {}),
+    ...(options.includeStandingsPosition
+      ? { standingsPosition: options.includeStandingsPosition }
+      : {}),
+  };
+}
+
+async function assertLeagueExists(leagueId) {
+  const league = await findLeagueById(leagueId);
+  if (!league) {
+    throw new ApiError(404, 'League not found');
+  }
+  return league;
+}
+
+async function assertLeagueOwner(userId, leagueId) {
+  const league = await findLeagueByIdAndOwner(leagueId, userId);
+  if (!league) {
+    throw new ApiError(404, 'League not found');
+  }
+  return league;
+}
+
+function ensureLeagueEditable(league) {
+  if (league.status === 'archived') {
+    throw new ApiError(400, 'League is archived');
+  }
+}
+
+async function isTeamManager(userId, leagueTeamId) {
+  const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
+  return Boolean(member && member.role === 'manager');
+}
+
+async function assertTeamManagerOrOwner(userId, leagueId, leagueTeamId) {
+  const league = await assertLeagueExists(leagueId);
+  if (String(league.ownerUserId) === String(userId)) {
+    return { league, role: 'owner' };
+  }
+
+  const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
+  if (!member || member.role !== 'manager') {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  return { league, role: 'manager' };
+}
+
+async function getLeagueTeamAccess(userId, leagueId, leagueTeamId) {
+  const league = await assertLeagueExists(leagueId);
+  if (String(league.ownerUserId) === String(userId)) {
+    return { league, role: 'owner', member: null };
+  }
+
+  const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
+  if (!member) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  return { league, role: member.role, member };
+}
+
+async function assertLeagueVisible(leagueIdOrSlug, options = {}) {
+  const league = options.bySlug
+    ? await findLeagueBySlug(leagueIdOrSlug)
+    : await findLeagueById(leagueIdOrSlug);
+  if (!league || !league.isPublic) {
+    throw new ApiError(404, 'League not found');
+  }
+
+  return league;
+}
+
+async function assertLeagueTeamExists(leagueId, leagueTeamId) {
+  const leagueTeam = await findLeagueTeamByIdAndLeague(leagueTeamId, leagueId);
+  if (!leagueTeam) {
+    throw new ApiError(404, 'League team not found');
+  }
+  return leagueTeam;
+}
+
+async function buildUsersMap(userIds) {
+  const ids = [...new Set((userIds || []).filter(Boolean).map(String))];
+  const entries = await Promise.all(ids.map((id) => findUserById(id)));
+  return new Map(entries.filter(Boolean).map((user) => [String(user._id), user]));
+}
+
+async function assertLeaguePremiumUser(userId) {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const entitlements = getUserLeagueEntitlements(user);
+  if (!entitlements.canCreateLeague) {
+    throw new ApiError(403, 'League premium is required');
+  }
+
+  return user;
+}
+
+async function createLeagueForUser(userId, payload) {
+  await assertLeaguePremiumUser(userId);
+  const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
+
+  if (!slug) {
+    throw new ApiError(400, 'League slug is required');
+  }
+
+  const existing = await findLeagueBySlug(slug);
+  if (existing) {
+    throw new ApiError(409, 'League slug is already in use');
+  }
+
+  const league = await createLeague({
+    ownerUserId: userId,
+    name: payload.name.trim(),
+    slug,
+    description: payload.description?.trim() || undefined,
+    seasonLabel: payload.seasonLabel?.trim() || undefined,
+    status: 'active',
+    isPublic: true,
+    plan: 'pro',
+    subscriptionStatus: 'active',
+  });
+
+  return sanitizeLeague(league);
+}
+
+async function listLeaguesForUser(userId) {
+  const [ownedLeagues, memberships] = await Promise.all([
+    listLeaguesByOwner(userId),
+    listLeagueMembershipsForUser(userId),
+  ]);
+  const memberLeagueIds = memberships.map((membership) => membership.leagueId).filter(Boolean);
+  const memberLeagues = memberLeagueIds.length > 0 ? await listLeaguesByIds(memberLeagueIds) : [];
+  const combined = new Map();
+
+  for (const league of [...ownedLeagues, ...memberLeagues]) {
+    combined.set(String(league._id), league);
+  }
+
+  return Array.from(combined.values())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .map((league) => sanitizeLeague(league));
+}
+
+async function listPublicLeagues() {
+  const leagues = await listPublicLeaguesRepo();
+  return leagues.map((league) => sanitizeLeague(league));
+}
+
+async function getLeagueForUser(userId, leagueId) {
+  const league = await assertLeagueExists(leagueId);
+  const isOwner = String(league.ownerUserId) === String(userId);
+  const memberships = await listLeagueMembershipsForUser(userId);
+  const hasMembership = memberships.some(
+    (membership) => String(membership.leagueId) === String(league._id)
+  );
+
+  if (!isOwner && !hasMembership) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  const [teams, standings, games] = await Promise.all([
+    listLeagueTeams(league._id),
+    getLeagueStandings(league._id),
+    listLeagueGames(league._id),
+  ]);
+
+  return sanitizeLeague(league, {
+    includeTeams: teams.map((team) => sanitizeLeagueTeam(team)),
+    includeStandings: standings,
+    includeGames: games,
+  });
+}
+
+async function getPublicLeagueBySlug(slug) {
+  const league = await assertLeagueVisible(slug, { bySlug: true });
+  const [teams, standings, games] = await Promise.all([
+    listLeagueTeams(league._id),
+    getLeagueStandings(league._id),
+    listLeagueGames(league._id, { publicOnly: true }),
+  ]);
+
+  return sanitizeLeague(league, {
+    includeTeams: teams.map((team) => sanitizeLeagueTeam(team)),
+    includeStandings: standings,
+    includeGames: games,
+  });
+}
+
+async function updateLeagueForUser(userId, leagueId, payload) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+
+  if (payload.name) {
+    league.name = payload.name.trim();
+  }
+
+  if (payload.slug) {
+    const nextSlug = slugify(payload.slug);
+    const existing = await findLeagueBySlug(nextSlug);
+    if (existing && String(existing._id) !== String(league._id)) {
+      throw new ApiError(409, 'League slug is already in use');
+    }
+    league.slug = nextSlug;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'description')) {
+    league.description = payload.description?.trim() || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'seasonLabel')) {
+    league.seasonLabel = payload.seasonLabel?.trim() || null;
+  }
+
+  await saveLeague(league);
+  return sanitizeLeague(league);
+}
+
+async function archiveLeagueForUser(userId, leagueId) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  league.status = 'archived';
+  await saveLeague(league);
+  return sanitizeLeague(league);
+}
+
+async function createLeagueTeamForLeague(userId, leagueId, payload) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+
+  const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
+  if (!slug) {
+    throw new ApiError(400, 'League team slug is required');
+  }
+
+  const existingTeams = await listLeagueTeams(league._id);
+  if (existingTeams.some((team) => normalizeName(team.name) === normalizeName(payload.name))) {
+    throw new ApiError(409, 'League team name is already in use');
+  }
+  if (existingTeams.some((team) => team.slug === slug)) {
+    throw new ApiError(409, 'League team slug is already in use');
+  }
+
+  const leagueTeam = await createLeagueTeam({
+    leagueId,
+    name: payload.name.trim(),
+    slug,
+    colors: (payload.colors || []).map(normalizeHexColor).filter(Boolean),
+    status: 'active',
+  });
+
+  return sanitizeLeagueTeam(leagueTeam);
+}
+
+async function listTeamsForLeagueViewer(userId, leagueId) {
+  await getLeagueForUser(userId, leagueId);
+  const teams = await listLeagueTeams(leagueId);
+  return teams.map((team) => sanitizeLeagueTeam(team));
+}
+
+async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
+  const access = await getLeagueTeamAccess(userId, leagueId, leagueTeamId);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+  const [players, members, joinRequests, standings, games] = await Promise.all([
+    listLeaguePlayers(team._id),
+    access.role === 'owner' || access.role === 'manager'
+      ? listLeagueTeamMembers(team._id)
+      : Promise.resolve([]),
+    access.role === 'owner' || access.role === 'manager'
+      ? listLeagueJoinRequests(team._id)
+      : Promise.resolve([]),
+    getLeagueStandings(leagueId),
+    listLeagueGames(leagueId),
+  ]);
+  const usersById = await buildUsersMap([
+    ...players.map((player) => player.claimedByUserId),
+    ...members.map((member) => member.userId),
+    ...joinRequests.map((request) => request.requesterUserId),
+    ...joinRequests.map((request) => request.reviewedByUserId),
+  ]);
+  const standingsPosition =
+    standings.findIndex((row) => row.teamId === String(team._id)) >= 0
+      ? standings.findIndex((row) => row.teamId === String(team._id)) + 1
+      : null;
+
+  return sanitizeLeagueTeam(team, {
+    includeRoster: players.map((player) =>
+      sanitizeLeaguePlayer(player, usersById, { includePrivateClaim: true })
+    ),
+    includeMembers: members.map((member) => sanitizeLeagueMember(member, usersById)),
+    includeJoinRequests: joinRequests.map((request) =>
+      sanitizeLeagueJoinRequest(request, usersById)
+    ),
+    includeGames: games.filter(
+      (game) =>
+        String(game.homeLeagueTeamId) === String(team._id) ||
+        String(game.awayLeagueTeamId) === String(team._id)
+    ),
+    includeStandingsPosition: standingsPosition,
+    includeStats: {
+      canManage: access.role === 'owner' || access.role === 'manager',
+      canReviewRequests: access.role === 'owner' || access.role === 'manager',
+      viewerRole: access.role,
+    },
+  });
+}
+
+async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+  const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
+  if (!team) {
+    throw new ApiError(404, 'League team not found');
+  }
+
+  const [players, games, standings] = await Promise.all([
+    listLeaguePlayers(team._id),
+    listLeagueGames(league._id, { publicOnly: true }),
+    getLeagueStandings(league._id),
+  ]);
+  const teamGames = games.filter(
+    (game) =>
+      String(game.homeLeagueTeamId) === String(team._id) ||
+      String(game.awayLeagueTeamId) === String(team._id)
+  );
+  const playerStats = buildLeagueTeamPlayerStats(teamGames, team._id);
+  const standingsRow = standings.find((row) => row.teamId === String(team._id)) || null;
+
+  return {
+    league: sanitizeLeague(league),
+    team: sanitizeLeagueTeam(team, {
+      includeRoster: players.map((player) => sanitizeLeaguePlayer(player)),
+      includeGames: teamGames,
+      includeStats: playerStats,
+      includeStandingsPosition: standingsRow
+        ? standings.findIndex((row) => row.teamId === String(team._id)) + 1
+        : null,
+    }),
+  };
+}
+
+function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId) {
+  const gameRows = [];
+
+  for (const game of games) {
+    if (String(game.trackedLeagueTeamId) !== String(leagueTeamId)) {
+      continue;
+    }
+
+    const snapshotPlayer = (game.rosterSnapshot || []).find(
+      (player) => String(player.leaguePlayerId || player._id) === String(leaguePlayerId)
+    );
+    if (!snapshotPlayer) {
+      continue;
+    }
+
+    const stats = emptyStats(String(leaguePlayerId), snapshotPlayer.displayName);
+    for (const event of game.events || []) {
+      if (String(event.playerId) !== String(snapshotPlayer._id)) {
+        continue;
+      }
+      applyEventToLine(stats, event.statType);
+    }
+
+    gameRows.push({
+      gameId: String(game.id || game._id),
+      title: game.title,
+      scheduledAt: game.scheduledAt ?? null,
+      completedAt: game.completedAt ?? null,
+      createdAt: game.createdAt ?? null,
+      opponent:
+        String(game.homeLeagueTeamId) === String(leagueTeamId)
+          ? game.awayTeamName
+          : game.homeTeamName,
+      opponentDestination: {
+        kind: 'game',
+        href: `/games/${game.id || game._id}`,
+      },
+      stats,
+    });
+  }
+
+  return gameRows.sort((a, b) => {
+    const aTime = new Date(a.completedAt || a.scheduledAt || a.createdAt || 0).getTime();
+    const bTime = new Date(b.completedAt || b.scheduledAt || b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function buildLeaguePlayerSummary(gameRows) {
+  const totals = gameRows.reduce(
+    (summary, game) => ({
+      ftm: summary.ftm + game.stats.ftm,
+      fta: summary.fta + game.stats.fta,
+      fg2m: summary.fg2m + game.stats.fg2m,
+      fg2a: summary.fg2a + game.stats.fg2a,
+      fg3m: summary.fg3m + game.stats.fg3m,
+      fg3a: summary.fg3a + game.stats.fg3a,
+      ast: summary.ast + game.stats.ast,
+      oreb: summary.oreb + game.stats.oreb,
+      dreb: summary.dreb + game.stats.dreb,
+      stl: summary.stl + game.stats.stl,
+      tov: summary.tov + game.stats.tov,
+      foul: summary.foul + game.stats.foul,
+      reb: summary.reb + game.stats.reb,
+      points: summary.points + game.stats.points,
+    }),
+    emptyStats(null, null)
+  );
+  const gamesCount = gameRows.length;
+
+  return {
+    gamesCount,
+    points: totals.points,
+    reb: totals.reb,
+    ast: totals.ast,
+    stl: totals.stl,
+    tov: totals.tov,
+    foul: totals.foul,
+    pointsPerGame: gamesCount > 0 ? totals.points / gamesCount : 0,
+    reboundsPerGame: gamesCount > 0 ? totals.reb / gamesCount : 0,
+    assistsPerGame: gamesCount > 0 ? totals.ast / gamesCount : 0,
+    stealsPerGame: gamesCount > 0 ? totals.stl / gamesCount : 0,
+    turnoversPerGame: gamesCount > 0 ? totals.tov / gamesCount : 0,
+    foulsPerGame: gamesCount > 0 ? totals.foul / gamesCount : 0,
+  };
+}
+
+async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+  const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
+  if (!team) {
+    throw new ApiError(404, 'League team not found');
+  }
+
+  const player = await findLeaguePlayerByIdAndTeam(leaguePlayerId, team._id);
+  if (!player) {
+    throw new ApiError(404, 'League player not found');
+  }
+
+  const games = await listLeagueGames(league._id, { publicOnly: true });
+  const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id);
+
+  return {
+    league: sanitizeLeague(league),
+    team: sanitizeLeagueTeam(team),
+    player: sanitizeLeaguePlayer(player),
+    summary: buildLeaguePlayerSummary(gameRows),
+    games: gameRows,
+  };
+}
+
+async function updateLeagueTeamForLeague(userId, leagueId, leagueTeamId, payload) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+
+  if (payload.name) {
+    team.name = payload.name.trim();
+  }
+  if (payload.slug) {
+    const nextSlug = slugify(payload.slug);
+    const existing = await findLeagueTeamByLeagueAndSlug(leagueId, nextSlug);
+    if (existing && String(existing._id) !== String(team._id)) {
+      throw new ApiError(409, 'League team slug is already in use');
+    }
+    team.slug = nextSlug;
+  }
+  if (payload.colors) {
+    team.colors = payload.colors.map(normalizeHexColor).filter(Boolean);
+  }
+
+  await saveLeagueTeam(team);
+  return sanitizeLeagueTeam(team);
+}
+
+async function archiveLeagueTeamForLeague(userId, leagueId, leagueTeamId) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+  team.status = 'archived';
+  await saveLeagueTeam(team);
+  return sanitizeLeagueTeam(team);
+}
+
+async function uploadLeagueTeamLogo(userId, leagueId, leagueTeamId, file) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+
+  if (!isCloudinaryConfigured()) {
+    throw new ApiError(503, 'Image upload is not configured');
+  }
+  if (!file) {
+    throw new ApiError(400, 'Logo file is required');
+  }
+  if (!TEAM_LOGO_MIME_TYPES.has(file.mimetype)) {
+    throw new ApiError(400, 'Logo must be a JPEG, PNG, or WebP image');
+  }
+  if (file.size > env.TEAM_LOGO_MAX_BYTES) {
+    throw new ApiError(400, 'Logo exceeds upload size limit');
+  }
+
+  const previousLogo = team.logo;
+  const upload = await uploadImageBuffer(file);
+  team.logo = {
+    url: upload.secure_url,
+    publicId: upload.public_id,
+    width: upload.width ?? null,
+    height: upload.height ?? null,
+    mimeType: file.mimetype,
+  };
+  await saveLeagueTeam(team);
+
+  if (previousLogo?.publicId && previousLogo.publicId !== upload.public_id) {
+    await destroyImage(previousLogo.publicId).catch(() => null);
+  }
+
+  return sanitizeLeagueTeam(team);
+}
+
+async function removeLeagueTeamLogo(userId, leagueId, leagueTeamId) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+  const previousLogo = team.logo;
+  team.logo = null;
+  await saveLeagueTeam(team);
+
+  if (previousLogo?.publicId) {
+    await destroyImage(previousLogo.publicId).catch(() => null);
+  }
+
+  return sanitizeLeagueTeam(team);
+}
+
+async function addPlayerToLeagueTeam(userId, leagueId, leagueTeamId, payload) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+  const existingPlayers = await listLeaguePlayers(team._id);
+
+  if (
+    existingPlayers.some(
+      (player) =>
+        player.isActive && normalizeName(player.displayName) === normalizeName(payload.displayName)
+    )
+  ) {
+    throw new ApiError(409, 'Player name is already in use on this team');
+  }
+
+  const player = await createLeaguePlayer({
+    leagueId,
+    leagueTeamId,
+    displayName: payload.displayName.trim(),
+    jerseyNumber: payload.jerseyNumber ?? null,
+    position: normalizePosition(payload.position),
+    isActive: true,
+  });
+
+  return sanitizeLeaguePlayer(player);
+}
+
+async function updateLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerId, payload) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const player = await findLeaguePlayerByIdAndTeam(leaguePlayerId, leagueTeamId);
+  if (!player) {
+    throw new ApiError(404, 'League player not found');
+  }
+
+  if (payload.displayName) {
+    const players = await listLeaguePlayers(leagueTeamId);
+    if (
+      players.some(
+        (candidate) =>
+          String(candidate._id) !== String(player._id) &&
+          candidate.isActive &&
+          normalizeName(candidate.displayName) === normalizeName(payload.displayName)
+      )
+    ) {
+      throw new ApiError(409, 'Player name is already in use on this team');
+    }
+    player.displayName = payload.displayName.trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'jerseyNumber')) {
+    player.jerseyNumber = payload.jerseyNumber ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'position')) {
+    player.position = normalizePosition(payload.position);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'isActive')) {
+    player.isActive = Boolean(payload.isActive);
+  }
+
+  await saveLeaguePlayer(player);
+  return sanitizeLeaguePlayer(player);
+}
+
+async function removeLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerId) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const player = await findLeaguePlayerByIdAndTeam(leaguePlayerId, leagueTeamId);
+  if (!player) {
+    throw new ApiError(404, 'League player not found');
+  }
+
+  player.isActive = false;
+  await saveLeaguePlayer(player);
+  return sanitizeLeaguePlayer(player);
+}
+
+async function listLeagueMembersForTeam(userId, leagueId, leagueTeamId) {
+  await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  const members = await listLeagueTeamMembers(leagueTeamId);
+  const usersById = await buildUsersMap(members.map((member) => member.userId));
+  return members.map((member) => sanitizeLeagueMember(member, usersById));
+}
+
+async function addManagerByEmail(userId, leagueId, leagueTeamId, email) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+  const leagueTeam = await assertLeagueTeamExists(leagueId, leagueTeamId);
+  const targetUser = await findUserByEmail(email);
+  if (!targetUser) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  let member = await findActiveLeagueTeamMember(leagueTeam._id, targetUser._id);
+  if (member) {
+    member.role = 'manager';
+    member.leaguePlayerId = null;
+    await saveLeagueTeamMember(member);
+  } else {
+    member = await createLeagueTeamMember({
+      leagueId,
+      leagueTeamId,
+      userId: targetUser._id,
+      role: 'manager',
+      leaguePlayerId: null,
+      createdByUserId: userId,
+    });
+  }
+
+  return sanitizeLeagueMember(member, new Map([[String(targetUser._id), targetUser]]));
+}
+
+async function updateLeagueMember(userId, leagueId, leagueTeamId, memberId, payload) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+  const member = await findLeagueTeamMemberById(memberId);
+  if (!member || String(member.leagueTeamId) !== String(leagueTeamId)) {
+    throw new ApiError(404, 'League member not found');
+  }
+
+  if (payload.status) {
+    member.status = payload.status;
+  }
+
+  await saveLeagueTeamMember(member);
+  const targetUser = await findUserById(member.userId);
+  return sanitizeLeagueMember(
+    member,
+    new Map(targetUser ? [[String(targetUser._id), targetUser]] : [])
+  );
+}
+
+async function removeLeagueMember(userId, leagueId, leagueTeamId, memberId) {
+  const { league, role } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const member = await findLeagueTeamMemberById(memberId);
+  if (!member || String(member.leagueTeamId) !== String(leagueTeamId)) {
+    throw new ApiError(404, 'League member not found');
+  }
+
+  if (member.role === 'manager' && role !== 'owner') {
+    throw new ApiError(403, 'Only the league owner can remove managers');
+  }
+
+  member.status = 'removed';
+  await saveLeagueTeamMember(member);
+  const targetUser = await findUserById(member.userId);
+  return sanitizeLeagueMember(
+    member,
+    new Map(targetUser ? [[String(targetUser._id), targetUser]] : [])
+  );
+}
+
+async function createJoinRequest(userId, leagueId, leagueTeamId, payload) {
+  const league = await assertLeagueExists(leagueId);
+  ensureLeagueEditable(league);
+  const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
+  const pending = await findPendingLeagueJoinRequest(team._id, userId);
+  if (pending) {
+    throw new ApiError(409, 'A pending join request already exists');
+  }
+
+  if (payload.requestedRole === 'player') {
+    const player = await findLeaguePlayerByIdAndTeam(payload.requestedLeaguePlayerId, leagueTeamId);
+    if (!player || !player.isActive) {
+      throw new ApiError(404, 'League player not found');
+    }
+    if (player.claimedByUserId) {
+      throw new ApiError(409, 'Player slot is already claimed');
+    }
+  }
+
+  const request = await createLeagueJoinRequest({
+    leagueId,
+    leagueTeamId,
+    requesterUserId: userId,
+    requestedRole: payload.requestedRole,
+    requestedLeaguePlayerId: payload.requestedLeaguePlayerId ?? null,
+    status: 'pending',
+  });
+
+  const requester = await findUserById(userId);
+  return sanitizeLeagueJoinRequest(
+    request,
+    new Map(requester ? [[String(requester._id), requester]] : [])
+  );
+}
+
+async function listJoinRequests(userId, leagueId, leagueTeamId) {
+  await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  const requests = await listLeagueJoinRequests(leagueTeamId);
+  const usersById = await buildUsersMap([
+    ...requests.map((request) => request.requesterUserId),
+    ...requests.map((request) => request.reviewedByUserId),
+  ]);
+  return requests.map((request) => sanitizeLeagueJoinRequest(request, usersById));
+}
+
+async function approveJoinRequest(userId, leagueId, leagueTeamId, requestId) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const request = await findLeagueJoinRequestById(requestId);
+  if (!request || String(request.leagueTeamId) !== String(leagueTeamId)) {
+    throw new ApiError(404, 'Join request not found');
+  }
+  if (request.status !== 'pending') {
+    throw new ApiError(400, 'Join request is no longer pending');
+  }
+
+  let member = await findActiveLeagueTeamMember(leagueTeamId, request.requesterUserId);
+  if (request.requestedRole === 'helper') {
+    if (member) {
+      member.role = 'helper';
+      member.leaguePlayerId = null;
+      await saveLeagueTeamMember(member);
+    } else {
+      member = await createLeagueTeamMember({
+        leagueId,
+        leagueTeamId,
+        userId: request.requesterUserId,
+        role: 'helper',
+        leaguePlayerId: null,
+        createdByUserId: userId,
+      });
+    }
+  } else {
+    const player = await findLeaguePlayerById(request.requestedLeaguePlayerId);
+    if (!player || String(player.leagueTeamId) !== String(leagueTeamId)) {
+      throw new ApiError(404, 'League player not found');
+    }
+    if (player.claimedByUserId) {
+      throw new ApiError(409, 'Player slot is already claimed');
+    }
+
+    player.claimedByUserId = request.requesterUserId;
+    await saveLeaguePlayer(player);
+
+    if (member) {
+      member.role = 'player';
+      member.leaguePlayerId = player._id;
+      await saveLeagueTeamMember(member);
+    } else {
+      member = await createLeagueTeamMember({
+        leagueId,
+        leagueTeamId,
+        userId: request.requesterUserId,
+        role: 'player',
+        leaguePlayerId: player._id,
+        createdByUserId: userId,
+      });
+    }
+  }
+
+  request.status = 'approved';
+  request.reviewedByUserId = userId;
+  request.reviewedAt = new Date();
+  await saveLeagueJoinRequest(request);
+
+  const usersById = await buildUsersMap([request.requesterUserId, userId]);
+  return sanitizeLeagueJoinRequest(request, usersById);
+}
+
+async function rejectJoinRequest(userId, leagueId, leagueTeamId, requestId) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const request = await findLeagueJoinRequestById(requestId);
+  if (!request || String(request.leagueTeamId) !== String(leagueTeamId)) {
+    throw new ApiError(404, 'Join request not found');
+  }
+  if (request.status !== 'pending') {
+    throw new ApiError(400, 'Join request is no longer pending');
+  }
+
+  request.status = 'rejected';
+  request.reviewedByUserId = userId;
+  request.reviewedAt = new Date();
+  await saveLeagueJoinRequest(request);
+  const usersById = await buildUsersMap([request.requesterUserId, userId]);
+  return sanitizeLeagueJoinRequest(request, usersById);
+}
+
+async function cancelJoinRequest(userId, leagueId, leagueTeamId, requestId) {
+  const request = await findLeagueJoinRequestById(requestId);
+  if (
+    !request ||
+    String(request.leagueTeamId) !== String(leagueTeamId) ||
+    String(request.requesterUserId) !== String(userId)
+  ) {
+    throw new ApiError(404, 'Join request not found');
+  }
+  if (request.status !== 'pending') {
+    throw new ApiError(400, 'Join request is no longer pending');
+  }
+
+  request.status = 'canceled';
+  await saveLeagueJoinRequest(request);
+  const requester = await findUserById(userId);
+  return sanitizeLeagueJoinRequest(
+    request,
+    new Map(requester ? [[String(requester._id), requester]] : [])
+  );
+}
+
+async function unclaimLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerId) {
+  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  ensureLeagueEditable(league);
+  const player = await findLeaguePlayerByIdAndTeam(leaguePlayerId, leagueTeamId);
+  if (!player) {
+    throw new ApiError(404, 'League player not found');
+  }
+  if (!player.claimedByUserId) {
+    throw new ApiError(400, 'Player is not claimed');
+  }
+
+  const member = await findActiveLeagueTeamMember(leagueTeamId, player.claimedByUserId);
+  player.claimedByUserId = null;
+  await saveLeaguePlayer(player);
+
+  if (member && member.role === 'player') {
+    member.status = 'removed';
+    await saveLeagueTeamMember(member);
+  }
+
+  return sanitizeLeaguePlayer(player);
+}
+
+function emptyStats(playerId, displayName) {
+  return {
+    playerId,
+    displayName,
+    ftm: 0,
+    fta: 0,
+    fg2m: 0,
+    fg2a: 0,
+    fg3m: 0,
+    fg3a: 0,
+    ast: 0,
+    oreb: 0,
+    dreb: 0,
+    stl: 0,
+    tov: 0,
+    foul: 0,
+    reb: 0,
+    points: 0,
+  };
+}
+
+function applyEventToLine(line, statType) {
+  if (statType === 'FT_MADE') {
+    line.ftm += 1;
+    line.fta += 1;
+    line.points += 1;
+    return;
+  }
+  if (statType === 'FT_MISS') {
+    line.fta += 1;
+    return;
+  }
+  if (statType === 'FG2_MADE') {
+    line.fg2m += 1;
+    line.fg2a += 1;
+    line.points += 2;
+    return;
+  }
+  if (statType === 'FG2_MISS') {
+    line.fg2a += 1;
+    return;
+  }
+  if (statType === 'FG3_MADE') {
+    line.fg3m += 1;
+    line.fg3a += 1;
+    line.points += 3;
+    return;
+  }
+  if (statType === 'FG3_MISS') {
+    line.fg3a += 1;
+    return;
+  }
+  if (statType === 'AST') {
+    line.ast += 1;
+    return;
+  }
+  if (statType === 'OREB') {
+    line.oreb += 1;
+    line.reb += 1;
+    return;
+  }
+  if (statType === 'DREB') {
+    line.dreb += 1;
+    line.reb += 1;
+    return;
+  }
+  if (statType === 'STL') {
+    line.stl += 1;
+    return;
+  }
+  if (statType === 'TOV') {
+    line.tov += 1;
+    return;
+  }
+  if (statType === 'FOUL') {
+    line.foul += 1;
+  }
+}
+
+function buildLeagueTeamPlayerStats(games, leagueTeamId) {
+  const snapshotMap = new Map();
+
+  for (const game of games) {
+    if (String(game.trackedLeagueTeamId) !== String(leagueTeamId)) {
+      continue;
+    }
+
+    for (const player of game.rosterSnapshot || []) {
+      const key = String(player.leaguePlayerId || player._id);
+      if (!snapshotMap.has(key)) {
+        snapshotMap.set(key, emptyStats(key, player.displayName));
+      }
+    }
+
+    for (const event of game.events || []) {
+      if (!event.playerId) {
+        continue;
+      }
+      const snapshotPlayer = (game.rosterSnapshot || []).find(
+        (player) => String(player._id) === String(event.playerId)
+      );
+      const key = String(snapshotPlayer?.leaguePlayerId || event.playerId);
+      if (!snapshotMap.has(key)) {
+        snapshotMap.set(key, emptyStats(key, `Unknown (${key.slice(-6)})`));
+      }
+      applyEventToLine(snapshotMap.get(key), event.statType);
+    }
+  }
+
+  return Array.from(snapshotMap.values()).sort((a, b) =>
+    a.displayName.localeCompare(b.displayName)
+  );
+}
+
+async function listLeagueGames(leagueId) {
+  const games = await listLeagueGamesByLeagueId(leagueId);
+  const teams = await listLeagueTeams(leagueId);
+  const byId = new Map(teams.map((team) => [String(team._id), team]));
+
+  return games.map((game) => ({
+    id: String(game._id),
+    leagueId: String(game.leagueId),
+    title: game.title,
+    gameContext: game.gameContext,
+    status: game.status,
+    scheduledAt: game.scheduledAt ?? null,
+    completedAt: game.completedAt ?? null,
+    homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
+    awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
+    trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
+    homeTeamName: byId.get(String(game.homeLeagueTeamId))?.name || null,
+    awayTeamName: byId.get(String(game.awayLeagueTeamId))?.name || null,
+    teamPoints: summarizeEvents(game.events || []).points,
+    opponentPoints: summarizeEvents(game.events || []).opponentPoints || 0,
+  }));
+}
+
+async function getLeagueStandings(leagueId) {
+  const [teams, games] = await Promise.all([
+    listLeagueTeams(leagueId),
+    listLeagueGamesByLeagueId(leagueId),
+  ]);
+  const rows = new Map(
+    teams.map((team) => [
+      String(team._id),
+      {
+        teamId: String(team._id),
+        teamName: team.name,
+        gamesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        winPct: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+        pointDiff: 0,
+      },
+    ])
+  );
+
+  for (const game of games) {
+    if (game.status !== 'completed') {
+      continue;
+    }
+    if (!game.homeLeagueTeamId || !game.awayLeagueTeamId) {
+      continue;
+    }
+
+    const trackedSummary = summarizeEvents(game.events || []);
+    const trackedTeamId = String(game.trackedLeagueTeamId);
+    const opponentTeamId =
+      trackedTeamId === String(game.homeLeagueTeamId)
+        ? String(game.awayLeagueTeamId)
+        : String(game.homeLeagueTeamId);
+
+    const trackedRow = rows.get(trackedTeamId);
+    const opponentRow = rows.get(opponentTeamId);
+    if (!trackedRow || !opponentRow) {
+      continue;
+    }
+
+    const trackedPoints = trackedSummary.points;
+    const opponentPoints = trackedSummary.opponentPoints || 0;
+
+    trackedRow.gamesPlayed += 1;
+    trackedRow.pointsFor += trackedPoints;
+    trackedRow.pointsAgainst += opponentPoints;
+    trackedRow.pointDiff = trackedRow.pointsFor - trackedRow.pointsAgainst;
+
+    opponentRow.gamesPlayed += 1;
+    opponentRow.pointsFor += opponentPoints;
+    opponentRow.pointsAgainst += trackedPoints;
+    opponentRow.pointDiff = opponentRow.pointsFor - opponentRow.pointsAgainst;
+
+    if (trackedPoints >= opponentPoints) {
+      trackedRow.wins += 1;
+      opponentRow.losses += 1;
+    } else {
+      trackedRow.losses += 1;
+      opponentRow.wins += 1;
+    }
+  }
+
+  for (const row of rows.values()) {
+    row.winPct = row.gamesPlayed > 0 ? row.wins / row.gamesPlayed : 0;
+    row.record = `${row.wins}-${row.losses}`;
+  }
+
+  return Array.from(rows.values()).sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (a.losses !== b.losses) return a.losses - b.losses;
+    if (b.winPct !== a.winPct) return b.winPct - a.winPct;
+    if (b.pointDiff !== a.pointDiff) return b.pointDiff - a.pointDiff;
+    if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
+    return a.teamName.localeCompare(b.teamName);
+  });
+}
+
+async function getLeagueContextForGame(userId, payload, options = {}) {
+  if (!mongoose.Types.ObjectId.isValid(payload.leagueId)) {
+    throw new ApiError(400, 'Invalid league id');
+  }
+
+  const league = await assertLeagueExists(payload.leagueId);
+  const isOwner = String(league.ownerUserId) === String(userId);
+
+  if (!isOwner && !options.allowManager) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  const [homeTeam, awayTeam, trackedTeam, trackedPlayers] = await Promise.all([
+    assertLeagueTeamExists(payload.leagueId, payload.homeLeagueTeamId),
+    assertLeagueTeamExists(payload.leagueId, payload.awayLeagueTeamId),
+    assertLeagueTeamExists(payload.leagueId, payload.trackedLeagueTeamId),
+    listLeaguePlayers(payload.trackedLeagueTeamId),
+  ]);
+
+  if (String(homeTeam._id) === String(awayTeam._id)) {
+    throw new ApiError(400, 'Home and away teams must be different');
+  }
+
+  if (
+    String(trackedTeam._id) !== String(homeTeam._id) &&
+    String(trackedTeam._id) !== String(awayTeam._id)
+  ) {
+    throw new ApiError(400, 'Tracked team must be either the home or away team');
+  }
+
+  if (!isOwner) {
+    const isManager = await isTeamManager(userId, trackedTeam._id);
+    if (!isManager) {
+      throw new ApiError(403, 'Forbidden');
+    }
+  }
+
+  return {
+    league,
+    homeTeam,
+    awayTeam,
+    trackedTeam,
+    rosterSnapshot: trackedPlayers
+      .filter((player) => player.isActive)
+      .map((player) => ({
+        leaguePlayerId: player._id,
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: normalizePosition(player.position),
+        claimedByUserId: player.claimedByUserId ?? null,
+        isClaimed: Boolean(player.claimedByUserId),
+        isActive: Boolean(player.isActive),
+      })),
+  };
+}
+
+async function getLeagueTeamRosterSnapshotForGame(game) {
+  const league = await assertLeagueExists(game.leagueId);
+  const trackedTeam = await assertLeagueTeamExists(game.leagueId, game.trackedLeagueTeamId);
+
+  return {
+    league,
+    trackedTeam,
+    team: {
+      _id: trackedTeam._id,
+      name: trackedTeam.name,
+      logo: trackedTeam.logo,
+      players: (game.rosterSnapshot || []).map((player) => ({
+        _id: player._id,
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        isActive: true,
+      })),
+      plan: 'pro',
+      subscriptionStatus: 'active',
+    },
+  };
+}
+
+async function canManageLeagueGame(userId, game) {
+  const league = await assertLeagueExists(game.leagueId);
+  if (String(league.ownerUserId) === String(userId)) {
+    return true;
+  }
+
+  const managerChecks = await Promise.all([
+    game.homeLeagueTeamId ? isTeamManager(userId, game.homeLeagueTeamId) : Promise.resolve(false),
+    game.awayLeagueTeamId ? isTeamManager(userId, game.awayLeagueTeamId) : Promise.resolve(false),
+  ]);
+
+  return managerChecks.some(Boolean);
+}
+
+module.exports = {
+  createLeagueForUser,
+  listLeaguesForUser,
+  listPublicLeagues,
+  getLeagueForUser,
+  getPublicLeagueBySlug,
+  getPublicLeaguePlayerBySlug,
+  updateLeagueForUser,
+  archiveLeagueForUser,
+  createLeagueTeamForLeague,
+  listTeamsForLeagueViewer,
+  getLeagueTeamForUser,
+  getPublicLeagueTeamBySlug,
+  updateLeagueTeamForLeague,
+  archiveLeagueTeamForLeague,
+  uploadLeagueTeamLogo,
+  removeLeagueTeamLogo,
+  addPlayerToLeagueTeam,
+  updateLeaguePlayer,
+  removeLeaguePlayer,
+  listLeagueMembersForTeam,
+  addManagerByEmail,
+  updateLeagueMember,
+  removeLeagueMember,
+  createJoinRequest,
+  listJoinRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  cancelJoinRequest,
+  unclaimLeaguePlayer,
+  listLeagueGames,
+  getLeagueStandings,
+  getLeagueContextForGame,
+  getLeagueTeamRosterSnapshotForGame,
+  canManageLeagueGame,
+};

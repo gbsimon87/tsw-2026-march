@@ -4,6 +4,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
 
 jest.mock('../../modules/games/games.repository', () => ({
   createGame: jest.fn(),
+  findGameById: jest.fn(),
   findGameByIdAndOwner: jest.fn(),
   saveGame: jest.fn(),
 }));
@@ -25,6 +26,12 @@ jest.mock('../../modules/games/gameRecap.service', () => ({
   buildGameRecap: jest.fn(() => ({ summary: [] })),
 }));
 
+jest.mock('../../modules/leagues/leagues.service', () => ({
+  getLeagueContextForGame: jest.fn(),
+  getLeagueTeamRosterSnapshotForGame: jest.fn(),
+  canManageLeagueGame: jest.fn(() => false),
+}));
+
 jest.mock('mongoose', () => ({
   Types: {
     ObjectId: {
@@ -34,11 +41,7 @@ jest.mock('mongoose', () => ({
 }));
 
 const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
-const {
-  createGame,
-  findGameByIdAndOwner,
-  saveGame,
-} = require('../../modules/games/games.repository');
+const { createGame, findGameById, saveGame } = require('../../modules/games/games.repository');
 const {
   computeBoxScore,
   createGameForUser,
@@ -212,6 +215,7 @@ describe('games service lineups', () => {
     };
     const game = {
       _id: 'game-1',
+      ownerUserId: 'user-1',
       teamId: 'team-1',
       status: 'in_progress',
       events: [],
@@ -219,7 +223,7 @@ describe('games service lineups', () => {
       currentLineupPlayerIds: [],
     };
 
-    findGameByIdAndOwner.mockResolvedValue(game);
+    findGameById.mockResolvedValue(game);
     findTeamByIdAndOwner.mockResolvedValue(team);
     saveGame.mockResolvedValue(game);
 
@@ -267,6 +271,7 @@ describe('games service lineups', () => {
     };
     const game = {
       _id: 'game-1',
+      ownerUserId: 'user-1',
       teamId: 'team-1',
       status: 'in_progress',
       events: [],
@@ -274,7 +279,7 @@ describe('games service lineups', () => {
       currentLineupPlayerIds: [],
     };
 
-    findGameByIdAndOwner.mockResolvedValue(game);
+    findGameById.mockResolvedValue(game);
     findTeamByIdAndOwner.mockResolvedValue(team);
 
     await expect(

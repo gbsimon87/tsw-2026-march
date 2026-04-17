@@ -33,13 +33,37 @@ const youtubeUrlSchema = z
   .max(500)
   .refine(isSupportedYouTubeUrl, 'Video URL must be a valid YouTube link');
 
-const createGameSchema = z.object({
+const standaloneGameSchema = z.object({
   teamId: z.string().min(1),
   title: z.string().trim().min(1).max(120),
   opponent: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
   videoUrl: youtubeUrlSchema.optional(),
 });
+
+const leagueGameSchema = z.object({
+  gameContext: z.literal('league'),
+  leagueId: z.string().min(1),
+  homeLeagueTeamId: z.string().min(1),
+  awayLeagueTeamId: z.string().min(1),
+  trackedLeagueTeamId: z.string().min(1),
+  title: z.string().trim().min(1).max(120).optional(),
+  scheduledAt: z.string().datetime().optional(),
+  videoUrl: youtubeUrlSchema.optional(),
+});
+
+const createGameSchema = z.union([standaloneGameSchema, leagueGameSchema]);
+
+const updateGameSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    opponent: z.string().trim().min(1).max(120).nullable().optional(),
+    scheduledAt: z.string().datetime().nullable().optional(),
+    videoUrl: youtubeUrlSchema.nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one field is required',
+  });
 
 const statTypeSchema = z.enum([
   STAT_TYPES.FT_MADE,
@@ -141,6 +165,7 @@ const setLineupSchema = z.object({
 
 module.exports = {
   createGameSchema,
+  updateGameSchema,
   appendEventSchema,
   setLineupSchema,
   statTypeSchema,

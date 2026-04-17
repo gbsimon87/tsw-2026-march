@@ -1,17 +1,16 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const { findTeamByIdAndOwner } = require('../teams/teams.repository');
-const {
-  createGame,
-  listGamesByOwner,
-  findGameByIdAndOwner,
-  findGameById,
-  saveGame,
-} = require('./games.repository');
+const { createGame, listGamesByOwner, findGameById, saveGame } = require('./games.repository');
 const { STAT_TYPES } = require('../shared/stats.constants');
 const { summarizeEvents } = require('../shared/statSummary');
 const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
+const {
+  getLeagueContextForGame,
+  getLeagueTeamRosterSnapshotForGame,
+  canManageLeagueGame,
+} = require('../leagues/leagues.service');
 
 function sanitizeEvent(event) {
   return {
@@ -42,7 +41,12 @@ function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
     ...(options.includeOwnerUserId ? { ownerUserId: String(game.ownerUserId) } : {}),
-    teamId: String(game.teamId),
+    teamId: game.teamId ? String(game.teamId) : null,
+    gameContext: game.gameContext || 'standalone',
+    leagueId: game.leagueId ? String(game.leagueId) : null,
+    homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
+    awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
+    trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
     title: game.title,
     opponent: game.opponent ?? null,
     videoUrl: game.videoUrl ?? null,
@@ -59,6 +63,23 @@ function sanitizeGame(game, options = {}) {
     updatedAt: game.updatedAt,
     events: game.events.map(sanitizeEvent),
   };
+}
+
+function getTeamPlayers(team, options = {}) {
+  const players = Array.isArray(team?.players) ? team.players : [];
+  return options.includeInactivePlayers ? players : players.filter((player) => player.isActive);
+}
+
+function findTeamPlayerById(team, playerId) {
+  if (typeof team?.players?.id === 'function') {
+    return team.players.id(playerId);
+  }
+
+  return (
+    (Array.isArray(team?.players) ? team.players : []).find(
+      (player) => String(player._id || player.id) === String(playerId)
+    ) || null
+  );
 }
 
 function emptyStats(playerId, displayName) {
@@ -197,7 +218,7 @@ function validateLineupPlayers(team, playerIds) {
   }
 
   for (const playerId of uniquePlayerIds) {
-    const player = team.players.id(playerId);
+    const player = findTeamPlayerById(team, playerId);
     if (!player || !player.isActive) {
       throw new ApiError(400, 'Starting lineup must use active team players');
     }
@@ -216,13 +237,11 @@ function buildGameSummary(game) {
 }
 
 function computeBoxScore(game, team, options = {}) {
-  const basePlayers = options.includeInactivePlayers
-    ? team.players
-    : team.players.filter((player) => player.isActive);
+  const basePlayers = getTeamPlayers(team, options);
   const map = new Map(
     basePlayers.map((player) => [
-      String(player._id),
-      emptyStats(String(player._id), player.displayName),
+      String(player._id || player.id),
+      emptyStats(String(player._id || player.id), player.displayName),
     ])
   );
 
@@ -278,7 +297,94 @@ async function assertTeamOwnership(userId, teamId) {
   return team;
 }
 
+async function assertGameAccess(userId, gameId) {
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  const game = await findGameById(gameId);
+  if (!game) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  if (String(game.ownerUserId) === String(userId)) {
+    return game;
+  }
+
+  if (game.gameContext === 'league' && (await canManageLeagueGame(userId, game))) {
+    return game;
+  }
+
+  throw new ApiError(404, 'Game not found');
+}
+
+async function resolveGameTeamContext(userId, game) {
+  if (game.gameContext === 'league') {
+    const { league, trackedTeam, team } = await getLeagueTeamRosterSnapshotForGame(game);
+    return {
+      team: {
+        id: String(trackedTeam._id),
+        name: trackedTeam.name,
+        logo: sanitizeLogo(trackedTeam.logo),
+        billing: {
+          plan: 'pro',
+          subscriptionStatus: 'active',
+          cancelAtPeriodEnd: false,
+          currentPeriodEnd: null,
+        },
+        entitlements: { canViewReplay: true, canViewShotMaps: true },
+        players: team.players.map((player) => ({
+          id: String(player._id || player.id),
+          displayName: player.displayName,
+          jerseyNumber: player.jerseyNumber ?? null,
+          isActive: Boolean(player.isActive),
+        })),
+      },
+      teamDoc: team,
+      league,
+    };
+  }
+
+  const team = await assertTeamOwnership(userId || game.ownerUserId, game.teamId);
+  return {
+    team: {
+      id: String(team._id),
+      name: team.name,
+      logo: sanitizeLogo(team.logo),
+      billing: getBillingSummary(team),
+      entitlements: getTeamEntitlements(team),
+      players: team.players.map((player) => ({
+        id: String(player._id),
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        isActive: Boolean(player.isActive),
+      })),
+    },
+    teamDoc: team,
+    league: null,
+  };
+}
+
 async function createGameForUser(userId, payload) {
+  if (payload.gameContext === 'league') {
+    const context = await getLeagueContextForGame(userId, payload);
+    const game = await createGame({
+      ownerUserId: userId,
+      gameContext: 'league',
+      leagueId: payload.leagueId,
+      homeLeagueTeamId: payload.homeLeagueTeamId,
+      awayLeagueTeamId: payload.awayLeagueTeamId,
+      trackedLeagueTeamId: payload.trackedLeagueTeamId,
+      title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
+      scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
+      status: 'in_progress',
+      rosterSnapshot: context.rosterSnapshot,
+    });
+
+    return sanitizeGame(game);
+  }
+
   if (!mongoose.Types.ObjectId.isValid(payload.teamId)) {
     throw new ApiError(400, 'Invalid team id');
   }
@@ -302,7 +408,12 @@ async function listGamesForUser(userId, filter = {}) {
   const games = await listGamesByOwner(userId, filter);
   return games.map((game) => ({
     id: String(game._id),
-    teamId: String(game.teamId),
+    teamId: game.teamId ? String(game.teamId) : null,
+    gameContext: game.gameContext || 'standalone',
+    leagueId: game.leagueId ? String(game.leagueId) : null,
+    homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
+    awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
+    trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
     title: game.title,
     opponent: game.opponent ?? null,
     videoUrl: game.videoUrl ?? null,
@@ -315,36 +426,54 @@ async function listGamesForUser(userId, filter = {}) {
   }));
 }
 
+async function updateGameForUser(userId, gameId, payload) {
+  const game = await assertGameAccess(userId, gameId);
+
+  if (payload.title) {
+    game.title = payload.title.trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'opponent') && game.gameContext !== 'league') {
+    game.opponent = payload.opponent?.trim() || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
+    game.scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
+    game.videoUrl = payload.videoUrl?.trim() || null;
+  }
+
+  await saveGame(game);
+  const { teamDoc } = await resolveGameTeamContext(userId, game);
+
+  return {
+    game: sanitizeGame(game),
+    boxScore: computeBoxScore(game, teamDoc),
+    gameSummary: buildGameSummary(game),
+  };
+}
+
 async function getGameForUser(userId, gameId) {
-  if (!mongoose.Types.ObjectId.isValid(gameId)) {
-    throw new ApiError(404, 'Game not found');
-  }
-
-  const game = await findGameByIdAndOwner(gameId, userId);
-  if (!game) {
-    throw new ApiError(404, 'Game not found');
-  }
-
-  const team = await assertTeamOwnership(userId, game.teamId);
+  const game = await assertGameAccess(userId, gameId);
+  const { team, teamDoc, league } = await resolveGameTeamContext(userId, game);
+  const boxScore = computeBoxScore(game, teamDoc);
 
   return {
     game: sanitizeGame(game, { includeOwnerUserId: true }),
-    team: {
-      id: String(team._id),
-      name: team.name,
-      logo: sanitizeLogo(team.logo),
-      billing: getBillingSummary(team),
-      entitlements: getTeamEntitlements(team),
-      players: team.players.map((player) => ({
-        id: String(player._id),
-        displayName: player.displayName,
-        jerseyNumber: player.jerseyNumber ?? null,
-        isActive: Boolean(player.isActive),
-      })),
-    },
-    boxScore: computeBoxScore(game, team),
-    teamEntitlements: getTeamEntitlements(team),
-    recap: buildGameRecap(game, team, computeBoxScore(game, team)),
+    team,
+    league: league
+      ? {
+          id: String(league._id),
+          name: league.name,
+          slug: league.slug,
+          seasonLabel: league.seasonLabel ?? null,
+        }
+      : null,
+    boxScore,
+    teamEntitlements: team.entitlements,
+    recap: buildGameRecap(game, teamDoc, boxScore),
     gameSummary: buildGameSummary(game),
   };
 }
@@ -358,44 +487,37 @@ async function getPublicGame(gameId) {
   if (!game) {
     throw new ApiError(404, 'Game not found');
   }
-
-  const team = await assertTeamOwnership(game.ownerUserId, game.teamId);
+  const { team, teamDoc, league } = await resolveGameTeamContext(null, game);
+  const boxScore = computeBoxScore(game, teamDoc);
 
   return {
     game: sanitizeGame(game),
-    team: {
-      id: String(team._id),
-      name: team.name,
-      logo: sanitizeLogo(team.logo),
-      billing: getBillingSummary(team),
-      entitlements: getTeamEntitlements(team),
-      players: team.players.map((player) => ({
-        id: String(player._id),
-        displayName: player.displayName,
-        jerseyNumber: player.jerseyNumber ?? null,
-        isActive: Boolean(player.isActive),
-      })),
-    },
-    boxScore: computeBoxScore(game, team),
-    teamEntitlements: getTeamEntitlements(team),
-    recap: buildGameRecap(game, team, computeBoxScore(game, team)),
+    team,
+    league: league
+      ? {
+          id: String(league._id),
+          name: league.name,
+          slug: league.slug,
+          seasonLabel: league.seasonLabel ?? null,
+        }
+      : null,
+    boxScore,
+    teamEntitlements: team.entitlements,
+    recap: buildGameRecap(game, teamDoc, boxScore),
     gameSummary: buildGameSummary(game),
   };
 }
 
 async function appendEventForUser(userId, gameId, payload) {
-  const game = await findGameByIdAndOwner(gameId, userId);
-  if (!game) {
-    throw new ApiError(404, 'Game not found');
-  }
+  const game = await assertGameAccess(userId, gameId);
 
   if (game.status !== 'in_progress') {
     throw new ApiError(400, 'Cannot track events on a completed game');
   }
 
-  const team = await assertTeamOwnership(userId, game.teamId);
+  const { teamDoc } = await resolveGameTeamContext(userId, game);
   if (payload.playerId) {
-    const player = team.players.id(payload.playerId);
+    const player = findTeamPlayerById(teamDoc, payload.playerId);
 
     if (!player || !player.isActive) {
       throw new ApiError(400, 'Player is not active on this team');
@@ -454,23 +576,20 @@ async function appendEventForUser(userId, gameId, payload) {
 
   return {
     game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, team),
+    boxScore: computeBoxScore(game, teamDoc),
     gameSummary: buildGameSummary(game),
   };
 }
 
 async function setGameLineup(userId, gameId, playerIds) {
-  const game = await findGameByIdAndOwner(gameId, userId);
-  if (!game) {
-    throw new ApiError(404, 'Game not found');
-  }
+  const game = await assertGameAccess(userId, gameId);
 
   if (game.status !== 'in_progress') {
     throw new ApiError(400, 'Cannot change lineup on a completed game');
   }
 
-  const team = await assertTeamOwnership(userId, game.teamId);
-  const validIds = validateLineupPlayers(team, playerIds);
+  const { teamDoc } = await resolveGameTeamContext(userId, game);
+  const validIds = validateLineupPlayers(teamDoc, playerIds);
 
   game.startingLineupPlayerIds = validIds;
   game.currentLineupPlayerIds = validIds;
@@ -478,16 +597,13 @@ async function setGameLineup(userId, gameId, playerIds) {
 
   return {
     game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, team),
+    boxScore: computeBoxScore(game, teamDoc),
     gameSummary: buildGameSummary(game),
   };
 }
 
 async function removeEventForUser(userId, gameId, eventId) {
-  const game = await findGameByIdAndOwner(gameId, userId);
-  if (!game) {
-    throw new ApiError(404, 'Game not found');
-  }
+  const game = await assertGameAccess(userId, gameId);
 
   const event = game.events.id(eventId);
   if (!event) {
@@ -498,19 +614,16 @@ async function removeEventForUser(userId, gameId, eventId) {
   recalculateCurrentLineup(game);
   await saveGame(game);
 
-  const team = await assertTeamOwnership(userId, game.teamId);
+  const { teamDoc } = await resolveGameTeamContext(userId, game);
   return {
     game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, team),
+    boxScore: computeBoxScore(game, teamDoc),
     gameSummary: buildGameSummary(game),
   };
 }
 
 async function finishGameForUser(userId, gameId) {
-  const game = await findGameByIdAndOwner(gameId, userId);
-  if (!game) {
-    throw new ApiError(404, 'Game not found');
-  }
+  const game = await assertGameAccess(userId, gameId);
 
   if (game.status === 'completed') {
     throw new ApiError(400, 'Game is already completed');
@@ -520,11 +633,11 @@ async function finishGameForUser(userId, gameId) {
   game.completedAt = new Date();
   await saveGame(game);
 
-  const team = await assertTeamOwnership(userId, game.teamId);
+  const { teamDoc } = await resolveGameTeamContext(userId, game);
 
   return {
     game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, team),
+    boxScore: computeBoxScore(game, teamDoc),
     gameSummary: buildGameSummary(game),
   };
 }
@@ -532,6 +645,7 @@ async function finishGameForUser(userId, gameId) {
 module.exports = {
   createGameForUser,
   listGamesForUser,
+  updateGameForUser,
   getGameForUser,
   getPublicGame,
   appendEventForUser,

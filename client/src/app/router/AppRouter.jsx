@@ -22,6 +22,17 @@ import { GameDetailPage } from '../../features/games/pages/GameDetailPage';
 import { PricingPage } from '../../features/billing/pages/PricingPage';
 import { BillingSuccessPage } from '../../features/billing/pages/BillingSuccessPage';
 import { BillingCancelPage } from '../../features/billing/pages/BillingCancelPage';
+import { LeaguesPage } from '../../features/leagues/pages/LeaguesPage';
+import { NewLeaguePage } from '../../features/leagues/pages/NewLeaguePage';
+import { LeagueDetailPage } from '../../features/leagues/pages/LeagueDetailPage';
+import { LeagueManagePage } from '../../features/leagues/pages/LeagueManagePage';
+import { LeagueTeamPage } from '../../features/leagues/pages/LeagueTeamPage';
+import { NewLeagueGamePage } from '../../features/leagues/pages/NewLeagueGamePage';
+import { PublicLeaguePage } from '../../features/leagues/pages/PublicLeaguePage';
+import { PublicLeagueStandingsPage } from '../../features/leagues/pages/PublicLeagueStandingsPage';
+import { PublicLeagueGamesPage } from '../../features/leagues/pages/PublicLeagueGamesPage';
+import { PublicLeagueTeamPage } from '../../features/leagues/pages/PublicLeagueTeamPage';
+import { PublicLeaguePlayerPage } from '../../features/leagues/pages/PublicLeaguePlayerPage';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -66,6 +77,14 @@ export function AppRouter() {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/billing/success" element={<BillingSuccessPage />} />
         <Route path="/billing/cancel" element={<BillingCancelPage />} />
+        <Route path="/league/:leagueSlug" element={<PublicLeaguePage />} />
+        <Route path="/league/:leagueSlug/standings" element={<PublicLeagueStandingsPage />} />
+        <Route path="/league/:leagueSlug/games" element={<PublicLeagueGamesPage />} />
+        <Route
+          path="/league/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId"
+          element={<PublicLeaguePlayerPage />}
+        />
+        <Route path="/league/:leagueSlug/teams/:teamSlug" element={<PublicLeagueTeamPage />} />
         <Route
           path="/teams"
           element={
@@ -93,6 +112,54 @@ export function AppRouter() {
         <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
         <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/teams/:teamId" element={<PublicTeamPage />} />
+        <Route
+          path="/leagues"
+          element={
+            <ProtectedRoute>
+              <LeaguesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/new"
+          element={
+            <ProtectedRoute>
+              <NewLeaguePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId"
+          element={
+            <ProtectedRoute>
+              <LeagueDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId/manage"
+          element={
+            <ProtectedRoute>
+              <LeagueManagePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId/teams/:leagueTeamId"
+          element={
+            <ProtectedRoute>
+              <LeagueTeamPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/:leagueId/games/new"
+          element={
+            <ProtectedRoute>
+              <NewLeagueGamePage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/games/new"
           element={

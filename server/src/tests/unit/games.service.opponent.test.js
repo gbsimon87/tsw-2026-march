@@ -23,6 +23,12 @@ jest.mock('../../modules/billing/billing.service', () => ({
   })),
 }));
 
+jest.mock('../../modules/leagues/leagues.service', () => ({
+  getLeagueContextForGame: jest.fn(),
+  getLeagueTeamRosterSnapshotForGame: jest.fn(),
+  canManageLeagueGame: jest.fn(() => false),
+}));
+
 jest.mock('mongoose', () => ({
   Types: {
     ObjectId: {
@@ -35,7 +41,6 @@ const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository')
 const {
   createGame,
   listGamesByOwner,
-  findGameByIdAndOwner,
   findGameById,
 } = require('../../modules/games/games.repository');
 const {
@@ -120,7 +125,7 @@ describe('games service opponent support', () => {
       name: 'Team',
       players: [],
     });
-    findGameByIdAndOwner.mockResolvedValue({
+    findGameById.mockResolvedValue({
       _id: 'game-1',
       ownerUserId: 'user-1',
       teamId: 'team-1',

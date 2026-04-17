@@ -9,6 +9,7 @@ gamesRouter.get('/:gameId', asyncHandler(controller.getPublicById));
 gamesRouter.use(authMiddleware);
 gamesRouter.post('/', asyncHandler(controller.create));
 gamesRouter.get('/', asyncHandler(controller.list));
+gamesRouter.patch('/:gameId', asyncHandler(controller.update));
 gamesRouter.post('/:gameId/lineup', asyncHandler(controller.setLineup));
 gamesRouter.post('/:gameId/events', asyncHandler(controller.appendEvent));
 gamesRouter.delete('/:gameId/events/:eventId', asyncHandler(controller.removeEvent));
