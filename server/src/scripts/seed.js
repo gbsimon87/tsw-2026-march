@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { connectDb } = require('../config/db');
-const { SHOT_ZONE_IDS, STAT_TYPES } = require('../modules/shared/stats.constants');
+const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../modules/shared/stats.constants');
 
 require('../modules/auth/auth.repository');
 require('../modules/teams/teams.repository');
@@ -25,6 +25,7 @@ const seedConfig = {
   userCount: Number(process.env.SEED_USER_COUNT || 10),
   gamesPerUser: Number(process.env.SEED_GAMES_PER_USER || 20),
   playersPerTeam: Number(process.env.SEED_PLAYERS_PER_TEAM || 10),
+  leaguePlayersPerTeam: Math.max(8, Number(process.env.SEED_LEAGUE_PLAYERS_PER_TEAM || 8)),
   postsCount: Number(process.env.SEED_POST_COUNT || 50),
   password: 'password',
 };
@@ -188,6 +189,7 @@ const seededLeagueBlueprint = {
   name: 'Metro Spring League',
   slug: 'metro-spring-league',
   seasonLabel: '2026 Spring',
+  ownerEmail: 'user1@user1.com',
   teamNames: ['City Ballers', 'Coastal Heat', 'Skyline Elite', 'Valley Storm'],
 };
 
@@ -358,15 +360,16 @@ function createOpponentEvent(statType, occurredAt) {
   };
 }
 
-function buildPlayerBlueprints(teamIndex) {
+function buildPlayerBlueprints(teamIndex, options = {}) {
+  const rosterSize = options.playersPerTeam || seedConfig.playersPerTeam;
   const names = [];
-  const baseOffset = (teamIndex * seedConfig.playersPerTeam) % playerNamePool.length;
+  const baseOffset = (teamIndex * rosterSize) % playerNamePool.length;
 
-  for (let index = 0; index < seedConfig.playersPerTeam; index += 1) {
+  for (let index = 0; index < rosterSize; index += 1) {
     let displayName = playerNamePool[(baseOffset + index) % playerNamePool.length];
 
     if (names.includes(displayName)) {
-      displayName = buildFallbackPlayerName(teamIndex * seedConfig.playersPerTeam + index);
+      displayName = buildFallbackPlayerName(teamIndex * rosterSize + index);
     }
 
     while (names.includes(displayName)) {
@@ -584,6 +587,8 @@ function buildLeagueRosterSnapshot(players) {
   return players.map((player) => ({
     _id: new mongoose.Types.ObjectId(),
     leaguePlayerId: player._id,
+    sourceType: 'league_player',
+    sourcePlayerId: player._id,
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
     position: player.position ?? null,
@@ -600,6 +605,13 @@ function buildLeagueGameEvents(rosterSnapshot, scheduledAt) {
   }));
 
   return buildGameEvents(players, scheduledAt);
+}
+
+function attachTeamSide(events, teamSide) {
+  return events.map((event) => ({
+    ...event,
+    teamSide,
+  }));
 }
 
 function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
@@ -623,23 +635,64 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
     const scheduledAt = new Date(startDate.getTime() + gameIndex * 5 * 24 * 60 * 60 * 1000);
     scheduledAt.setHours(18 + (gameIndex % 3), gameIndex % 2 === 0 ? 0 : 30, 0, 0);
     const completedAt = new Date(scheduledAt.getTime() + 2 * 60 * 60 * 1000);
-    const rosterSnapshot = buildLeagueRosterSnapshot(home.players);
+    const homeRosterSnapshot = buildLeagueRosterSnapshot(home.players);
+    const awayRosterSnapshot = buildLeagueRosterSnapshot(away.players);
+    const homeEvents = attachTeamSide(
+      buildLeagueGameEvents(homeRosterSnapshot.slice(0, 8), scheduledAt),
+      TEAM_SIDES.HOME
+    );
+    const awayEvents = attachTeamSide(
+      buildLeagueGameEvents(awayRosterSnapshot.slice(0, 8), scheduledAt),
+      TEAM_SIDES.AWAY
+    );
 
     return {
       ownerUserId,
       gameContext: 'league',
+      trackingMode: 'dual_team',
       leagueId: league._id,
       homeLeagueTeamId: home.team._id,
       awayLeagueTeamId: away.team._id,
       trackedLeagueTeamId: home.team._id,
+      initialActiveSide: TEAM_SIDES.HOME,
+      homeParticipant: {
+        side: TEAM_SIDES.HOME,
+        participantType: 'league_team',
+        teamId: null,
+        leagueTeamId: home.team._id,
+        displayName: home.team.name,
+        logo: null,
+        colors: home.team.colors || ['#0f172a', '#38bdf8'],
+        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+      },
+      awayParticipant: {
+        side: TEAM_SIDES.AWAY,
+        participantType: 'league_team',
+        teamId: null,
+        leagueTeamId: away.team._id,
+        displayName: away.team.name,
+        logo: null,
+        colors: away.team.colors || ['#0f172a', '#38bdf8'],
+        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+      },
       title: `${away.team.name} at ${home.team.name}`,
       status: 'completed',
       scheduledAt,
       completedAt,
-      rosterSnapshot,
-      startingLineupPlayerIds: rosterSnapshot.slice(0, 5).map((player) => player._id),
-      currentLineupPlayerIds: rosterSnapshot.slice(0, 5).map((player) => player._id),
-      events: buildLeagueGameEvents(rosterSnapshot, scheduledAt),
+      rosterSnapshot: homeRosterSnapshot,
+      homeRosterSnapshot,
+      awayRosterSnapshot,
+      startingLineupPlayerIds: homeRosterSnapshot.slice(0, 5).map((player) => player._id),
+      currentLineupPlayerIds: homeRosterSnapshot.slice(0, 5).map((player) => player._id),
+      homeStartingLineupPlayerIds: homeRosterSnapshot.slice(0, 5).map((player) => player._id),
+      homeCurrentLineupPlayerIds: homeRosterSnapshot.slice(0, 5).map((player) => player._id),
+      awayStartingLineupPlayerIds: awayRosterSnapshot.slice(0, 5).map((player) => player._id),
+      awayCurrentLineupPlayerIds: awayRosterSnapshot.slice(0, 5).map((player) => player._id),
+      events: [...homeEvents, ...awayEvents].sort(
+        (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+      ),
     };
   });
 }
@@ -662,19 +715,20 @@ async function upsertSeedUsers() {
         emailVerifiedAt: new Date(),
         roles: ['user'],
         plan: seedUser.plan,
-        leaguePlan: seedUser.email === 'user1@user1.com' ? 'pro' : 'free',
-        leagueSubscriptionStatus: seedUser.email === 'user1@user1.com' ? 'active' : 'inactive',
+        leaguePlan: seedUser.email === seededLeagueBlueprint.ownerEmail ? 'pro' : 'free',
+        leagueSubscriptionStatus:
+          seedUser.email === seededLeagueBlueprint.ownerEmail ? 'active' : 'inactive',
         leagueCurrentPeriodEnd:
-          seedUser.email === 'user1@user1.com'
+          seedUser.email === seededLeagueBlueprint.ownerEmail
             ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
             : null,
         leagueCancelAtPeriodEnd: false,
         leagueStripeCustomerId:
-          seedUser.email === 'user1@user1.com' ? 'cus_seed_league_user1' : null,
+          seedUser.email === seededLeagueBlueprint.ownerEmail ? 'cus_seed_league_user1' : null,
         leagueStripeSubscriptionId:
-          seedUser.email === 'user1@user1.com' ? 'sub_seed_league_user1' : null,
+          seedUser.email === seededLeagueBlueprint.ownerEmail ? 'sub_seed_league_user1' : null,
         leagueStripePriceId:
-          seedUser.email === 'user1@user1.com'
+          seedUser.email === seededLeagueBlueprint.ownerEmail
             ? process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_league_pro_monthly'
             : null,
       });
@@ -686,19 +740,20 @@ async function upsertSeedUsers() {
       user.emailVerifiedAt = user.emailVerifiedAt || new Date();
       user.roles = ['user'];
       user.plan = seedUser.plan;
-      user.leaguePlan = seedUser.email === 'user1@user1.com' ? 'pro' : 'free';
-      user.leagueSubscriptionStatus = seedUser.email === 'user1@user1.com' ? 'active' : 'inactive';
+      user.leaguePlan = seedUser.email === seededLeagueBlueprint.ownerEmail ? 'pro' : 'free';
+      user.leagueSubscriptionStatus =
+        seedUser.email === seededLeagueBlueprint.ownerEmail ? 'active' : 'inactive';
       user.leagueCurrentPeriodEnd =
-        seedUser.email === 'user1@user1.com'
+        seedUser.email === seededLeagueBlueprint.ownerEmail
           ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
           : null;
       user.leagueCancelAtPeriodEnd = false;
       user.leagueStripeCustomerId =
-        seedUser.email === 'user1@user1.com' ? 'cus_seed_league_user1' : null;
+        seedUser.email === seededLeagueBlueprint.ownerEmail ? 'cus_seed_league_user1' : null;
       user.leagueStripeSubscriptionId =
-        seedUser.email === 'user1@user1.com' ? 'sub_seed_league_user1' : null;
+        seedUser.email === seededLeagueBlueprint.ownerEmail ? 'sub_seed_league_user1' : null;
       user.leagueStripePriceId =
-        seedUser.email === 'user1@user1.com'
+        seedUser.email === seededLeagueBlueprint.ownerEmail
           ? process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_league_pro_monthly'
           : null;
       await user.save();
@@ -764,7 +819,9 @@ async function seedLeagueForUser(userEntry) {
       status: 'active',
     });
 
-    const roster = buildPlayerBlueprints(100 + index).map((player) => ({
+    const roster = buildPlayerBlueprints(100 + index, {
+      playersPerTeam: seedConfig.leaguePlayersPerTeam,
+    }).map((player) => ({
       leagueId: league._id,
       leagueTeamId: leagueTeam._id,
       displayName: player.displayName,
@@ -935,7 +992,9 @@ async function main() {
       eventCount += games.reduce((total, game) => total + game.events.length, 0);
     }
 
-    const primaryLeagueOwner = seededUsers.find((entry) => entry.email === 'user1@user1.com');
+    const primaryLeagueOwner = seededUsers.find(
+      (entry) => entry.email === seededLeagueBlueprint.ownerEmail
+    );
     if (primaryLeagueOwner) {
       const seededLeague = await seedLeagueForUser(primaryLeagueOwner);
       leagueCount += 1;
@@ -959,6 +1018,9 @@ async function main() {
     console.log(`League Players: ${leaguePlayerCount}`);
     console.log(`League Games: ${leagueGameCount}`);
     console.log(`League Events: ${leagueEventCount}`);
+    console.log(
+      `Seeded League Owner: ${seededLeagueBlueprint.ownerEmail} (league premium, ${seedConfig.leaguePlayersPerTeam} players per league team)`
+    );
     console.log(`Free Teams: ${seededUsers.filter((entry) => entry.plan === 'free').length}`);
     console.log(`Pro Teams: ${seededUsers.filter((entry) => entry.plan === 'pro').length}`);
     console.log(`Players: ${playerCount}`);

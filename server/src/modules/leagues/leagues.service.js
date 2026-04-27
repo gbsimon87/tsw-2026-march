@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const { env } = require('../../config/env');
-const { summarizeEvents } = require('../shared/statSummary');
+const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const { TEAM_SIDES } = require('../shared/stats.constants');
 const {
   createLeague,
   listLeaguesByOwner,
@@ -542,11 +543,8 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId) {
   const gameRows = [];
 
   for (const game of games) {
-    if (String(game.trackedLeagueTeamId) !== String(leagueTeamId)) {
-      continue;
-    }
-
-    const snapshotPlayer = (game.rosterSnapshot || []).find(
+    const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, leagueTeamId);
+    const snapshotPlayer = rosterSnapshot.find(
       (player) => String(player.leaguePlayerId || player._id) === String(leaguePlayerId)
     );
     if (!snapshotPlayer) {
@@ -555,7 +553,7 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId) {
 
     const stats = emptyStats(String(leaguePlayerId), snapshotPlayer.displayName);
     for (const event of game.events || []) {
-      if (String(event.playerId) !== String(snapshotPlayer._id)) {
+      if (String(event.playerId) !== String(snapshotPlayer._id) || !eventFilter(event)) {
         continue;
       }
       applyEventToLine(stats, event.statType);
@@ -1138,15 +1136,107 @@ function applyEventToLine(line, statType) {
   }
 }
 
+function getLeagueGameTeamSide(game, leagueTeamId) {
+  if (String(game.homeLeagueTeamId) === String(leagueTeamId)) {
+    return TEAM_SIDES.HOME;
+  }
+  if (String(game.awayLeagueTeamId) === String(leagueTeamId)) {
+    return TEAM_SIDES.AWAY;
+  }
+  return null;
+}
+
+function getLeagueGameScore(game) {
+  if (game.trackingMode === 'dual_team') {
+    const summary = summarizeEventsBySide(game.events || []);
+    return {
+      homePoints: summary[TEAM_SIDES.HOME].points,
+      awayPoints: summary[TEAM_SIDES.AWAY].points,
+    };
+  }
+
+  const trackedSummary = summarizeEvents(game.events || []);
+  const trackedTeamId = game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null;
+  const homeTeamId = game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null;
+
+  if (!trackedTeamId || !homeTeamId) {
+    return { homePoints: 0, awayPoints: 0 };
+  }
+
+  if (trackedTeamId === homeTeamId) {
+    return {
+      homePoints: trackedSummary.points,
+      awayPoints: trackedSummary.opponentPoints || 0,
+    };
+  }
+
+  return {
+    homePoints: trackedSummary.opponentPoints || 0,
+    awayPoints: trackedSummary.points,
+  };
+}
+
+function getLeagueGameSnapshotForTeam(game, leagueTeamId) {
+  if (game.trackingMode === 'dual_team') {
+    const side = getLeagueGameTeamSide(game, leagueTeamId);
+    if (!side) {
+      return { side: null, rosterSnapshot: [], eventFilter: () => false };
+    }
+
+    return {
+      side,
+      rosterSnapshot:
+        side === TEAM_SIDES.HOME ? game.homeRosterSnapshot || [] : game.awayRosterSnapshot || [],
+      eventFilter: (event) => event.teamSide === side,
+    };
+  }
+
+  if (String(game.trackedLeagueTeamId) !== String(leagueTeamId)) {
+    return { side: null, rosterSnapshot: [], eventFilter: () => false };
+  }
+
+  return {
+    side: getLeagueGameTeamSide(game, leagueTeamId),
+    rosterSnapshot: game.rosterSnapshot || [],
+    eventFilter: () => true,
+  };
+}
+
+function createLeagueGameRow(game, teamsById) {
+  const score = getLeagueGameScore(game);
+  const isCompleted = game.status === 'completed';
+
+  return {
+    id: String(game._id),
+    leagueId: String(game.leagueId),
+    title: game.title,
+    gameContext: game.gameContext,
+    trackingMode: game.trackingMode || 'one_sided',
+    status: game.status,
+    scheduledAt: game.scheduledAt ?? null,
+    completedAt: game.completedAt ?? null,
+    homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
+    awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
+    trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
+    homeTeamName: teamsById.get(String(game.homeLeagueTeamId))?.name || null,
+    awayTeamName: teamsById.get(String(game.awayLeagueTeamId))?.name || null,
+    homePoints: isCompleted ? score.homePoints : null,
+    awayPoints: isCompleted ? score.awayPoints : null,
+    teamPoints: isCompleted ? score.homePoints : null,
+    opponentPoints: isCompleted ? score.awayPoints : null,
+  };
+}
+
 function buildLeagueTeamPlayerStats(games, leagueTeamId) {
   const snapshotMap = new Map();
 
   for (const game of games) {
-    if (String(game.trackedLeagueTeamId) !== String(leagueTeamId)) {
+    const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, leagueTeamId);
+    if (!rosterSnapshot.length) {
       continue;
     }
 
-    for (const player of game.rosterSnapshot || []) {
+    for (const player of rosterSnapshot) {
       const key = String(player.leaguePlayerId || player._id);
       if (!snapshotMap.has(key)) {
         snapshotMap.set(key, emptyStats(key, player.displayName));
@@ -1154,10 +1244,10 @@ function buildLeagueTeamPlayerStats(games, leagueTeamId) {
     }
 
     for (const event of game.events || []) {
-      if (!event.playerId) {
+      if (!event.playerId || !eventFilter(event)) {
         continue;
       }
-      const snapshotPlayer = (game.rosterSnapshot || []).find(
+      const snapshotPlayer = rosterSnapshot.find(
         (player) => String(player._id) === String(event.playerId)
       );
       const key = String(snapshotPlayer?.leaguePlayerId || event.playerId);
@@ -1178,22 +1268,7 @@ async function listLeagueGames(leagueId) {
   const teams = await listLeagueTeams(leagueId);
   const byId = new Map(teams.map((team) => [String(team._id), team]));
 
-  return games.map((game) => ({
-    id: String(game._id),
-    leagueId: String(game.leagueId),
-    title: game.title,
-    gameContext: game.gameContext,
-    status: game.status,
-    scheduledAt: game.scheduledAt ?? null,
-    completedAt: game.completedAt ?? null,
-    homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
-    awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
-    trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
-    homeTeamName: byId.get(String(game.homeLeagueTeamId))?.name || null,
-    awayTeamName: byId.get(String(game.awayLeagueTeamId))?.name || null,
-    teamPoints: summarizeEvents(game.events || []).points,
-    opponentPoints: summarizeEvents(game.events || []).opponentPoints || 0,
-  }));
+  return games.map((game) => createLeagueGameRow(game, byId));
 }
 
 async function getLeagueStandings(leagueId) {
@@ -1226,38 +1301,32 @@ async function getLeagueStandings(leagueId) {
       continue;
     }
 
-    const trackedSummary = summarizeEvents(game.events || []);
-    const trackedTeamId = String(game.trackedLeagueTeamId);
-    const opponentTeamId =
-      trackedTeamId === String(game.homeLeagueTeamId)
-        ? String(game.awayLeagueTeamId)
-        : String(game.homeLeagueTeamId);
-
-    const trackedRow = rows.get(trackedTeamId);
-    const opponentRow = rows.get(opponentTeamId);
-    if (!trackedRow || !opponentRow) {
+    const homeTeamId = String(game.homeLeagueTeamId);
+    const awayTeamId = String(game.awayLeagueTeamId);
+    const homeRow = rows.get(homeTeamId);
+    const awayRow = rows.get(awayTeamId);
+    if (!homeRow || !awayRow) {
       continue;
     }
 
-    const trackedPoints = trackedSummary.points;
-    const opponentPoints = trackedSummary.opponentPoints || 0;
+    const { homePoints, awayPoints } = getLeagueGameScore(game);
 
-    trackedRow.gamesPlayed += 1;
-    trackedRow.pointsFor += trackedPoints;
-    trackedRow.pointsAgainst += opponentPoints;
-    trackedRow.pointDiff = trackedRow.pointsFor - trackedRow.pointsAgainst;
+    homeRow.gamesPlayed += 1;
+    homeRow.pointsFor += homePoints;
+    homeRow.pointsAgainst += awayPoints;
+    homeRow.pointDiff = homeRow.pointsFor - homeRow.pointsAgainst;
 
-    opponentRow.gamesPlayed += 1;
-    opponentRow.pointsFor += opponentPoints;
-    opponentRow.pointsAgainst += trackedPoints;
-    opponentRow.pointDiff = opponentRow.pointsFor - opponentRow.pointsAgainst;
+    awayRow.gamesPlayed += 1;
+    awayRow.pointsFor += awayPoints;
+    awayRow.pointsAgainst += homePoints;
+    awayRow.pointDiff = awayRow.pointsFor - awayRow.pointsAgainst;
 
-    if (trackedPoints >= opponentPoints) {
-      trackedRow.wins += 1;
-      opponentRow.losses += 1;
+    if (homePoints >= awayPoints) {
+      homeRow.wins += 1;
+      awayRow.losses += 1;
     } else {
-      trackedRow.losses += 1;
-      opponentRow.wins += 1;
+      homeRow.losses += 1;
+      awayRow.wins += 1;
     }
   }
 

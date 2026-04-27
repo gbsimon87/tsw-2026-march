@@ -23,6 +23,20 @@ jest.mock('../../modules/billing/billing.service', () => ({
 }));
 
 jest.mock('mongoose', () => ({
+  Schema: Object.assign(
+    function Schema() {
+      return {
+        index: jest.fn(),
+      };
+    },
+    {
+      Types: {
+        ObjectId: function ObjectId() {},
+      },
+    }
+  ),
+  model: jest.fn(() => ({})),
+  models: {},
   Types: {
     ObjectId: {
       isValid: jest.fn(() => true),

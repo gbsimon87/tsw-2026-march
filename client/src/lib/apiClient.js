@@ -1,8 +1,34 @@
 import { env } from './env';
 
 let csrfToken = null;
+let refreshPromise = null;
 
-async function request(path, options = {}) {
+async function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${env.apiBaseUrl}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
+    })
+      .then(async (response) => {
+        const nextCsrfToken = response.headers.get('x-csrf-token');
+        if (nextCsrfToken) {
+          csrfToken = nextCsrfToken;
+        }
+
+        if (!response.ok) {
+          throw new Error('Session refresh failed');
+        }
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
+
+async function request(path, options = {}, retryState = {}) {
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
     (options.method || 'GET').toUpperCase()
   );
@@ -31,6 +57,22 @@ async function request(path, options = {}) {
   }
 
   const data = await response.json().catch(() => ({}));
+
+  if (
+    response.status === 401 &&
+    !retryState.didRefresh &&
+    !path.startsWith('/auth/login') &&
+    !path.startsWith('/auth/register') &&
+    !path.startsWith('/auth/refresh') &&
+    !path.startsWith('/auth/logout')
+  ) {
+    try {
+      await refreshSession();
+      return request(path, options, { didRefresh: true });
+    } catch {
+      // Fall through to the original unauthorized error handling.
+    }
+  }
 
   if (!response.ok) {
     const message = data?.error?.message || 'Request failed';

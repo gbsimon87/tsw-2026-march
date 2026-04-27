@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { SHOT_ZONE_IDS, STAT_TYPES } = require('../shared/stats.constants');
+const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 
 function isSupportedYouTubeUrl(value) {
   try {
@@ -41,6 +41,17 @@ const standaloneGameSchema = z.object({
   videoUrl: youtubeUrlSchema.optional(),
 });
 
+const standaloneDualGameSchema = z.object({
+  gameContext: z.literal('standalone').optional(),
+  trackingMode: z.literal('dual_team'),
+  homeTeamId: z.string().min(1),
+  awayTeamId: z.string().min(1),
+  initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  title: z.string().trim().min(1).max(120).optional(),
+  scheduledAt: z.string().datetime().optional(),
+  videoUrl: youtubeUrlSchema.optional(),
+});
+
 const leagueGameSchema = z.object({
   gameContext: z.literal('league'),
   leagueId: z.string().min(1),
@@ -52,7 +63,24 @@ const leagueGameSchema = z.object({
   videoUrl: youtubeUrlSchema.optional(),
 });
 
-const createGameSchema = z.union([standaloneGameSchema, leagueGameSchema]);
+const leagueDualGameSchema = z.object({
+  gameContext: z.literal('league'),
+  trackingMode: z.literal('dual_team'),
+  leagueId: z.string().min(1),
+  homeLeagueTeamId: z.string().min(1),
+  awayLeagueTeamId: z.string().min(1),
+  initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  title: z.string().trim().min(1).max(120).optional(),
+  scheduledAt: z.string().datetime().optional(),
+  videoUrl: youtubeUrlSchema.optional(),
+});
+
+const createGameSchema = z.union([
+  standaloneGameSchema,
+  standaloneDualGameSchema,
+  leagueGameSchema,
+  leagueDualGameSchema,
+]);
 
 const updateGameSchema = z
   .object({
@@ -60,6 +88,7 @@ const updateGameSchema = z
     opponent: z.string().trim().min(1).max(120).nullable().optional(),
     scheduledAt: z.string().datetime().nullable().optional(),
     videoUrl: youtubeUrlSchema.nullable().optional(),
+    initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
@@ -129,6 +158,7 @@ const opponentStatTypeSchema = z.enum([
 const baseEventSchema = z.object({
   playerId: z.string().min(1),
   occurredAt: z.string().datetime().optional(),
+  teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 
 const appendTrackedShotEventSchema = baseEventSchema.extend({
@@ -145,6 +175,7 @@ const appendNonShotEventSchema = baseEventSchema.extend({
 const appendSubstitutionEventSchema = baseEventSchema.extend({
   statType: substitutionStatTypeSchema,
   relatedPlayerId: z.string().min(1).optional(),
+  relatedTeamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 
 const appendOpponentEventSchema = z.object({
@@ -161,6 +192,7 @@ const appendEventSchema = z.union([
 
 const setLineupSchema = z.object({
   playerIds: z.array(z.string().min(1)).length(5),
+  teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 
 module.exports = {

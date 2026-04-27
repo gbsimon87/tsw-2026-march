@@ -18,6 +18,8 @@ export function GameDetailHeader({
   gameId,
   game,
   team,
+  participants,
+  isDualTeam = false,
   recap,
   gameSummary,
   canContinueTracking = false,
@@ -39,7 +41,7 @@ export function GameDetailHeader({
             className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
           />
           <div>
-            {team?.id ? (
+            {team?.id && !isDualTeam ? (
               <Link
                 to={`/teams/${team.id}`}
                 className="text-3xl font-bold leading-tight text-slate-900 transition hover:text-sky-700 hover:underline focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-sky-500 md:text-4xl"
@@ -52,9 +54,11 @@ export function GameDetailHeader({
               </h1>
             )}
             <p className="mt-2 text-base text-slate-700">
-              {recap?.opponent?.name || game?.opponent
-                ? `vs ${recap?.opponent?.name || game?.opponent}`
-                : 'Opponent not recorded'}
+              {isDualTeam
+                ? `${participants?.away?.displayName || 'Away'} at ${participants?.home?.displayName || 'Home'}`
+                : recap?.opponent?.name || game?.opponent
+                  ? `vs ${recap?.opponent?.name || game?.opponent}`
+                  : 'Opponent not recorded'}
             </p>
             <p className="mt-2 text-sm text-slate-600">
               {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
@@ -73,18 +77,26 @@ export function GameDetailHeader({
           <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-3 text-slate-900">
             <div className="text-left">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {recap?.team?.name || team?.name || 'Team'}
+                {isDualTeam
+                  ? participants?.home?.displayName || 'Home'
+                  : recap?.team?.name || team?.name || 'Team'}
               </p>
-              <p className="text-4xl font-bold">{gameSummary?.teamPoints || 0}</p>
+              <p className="text-4xl font-bold">
+                {isDualTeam ? gameSummary?.homePoints || 0 : gameSummary?.teamPoints || 0}
+              </p>
             </div>
             <p className="pb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
               Final
             </p>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {recap?.opponent?.name || game?.opponent || 'Opponent'}
+                {isDualTeam
+                  ? participants?.away?.displayName || 'Away'
+                  : recap?.opponent?.name || game?.opponent || 'Opponent'}
               </p>
-              <p className="text-4xl font-bold">{gameSummary?.opponentPoints || 0}</p>
+              <p className="text-4xl font-bold">
+                {isDualTeam ? gameSummary?.awayPoints || 0 : gameSummary?.opponentPoints || 0}
+              </p>
             </div>
           </div>
         </div>

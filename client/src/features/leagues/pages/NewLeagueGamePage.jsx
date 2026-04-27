@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { gamesApi } from '../../games/api/gamesApi';
+import { TEAM_SIDES } from '../../games/constants';
 import { leaguesApi } from '../api/leaguesApi';
 
 export function NewLeagueGamePage() {
@@ -10,7 +11,7 @@ export function NewLeagueGamePage() {
   const [teams, setTeams] = useState([]);
   const [homeLeagueTeamId, setHomeLeagueTeamId] = useState('');
   const [awayLeagueTeamId, setAwayLeagueTeamId] = useState('');
-  const [trackedLeagueTeamId, setTrackedLeagueTeamId] = useState('');
+  const [initialActiveSide, setInitialActiveSide] = useState(TEAM_SIDES.HOME);
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
@@ -27,7 +28,6 @@ export function NewLeagueGamePage() {
         if (nextTeams.length > 1) {
           setHomeLeagueTeamId(nextTeams[0].id);
           setAwayLeagueTeamId(nextTeams[1].id);
-          setTrackedLeagueTeamId(nextTeams[0].id);
         }
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load league setup'))
@@ -41,10 +41,11 @@ export function NewLeagueGamePage() {
     try {
       const response = await gamesApi.create({
         gameContext: 'league',
+        trackingMode: 'dual_team',
         leagueId,
         homeLeagueTeamId,
         awayLeagueTeamId,
-        trackedLeagueTeamId,
+        initialActiveSide,
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
         ...(videoUrl.trim() ? { videoUrl: videoUrl.trim() } : {}),
@@ -60,6 +61,9 @@ export function NewLeagueGamePage() {
   if (isLoading) {
     return <p className="text-sm">Loading league teams...</p>;
   }
+
+  const hasValidMatchup =
+    homeLeagueTeamId && awayLeagueTeamId && homeLeagueTeamId !== awayLeagueTeamId;
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
@@ -109,21 +113,23 @@ export function NewLeagueGamePage() {
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm text-slate-700">Tracked Team</span>
+          <span className="mb-1 block text-sm text-slate-700">Start Tracking On</span>
           <select
             className="w-full rounded border border-slate-300 px-3 py-2"
-            value={trackedLeagueTeamId}
-            onChange={(event) => setTrackedLeagueTeamId(event.target.value)}
+            value={initialActiveSide}
+            onChange={(event) => setInitialActiveSide(event.target.value)}
           >
-            {teams
-              .filter((team) => team.id === homeLeagueTeamId || team.id === awayLeagueTeamId)
-              .map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
+            <option value={TEAM_SIDES.HOME}>
+              {teams.find((team) => team.id === homeLeagueTeamId)?.name || 'Home Team'}
+            </option>
+            <option value={TEAM_SIDES.AWAY}>
+              {teams.find((team) => team.id === awayLeagueTeamId)?.name || 'Away Team'}
+            </option>
           </select>
         </label>
+        {!hasValidMatchup ? (
+          <p className="text-sm text-amber-700">Choose two different teams for this matchup.</p>
+        ) : null}
         <label className="block">
           <span className="mb-1 block text-sm text-slate-700">Title (optional)</span>
           <input
@@ -159,7 +165,7 @@ export function NewLeagueGamePage() {
         </label>
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !hasValidMatchup}
           className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
         >
           {isSubmitting ? 'Creating game...' : 'Create and Start Tracking'}

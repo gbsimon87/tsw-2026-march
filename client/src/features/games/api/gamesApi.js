@@ -25,8 +25,8 @@ export const gamesApi = {
   appendEvent(gameId, payload) {
     return apiClient.post(`/games/${gameId}/events`, payload);
   },
-  setLineup(gameId, playerIds) {
-    return apiClient.post(`/games/${gameId}/lineup`, { playerIds });
+  setLineup(gameId, payload) {
+    return apiClient.post(`/games/${gameId}/lineup`, payload);
   },
   removeEvent(gameId, eventId) {
     return apiClient.delete(`/games/${gameId}/events/${eventId}`);

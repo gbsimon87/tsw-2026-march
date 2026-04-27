@@ -32,7 +32,13 @@ const STAT_TYPES = {
   SUB_OUT: 'SUB_OUT',
 };
 
+const TEAM_SIDES = {
+  HOME: 'home',
+  AWAY: 'away',
+};
+
 module.exports = {
   SHOT_ZONE_IDS,
   STAT_TYPES,
+  TEAM_SIDES,
 };

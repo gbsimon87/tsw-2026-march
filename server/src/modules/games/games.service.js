@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
-const { findTeamByIdAndOwner } = require('../teams/teams.repository');
+const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const { createGame, listGamesByOwner, findGameById, saveGame } = require('./games.repository');
-const { STAT_TYPES } = require('../shared/stats.constants');
-const { summarizeEvents } = require('../shared/statSummary');
+const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
+const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
 const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const {
@@ -17,6 +17,8 @@ function sanitizeEvent(event) {
     id: String(event._id),
     playerId: event.playerId ? String(event.playerId) : null,
     relatedPlayerId: event.relatedPlayerId ? String(event.relatedPlayerId) : null,
+    teamSide: event.teamSide || null,
+    relatedTeamSide: event.relatedTeamSide || null,
     statType: event.statType,
     zoneId: event.zoneId ?? null,
     x: event.x ?? null,
@@ -37,16 +39,51 @@ function sanitizeLogo(logo) {
   };
 }
 
+function sanitizePlayer(player) {
+  return {
+    id: String(player._id || player.id || player.sourcePlayerId),
+    displayName: player.displayName,
+    jerseyNumber: player.jerseyNumber ?? null,
+    position: player.position ?? null,
+    isActive: Boolean(player.isActive),
+  };
+}
+
+function sanitizeParticipant(participant) {
+  if (!participant) {
+    return null;
+  }
+
+  return {
+    side: participant.side,
+    participantType: participant.participantType,
+    teamId: participant.teamId ? String(participant.teamId) : null,
+    leagueTeamId: participant.leagueTeamId ? String(participant.leagueTeamId) : null,
+    displayName: participant.displayName,
+    logo: sanitizeLogo(participant.logo),
+    colors: Array.isArray(participant.colors) ? participant.colors : [],
+    billing: participant.billingSnapshot ?? null,
+    entitlements: participant.entitlementsSnapshot ?? null,
+  };
+}
+
 function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
     ...(options.includeOwnerUserId ? { ownerUserId: String(game.ownerUserId) } : {}),
     teamId: game.teamId ? String(game.teamId) : null,
     gameContext: game.gameContext || 'standalone',
+    trackingMode: game.trackingMode || 'one_sided',
     leagueId: game.leagueId ? String(game.leagueId) : null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
     awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
+    homeTeamId: game.homeTeamId ? String(game.homeTeamId) : null,
+    awayTeamId: game.awayTeamId ? String(game.awayTeamId) : null,
+    initialActiveSide: game.initialActiveSide || TEAM_SIDES.HOME,
+    activeSideDefault: game.initialActiveSide || TEAM_SIDES.HOME,
+    homeParticipant: sanitizeParticipant(game.homeParticipant),
+    awayParticipant: sanitizeParticipant(game.awayParticipant),
     title: game.title,
     opponent: game.opponent ?? null,
     videoUrl: game.videoUrl ?? null,
@@ -57,11 +94,23 @@ function sanitizeGame(game, options = {}) {
     currentLineupPlayerIds: Array.isArray(game.currentLineupPlayerIds)
       ? game.currentLineupPlayerIds.map(String)
       : [],
+    homeStartingLineupPlayerIds: Array.isArray(game.homeStartingLineupPlayerIds)
+      ? game.homeStartingLineupPlayerIds.map(String)
+      : [],
+    homeCurrentLineupPlayerIds: Array.isArray(game.homeCurrentLineupPlayerIds)
+      ? game.homeCurrentLineupPlayerIds.map(String)
+      : [],
+    awayStartingLineupPlayerIds: Array.isArray(game.awayStartingLineupPlayerIds)
+      ? game.awayStartingLineupPlayerIds.map(String)
+      : [],
+    awayCurrentLineupPlayerIds: Array.isArray(game.awayCurrentLineupPlayerIds)
+      ? game.awayCurrentLineupPlayerIds.map(String)
+      : [],
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
-    events: game.events.map(sanitizeEvent),
+    events: (game.events || []).map(sanitizeEvent),
   };
 }
 
@@ -77,7 +126,7 @@ function findTeamPlayerById(team, playerId) {
 
   return (
     (Array.isArray(team?.players) ? team.players : []).find(
-      (player) => String(player._id || player.id) === String(playerId)
+      (player) => String(player._id || player.id || player.sourcePlayerId) === String(playerId)
     ) || null
   );
 }
@@ -110,71 +159,52 @@ function applyEventToRow(row, statType) {
     row.points += 1;
     return;
   }
-
   if (statType === STAT_TYPES.FT_MISS) {
     row.fta += 1;
     return;
   }
-
   if (statType === STAT_TYPES.FG2_MADE) {
     row.fg2m += 1;
     row.fg2a += 1;
     row.points += 2;
     return;
   }
-
   if (statType === STAT_TYPES.FG2_MISS) {
     row.fg2a += 1;
     return;
   }
-
   if (statType === STAT_TYPES.FG3_MADE) {
     row.fg3m += 1;
     row.fg3a += 1;
     row.points += 3;
     return;
   }
-
   if (statType === STAT_TYPES.FG3_MISS) {
     row.fg3a += 1;
     return;
   }
-
   if (statType === STAT_TYPES.AST) {
     row.ast += 1;
     return;
   }
-
   if (statType === STAT_TYPES.OREB) {
     row.oreb += 1;
     row.reb += 1;
     return;
   }
-
   if (statType === STAT_TYPES.DREB) {
     row.dreb += 1;
     row.reb += 1;
     return;
   }
-
-  if (
-    statType === STAT_TYPES.OPP_REB ||
-    statType === STAT_TYPES.SUB_IN ||
-    statType === STAT_TYPES.SUB_OUT
-  ) {
-    return;
-  }
-
   if (statType === STAT_TYPES.STL) {
     row.stl += 1;
     return;
   }
-
   if (statType === STAT_TYPES.TOV) {
     row.tov += 1;
     return;
   }
-
   if (statType === STAT_TYPES.FOUL) {
     row.foul += 1;
   }
@@ -187,28 +217,6 @@ function isOpponentEvent(statType) {
     statType === STAT_TYPES.OPP_FG3_MADE ||
     statType === STAT_TYPES.OPP_REB
   );
-}
-
-function recalculateCurrentLineup(game) {
-  let lineup = Array.isArray(game.startingLineupPlayerIds)
-    ? game.startingLineupPlayerIds.map(String)
-    : [];
-
-  for (const event of game.events) {
-    if (event.statType === STAT_TYPES.SUB_OUT && event.playerId) {
-      lineup = lineup.filter((id) => id !== String(event.playerId));
-      continue;
-    }
-
-    if (event.statType === STAT_TYPES.SUB_IN && event.playerId) {
-      const playerId = String(event.playerId);
-      if (!lineup.includes(playerId)) {
-        lineup.push(playerId);
-      }
-    }
-  }
-
-  game.currentLineupPlayerIds = lineup;
 }
 
 function validateLineupPlayers(team, playerIds) {
@@ -227,7 +235,74 @@ function validateLineupPlayers(team, playerIds) {
   return uniquePlayerIds;
 }
 
+function getDualLineupFieldName(side, kind) {
+  if (side === TEAM_SIDES.HOME) {
+    return kind === 'starting' ? 'homeStartingLineupPlayerIds' : 'homeCurrentLineupPlayerIds';
+  }
+  return kind === 'starting' ? 'awayStartingLineupPlayerIds' : 'awayCurrentLineupPlayerIds';
+}
+
+function recalculateCurrentLineup(game) {
+  if (game.trackingMode === 'dual_team') {
+    for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
+      const startingField = getDualLineupFieldName(side, 'starting');
+      const currentField = getDualLineupFieldName(side, 'current');
+      let lineup = Array.isArray(game[startingField]) ? game[startingField].map(String) : [];
+
+      for (const event of game.events || []) {
+        if (event.teamSide !== side) {
+          continue;
+        }
+        if (event.statType === STAT_TYPES.SUB_OUT && event.playerId) {
+          lineup = lineup.filter((id) => id !== String(event.playerId));
+          continue;
+        }
+        if (event.statType === STAT_TYPES.SUB_IN && event.playerId) {
+          const playerId = String(event.playerId);
+          if (!lineup.includes(playerId)) {
+            lineup.push(playerId);
+          }
+        }
+      }
+
+      game[currentField] = lineup;
+    }
+    return;
+  }
+
+  let lineup = Array.isArray(game.startingLineupPlayerIds)
+    ? game.startingLineupPlayerIds.map(String)
+    : [];
+
+  for (const event of game.events || []) {
+    if (event.statType === STAT_TYPES.SUB_OUT && event.playerId) {
+      lineup = lineup.filter((id) => id !== String(event.playerId));
+      continue;
+    }
+
+    if (event.statType === STAT_TYPES.SUB_IN && event.playerId) {
+      const playerId = String(event.playerId);
+      if (!lineup.includes(playerId)) {
+        lineup.push(playerId);
+      }
+    }
+  }
+
+  game.currentLineupPlayerIds = lineup;
+}
+
 function buildGameSummary(game) {
+  if (game.trackingMode === 'dual_team') {
+    const summary = summarizeEventsBySide(game.events);
+    return {
+      homePoints: summary.home.points,
+      awayPoints: summary.away.points,
+      teamPoints: summary.home.points,
+      opponentPoints: summary.away.points,
+      hasOpponentScore: summary.home.points > 0 || summary.away.points > 0,
+    };
+  }
+
   const summary = summarizeEvents(game.events);
   return {
     teamPoints: summary.points,
@@ -236,7 +311,60 @@ function buildGameSummary(game) {
   };
 }
 
+function buildBoxScoreForSide(game, team, side) {
+  const basePlayers = getTeamPlayers(team, { includeInactivePlayers: true });
+  const map = new Map(
+    basePlayers.map((player) => [
+      String(player._id || player.id || player.sourcePlayerId),
+      emptyStats(String(player._id || player.id || player.sourcePlayerId), player.displayName),
+    ])
+  );
+
+  for (const event of game.events || []) {
+    if (event.teamSide !== side || !event.playerId) {
+      continue;
+    }
+    const key = String(event.playerId);
+    if (!map.has(key)) {
+      map.set(key, emptyStats(key, `Unknown (${key.slice(-6)})`));
+    }
+    applyEventToRow(map.get(key), event.statType);
+  }
+
+  const players = Array.from(map.values()).sort((a, b) =>
+    a.displayName.localeCompare(b.displayName)
+  );
+  const summary = summarizeEventsBySide(game.events)[side];
+
+  return {
+    players,
+    totals: {
+      ftm: summary.ft.made,
+      fta: summary.ft.attempts,
+      fg2m: summary.fg2.made,
+      fg2a: summary.fg2.attempts,
+      fg3m: summary.fg3.made,
+      fg3a: summary.fg3.attempts,
+      ast: players.reduce((total, row) => total + row.ast, 0),
+      oreb: players.reduce((total, row) => total + row.oreb, 0),
+      dreb: players.reduce((total, row) => total + row.dreb, 0),
+      stl: players.reduce((total, row) => total + row.stl, 0),
+      tov: players.reduce((total, row) => total + row.tov, 0),
+      foul: players.reduce((total, row) => total + row.foul, 0),
+      reb: players.reduce((total, row) => total + row.reb, 0),
+      points: summary.points,
+    },
+  };
+}
+
 function computeBoxScore(game, team, options = {}) {
+  if (game.trackingMode === 'dual_team' && options.participants) {
+    return {
+      home: buildBoxScoreForSide(game, options.participants.home.teamDoc, TEAM_SIDES.HOME),
+      away: buildBoxScoreForSide(game, options.participants.away.teamDoc, TEAM_SIDES.AWAY),
+    };
+  }
+
   const basePlayers = getTeamPlayers(team, options);
   const map = new Map(
     basePlayers.map((player) => [
@@ -245,17 +373,15 @@ function computeBoxScore(game, team, options = {}) {
     ])
   );
 
-  for (const event of game.events) {
+  for (const event of game.events || []) {
     if (isOpponentEvent(event.statType)) {
       continue;
     }
 
     const key = String(event.playerId);
     if (!map.has(key)) {
-      const fallbackName = `Unknown (${key.slice(-6)})`;
-      map.set(key, emptyStats(key, fallbackName));
+      map.set(key, emptyStats(key, `Unknown (${key.slice(-6)})`));
     }
-
     applyEventToRow(map.get(key), event.statType);
   }
 
@@ -293,8 +419,30 @@ async function assertTeamOwnership(userId, teamId) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
-
   return team;
+}
+
+async function canAccessStandaloneDualGame(userId, game) {
+  if (String(game.ownerUserId) === String(userId)) {
+    return true;
+  }
+  if (game.homeTeamId) {
+    const team = await findTeamByIdAndOwner(game.homeTeamId, userId);
+    if (team) {
+      return true;
+    }
+  }
+  if (game.awayTeamId) {
+    const team = await findTeamByIdAndOwner(game.awayTeamId, userId);
+    if (team) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function canEditStandaloneDualGame(userId, game) {
+  return canAccessStandaloneDualGame(userId, game);
 }
 
 async function assertGameAccess(userId, gameId) {
@@ -307,8 +455,18 @@ async function assertGameAccess(userId, gameId) {
     throw new ApiError(404, 'Game not found');
   }
 
+  if (!userId) {
+    return game;
+  }
+
   if (String(game.ownerUserId) === String(userId)) {
     return game;
+  }
+
+  if (game.trackingMode === 'dual_team' && game.gameContext === 'standalone') {
+    if (await canAccessStandaloneDualGame(userId, game)) {
+      return game;
+    }
   }
 
   if (game.gameContext === 'league' && (await canManageLeagueGame(userId, game))) {
@@ -318,7 +476,107 @@ async function assertGameAccess(userId, gameId) {
   throw new ApiError(404, 'Game not found');
 }
 
+function buildParticipantFromStandaloneTeam(team, side) {
+  return {
+    side,
+    participantType: 'team',
+    teamId: team._id,
+    leagueTeamId: null,
+    displayName: team.name,
+    logo: sanitizeLogo(team.logo),
+    colors: Array.isArray(team.colors) ? team.colors : [],
+    billingSnapshot: getBillingSummary(team),
+    entitlementsSnapshot: getTeamEntitlements(team),
+  };
+}
+
+function buildRosterSnapshotFromStandaloneTeam(team) {
+  return (team.players || [])
+    .filter((player) => player.isActive)
+    .map((player) => ({
+      sourceType: 'team_player',
+      sourcePlayerId: player._id,
+      displayName: player.displayName,
+      jerseyNumber: player.jerseyNumber ?? null,
+      position: player.position ?? null,
+      claimedByUserId: null,
+      isClaimed: false,
+      isActive: Boolean(player.isActive),
+    }));
+}
+
+function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
+  return {
+    _id: participant.teamId || participant.leagueTeamId || participant.displayName,
+    id: participant.teamId || participant.leagueTeamId || participant.displayName,
+    name: participant.displayName,
+    logo: participant.logo,
+    plan: participant.billing?.plan || 'pro',
+    subscriptionStatus: participant.billing?.subscriptionStatus || 'active',
+    players: (rosterSnapshot || []).map((player) => ({
+      _id: player._id || player.sourcePlayerId || player.leaguePlayerId,
+      id: player._id || player.sourcePlayerId || player.leaguePlayerId,
+      sourcePlayerId: player.sourcePlayerId || player.leaguePlayerId,
+      displayName: player.displayName,
+      jerseyNumber: player.jerseyNumber ?? null,
+      position: player.position ?? null,
+      isActive: Boolean(player.isActive),
+    })),
+  };
+}
+
+async function resolveDualGameParticipants(game) {
+  const home = sanitizeParticipant(game.homeParticipant);
+  const away = sanitizeParticipant(game.awayParticipant);
+  return {
+    home: {
+      ...home,
+      teamDoc: buildTeamDocFromSnapshot(home, game.homeRosterSnapshot),
+      players: (game.homeRosterSnapshot || []).map(sanitizePlayer),
+    },
+    away: {
+      ...away,
+      teamDoc: buildTeamDocFromSnapshot(away, game.awayRosterSnapshot),
+      players: (game.awayRosterSnapshot || []).map(sanitizePlayer),
+    },
+  };
+}
+
 async function resolveGameTeamContext(userId, game) {
+  if (game.trackingMode === 'dual_team') {
+    const participants = await resolveDualGameParticipants(game);
+    const viewerSide =
+      game.gameContext === 'standalone' && userId
+        ? (await findTeamByIdAndOwner(game.homeTeamId, userId))
+          ? TEAM_SIDES.HOME
+          : TEAM_SIDES.AWAY
+        : game.initialActiveSide || TEAM_SIDES.HOME;
+    const primary = participants[viewerSide];
+    const secondary =
+      participants[viewerSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME];
+    return {
+      team: {
+        id: primary.teamId || primary.leagueTeamId,
+        name: primary.displayName,
+        logo: primary.logo,
+        billing: primary.billing || { plan: 'pro', subscriptionStatus: 'active' },
+        entitlements: primary.entitlements || { canViewReplay: true, canViewShotMaps: true },
+        players: primary.players,
+      },
+      opponentTeam: {
+        id: secondary.teamId || secondary.leagueTeamId,
+        name: secondary.displayName,
+        logo: secondary.logo,
+        billing: secondary.billing || { plan: 'pro', subscriptionStatus: 'active' },
+        entitlements: secondary.entitlements || { canViewReplay: true, canViewShotMaps: true },
+        players: secondary.players,
+      },
+      participants,
+      teamDoc: primary.teamDoc,
+      league: null,
+    };
+  }
+
   if (game.gameContext === 'league') {
     const { league, trackedTeam, team } = await getLeagueTeamRosterSnapshotForGame(game);
     return {
@@ -333,13 +591,10 @@ async function resolveGameTeamContext(userId, game) {
           currentPeriodEnd: null,
         },
         entitlements: { canViewReplay: true, canViewShotMaps: true },
-        players: team.players.map((player) => ({
-          id: String(player._id || player.id),
-          displayName: player.displayName,
-          jerseyNumber: player.jerseyNumber ?? null,
-          isActive: Boolean(player.isActive),
-        })),
+        players: team.players.map(sanitizePlayer),
       },
+      opponentTeam: null,
+      participants: null,
       teamDoc: team,
       league,
     };
@@ -353,24 +608,145 @@ async function resolveGameTeamContext(userId, game) {
       logo: sanitizeLogo(team.logo),
       billing: getBillingSummary(team),
       entitlements: getTeamEntitlements(team),
-      players: team.players.map((player) => ({
-        id: String(player._id),
-        displayName: player.displayName,
-        jerseyNumber: player.jerseyNumber ?? null,
-        isActive: Boolean(player.isActive),
-      })),
+      players: team.players.map(sanitizePlayer),
     },
+    opponentTeam: null,
+    participants: null,
     teamDoc: team,
     league: null,
   };
 }
 
 async function createGameForUser(userId, payload) {
+  if (payload.trackingMode === 'dual_team' && payload.homeTeamId && payload.awayTeamId) {
+    const [homeTeam, awayTeam] = await Promise.all([
+      assertTeamOwnership(userId, payload.homeTeamId).catch(() => findTeamById(payload.homeTeamId)),
+      findTeamById(payload.awayTeamId),
+    ]);
+    if (!homeTeam || !awayTeam) {
+      throw new ApiError(404, 'Team not found');
+    }
+    if (String(homeTeam._id) === String(awayTeam._id)) {
+      throw new ApiError(400, 'Home and away teams must be different');
+    }
+    const canOwnHome = await findTeamByIdAndOwner(homeTeam._id, userId);
+    const canOwnAway = await findTeamByIdAndOwner(awayTeam._id, userId);
+    if (!canOwnHome && !canOwnAway) {
+      throw new ApiError(403, 'Forbidden');
+    }
+    const homeBilling = getBillingSummary(homeTeam);
+    const awayBilling = getBillingSummary(awayTeam);
+    if (
+      homeBilling.plan !== 'pro' ||
+      !['active', 'trialing'].includes(homeBilling.subscriptionStatus)
+    ) {
+      throw new ApiError(400, 'Home team must be on Team Pro');
+    }
+    if (
+      awayBilling.plan !== 'pro' ||
+      !['active', 'trialing'].includes(awayBilling.subscriptionStatus)
+    ) {
+      throw new ApiError(400, 'Away team must be on Team Pro');
+    }
+
+    const game = await createGame({
+      ownerUserId: userId,
+      gameContext: 'standalone',
+      trackingMode: 'dual_team',
+      homeTeamId: homeTeam._id,
+      awayTeamId: awayTeam._id,
+      initialActiveSide: payload.initialActiveSide || TEAM_SIDES.HOME,
+      homeParticipant: buildParticipantFromStandaloneTeam(homeTeam, TEAM_SIDES.HOME),
+      awayParticipant: buildParticipantFromStandaloneTeam(awayTeam, TEAM_SIDES.AWAY),
+      homeRosterSnapshot: buildRosterSnapshotFromStandaloneTeam(homeTeam),
+      awayRosterSnapshot: buildRosterSnapshotFromStandaloneTeam(awayTeam),
+      title: payload.title?.trim() || `${awayTeam.name} at ${homeTeam.name}`,
+      scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
+      status: 'in_progress',
+    });
+
+    return sanitizeGame(game);
+  }
+
+  if (payload.trackingMode === 'dual_team' && payload.gameContext === 'league') {
+    const context = await getLeagueContextForGame(
+      userId,
+      {
+        ...payload,
+        trackedLeagueTeamId:
+          payload.initialActiveSide === TEAM_SIDES.AWAY
+            ? payload.awayLeagueTeamId
+            : payload.homeLeagueTeamId,
+      },
+      { allowManager: true }
+    );
+    const awayContext = await getLeagueContextForGame(
+      userId,
+      {
+        ...payload,
+        trackedLeagueTeamId: payload.awayLeagueTeamId,
+      },
+      { allowManager: true }
+    );
+
+    const game = await createGame({
+      ownerUserId: userId,
+      gameContext: 'league',
+      trackingMode: 'dual_team',
+      leagueId: payload.leagueId,
+      homeLeagueTeamId: payload.homeLeagueTeamId,
+      awayLeagueTeamId: payload.awayLeagueTeamId,
+      trackedLeagueTeamId:
+        payload.initialActiveSide === TEAM_SIDES.AWAY
+          ? payload.awayLeagueTeamId
+          : payload.homeLeagueTeamId,
+      initialActiveSide: payload.initialActiveSide || TEAM_SIDES.HOME,
+      homeParticipant: {
+        side: TEAM_SIDES.HOME,
+        participantType: 'league_team',
+        teamId: null,
+        leagueTeamId: context.homeTeam._id,
+        displayName: context.homeTeam.name,
+        logo: sanitizeLogo(context.homeTeam.logo),
+        colors: Array.isArray(context.homeTeam.colors) ? context.homeTeam.colors : [],
+        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+      },
+      awayParticipant: {
+        side: TEAM_SIDES.AWAY,
+        participantType: 'league_team',
+        teamId: null,
+        leagueTeamId: context.awayTeam._id,
+        displayName: context.awayTeam.name,
+        logo: sanitizeLogo(context.awayTeam.logo),
+        colors: Array.isArray(context.awayTeam.colors) ? context.awayTeam.colors : [],
+        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+      },
+      homeRosterSnapshot:
+        String(context.homeTeam._id) === String(context.trackedTeam._id)
+          ? context.rosterSnapshot
+          : awayContext.rosterSnapshot,
+      awayRosterSnapshot:
+        String(context.awayTeam._id) === String(awayContext.trackedTeam._id)
+          ? awayContext.rosterSnapshot
+          : context.rosterSnapshot,
+      title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
+      scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
+      status: 'in_progress',
+    });
+
+    return sanitizeGame(game);
+  }
+
   if (payload.gameContext === 'league') {
     const context = await getLeagueContextForGame(userId, payload);
     const game = await createGame({
       ownerUserId: userId,
       gameContext: 'league',
+      trackingMode: 'one_sided',
       leagueId: payload.leagueId,
       homeLeagueTeamId: payload.homeLeagueTeamId,
       awayLeagueTeamId: payload.awayLeagueTeamId,
@@ -385,15 +761,11 @@ async function createGameForUser(userId, payload) {
     return sanitizeGame(game);
   }
 
-  if (!mongoose.Types.ObjectId.isValid(payload.teamId)) {
-    throw new ApiError(400, 'Invalid team id');
-  }
-
   await assertTeamOwnership(userId, payload.teamId);
-
   const game = await createGame({
     ownerUserId: userId,
     teamId: payload.teamId,
+    trackingMode: 'one_sided',
     title: payload.title.trim(),
     opponent: payload.opponent?.trim() ? payload.opponent.trim() : undefined,
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
@@ -410,17 +782,19 @@ async function listGamesForUser(userId, filter = {}) {
     id: String(game._id),
     teamId: game.teamId ? String(game.teamId) : null,
     gameContext: game.gameContext || 'standalone',
+    trackingMode: game.trackingMode || 'one_sided',
     leagueId: game.leagueId ? String(game.leagueId) : null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
     awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
+    homeTeamId: game.homeTeamId ? String(game.homeTeamId) : null,
+    awayTeamId: game.awayTeamId ? String(game.awayTeamId) : null,
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
     title: game.title,
     opponent: game.opponent ?? null,
-    videoUrl: game.videoUrl ?? null,
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
-    eventCount: game.events.length,
+    eventCount: (game.events || []).length,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
   }));
@@ -432,37 +806,64 @@ async function updateGameForUser(userId, gameId, payload) {
   if (payload.title) {
     game.title = payload.title.trim();
   }
-
   if (Object.prototype.hasOwnProperty.call(payload, 'opponent') && game.gameContext !== 'league') {
     game.opponent = payload.opponent?.trim() || null;
   }
-
   if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
     game.scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   }
-
   if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
     game.videoUrl = payload.videoUrl?.trim() || null;
   }
+  if (payload.initialActiveSide && game.trackingMode === 'dual_team') {
+    game.initialActiveSide = payload.initialActiveSide;
+  }
 
   await saveGame(game);
-  const { teamDoc } = await resolveGameTeamContext(userId, game);
-
-  return {
-    game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, teamDoc),
-    gameSummary: buildGameSummary(game),
-  };
+  return getGameForUser(userId, gameId);
 }
 
 async function getGameForUser(userId, gameId) {
   const game = await assertGameAccess(userId, gameId);
-  const { team, teamDoc, league } = await resolveGameTeamContext(userId, game);
-  const boxScore = computeBoxScore(game, teamDoc);
+  const { team, opponentTeam, teamDoc, participants, league } = await resolveGameTeamContext(
+    userId,
+    game
+  );
+  const boxScore =
+    game.trackingMode === 'dual_team'
+      ? computeBoxScore(game, null, { participants })
+      : computeBoxScore(game, teamDoc);
+  const gameSummary = buildGameSummary(game);
 
   return {
     game: sanitizeGame(game, { includeOwnerUserId: true }),
     team,
+    opponentTeam,
+    participants: participants
+      ? {
+          home: {
+            id: participants.home.teamId || participants.home.leagueTeamId,
+            ...participants.home,
+          },
+          away: {
+            id: participants.away.teamId || participants.away.leagueTeamId,
+            ...participants.away,
+          },
+        }
+      : null,
+    lineups:
+      game.trackingMode === 'dual_team'
+        ? {
+            home: {
+              startingPlayerIds: (game.homeStartingLineupPlayerIds || []).map(String),
+              currentPlayerIds: (game.homeCurrentLineupPlayerIds || []).map(String),
+            },
+            away: {
+              startingPlayerIds: (game.awayStartingLineupPlayerIds || []).map(String),
+              currentPlayerIds: (game.awayCurrentLineupPlayerIds || []).map(String),
+            },
+          }
+        : null,
     league: league
       ? {
           id: String(league._id),
@@ -472,65 +873,143 @@ async function getGameForUser(userId, gameId) {
         }
       : null,
     boxScore,
+    replayFilters: game.trackingMode === 'dual_team' ? ['all', 'home', 'away'] : ['all'],
     teamEntitlements: team.entitlements,
-    recap: buildGameRecap(game, teamDoc, boxScore),
-    gameSummary: buildGameSummary(game),
+    recap: buildGameRecap(
+      game,
+      game.trackingMode === 'dual_team' ? participants : teamDoc,
+      boxScore
+    ),
+    gameSummary,
   };
 }
 
 async function getPublicGame(gameId) {
-  if (!mongoose.Types.ObjectId.isValid(gameId)) {
-    throw new ApiError(404, 'Game not found');
-  }
+  return getGameForUser(null, gameId);
+}
 
-  const game = await findGameById(gameId);
-  if (!game) {
-    throw new ApiError(404, 'Game not found');
+function getTeamDocForSide(game, participants, side, fallbackTeamDoc) {
+  if (game.trackingMode !== 'dual_team') {
+    return fallbackTeamDoc;
   }
-  const { team, teamDoc, league } = await resolveGameTeamContext(null, game);
-  const boxScore = computeBoxScore(game, teamDoc);
+  return side === TEAM_SIDES.HOME ? participants.home.teamDoc : participants.away.teamDoc;
+}
 
-  return {
-    game: sanitizeGame(game),
-    team,
-    league: league
-      ? {
-          id: String(league._id),
-          name: league.name,
-          slug: league.slug,
-          seasonLabel: league.seasonLabel ?? null,
-        }
-      : null,
-    boxScore,
-    teamEntitlements: team.entitlements,
-    recap: buildGameRecap(game, teamDoc, boxScore),
-    gameSummary: buildGameSummary(game),
-  };
+function requireBothLineups(game) {
+  if (game.trackingMode !== 'dual_team') {
+    return;
+  }
+  if (
+    (game.homeCurrentLineupPlayerIds || []).length !== 5 ||
+    (game.awayCurrentLineupPlayerIds || []).length !== 5
+  ) {
+    throw new ApiError(400, 'Set both starting fives before tracking');
+  }
 }
 
 async function appendEventForUser(userId, gameId, payload) {
   const game = await assertGameAccess(userId, gameId);
-
   if (game.status !== 'in_progress') {
     throw new ApiError(400, 'Cannot track events on a completed game');
   }
 
-  const { teamDoc } = await resolveGameTeamContext(userId, game);
+  const context = await resolveGameTeamContext(userId, game);
+
+  if (game.trackingMode === 'dual_team') {
+    if (!payload.teamSide) {
+      throw new ApiError(400, 'teamSide is required for dual-team events');
+    }
+    if (isOpponentEvent(payload.statType)) {
+      throw new ApiError(400, 'Opponent aggregate events are not allowed for dual-team games');
+    }
+
+    requireBothLineups(game);
+
+    const teamDoc = getTeamDocForSide(game, context.participants, payload.teamSide, null);
+    if (payload.playerId) {
+      const player = findTeamPlayerById(teamDoc, payload.playerId);
+      if (!player || !player.isActive) {
+        throw new ApiError(400, 'Player is not active on this team');
+      }
+    }
+
+    const currentField = getDualLineupFieldName(payload.teamSide, 'current');
+    const lineupIds = (game[currentField] || []).map(String);
+
+    if (
+      [
+        STAT_TYPES.AST,
+        STAT_TYPES.OREB,
+        STAT_TYPES.DREB,
+        STAT_TYPES.STL,
+        STAT_TYPES.TOV,
+        STAT_TYPES.FOUL,
+      ].includes(payload.statType)
+    ) {
+      if (
+        payload.playerId &&
+        lineupIds.length > 0 &&
+        !lineupIds.includes(String(payload.playerId))
+      ) {
+        throw new ApiError(400, 'Player is not currently on the court');
+      }
+    }
+
+    if (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN) {
+      if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
+        throw new ApiError(400, 'Set starting five before making substitutions');
+      }
+
+      if (payload.statType === STAT_TYPES.SUB_OUT) {
+        if (!payload.playerId || !lineupIds.includes(String(payload.playerId))) {
+          throw new ApiError(400, 'Outgoing player is not currently on the court');
+        }
+        game[currentField] = lineupIds.filter((id) => id !== String(payload.playerId));
+      }
+
+      if (payload.statType === STAT_TYPES.SUB_IN) {
+        if (!payload.playerId) {
+          throw new ApiError(400, 'Incoming player is required');
+        }
+        if (lineupIds.includes(String(payload.playerId))) {
+          throw new ApiError(400, 'Incoming player is already on the court');
+        }
+        game[currentField] = [...lineupIds, String(payload.playerId)];
+      }
+    }
+
+    game.events.push({
+      ...(payload.playerId ? { playerId: payload.playerId } : {}),
+      ...(payload.relatedPlayerId ? { relatedPlayerId: payload.relatedPlayerId } : {}),
+      ...(payload.teamSide ? { teamSide: payload.teamSide } : {}),
+      ...(payload.relatedTeamSide ? { relatedTeamSide: payload.relatedTeamSide } : {}),
+      statType: payload.statType,
+      zoneId: payload.zoneId,
+      x: payload.x,
+      y: payload.y,
+      occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
+    });
+    await saveGame(game);
+    return getGameForUser(userId, gameId);
+  }
+
+  const { teamDoc } = context;
   if (payload.playerId) {
     const player = findTeamPlayerById(teamDoc, payload.playerId);
-
     if (!player || !player.isActive) {
       throw new ApiError(400, 'Player is not active on this team');
     }
   }
 
   if (
-    payload.statType === STAT_TYPES.AST ||
-    payload.statType === STAT_TYPES.OREB ||
-    payload.statType === STAT_TYPES.DREB ||
-    payload.statType === STAT_TYPES.STL ||
-    payload.statType === STAT_TYPES.TOV ||
-    payload.statType === STAT_TYPES.FOUL
+    [
+      STAT_TYPES.AST,
+      STAT_TYPES.OREB,
+      STAT_TYPES.DREB,
+      STAT_TYPES.STL,
+      STAT_TYPES.TOV,
+      STAT_TYPES.FOUL,
+    ].includes(payload.statType)
   ) {
     const lineupIds = (game.currentLineupPlayerIds || []).map(String);
     if (payload.playerId && lineupIds.length > 0 && !lineupIds.includes(String(payload.playerId))) {
@@ -543,14 +1022,12 @@ async function appendEventForUser(userId, gameId, payload) {
     if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
       throw new ApiError(400, 'Set starting five before making substitutions');
     }
-
     if (payload.statType === STAT_TYPES.SUB_OUT) {
       if (!payload.playerId || !lineupIds.includes(String(payload.playerId))) {
         throw new ApiError(400, 'Outgoing player is not currently on the court');
       }
       game.currentLineupPlayerIds = lineupIds.filter((id) => id !== String(payload.playerId));
     }
-
     if (payload.statType === STAT_TYPES.SUB_IN) {
       if (!payload.playerId) {
         throw new ApiError(400, 'Incoming player is required');
@@ -573,73 +1050,60 @@ async function appendEventForUser(userId, gameId, payload) {
   });
 
   await saveGame(game);
-
-  return {
-    game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, teamDoc),
-    gameSummary: buildGameSummary(game),
-  };
+  return getGameForUser(userId, gameId);
 }
 
-async function setGameLineup(userId, gameId, playerIds) {
+async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
   const game = await assertGameAccess(userId, gameId);
-
   if (game.status !== 'in_progress') {
     throw new ApiError(400, 'Cannot change lineup on a completed game');
   }
 
-  const { teamDoc } = await resolveGameTeamContext(userId, game);
-  const validIds = validateLineupPlayers(teamDoc, playerIds);
+  const payload = Array.isArray(payloadOrPlayerIds)
+    ? { playerIds: payloadOrPlayerIds }
+    : payloadOrPlayerIds;
+  const context = await resolveGameTeamContext(userId, game);
 
+  if (game.trackingMode === 'dual_team') {
+    if (!payload.teamSide) {
+      throw new ApiError(400, 'teamSide is required for dual-team lineups');
+    }
+    const teamDoc = getTeamDocForSide(game, context.participants, payload.teamSide, null);
+    const validIds = validateLineupPlayers(teamDoc, payload.playerIds);
+    game[getDualLineupFieldName(payload.teamSide, 'starting')] = validIds;
+    game[getDualLineupFieldName(payload.teamSide, 'current')] = validIds;
+    await saveGame(game);
+    return getGameForUser(userId, gameId);
+  }
+
+  const validIds = validateLineupPlayers(context.teamDoc, payload.playerIds);
   game.startingLineupPlayerIds = validIds;
   game.currentLineupPlayerIds = validIds;
   await saveGame(game);
-
-  return {
-    game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, teamDoc),
-    gameSummary: buildGameSummary(game),
-  };
+  return getGameForUser(userId, gameId);
 }
 
 async function removeEventForUser(userId, gameId, eventId) {
   const game = await assertGameAccess(userId, gameId);
-
   const event = game.events.id(eventId);
   if (!event) {
     throw new ApiError(404, 'Event not found');
   }
-
   event.deleteOne();
   recalculateCurrentLineup(game);
   await saveGame(game);
-
-  const { teamDoc } = await resolveGameTeamContext(userId, game);
-  return {
-    game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, teamDoc),
-    gameSummary: buildGameSummary(game),
-  };
+  return getGameForUser(userId, gameId);
 }
 
 async function finishGameForUser(userId, gameId) {
   const game = await assertGameAccess(userId, gameId);
-
   if (game.status === 'completed') {
     throw new ApiError(400, 'Game is already completed');
   }
-
   game.status = 'completed';
   game.completedAt = new Date();
   await saveGame(game);
-
-  const { teamDoc } = await resolveGameTeamContext(userId, game);
-
-  return {
-    game: sanitizeGame(game),
-    boxScore: computeBoxScore(game, teamDoc),
-    gameSummary: buildGameSummary(game),
-  };
+  return getGameForUser(userId, gameId);
 }
 
 module.exports = {
@@ -654,4 +1118,7 @@ module.exports = {
   finishGameForUser,
   computeBoxScore,
   buildGameSummary,
+  canAccessStandaloneDualGame,
+  canEditStandaloneDualGame,
+  resolveDualGameParticipants,
 };

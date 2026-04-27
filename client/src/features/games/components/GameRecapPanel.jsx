@@ -78,7 +78,14 @@ function FeedIcon() {
   );
 }
 
-export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
+export function GameRecapPanel({
+  gameId,
+  team,
+  participants,
+  isDualTeam = false,
+  recap,
+  onShareToFeed,
+}) {
   const [imageState, setImageState] = useState('');
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
   const recapCardDataUrl = createRecapCardDataUrl(recap, {
@@ -88,9 +95,11 @@ export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
   const cardFilename = `${(recap?.team?.name || 'team')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}-game-recap.svg`;
-  const shareText = `${recap?.team?.name || 'Team'}${
-    recap?.opponent?.name ? ` vs ${recap.opponent.name}` : ''
-  } final: ${recap?.team?.points || 0}-${recap?.opponent?.points || 0}.`;
+  const shareText = isDualTeam
+    ? `${participants?.away?.displayName || 'Away'} at ${participants?.home?.displayName || 'Home'} final: ${recap?.home?.points || 0}-${recap?.away?.points || 0}.`
+    : `${recap?.team?.name || 'Team'}${
+        recap?.opponent?.name ? ` vs ${recap.opponent.name}` : ''
+      } final: ${recap?.team?.points || 0}-${recap?.opponent?.points || 0}.`;
 
   function downloadCard() {
     if (!shareUrl) {
@@ -184,7 +193,7 @@ export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
           <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Points</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {recap?.teamStats?.points || 0}
+              {isDualTeam ? recap?.home?.points || 0 : recap?.teamStats?.points || 0}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
@@ -232,7 +241,7 @@ export function GameRecapPanel({ gameId, team, recap, onShareToFeed }) {
 
       <section className="grid gap-4 md:grid-cols-3">
         {(recap?.topPerformers || []).map((player) =>
-          player.playerId && team?.id ? (
+          player.playerId && team?.id && !isDualTeam ? (
             <Link
               key={player.playerId}
               to={`/teams/${team.id}/players/${player.playerId}`}

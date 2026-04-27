@@ -65,28 +65,34 @@ export function PublicLeagueGamesPage() {
       </section>
 
       <section className="grid gap-3">
-        {games.map((game) => (
-          <Link
-            key={game.id}
-            to={`/games/${game.id}`}
-            className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300"
-          >
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="font-semibold text-slate-900">{game.title}</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {game.awayTeamName} at {game.homeTeamName}
-                </p>
+        {games.length === 0 ? (
+          <p className="text-sm text-slate-600">No league games yet.</p>
+        ) : (
+          games.map((game) => (
+            <Link
+              key={game.id}
+              to={`/games/${game.id}`}
+              className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900">{game.title}</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {game.awayTeamName} at {game.homeTeamName}
+                  </p>
+                </div>
+                <div className="text-sm text-slate-500">
+                  <p>{formatGameDate(game)}</p>
+                  <p>
+                    {game.homePoints != null && game.awayPoints != null
+                      ? `${game.homePoints} - ${game.awayPoints}`
+                      : 'Score pending'}
+                  </p>
+                </div>
               </div>
-              <div className="text-sm text-slate-500">
-                <p>{formatGameDate(game)}</p>
-                <p>
-                  {game.teamPoints} - {game.opponentPoints}
-                </p>
-              </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          ))
+        )}
       </section>
     </main>
   );

@@ -32,7 +32,13 @@ export const STAT_LABELS = {
   SUB_OUT: 'Sub Out',
 };
 
+export const TEAM_SIDES = {
+  HOME: 'home',
+  AWAY: 'away',
+};
+
 export default {
   ZONE_LABELS,
   STAT_LABELS,
+  TEAM_SIDES,
 };

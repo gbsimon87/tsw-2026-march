@@ -1,4 +1,4 @@
-const { summarizeEvents } = require('../shared/statSummary');
+const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
 
 const MOMENT_PRIORITY = {
   OPP_FG3_MADE: 5,
@@ -35,7 +35,8 @@ function formatStatusLabel(status) {
 }
 
 function buildTopPerformers(boxScore) {
-  return [...(boxScore?.players || [])]
+  const rows = Array.isArray(boxScore) ? boxScore : boxScore?.players || [];
+  return [...rows]
     .sort((left, right) => {
       if (right.points !== left.points) {
         return right.points - left.points;
@@ -109,6 +110,53 @@ function buildShotSnapshot(events, playersById) {
 }
 
 function buildGameRecap(game, team, boxScore) {
+  if (game?.trackingMode === 'dual_team') {
+    const bySide = summarizeEventsBySide(game?.events || []);
+    const players = [
+      ...(team?.home?.players || []).map((player) => ({
+        ...player,
+        side: 'home',
+      })),
+      ...(team?.away?.players || []).map((player) => ({
+        ...player,
+        side: 'away',
+      })),
+    ];
+    const playersById = new Map(
+      players.map((player) => [String(player._id || player.id), player.displayName])
+    );
+
+    return {
+      statusLabel: formatStatusLabel(game?.status),
+      home: {
+        name: team?.home?.displayName || 'Home',
+        points: boxScore?.home?.totals?.points || 0,
+      },
+      away: {
+        name: team?.away?.displayName || 'Away',
+        points: boxScore?.away?.totals?.points || 0,
+      },
+      playedAt: game?.completedAt || game?.scheduledAt || game?.createdAt || null,
+      topPerformers: buildTopPerformers([
+        ...(boxScore?.home?.players || []),
+        ...(boxScore?.away?.players || []),
+      ]),
+      teamStats: {
+        points: boxScore?.home?.totals?.points || 0,
+        fg2: bySide.home.fg2,
+        fg3: bySide.home.fg3,
+        ft: bySide.home.ft,
+        reb: boxScore?.home?.totals?.reb || 0,
+        ast: boxScore?.home?.totals?.ast || 0,
+        stl: boxScore?.home?.totals?.stl || 0,
+        tov: boxScore?.home?.totals?.tov || 0,
+        foul: boxScore?.home?.totals?.foul || 0,
+      },
+      keyMoments: buildKeyMoments(game?.events || [], playersById),
+      shotSnapshot: buildShotSnapshot(game?.events || [], playersById),
+    };
+  }
+
   const playersById = new Map(
     (team?.players || []).map((player) => [String(player._id || player.id), player.displayName])
   );

@@ -60,7 +60,7 @@ async function appendEvent(req, res) {
 async function setLineup(req, res) {
   const userId = requireAuthUserId(req);
   const payload = setLineupSchema.parse(req.body);
-  const result = await gamesService.setGameLineup(userId, req.params.gameId, payload.playerIds);
+  const result = await gamesService.setGameLineup(userId, req.params.gameId, payload);
   res.status(200).json(result);
 }
 

@@ -51,15 +51,19 @@ export function PublicLeaguePage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="text-xl font-semibold text-slate-900">Teams</h2>
           <div className="mt-4 grid gap-3">
-            {(league.teams || []).map((team) => (
-              <Link
-                key={team.id}
-                to={`/league/${league.slug}/teams/${team.slug}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-              >
-                <p className="font-semibold text-slate-900">{team.name}</p>
-              </Link>
-            ))}
+            {(league.teams || []).length === 0 ? (
+              <p className="text-sm text-slate-600">No teams yet.</p>
+            ) : (
+              (league.teams || []).map((team) => (
+                <Link
+                  key={team.id}
+                  to={`/league/${league.slug}/teams/${team.slug}`}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+                >
+                  <p className="font-semibold text-slate-900">{team.name}</p>
+                </Link>
+              ))
+            )}
           </div>
         </div>
 
@@ -74,18 +78,25 @@ export function PublicLeaguePage() {
             </Link>
           </div>
           <div className="mt-4 grid gap-3">
-            {(league.games || []).map((game) => (
-              <Link
-                key={game.id}
-                to={`/games/${game.id}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-              >
-                <p className="font-semibold text-slate-900">{game.title}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {game.homeTeamName} vs {game.awayTeamName}
-                </p>
-              </Link>
-            ))}
+            {(league.games || []).length === 0 ? (
+              <p className="text-sm text-slate-600">No league games yet.</p>
+            ) : (
+              (league.games || []).map((game) => (
+                <Link
+                  key={game.id}
+                  to={`/games/${game.id}`}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+                >
+                  <p className="font-semibold text-slate-900">{game.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {game.homeTeamName} vs {game.awayTeamName}
+                    {game.homePoints != null && game.awayPoints != null
+                      ? ` • ${game.homePoints}-${game.awayPoints}`
+                      : ''}
+                  </p>
+                </Link>
+              ))
+            )}
           </div>
         </div>
       </section>

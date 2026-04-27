@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { Tabs } from '../../../components/Tabs';
@@ -48,14 +48,6 @@ function formatEventMeta(event) {
   return parts.join(' | ');
 }
 
-function eventActorLabel(event, playersById) {
-  if (!event.playerId) {
-    return 'Opponent';
-  }
-
-  return playersById.get(event.playerId)?.displayName || 'Unknown Player';
-}
-
 function formatGameDate(value) {
   if (!value) {
     return 'Date unavailable';
@@ -81,6 +73,68 @@ function canAccessReplay(team, entitlements) {
   return hasActiveProBilling && Boolean(entitlements?.canViewReplay);
 }
 
+function buildPlayersById(data, isDualTeam) {
+  const entries = [];
+
+  if (isDualTeam) {
+    for (const side of ['home', 'away']) {
+      for (const player of data?.participants?.[side]?.players || []) {
+        entries.push([player.id, player]);
+      }
+    }
+  } else {
+    for (const player of data?.team?.players || []) {
+      entries.push([player.id, player]);
+    }
+  }
+
+  return new Map(entries);
+}
+
+function getParticipantName(participants, side) {
+  return participants?.[side]?.displayName || side;
+}
+
+function buildPrimaryStatsView(data, isDualTeam) {
+  if (!isDualTeam) {
+    return {
+      label: data.team?.name || 'Team',
+      rows: [
+        ...(data.boxScore?.players || []),
+        {
+          playerId: 'team-total',
+          displayName: 'Team Total',
+          ...(data.boxScore?.teamTotals || {}),
+          isTeamTotal: true,
+        },
+      ],
+    };
+  }
+
+  return {
+    label: getParticipantName(data.participants, 'home'),
+    rows: [
+      ...(data.boxScore?.home?.players || []),
+      {
+        playerId: 'team-total',
+        displayName: 'Team Total',
+        ...(data.boxScore?.home?.totals || {}),
+        isTeamTotal: true,
+      },
+    ],
+    secondaryLabel: getParticipantName(data.participants, 'away'),
+    secondaryRows: [
+      ...(data.boxScore?.away?.players || []),
+      {
+        playerId: 'team-total-away',
+        displayName: 'Team Total',
+        ...(data.boxScore?.away?.totals || {}),
+        isTeamTotal: true,
+      },
+    ],
+  };
+}
+
 export function GameDetailPage() {
   const { gameId } = useParams();
   const { user } = useAuth();
@@ -103,11 +157,6 @@ export function GameDetailPage() {
       .finally(() => setIsLoading(false));
   }, [gameId]);
 
-  const playersById = useMemo(
-    () => new Map((data?.team?.players || []).map((player) => [player.id, player])),
-    [data]
-  );
-
   if (isLoading) {
     return <p className="text-sm">Loading game...</p>;
   }
@@ -116,8 +165,10 @@ export function GameDetailPage() {
     return <p className="text-sm text-red-600">{error || 'Game not found'}</p>;
   }
 
-  const { game, team, boxScore } = data;
+  const { game, team, boxScore, participants } = data;
+  const isDualTeam = game.trackingMode === 'dual_team';
   const recap = data.recap;
+  const playersById = buildPlayersById(data, isDualTeam);
   const gameSummary = data.gameSummary || {
     teamPoints: boxScore?.teamTotals?.points || 0,
     opponentPoints: boxScore?.opponentTotals?.points || 0,
@@ -137,25 +188,7 @@ export function GameDetailPage() {
   const playByPlayEvents = (showAllEvents ? sortedEvents : sortedEvents.slice(-5))
     .slice()
     .reverse();
-  const boxScoreRows = [
-    ...boxScore.players,
-    {
-      playerId: 'team-total',
-      displayName: 'Team Total',
-      ftm: boxScore.teamTotals.ftm,
-      fta: boxScore.teamTotals.fta,
-      fg2m: boxScore.teamTotals.fg2m,
-      fg2a: boxScore.teamTotals.fg2a,
-      fg3m: boxScore.teamTotals.fg3m,
-      fg3a: boxScore.teamTotals.fg3a,
-      ast: boxScore.teamTotals.ast,
-      oreb: boxScore.teamTotals.oreb,
-      dreb: boxScore.teamTotals.dreb,
-      reb: boxScore.teamTotals.reb,
-      points: boxScore.teamTotals.points,
-      isTeamTotal: true,
-    },
-  ];
+  const statsView = buildPrimaryStatsView(data, isDualTeam);
   const boxScoreColumns = [
     {
       id: 'player',
@@ -163,7 +196,7 @@ export function GameDetailPage() {
       align: 'left',
       sortKey: 'displayName',
       render: (row) =>
-        row.isTeamTotal ? (
+        row.isTeamTotal || isDualTeam ? (
           row.displayName
         ) : (
           <Link
@@ -179,109 +212,61 @@ export function GameDetailPage() {
       label: 'PTS',
       align: 'right',
       sortKey: 'points',
-      emphasis: true,
-      render: (row) => row.points,
+      render: (row) => row.points || 0,
     },
-    {
-      id: 'reb',
-      label: 'REB',
-      align: 'right',
-      sortKey: 'reb',
-      render: (row) => row.reb,
-    },
-    {
-      id: 'ast',
-      label: 'AST',
-      align: 'right',
-      sortKey: 'ast',
-      render: (row) => row.ast,
-    },
-    {
-      id: 'stl',
-      label: 'STL',
-      align: 'right',
-      sortKey: 'stl',
-      render: (row) => row.stl,
-    },
-    {
-      id: 'tov',
-      label: 'TOV',
-      align: 'right',
-      sortKey: 'tov',
-      render: (row) => row.tov,
-    },
-    {
-      id: 'foul',
-      label: 'FOUL',
-      align: 'right',
-      sortKey: 'foul',
-      render: (row) => row.foul,
-    },
+    { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb || 0 },
+    { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast || 0 },
+    { id: 'stl', label: 'STL', align: 'right', sortKey: 'stl', render: (row) => row.stl || 0 },
+    { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov || 0 },
+    { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul || 0 },
     {
       id: 'ft',
       label: 'FT',
       align: 'right',
-      sortValue: (row) => row.ftm,
-      render: (row) => `${row.ftm}/${row.fta}`,
+      sortValue: (row) => row.ftm || 0,
+      render: (row) => `${row.ftm || 0}/${row.fta || 0}`,
     },
     {
       id: 'fg2',
       label: '2PT',
       align: 'right',
-      sortValue: (row) => row.fg2m,
-      render: (row) => `${row.fg2m}/${row.fg2a}`,
+      sortValue: (row) => row.fg2m || 0,
+      render: (row) => `${row.fg2m || 0}/${row.fg2a || 0}`,
     },
     {
       id: 'fg3',
       label: '3PT',
       align: 'right',
-      sortValue: (row) => row.fg3m,
-      render: (row) => `${row.fg3m}/${row.fg3a}`,
+      sortValue: (row) => row.fg3m || 0,
+      render: (row) => `${row.fg3m || 0}/${row.fg3a || 0}`,
     },
-    {
-      id: 'oreb',
-      label: 'OREB',
-      align: 'right',
-      sortKey: 'oreb',
-      render: (row) => row.oreb,
-    },
-    {
-      id: 'dreb',
-      label: 'DREB',
-      align: 'right',
-      sortKey: 'dreb',
-      render: (row) => row.dreb,
-    },
-  ];
-
-  const printBoxScoreColumns = [
-    {
-      id: 'player',
-      label: 'Player',
-      align: 'left',
-      headerClassName: 'w-[28%] min-w-[12rem]',
-      cellClassName: 'max-w-[14rem] whitespace-normal break-words pr-3 text-left',
-      render: (row) => row.displayName,
-    },
-    { id: 'pts', label: 'PTS', align: 'right', render: (row) => row.points },
-    { id: 'reb', label: 'REB', align: 'right', render: (row) => row.reb },
-    { id: 'ast', label: 'AST', align: 'right', render: (row) => row.ast },
-    { id: 'stl', label: 'STL', align: 'right', render: (row) => row.stl },
-    { id: 'tov', label: 'TOV', align: 'right', render: (row) => row.tov },
-    { id: 'foul', label: 'FOUL', align: 'right', render: (row) => row.foul },
-    { id: 'ft', label: 'FT', align: 'right', render: (row) => `${row.ftm}/${row.fta}` },
-    { id: 'fg2', label: '2PT', align: 'right', render: (row) => `${row.fg2m}/${row.fg2a}` },
-    { id: 'fg3', label: '3PT', align: 'right', render: (row) => `${row.fg3m}/${row.fg3a}` },
-    { id: 'oreb', label: 'OREB', align: 'right', render: (row) => row.oreb },
-    { id: 'dreb', label: 'DREB', align: 'right', render: (row) => row.dreb },
   ];
 
   const statsContent = (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded border bg-white">
-        <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">Box Score</div>
-        <StatsTable columns={boxScoreColumns} rows={boxScoreRows} tableClassName="w-max text-sm" />
+        <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
+          Box Score: {statsView.label}
+        </div>
+        <StatsTable
+          columns={boxScoreColumns}
+          rows={statsView.rows}
+          tableClassName="w-max text-sm"
+        />
       </div>
+
+      {isDualTeam && statsView.secondaryRows ? (
+        <div className="overflow-x-auto rounded border bg-white">
+          <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
+            Box Score: {statsView.secondaryLabel}
+          </div>
+          <StatsTable
+            columns={boxScoreColumns}
+            rows={statsView.secondaryRows}
+            tableClassName="w-max text-sm"
+          />
+        </div>
+      ) : null}
 
       <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
 
@@ -304,8 +289,13 @@ export function GameDetailPage() {
           <ul className="divide-y text-sm">
             {playByPlayEvents.map((event, index) => {
               const player = event.playerId ? playersById.get(event.playerId) : null;
-              const playerName = eventActorLabel(event, playersById);
+              const playerName =
+                player?.displayName || (event.playerId ? 'Unknown Player' : 'Opponent');
               const statLabel = STAT_LABELS[event.statType] || event.statType;
+              const sideLabel =
+                isDualTeam && event.teamSide
+                  ? `${getParticipantName(participants, event.teamSide)}: `
+                  : '';
 
               return (
                 <li key={event.id} className="grid grid-cols-[auto_1fr] gap-3 px-3 py-2">
@@ -313,21 +303,7 @@ export function GameDetailPage() {
                     #{showAllEvents ? sortedEvents.length - index : sortedEvents.length - index}
                   </div>
                   <div>
-                    <p className="font-medium text-slate-900">
-                      {player?.id && team?.id ? (
-                        <>
-                          <Link
-                            to={`/teams/${team.id}/players/${player.id}`}
-                            className="text-blue-700 hover:text-blue-900 hover:underline"
-                          >
-                            {playerName}
-                          </Link>
-                          {`: ${statLabel}`}
-                        </>
-                      ) : (
-                        `${playerName}: ${statLabel}`
-                      )}
-                    </p>
+                    <p className="font-medium text-slate-900">{`${sideLabel}${playerName}: ${statLabel}`}</p>
                     <p className="text-xs text-slate-600">{formatEventMeta(event)}</p>
                   </div>
                 </li>
@@ -338,15 +314,25 @@ export function GameDetailPage() {
       </div>
     </div>
   );
-  const replayContent = canViewReplay ? (
-    <GameReplayPanel events={replayEvents} players={team.players || []} />
-  ) : (
-    <LockedFeatureCard
-      title="Replay is only available for Pro users"
-      description="Upgrade to Team Pro to unlock interactive event replay and the live-updating replay box score."
-      showUpgrade
-    />
-  );
+
+  const replayContent =
+    canViewReplay && !isDualTeam ? (
+      <GameReplayPanel events={replayEvents} players={team.players || []} />
+    ) : (
+      <LockedFeatureCard
+        title={
+          isDualTeam
+            ? 'Replay is not available for league dual-team games yet'
+            : 'Replay is only available for Pro users'
+        }
+        description={
+          isDualTeam
+            ? 'Replay remains disabled here until side-aware league replay is fully supported.'
+            : 'Upgrade to Team Pro to unlock interactive event replay and the live-updating replay box score.'
+        }
+        showUpgrade={!isDualTeam}
+      />
+    );
 
   function updateSearchParam(name, value) {
     const nextParams = new URLSearchParams(searchParams);
@@ -390,7 +376,7 @@ export function GameDetailPage() {
       : null;
 
   const printContent = (
-    <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 text-slate-900 print:mx-auto print:max-w-[7.35in] print:space-y-2 print:rounded-none print:border-0 print:p-0">
+    <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 text-slate-900">
       <div className="flex flex-wrap justify-end gap-2 print:hidden">
         <button
           type="button"
@@ -407,85 +393,22 @@ export function GameDetailPage() {
           Exit Print View
         </button>
       </div>
-
-      <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 print:break-inside-avoid print:gap-3 print:pb-2">
-        <div className="min-w-0 space-y-1.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Printable Box Score
-          </p>
-          <h1 className="text-2xl font-bold text-slate-900 print:text-[1.35rem]">
-            {team?.name || recap?.team?.name || game?.title || 'Team'}
-          </h1>
-          <p className="text-sm text-slate-700 print:text-xs">
-            vs {recap?.opponent?.name || game?.opponent || 'Opponent'}
-          </p>
-          <div className="grid gap-1 text-xs text-slate-600 sm:grid-cols-2 sm:gap-x-6 print:gap-y-0.5">
-            <p>Date: {formatGameDate(recap?.playedAt || game?.scheduledAt || game?.createdAt)}</p>
-            <p>Status: {game?.status || 'unknown'}</p>
-            <p>Recorded: {formatGameDate(game?.createdAt)}</p>
-            <p>Finished: {formatGameDate(game?.completedAt)}</p>
-          </div>
-        </div>
-        <div className="min-w-[11rem] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right print:min-w-[8.35rem] print:px-3 print:py-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Final Score
-          </p>
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 print:mt-1.5">
-            <div className="text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                {team?.name || 'Team'}
-              </p>
-              <p className="text-3xl font-bold leading-none print:text-[1.7rem]">
-                {gameSummary.teamPoints}
-              </p>
-            </div>
-            <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Final
-            </p>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                {recap?.opponent?.name || game?.opponent || 'Opponent'}
-              </p>
-              <p className="text-3xl font-bold leading-none print:text-[1.7rem]">
-                {gameSummary.opponentPoints}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto print:overflow-visible">
-        <table className="w-full table-fixed border-collapse text-sm print:text-[11px]">
-          <thead>
-            <tr className="border-b-2 border-slate-300 text-slate-600">
-              {printBoxScoreColumns.map((column) => (
-                <th
-                  key={column.id}
-                  className={`px-2 py-2 font-semibold print:px-1.5 print:py-1.5 ${column.align === 'right' ? 'text-right' : 'text-left'} ${column.headerClassName || ''}`}
-                >
-                  {column.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {boxScoreRows.map((row) => (
-              <tr
-                key={row.playerId}
-                className={`${row.isTeamTotal ? 'border-t-2 border-slate-300 bg-slate-50 font-semibold' : 'border-t border-slate-200'} print:break-inside-avoid`}
-              >
-                {printBoxScoreColumns.map((column) => (
-                  <td
-                    key={column.id}
-                    className={`px-2 py-2 align-top print:px-1.5 print:py-1.5 ${column.align === 'right' ? 'text-right' : 'text-left'} ${column.cellClassName || ''}`}
-                  >
-                    {column.render(row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold text-slate-900">{game.title}</h1>
+        <p className="text-sm text-slate-700">
+          {isDualTeam
+            ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')}`
+            : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'}`}
+        </p>
+        <p className="text-sm text-slate-700">
+          Final:{' '}
+          {isDualTeam
+            ? `${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}`
+            : `${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}`}
+        </p>
+        <p className="text-sm text-slate-700">
+          Date: {formatGameDate(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
+        </p>
       </div>
     </section>
   );
@@ -497,6 +420,8 @@ export function GameDetailPage() {
           gameId={game.id}
           game={game}
           team={team}
+          participants={participants}
+          isDualTeam={isDualTeam}
           recap={recap}
           gameSummary={gameSummary}
           canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
@@ -528,6 +453,8 @@ export function GameDetailPage() {
               content: (
                 <GameRecapPanel
                   team={team}
+                  participants={participants}
+                  isDualTeam={isDualTeam}
                   gameId={game.id}
                   recap={recap}
                   onShareToFeed={openFeedComposer}

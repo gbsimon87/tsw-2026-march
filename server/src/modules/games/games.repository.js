@@ -1,5 +1,30 @@
 const mongoose = require('mongoose');
-const { STAT_TYPES, SHOT_ZONE_IDS } = require('../shared/stats.constants');
+const { STAT_TYPES, SHOT_ZONE_IDS, TEAM_SIDES } = require('../shared/stats.constants');
+
+const participantSchema = new mongoose.Schema(
+  {
+    side: { type: String, enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY], required: true },
+    participantType: { type: String, enum: ['team', 'league_team'], required: true },
+    teamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    leagueTeamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    displayName: { type: String, required: true, trim: true },
+    logo: {
+      type: new mongoose.Schema(
+        {
+          url: { type: String, default: null },
+          width: { type: Number, default: null },
+          height: { type: Number, default: null },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    colors: { type: [String], default: [] },
+    billingSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+    entitlementsSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
 
 const shotEventSchema = new mongoose.Schema(
   {
@@ -46,6 +71,17 @@ const shotEventSchema = new mongoose.Schema(
     x: { type: Number, min: 0, max: 100 },
     y: { type: Number, min: 0, max: 100 },
     relatedPlayerId: { type: mongoose.Schema.Types.ObjectId, required: false },
+    teamSide: {
+      type: String,
+      enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
+      required: false,
+      index: true,
+    },
+    relatedTeamSide: {
+      type: String,
+      enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
+      required: false,
+    },
     occurredAt: { type: Date, default: Date.now },
   },
   { _id: true }
@@ -54,6 +90,8 @@ const shotEventSchema = new mongoose.Schema(
 const rosterSnapshotPlayerSchema = new mongoose.Schema(
   {
     leaguePlayerId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    sourceType: { type: String, enum: ['team_player', 'league_player'], default: null },
+    sourcePlayerId: { type: mongoose.Schema.Types.ObjectId, default: null },
     displayName: { type: String, required: true, trim: true },
     jerseyNumber: { type: Number, default: null },
     position: {
@@ -78,6 +116,12 @@ const gameSchema = new mongoose.Schema(
       default: 'standalone',
       index: true,
     },
+    trackingMode: {
+      type: String,
+      enum: ['one_sided', 'dual_team'],
+      default: 'one_sided',
+      index: true,
+    },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
     homeLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -97,6 +141,15 @@ const gameSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    homeTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
+    awayTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
+    initialActiveSide: {
+      type: String,
+      enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
+      default: TEAM_SIDES.HOME,
+    },
+    homeParticipant: { type: participantSchema, default: null },
+    awayParticipant: { type: participantSchema, default: null },
     title: { type: String, required: true, trim: true },
     opponent: { type: String, trim: true, default: null },
     videoUrl: { type: String, trim: true, default: null },
@@ -108,15 +161,25 @@ const gameSchema = new mongoose.Schema(
     },
     startingLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     currentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    homeStartingLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    homeCurrentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    awayStartingLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    awayCurrentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     scheduledAt: { type: Date },
     completedAt: { type: Date },
     rosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
+    homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
+    awayRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     events: { type: [shotEventSchema], default: [] },
   },
   { timestamps: true }
 );
 
 gameSchema.index({ ownerUserId: 1, teamId: 1, createdAt: -1 });
+gameSchema.index({ homeTeamId: 1, createdAt: -1 });
+gameSchema.index({ awayTeamId: 1, createdAt: -1 });
+gameSchema.index({ homeLeagueTeamId: 1, createdAt: -1 });
+gameSchema.index({ awayLeagueTeamId: 1, createdAt: -1 });
 
 const Game = mongoose.models.Game || mongoose.model('Game', gameSchema);
 
@@ -150,6 +213,20 @@ async function listGamesByTeamId(teamId) {
   return Game.find({ teamId }).sort({ scheduledAt: -1, completedAt: -1, createdAt: -1 });
 }
 
+async function listGamesByStandaloneParticipantTeamId(teamId) {
+  return Game.find({
+    trackingMode: 'dual_team',
+    $or: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+  }).sort({ scheduledAt: -1, completedAt: -1, createdAt: -1 });
+}
+
+async function listGamesByLeagueParticipantTeamId(leagueTeamId) {
+  return Game.find({
+    trackingMode: 'dual_team',
+    $or: [{ homeLeagueTeamId: leagueTeamId }, { awayLeagueTeamId: leagueTeamId }],
+  }).sort({ scheduledAt: -1, completedAt: -1, createdAt: -1 });
+}
+
 async function listCompletedGames() {
   return Game.find({ status: 'completed' }).sort({
     scheduledAt: -1,
@@ -180,6 +257,8 @@ module.exports = {
   findGameByIdAndOwner,
   findGameById,
   listGamesByTeamId,
+  listGamesByStandaloneParticipantTeamId,
+  listGamesByLeagueParticipantTeamId,
   listCompletedGames,
   listLeagueGamesByLeagueId,
   findGameByLeagueIdAndId,
