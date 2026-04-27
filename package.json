@@ -2,7 +2,7 @@
   "name": "tsw-2026-march",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@10.6.1",
+  "packageManager": "pnpm@10.15.1",
   "engines": {
     "node": ">=20.10.0"
   },
