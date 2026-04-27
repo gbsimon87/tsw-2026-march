@@ -44,6 +44,11 @@ async function listPublicExploreGames(req, res) {
   res.status(200).json({ games });
 }
 
+async function listPublicTeams(req, res) {
+  const teams = await teamsService.listPublicTeams();
+  res.status(200).json({ teams });
+}
+
 async function getPublicPlayerById(req, res) {
   const result = await teamsService.getPublicPlayer(req.params.teamId, req.params.playerId);
   res.status(200).json(result);
@@ -113,6 +118,7 @@ module.exports = {
   list,
   getById,
   listPublicExploreGames,
+  listPublicTeams,
   getPublicById,
   getPublicPlayerById,
   getPublicOpponentBySlug,

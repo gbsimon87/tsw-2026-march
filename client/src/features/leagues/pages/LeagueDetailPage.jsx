@@ -3,13 +3,14 @@ import { Link, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 
-export function LeagueDetailPage() {
+export function LeagueDetailPage({ manageMode = false }) {
   const { leagueId } = useParams();
   const [league, setLeague] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
   const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
+  const [isUpdatingLeague, setIsUpdatingLeague] = useState(false);
 
   useEffect(() => {
     leaguesApi
@@ -41,6 +42,25 @@ export function LeagueDetailPage() {
       setError(submitError.message || 'Failed to add team');
     } finally {
       setIsSubmittingTeam(false);
+    }
+  }
+
+  async function onTogglePublicVisibility() {
+    if (!league || isUpdatingLeague) {
+      return;
+    }
+
+    setError('');
+    setIsUpdatingLeague(true);
+    try {
+      const response = await leaguesApi.update(league.id, {
+        isPublic: !league.isPublic,
+      });
+      setLeague(response.league);
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to update league visibility');
+    } finally {
+      setIsUpdatingLeague(false);
     }
   }
 
@@ -87,6 +107,37 @@ export function LeagueDetailPage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-4">
+          {manageMode ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Public Visibility</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Control whether this league appears in public discovery and public league pages.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isUpdatingLeague}
+                  onClick={onTogglePublicVisibility}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold text-white ${
+                    league.isPublic ? 'bg-rose-600' : 'bg-emerald-600'
+                  }`}
+                >
+                  {isUpdatingLeague
+                    ? 'Saving...'
+                    : league.isPublic
+                      ? 'Hide From Public'
+                      : 'Make Public'}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-slate-700">
+                Current visibility:{' '}
+                <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
+              </p>
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold text-slate-900">Teams</h2>

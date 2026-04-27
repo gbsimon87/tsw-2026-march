@@ -263,7 +263,7 @@ async function assertLeagueVisible(leagueIdOrSlug, options = {}) {
   const league = options.bySlug
     ? await findLeagueBySlug(leagueIdOrSlug)
     : await findLeagueById(leagueIdOrSlug);
-  if (!league || !league.isPublic) {
+  if (!league || !league.isPublic || league.status !== 'active') {
     throw new ApiError(404, 'League not found');
   }
 
@@ -412,6 +412,10 @@ async function updateLeagueForUser(userId, leagueId, payload) {
 
   if (Object.prototype.hasOwnProperty.call(payload, 'seasonLabel')) {
     league.seasonLabel = payload.seasonLabel?.trim() || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'isPublic')) {
+    league.isPublic = Boolean(payload.isPublic);
   }
 
   await saveLeague(league);

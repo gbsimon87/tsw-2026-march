@@ -174,6 +174,8 @@ function sanitizePublicGame(game) {
     id: String(game._id),
     title: game.title,
     opponent: game.opponent ?? null,
+    videoUrl: game.videoUrl ?? null,
+    hasVideo: Boolean(game.videoUrl),
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
@@ -596,6 +598,26 @@ async function listPublicExploreGames(limit = 10) {
   return selectedGames;
 }
 
+async function listPublicTeams(limit = 6) {
+  const teams = await listTeams();
+  const games = await listCompletedGames();
+  const publicTeamIds = new Set(
+    games.filter((game) => isGamePubliclyViewable(game)).map((game) => String(game.teamId))
+  );
+
+  return teams
+    .filter((team) => publicTeamIds.has(String(team._id)))
+    .sort(
+      (teamA, teamB) => new Date(teamB.createdAt).getTime() - new Date(teamA.createdAt).getTime()
+    )
+    .slice(0, limit)
+    .map((team) => ({
+      id: String(team._id),
+      name: team.name,
+      logo: sanitizeLogo(team.logo),
+    }));
+}
+
 async function getEntitlementsForUser(userId, teamId) {
   const team = await findTeamByIdAndOwner(teamId, userId);
   if (!team) {
@@ -795,6 +817,7 @@ module.exports = {
   getPublicPlayer,
   getPublicOpponentBySlug,
   listPublicExploreGames,
+  listPublicTeams,
   buildPublicTeamSummary,
   buildPublicPlayerGameRows,
   buildPublicPlayerSummary,

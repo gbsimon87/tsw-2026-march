@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { billingApi } from '../api/billingApi';
 import { teamsApi } from '../../teams/api/teamsApi';
+import { env } from '../../../lib/env';
 
 const ACTIVE_BILLING_STATUSES = new Set(['active', 'trialing']);
 
@@ -57,6 +58,7 @@ export function PricingPage() {
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const isBillingConfigured = Boolean(env.stripePublishableKey);
 
   useEffect(() => {
     if (!user) {
@@ -95,6 +97,11 @@ export function PricingPage() {
 
   async function handleProCheckout() {
     setError('');
+
+    if (!isBillingConfigured) {
+      setError('Billing is not configured for this environment.');
+      return;
+    }
 
     if (!user) {
       navigate('/login?redirectTo=/pricing');
@@ -226,15 +233,22 @@ export function PricingPage() {
             <button
               type="button"
               onClick={handleProCheckout}
-              disabled={isSubmitting || isLoadingTeams}
+              disabled={isSubmitting || isLoadingTeams || !isBillingConfigured}
               className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
             >
-              {isSubmitting
-                ? 'Redirecting to Stripe...'
-                : hasActiveProBilling(selectedTeam)
-                  ? 'Manage Team Pro Billing'
-                  : 'Choose Team Pro'}
+              {!isBillingConfigured
+                ? 'Billing Unavailable'
+                : isSubmitting
+                  ? 'Redirecting to Stripe...'
+                  : hasActiveProBilling(selectedTeam)
+                    ? 'Manage Team Pro Billing'
+                    : 'Choose Team Pro'}
             </button>
+            {!isBillingConfigured ? (
+              <p className="text-xs text-slate-500">
+                Team Pro checkout is disabled until Stripe is configured for this environment.
+              </p>
+            ) : null}
 
             {!user ? (
               <p className="text-xs text-slate-500">

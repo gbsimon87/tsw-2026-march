@@ -1,5 +1,5 @@
 import { LeagueDetailPage } from './LeagueDetailPage';
 
 export function LeagueManagePage() {
-  return <LeagueDetailPage />;
+  return <LeagueDetailPage manageMode />;
 }

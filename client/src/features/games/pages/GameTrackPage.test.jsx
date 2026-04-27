@@ -239,6 +239,70 @@ describe('GameTrackPage', () => {
     expect(screen.getAllByText('Flynn').length).toBeGreaterThan(0);
   });
 
+  test('switches active side in fullscreen and clears transient event state for dual-team games', async () => {
+    const homePlayers = createPlayers();
+    const awayPlayers = createPlayers().map((player, index) => ({
+      ...player,
+      id: `away-${index + 1}`,
+      displayName: `Away ${index + 1}`,
+    }));
+
+    currentResponse = {
+      game: {
+        id: 'game-1',
+        title: 'League Match',
+        status: 'in_progress',
+        trackingMode: 'dual_team',
+        events: [],
+      },
+      participants: {
+        home: { displayName: 'Home Squad', players: homePlayers },
+        away: { displayName: 'Away Squad', players: awayPlayers },
+      },
+      lineups: {
+        home: {
+          startingPlayerIds: homePlayers.slice(0, 5).map((player) => player.id),
+          currentPlayerIds: homePlayers.slice(0, 5).map((player) => player.id),
+        },
+        away: {
+          startingPlayerIds: awayPlayers.slice(0, 5).map((player) => player.id),
+          currentPlayerIds: awayPlayers.slice(0, 5).map((player) => player.id),
+        },
+      },
+      boxScore: {
+        home: { players: createBoxPlayers(homePlayers), totals: { points: 0 } },
+        away: { players: createBoxPlayers(awayPlayers), totals: { points: 0 } },
+      },
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+    };
+
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Home Squad' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: 'Away Squad' }).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByTestId('interactive-court-image'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Add Event/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Away Squad' })[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Add Event/i)).not.toBeInTheDocument();
+    });
+  });
+
   test('shows only on-court players for assist follow-up and includes No Assist', async () => {
     currentResponse = createResponse({
       game: {

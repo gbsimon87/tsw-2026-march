@@ -17,6 +17,7 @@ const upload = multer({
 });
 
 publicTeamsRouter.get('/explore', asyncHandler(controller.listPublicExploreGames));
+publicTeamsRouter.get('/', asyncHandler(controller.listPublicTeams));
 publicTeamsRouter.get('/:teamId/players/:playerId', asyncHandler(controller.getPublicPlayerById));
 publicTeamsRouter.get('/:teamId', asyncHandler(controller.getPublicById));
 publicOpponentsRouter.get('/:opponentSlug', asyncHandler(controller.getPublicOpponentBySlug));

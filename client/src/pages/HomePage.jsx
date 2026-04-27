@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
 import { teamsApi } from '../features/teams/api/teamsApi';
+import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import basketballImage1 from '../assets/home/basketball_image_1.png';
 import basketballImage2 from '../assets/home/basketball_image_2.png';
 import basketballImage3 from '../assets/home/basketball_image_3.png';
@@ -53,12 +54,23 @@ const homeAudienceSections = [
 export function HomePage() {
   const { user } = useAuth();
   const [exploreGames, setExploreGames] = useState([]);
+  const [publicLeagues, setPublicLeagues] = useState([]);
+  const [publicTeams, setPublicTeams] = useState([]);
 
   useEffect(() => {
-    teamsApi
-      .listPublicExploreGames()
-      .then((result) => setExploreGames(result.games || []))
-      .catch(() => setExploreGames([]));
+    Promise.all([
+      teamsApi.listPublicExploreGames().catch(() => ({ games: [] })),
+      teamsApi.listPublic().catch(() => ({ teams: [] })),
+      leaguesApi.listPublic().catch(() => ({ leagues: [] })),
+    ]).then(([gamesResult, teamsResult, leaguesResult]) => {
+      setExploreGames(gamesResult.games || []);
+      setPublicTeams(teamsResult.teams || []);
+      setPublicLeagues(
+        (leaguesResult.leagues || []).filter(
+          (league) => league.isPublic && league.status === 'active'
+        )
+      );
+    });
   }, []);
 
   return (
@@ -128,6 +140,103 @@ export function HomePage() {
           </section>
         );
       })}
+
+      <section
+        aria-labelledby="active-leagues-heading"
+        className="rounded-2xl border border-slate-200 p-6 md:p-8"
+      >
+        <div>
+          <h2 id="active-leagues-heading" className="text-2xl font-semibold text-slate-900">
+            Active Leagues
+          </h2>
+          <p className="mt-2 max-w-2xl text-slate-700">
+            Browse public leagues, standings, and games from teams currently competing.
+          </p>
+        </div>
+
+        {publicLeagues.length === 0 ? (
+          <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
+            No public leagues yet.
+          </p>
+        ) : (
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {publicLeagues.map((league) => (
+              <article
+                key={league.id}
+                className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+              >
+                <h3 className="text-lg font-semibold text-slate-900">{league.name}</h3>
+                <p className="mt-2 text-sm text-slate-600">{league.seasonLabel || 'Season TBD'}</p>
+                <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold">
+                  <Link to={`/league/${league.slug}`} className="text-sky-700 hover:underline">
+                    Overview
+                  </Link>
+                  <Link
+                    to={`/league/${league.slug}/standings`}
+                    className="text-sky-700 hover:underline"
+                  >
+                    Standings
+                  </Link>
+                  <Link
+                    to={`/league/${league.slug}/games`}
+                    className="text-sky-700 hover:underline"
+                  >
+                    Games
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="featured-teams-heading"
+        className="rounded-2xl border border-slate-200 p-6 md:p-8"
+      >
+        <div>
+          <h2 id="featured-teams-heading" className="text-2xl font-semibold text-slate-900">
+            Featured Public Teams
+          </h2>
+          <p className="mt-2 max-w-2xl text-slate-700">
+            Open public team pages to review rosters, players, and recent games.
+          </p>
+        </div>
+
+        {publicTeams.length === 0 ? (
+          <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
+            No public teams yet.
+          </p>
+        ) : (
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {publicTeams.map((team) => (
+              <Link
+                key={team.id}
+                to={`/teams/${team.id}`}
+                className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-slate-300"
+              >
+                <div className="flex items-center gap-3">
+                  {team.logo?.url ? (
+                    <img
+                      src={team.logo.url}
+                      alt={`${team.name} logo`}
+                      className="h-12 w-12 rounded-full border border-slate-200 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-500">
+                      TSW
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">{team.name}</h3>
+                    <p className="text-sm text-slate-600">Open public team page</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section
         aria-labelledby="explore-heading"

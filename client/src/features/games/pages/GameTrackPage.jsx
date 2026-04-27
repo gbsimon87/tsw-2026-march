@@ -304,6 +304,21 @@ export function GameTrackPage() {
     setIsTrackingFullscreen(false);
   }
 
+  function resetTransientTrackingState() {
+    setSelectedShot(null);
+    setPendingFollowUpPrompt(null);
+    setError('');
+  }
+
+  function changeActiveSide(nextSide) {
+    if (!isDualTeam || nextSide === activeSide) {
+      return;
+    }
+
+    resetTransientTrackingState();
+    setActiveSide(nextSide);
+  }
+
   function clearEventPicker(reason = '') {
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
@@ -938,7 +953,7 @@ export function GameTrackPage() {
               <button
                 key={side}
                 type="button"
-                onClick={() => setActiveSide(side)}
+                onClick={() => changeActiveSide(side)}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold ${
                   activeSide === side
                     ? 'bg-slate-900 text-white'
@@ -1254,8 +1269,28 @@ export function GameTrackPage() {
       {isTrackingFullscreen ? (
         <div className="fixed inset-0 z-50 bg-black/50 p-4">
           <div className="mx-auto flex h-full max-w-6xl flex-col rounded-3xl bg-white p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Fullscreen Tracking</h2>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-lg font-semibold text-slate-900">Fullscreen Tracking</h2>
+                {isDualTeam ? (
+                  <div className="flex flex-wrap gap-2">
+                    {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                      <button
+                        key={`fullscreen-${side}`}
+                        type="button"
+                        onClick={() => changeActiveSide(side)}
+                        className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                          activeSide === side
+                            ? 'bg-slate-900 text-white'
+                            : 'border border-slate-300 bg-white text-slate-800'
+                        }`}
+                      >
+                        {participantsBySide[side]?.displayName || side}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
                 onClick={closeTrackingOverlay}

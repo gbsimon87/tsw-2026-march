@@ -80,6 +80,7 @@ function PublicGameRow({ game }) {
             ? ` • ${game.teamPoints}-${game.opponentPoints || 0}`
             : ''}
         </p>
+        {game.hasVideo ? <p className="text-xs font-medium text-sky-700">Video available</p> : null}
       </div>
       {game.isPubliclyViewable ? (
         <Link

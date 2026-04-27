@@ -147,7 +147,7 @@ function listLeaguesByOwner(ownerUserId) {
 }
 
 function listPublicLeagues() {
-  return League.find({ isPublic: true }).sort({ createdAt: -1 });
+  return League.find({ isPublic: true, status: 'active' }).sort({ createdAt: -1 });
 }
 
 function findLeagueById(leagueId) {
