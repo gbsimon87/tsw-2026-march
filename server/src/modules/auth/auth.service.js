@@ -28,7 +28,7 @@ const {
   hashAuthToken,
   buildTokenExpiry,
 } = require('../../services/authToken.service');
-const { sendVerificationEmail, sendPasswordResetEmail } = require('../../services/email.service');
+const { sendPasswordResetEmail } = require('../../services/email.service');
 
 function sanitizeUser(user) {
   return {
@@ -107,30 +107,6 @@ async function issueAuthTokens(user, metadata) {
   };
 }
 
-async function issueEmailVerification(user) {
-  await invalidateTokensForUserByType(user._id, 'email_verification');
-
-  const rawToken = generateRawToken();
-  const verifyUrl = buildClientUrl('/verify-email', rawToken);
-  await createAuthToken({
-    userId: user._id,
-    type: 'email_verification',
-    tokenHash: hashAuthToken(rawToken),
-    expiresAt: buildTokenExpiry('email_verification'),
-  });
-
-  const emailResult = await sendVerificationEmail({
-    to: user.email,
-    name: user.name,
-    verifyUrl,
-  });
-
-  return {
-    delivery: emailResult?.delivery || 'smtp',
-    verificationUrl: emailResult?.delivery === 'fallback' ? verifyUrl : null,
-  };
-}
-
 async function issuePasswordReset(user) {
   await invalidateTokensForUserByType(user._id, 'password_reset');
 
@@ -161,17 +137,15 @@ async function register(input) {
     name: input.name,
     passwordHash,
     authProvider: 'local',
-    emailVerified: false,
+    emailVerified: true,
     roles: ['user'],
     plan: 'free',
   });
 
-  const verification = await issueEmailVerification(user);
-
   return {
     user: sanitizeUser(user),
-    message: 'Registration successful. Verify your email before logging in.',
-    verificationUrl: verification.verificationUrl,
+    message: 'Registration successful. You can now sign in.',
+    verificationUrl: null,
   };
 }
 
@@ -179,10 +153,6 @@ async function login(input, metadata) {
   const user = await findUserByEmail(input.email);
   if (!user || !user.passwordHash) {
     throw new ApiError(401, 'Invalid credentials');
-  }
-
-  if (user.authProvider === 'local' && !user.emailVerified) {
-    throw new ApiError(403, 'Email is not verified. Check your inbox for a verification link.');
   }
 
   const valid = await bcrypt.compare(input.password, user.passwordHash);
@@ -247,15 +217,7 @@ async function getCurrentUser(userId) {
 }
 
 async function requestEmailVerification(email) {
-  const user = await findUserByEmail(email);
-
-  if (user && user.authProvider === 'local' && !user.emailVerified) {
-    const verification = await issueEmailVerification(user);
-    return {
-      message: 'If an account exists for that email, a verification link has been sent.',
-      verificationUrl: verification.verificationUrl,
-    };
-  }
+  void email;
 
   return {
     message: 'If an account exists for that email, a verification link has been sent.',

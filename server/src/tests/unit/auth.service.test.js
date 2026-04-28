@@ -16,7 +16,6 @@ jest.mock('../../modules/auth/auth.repository', () => ({
 }));
 
 jest.mock('../../services/email.service', () => ({
-  sendVerificationEmail: jest.fn(),
   sendPasswordResetEmail: jest.fn(),
 }));
 
@@ -27,7 +26,6 @@ jest.mock('../../services/authToken.service', () => ({
 }));
 
 const repository = require('../../modules/auth/auth.repository');
-const emailService = require('../../services/email.service');
 const authService = require('../../modules/auth/auth.service');
 
 describe('auth service', () => {
@@ -35,7 +33,7 @@ describe('auth service', () => {
     jest.clearAllMocks();
   });
 
-  test('register returns fallback verification url when email delivery falls back', async () => {
+  test('register creates a local account without requiring email verification', async () => {
     repository.findUserByEmail.mockResolvedValue(null);
     repository.createUser.mockResolvedValue({
       _id: 'user-1',
@@ -43,10 +41,9 @@ describe('auth service', () => {
       name: 'Player One',
       roles: ['user'],
       plan: 'free',
-      emailVerified: false,
+      emailVerified: true,
       authProvider: 'local',
     });
-    emailService.sendVerificationEmail.mockResolvedValue({ delivery: 'fallback' });
 
     const result = await authService.register({
       email: 'player@example.com',
@@ -54,21 +51,18 @@ describe('auth service', () => {
       password: 'password123',
     });
 
-    expect(result.message).toBe('Registration successful. Verify your email before logging in.');
-    expect(result.verificationUrl).toBe(
-      'http://localhost:5173/verify-email?token=raw-verification-token'
-    );
+    expect(result.message).toBe('Registration successful. You can now sign in.');
+    expect(result.verificationUrl).toBeNull();
   });
 
-  test('requestEmailVerification omits fallback url when email sends over smtp', async () => {
+  test('requestEmailVerification returns a generic response when verification is not required', async () => {
     repository.findUserByEmail.mockResolvedValue({
       _id: 'user-1',
       email: 'player@example.com',
       name: 'Player One',
       authProvider: 'local',
-      emailVerified: false,
+      emailVerified: true,
     });
-    emailService.sendVerificationEmail.mockResolvedValue({ delivery: 'smtp' });
 
     const result = await authService.requestEmailVerification('player@example.com');
 
@@ -76,22 +70,5 @@ describe('auth service', () => {
       'If an account exists for that email, a verification link has been sent.'
     );
     expect(result.verificationUrl).toBeNull();
-  });
-
-  test('requestEmailVerification returns fallback url when smtp delivery fails in development', async () => {
-    repository.findUserByEmail.mockResolvedValue({
-      _id: 'user-1',
-      email: 'player@example.com',
-      name: 'Player One',
-      authProvider: 'local',
-      emailVerified: false,
-    });
-    emailService.sendVerificationEmail.mockResolvedValue({ delivery: 'fallback' });
-
-    const result = await authService.requestEmailVerification('player@example.com');
-
-    expect(result.verificationUrl).toBe(
-      'http://localhost:5173/verify-email?token=raw-verification-token'
-    );
   });
 });

@@ -66,11 +66,9 @@ function formatGameDate(value) {
 }
 
 function canAccessReplay(team, entitlements) {
-  const billing = team?.billing || {};
-  const hasActiveProBilling =
-    billing.plan === 'pro' && ['active', 'trialing'].includes(billing.subscriptionStatus);
-
-  return hasActiveProBilling && Boolean(entitlements?.canViewReplay);
+  void team;
+  void entitlements;
+  return true;
 }
 
 function buildPlayersById(data, isDualTeam) {
@@ -323,14 +321,13 @@ export function GameDetailPage() {
         title={
           isDualTeam
             ? 'Replay is not available for league dual-team games yet'
-            : 'Replay is only available for Pro users'
+            : 'Replay is temporarily unavailable'
         }
         description={
           isDualTeam
             ? 'Replay remains disabled here until side-aware league replay is fully supported.'
-            : 'Upgrade to Team Pro to unlock interactive event replay and the live-updating replay box score.'
+            : 'Replay is not available for this game right now.'
         }
-        showUpgrade={!isDualTeam}
       />
     );
 

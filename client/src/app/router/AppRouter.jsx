@@ -19,9 +19,6 @@ import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
 import { GameDetailPage } from '../../features/games/pages/GameDetailPage';
-import { PricingPage } from '../../features/billing/pages/PricingPage';
-import { BillingSuccessPage } from '../../features/billing/pages/BillingSuccessPage';
-import { BillingCancelPage } from '../../features/billing/pages/BillingCancelPage';
 import { LeaguesPage } from '../../features/leagues/pages/LeaguesPage';
 import { NewLeaguePage } from '../../features/leagues/pages/NewLeaguePage';
 import { LeagueDetailPage } from '../../features/leagues/pages/LeagueDetailPage';
@@ -74,9 +71,9 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/billing/success" element={<BillingSuccessPage />} />
-        <Route path="/billing/cancel" element={<BillingCancelPage />} />
+        <Route path="/pricing" element={<Navigate to="/" replace />} />
+        <Route path="/billing/success" element={<Navigate to="/" replace />} />
+        <Route path="/billing/cancel" element={<Navigate to="/" replace />} />
         <Route path="/league/:leagueSlug" element={<PublicLeaguePage />} />
         <Route path="/league/:leagueSlug/standings" element={<PublicLeagueStandingsPage />} />
         <Route path="/league/:leagueSlug/games" element={<PublicLeagueGamesPage />} />

@@ -10,15 +10,8 @@ export function RegisterForm({ redirectTo }) {
     { name: '', email: '', password: '' },
     registerSchema,
     async (payload) => {
-      const result = await register(payload);
-      if (result.verificationUrl) {
-        window.location.assign(result.verificationUrl);
-        return;
-      }
-
-      const next = redirectTo
-        ? `/login?verifyEmail=1&redirectTo=${encodeURIComponent(redirectTo)}`
-        : '/login?verifyEmail=1&redirectTo=%2Ffeed';
+      await register(payload);
+      const next = redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login';
       navigate(next);
     }
   );
@@ -67,12 +60,10 @@ export function RegisterForm({ redirectTo }) {
         className="rounded bg-emerald-700 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
         type="submit"
         disabled={isSubmitting}
+        aria-label="Register"
       >
         {isSubmitting ? 'Creating account...' : 'Register'}
       </button>
-      <p className="text-xs text-slate-500">
-        New accounts must verify email before password login is enabled.
-      </p>
       <p className="text-sm text-slate-600">
         Already have an account?{' '}
         <Link

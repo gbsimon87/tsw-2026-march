@@ -4,7 +4,7 @@ const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repositor
 const { createGame, listGamesByOwner, findGameById, saveGame } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
-const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
+const { getTeamEntitlements, getBillingSummary } = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const {
   getLeagueContextForGame,
@@ -634,21 +634,6 @@ async function createGameForUser(userId, payload) {
     if (!canOwnHome && !canOwnAway) {
       throw new ApiError(403, 'Forbidden');
     }
-    const homeBilling = getBillingSummary(homeTeam);
-    const awayBilling = getBillingSummary(awayTeam);
-    if (
-      homeBilling.plan !== 'pro' ||
-      !['active', 'trialing'].includes(homeBilling.subscriptionStatus)
-    ) {
-      throw new ApiError(400, 'Home team must be on Team Pro');
-    }
-    if (
-      awayBilling.plan !== 'pro' ||
-      !['active', 'trialing'].includes(awayBilling.subscriptionStatus)
-    ) {
-      throw new ApiError(400, 'Away team must be on Team Pro');
-    }
-
     const game = await createGame({
       ownerUserId: userId,
       gameContext: 'standalone',

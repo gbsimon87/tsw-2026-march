@@ -6,6 +6,10 @@ This plan covers the full production launch for `thesportyway.com` with the curr
 
 Priority order:
 
+- `[]` Fix production auth flows that still point to `localhost` instead of live hosts
+- `[x]` Remove email verification as a login requirement for now
+- `[]` Keep `/feed` publicly accessible while preserving logged-in posting features
+- `[x]` Hide pricing and temporarily remove pricing/billing gates
 - `[]` Correct Render production domain ownership and environment variables
 - `[]` Update Namecheap DNS records for apex, `www`, and `api`
 - `[]` Create production third-party credentials and finish launch-safe env setup
@@ -47,6 +51,12 @@ No new deployment API is required.
 
 Planned application-facing changes:
 
+- `[x]` Production client builds must fail instead of defaulting to `http://localhost:4000/api/v1` when `VITE_API_BASE_URL` is missing or wrong.
+- `[]` Production Google OAuth must return to `https://thesportyway.com`, not localhost.
+- `[x]` Local email/password registration should no longer require verification before login.
+- `[x]` Public feed routing already exists and anonymous users can open `/feed`.
+- `[x]` Pricing routes, navigation, and upgrade links should be hidden for now.
+- `[x]` League and team creation flows should not be blocked by billing gates for now.
 - `[x]` Homepage will consume the existing public leagues list endpoint and public teams data.
 - `[x]` Public league discovery must include only leagues that are both `isPublic=true` and `status='active'`.
 - `[x]` League management UI must expose a clear public visibility control if it does not already.
@@ -126,6 +136,11 @@ Planned application-facing changes:
 
 ## Product Changes
 
+- `[x]` Prevent production client builds from silently falling back to localhost API URLs
+- `[x]` Disable email verification requirement for new local-password accounts
+- `[x]` Keep `/feed` publicly accessible to anonymous users
+- `[x]` Remove visible pricing routes and links from the client
+- `[x]` Remove temporary billing gates from league creation and dual-team creation flows
 - `[x]` Add `Active Leagues` to homepage
 - `[x]` Add `Featured Public Teams` to homepage
 - `[x]` Filter public leagues to `isPublic=true` and `status='active'`

@@ -3,7 +3,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   VITE_APP_NAME: z.string().default('tsw-2026-march'),
   VITE_APP_ENV: z.enum(['development', 'production']).default('development'),
-  VITE_API_BASE_URL: z.string().url().default('http://localhost:4000/api/v1'),
+  VITE_API_BASE_URL: z.string().url().optional(),
   VITE_ENABLE_ANALYTICS: z
     .union([z.boolean(), z.string()])
     .transform((value) => value === true || value === 'true')
@@ -25,6 +25,19 @@ const parsed = envSchema.safeParse({
 
 if (!parsed.success) {
   throw new Error(`Client environment validation failed: ${parsed.error.message}`);
+}
+
+if (!parsed.data.VITE_API_BASE_URL) {
+  throw new Error('Client environment validation failed: VITE_API_BASE_URL is required');
+}
+
+if (
+  parsed.data.VITE_APP_ENV === 'production' &&
+  new URL(parsed.data.VITE_API_BASE_URL).hostname === 'localhost'
+) {
+  throw new Error(
+    'Client environment validation failed: production VITE_API_BASE_URL cannot point to localhost'
+  );
 }
 
 export const env = {

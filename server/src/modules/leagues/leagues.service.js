@@ -41,7 +41,6 @@ const {
   destroyImage,
   isCloudinaryConfigured,
 } = require('../feed/cloudinary.client');
-const { getUserLeagueEntitlements } = require('../auth/auth.service');
 
 const PLAYER_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C']);
 const TEAM_LOGO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -288,11 +287,6 @@ async function assertLeaguePremiumUser(userId) {
   const user = await findUserById(userId);
   if (!user) {
     throw new ApiError(404, 'User not found');
-  }
-
-  const entitlements = getUserLeagueEntitlements(user);
-  if (!entitlements.canCreateLeague) {
-    throw new ApiError(403, 'League premium is required');
   }
 
   return user;

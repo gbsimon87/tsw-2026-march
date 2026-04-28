@@ -322,17 +322,22 @@ export function EditTeamPage() {
                 alt={`${team?.name || 'Team'} logo`}
                 className="h-40 w-40 rounded-full border border-slate-200 bg-slate-50 object-cover"
               />
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                disabled={isLoading || !team || isLogoSubmitting}
-                onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
-              />
+              <label className="block">
+                <span className="mb-1 block text-sm text-slate-700">Team Logo File</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  disabled={isLoading || !team || isLogoSubmitting}
+                  aria-label="Choose team logo file"
+                  onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
+                />
+              </label>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={!logoFile || isLogoSubmitting}
+                  aria-label={isLogoSubmitting ? 'Saving team logo' : 'Upload team logo'}
                   className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   onClick={onUploadLogo}
                 >
@@ -356,6 +361,7 @@ export function EditTeamPage() {
                   type="text"
                   required
                   disabled={isLoading || !team}
+                  autoComplete="organization"
                   className="w-full rounded border border-slate-300 px-3 py-2 disabled:cursor-not-allowed disabled:bg-slate-50"
                   value={teamName}
                   onChange={(event) => setTeamName(event.target.value)}
@@ -371,6 +377,8 @@ export function EditTeamPage() {
                     <p className="mb-1 text-sm text-slate-700">Colour {index + 1}</p>
                     <input
                       type="color"
+                      aria-label={`Team colour ${index + 1}`}
+                      autoComplete="off"
                       className="h-10 w-full rounded border border-slate-300 bg-white"
                       value={color || EMPTY_COLOR}
                       onChange={(event) => updateColor(index, event.target.value)}
@@ -381,6 +389,7 @@ export function EditTeamPage() {
                       </span>
                       <button
                         type="button"
+                        aria-label={`Clear team colour ${index + 1}`}
                         className="text-xs font-semibold text-slate-600 hover:text-slate-900"
                         onClick={() => clearColor(index)}
                       >
@@ -396,6 +405,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">Arena Name</span>
                   <input
                     type="text"
+                    autoComplete="organization-title"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.arenaName}
                     onChange={(event) => updateVenue('arenaName', event.target.value)}
@@ -405,6 +415,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">Address Line 1</span>
                   <input
                     type="text"
+                    autoComplete="address-line1"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.addressLine1}
                     onChange={(event) => updateVenue('addressLine1', event.target.value)}
@@ -414,6 +425,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">Address Line 2</span>
                   <input
                     type="text"
+                    autoComplete="address-line2"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.addressLine2}
                     onChange={(event) => updateVenue('addressLine2', event.target.value)}
@@ -423,6 +435,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">City</span>
                   <input
                     type="text"
+                    autoComplete="address-level2"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.city}
                     onChange={(event) => updateVenue('city', event.target.value)}
@@ -432,6 +445,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">State / Province</span>
                   <input
                     type="text"
+                    autoComplete="address-level1"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.state}
                     onChange={(event) => updateVenue('state', event.target.value)}
@@ -441,6 +455,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">Postal Code</span>
                   <input
                     type="text"
+                    autoComplete="postal-code"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.postalCode}
                     onChange={(event) => updateVenue('postalCode', event.target.value)}
@@ -450,6 +465,7 @@ export function EditTeamPage() {
                   <span className="mb-1 block text-sm text-slate-700">Country</span>
                   <input
                     type="text"
+                    autoComplete="country-name"
                     className="w-full rounded border border-slate-300 px-3 py-2"
                     value={homeVenue.country}
                     onChange={(event) => updateVenue('country', event.target.value)}
@@ -461,16 +477,11 @@ export function EditTeamPage() {
                 <button
                   type="submit"
                   disabled={isLoading || !team || isSubmitting}
+                  aria-label={isSubmitting ? 'Saving team changes' : 'Save team changes'}
                   className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                 >
                   {isSubmitting ? 'Saving...' : 'Save Changes'}
                 </button>
-                <Link
-                  to="/pricing"
-                  className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  {team?.billing?.plan === 'pro' ? 'Manage Team Pro' : 'Upgrade to Team Pro'}
-                </Link>
               </div>
             </div>
           </div>
@@ -491,6 +502,7 @@ export function EditTeamPage() {
             type="button"
             aria-expanded={isRosterExpanded}
             aria-controls="team-players-panel"
+            aria-label={isRosterExpanded ? 'Hide team players roster' : 'Show team players roster'}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
             onClick={() => setIsRosterExpanded((current) => !current)}
           >
@@ -521,6 +533,7 @@ export function EditTeamPage() {
                     </span>
                     <input
                       type="text"
+                      autoComplete="name"
                       className="w-full rounded border border-slate-300 px-3 py-2"
                       value={player.displayName}
                       disabled={Boolean(activePlayerId)}
@@ -533,6 +546,7 @@ export function EditTeamPage() {
                     <span className="mb-1 block text-sm text-slate-700">Jersey Number</span>
                     <input
                       type="number"
+                      autoComplete="off"
                       className="w-full rounded border border-slate-300 px-3 py-2"
                       value={player.jerseyNumber}
                       disabled={Boolean(activePlayerId)}
@@ -544,6 +558,7 @@ export function EditTeamPage() {
                   <label className="block">
                     <span className="mb-1 block text-sm text-slate-700">Position</span>
                     <select
+                      aria-label={`Player ${index + 1} position`}
                       className="w-full rounded border border-slate-300 px-3 py-2"
                       value={player.position}
                       disabled={Boolean(activePlayerId)}

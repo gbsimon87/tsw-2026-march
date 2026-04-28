@@ -33,9 +33,6 @@ export function AppLayout() {
             <NavLink to="/feed" className={desktopNavLinkClass}>
               Feed
             </NavLink>
-            <NavLink to="/pricing" className={desktopNavLinkClass}>
-              Pricing
-            </NavLink>
             {user ? (
               <NavLink to="/dashboard" className={desktopNavLinkClass}>
                 Dashboard
@@ -107,6 +104,7 @@ export function AppLayout() {
             isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
           aria-hidden={!isMobileMenuOpen}
+          inert={!isMobileMenuOpen ? '' : undefined}
         >
           <div className="mb-6 flex justify-end">
             <button
@@ -143,13 +141,6 @@ export function AppLayout() {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Feed
-            </NavLink>
-            <NavLink
-              to="/pricing"
-              className={mobileNavLinkClass}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Pricing
             </NavLink>
             {user ? (
               <NavLink
