@@ -43,16 +43,10 @@ export function AppLayout() {
                 Leagues
               </NavLink>
             ) : null}
-            {user ? null : null}
             {!user ? (
-              <>
-                <NavLink to="/login" className={desktopNavLinkClass}>
-                  Login
-                </NavLink>
-                <NavLink to="/register" className={desktopNavLinkClass}>
-                  Register
-                </NavLink>
-              </>
+              <NavLink to="/login" className={desktopNavLinkClass}>
+                Sign in
+              </NavLink>
             ) : (
               <button
                 type="button"
@@ -160,24 +154,14 @@ export function AppLayout() {
                 Leagues
               </NavLink>
             ) : null}
-            {user ? null : null}
             {!user ? (
-              <>
-                <NavLink
-                  to="/login"
-                  className={mobileNavLinkClass}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Login
-                </NavLink>
-                <NavLink
-                  to="/register"
-                  className={mobileNavLinkClass}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Register
-                </NavLink>
-              </>
+              <NavLink
+                to="/login"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Sign in
+              </NavLink>
             ) : (
               <button
                 type="button"

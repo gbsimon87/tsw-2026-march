@@ -200,7 +200,7 @@ FEED_IMAGE_MAX_BYTES=5242880
 ### Client Dev
 
 ```env
-VITE_APP_NAME=tsw-2026-march (Dev)
+VITE_APP_NAME=TSW
 VITE_APP_ENV=development
 VITE_API_BASE_URL=https://tsw-2026-march-api-dev.onrender.com/api/v1
 VITE_ENABLE_ANALYTICS=false

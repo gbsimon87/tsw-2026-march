@@ -4,7 +4,33 @@ import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
 
-export function LoginForm({ redirectTo = '/feed' }) {
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.017 17.64 11.71 17.64 8.97z"
+      />
+      <path
+        fill="#34A853"
+        d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+      />
+      <path
+        fill="#EA4335"
+        d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"
+      />
+    </svg>
+  );
+}
+
+const inputClass =
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100';
+
+export function LoginForm({ redirectTo = '/feed', onSwitchToRegister }) {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(
@@ -17,13 +43,20 @@ export function LoginForm({ redirectTo = '/feed' }) {
   );
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded border bg-white p-4 shadow-sm">
-      <h2 className="text-xl font-semibold">Login</h2>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <label className="block">
-        <span className="mb-1 block text-sm">Email</span>
+    <form onSubmit={submit} className="space-y-4">
+      {error ? (
+        <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-sm text-red-600">
+          {error}
+        </p>
+      ) : null}
+
+      <div>
+        <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+          Email
+        </label>
         <input
-          className="w-full rounded border px-3 py-2"
+          id="login-email"
+          className={inputClass}
           type="email"
           name="email"
           value={values.email}
@@ -31,11 +64,23 @@ export function LoginForm({ redirectTo = '/feed' }) {
           autoComplete="email"
           required
         />
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-sm">Password</span>
+      </div>
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <label htmlFor="login-password" className="text-sm font-medium text-slate-700">
+            Password
+          </label>
+          <Link
+            className="text-xs text-slate-500 transition-colors hover:text-slate-700"
+            to="/forgot-password"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
-          className="w-full rounded border px-3 py-2"
+          id="login-password"
+          className={inputClass}
           type="password"
           name="password"
           value={values.password}
@@ -43,35 +88,49 @@ export function LoginForm({ redirectTo = '/feed' }) {
           autoComplete="current-password"
           required
         />
-      </label>
+      </div>
+
       <button
-        className="rounded bg-slate-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
         type="submit"
+        aria-label="Log in"
+        className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={isSubmitting}
       >
-        {isSubmitting ? 'Logging in...' : 'Login'}
+        {isSubmitting ? 'Logging in…' : 'Log in'}
       </button>
-      <div className="flex flex-col gap-1 text-sm">
-        <Link className="text-blue-600 hover:underline" to="/forgot-password">
-          Forgot password?
-        </Link>
-        <Link className="text-blue-600 hover:underline" to="/verify-email">
-          Need a new verification email?
-        </Link>
+
+      <div className="flex items-center gap-3">
+        <hr className="flex-1 border-slate-100" />
+        <span className="text-xs text-slate-400">or</span>
+        <hr className="flex-1 border-slate-100" />
       </div>
+
       <a
-        className="block text-sm text-blue-600 hover:underline"
+        className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:bg-slate-100"
         href={`${env.apiBaseUrl}/auth/google/start`}
       >
+        <GoogleIcon />
         Continue with Google
       </a>
-      <p className="text-sm text-slate-600">
-        Don&apos;t have an account?{' '}
-        <Link
-          className="text-blue-600 hover:underline"
-          to={redirectTo ? `/register?redirectTo=${encodeURIComponent(redirectTo)}` : '/register'}
+
+      <p className="text-center text-sm text-slate-500">
+        No account?{' '}
+        <button
+          type="button"
+          aria-label="Sign up"
+          className="font-medium text-slate-700 underline-offset-2 hover:underline"
+          onClick={onSwitchToRegister}
         >
-          Create one
+          Sign up
+        </button>
+      </p>
+
+      <p className="text-center">
+        <Link
+          className="text-xs text-slate-400 transition-colors hover:text-slate-600"
+          to="/verify-email"
+        >
+          Need a new verification email?
         </Link>
       </p>
     </form>

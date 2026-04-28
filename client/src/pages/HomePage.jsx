@@ -121,7 +121,11 @@ export function HomePage() {
             className="grid items-center gap-8 rounded-2xl border border-slate-200 p-6 md:grid-cols-2 md:p-8"
           >
             <div className={imageIsSecond ? 'order-2 md:order-1' : undefined}>
-              <h2 id={section.headingId} className="text-2xl font-semibold text-slate-900">
+              <h2
+                id={section.headingId}
+                aria-label={section.title}
+                className="text-2xl font-semibold text-slate-900"
+              >
                 {section.title}
               </h2>
               <p className="mt-3 text-slate-700">{section.body}</p>
@@ -165,17 +169,13 @@ export function HomePage() {
                 key={league.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
               >
-                <h3 className="text-lg font-semibold text-slate-900">{league.name}</h3>
+                <h3 aria-label={league.name} className="text-lg font-semibold text-slate-900">
+                  {league.name}
+                </h3>
                 <p className="mt-2 text-sm text-slate-600">{league.seasonLabel || 'Season TBD'}</p>
                 <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold">
                   <Link to={`/league/${league.slug}`} className="text-sky-700 hover:underline">
                     Overview
-                  </Link>
-                  <Link
-                    to={`/league/${league.slug}/standings`}
-                    className="text-sky-700 hover:underline"
-                  >
-                    Standings
                   </Link>
                   <Link
                     to={`/league/${league.slug}/games`}

@@ -3,8 +3,7 @@ import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
 import { DashboardPage } from '../../features/dashboard/DashboardPage';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
-import { LoginPage } from '../../features/auth/pages/LoginPage';
-import { RegisterPage } from '../../features/auth/pages/RegisterPage';
+import { AuthPage } from '../../features/auth/pages/AuthPage';
 import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage';
 import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage';
@@ -66,8 +65,8 @@ export function AppRouter() {
         <Route path="/" element={<LandingRoute />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/feed" element={<FeedPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
