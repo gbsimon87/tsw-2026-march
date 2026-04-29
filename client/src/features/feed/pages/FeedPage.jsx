@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { FloatingActionButton } from '../../../components/ui/FloatingActionButton';
 import { Modal } from '../../../components/ui/Modal';
@@ -68,28 +68,6 @@ export function FeedPage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6">
-      {!user ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-slate-700">
-            Log in to post images and share game, player, or team cards.
-          </p>
-          <div className="mt-3 flex gap-3">
-            <Link
-              to="/login?redirectTo=%2Ffeed"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Login
-            </Link>
-            <Link
-              to="/register?redirectTo=%2Ffeed"
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800"
-            >
-              Register
-            </Link>
-          </div>
-        </section>
-      ) : null}
-
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <FeedList posts={posts} onDelete={onDelete} />
 

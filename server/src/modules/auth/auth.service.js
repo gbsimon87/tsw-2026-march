@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const {
   createUser,
   findUserByEmail,
@@ -289,6 +290,45 @@ async function loginWithGoogle(googleProfile, metadata) {
   return issueAuthTokens(user, metadata);
 }
 
+async function prepareGoogleExchange(googleProfile) {
+  const user = await findOrCreateGoogleUser({
+    googleId: googleProfile.id,
+    email: googleProfile.email,
+    name: googleProfile.name,
+  });
+
+  // Short-lived token so the client can exchange it for session cookies via a
+  // credentialed fetch. Cookies set on a redirect (bounce) are blocked by Chrome
+  // BTM and Safari ITP; a fetch-issued cookie is not.
+  const exchangeToken = jwt.sign(
+    { sub: String(user._id), type: 'google_exchange' },
+    env.JWT_ACCESS_SECRET,
+    { expiresIn: '60s' }
+  );
+
+  return exchangeToken;
+}
+
+async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
+  let payload;
+  try {
+    payload = jwt.verify(exchangeToken, env.JWT_ACCESS_SECRET);
+  } catch {
+    throw new ApiError(401, 'Exchange token is invalid or expired');
+  }
+
+  if (payload.type !== 'google_exchange') {
+    throw new ApiError(401, 'Invalid token type');
+  }
+
+  const user = await findUserById(payload.sub);
+  if (!user) {
+    throw new ApiError(401, 'User not found');
+  }
+
+  return issueAuthTokens(user, metadata);
+}
+
 module.exports = {
   register,
   login,
@@ -300,6 +340,8 @@ module.exports = {
   forgotPassword,
   resetPassword,
   loginWithGoogle,
+  prepareGoogleExchange,
+  exchangeGoogleOAuthToken,
   getUserLeagueBillingSummary,
   getUserLeagueEntitlements,
 };

@@ -112,9 +112,25 @@ async function googleCallback(req, res) {
     throw new ApiError(401, 'Google authentication failed');
   }
 
-  const result = await authService.loginWithGoogle(req.user, metadata(req));
+  // Do not set cookies on the redirect response — browsers with bounce-tracking
+  // protection (Chrome BTM, Safari ITP) strip cookies set during redirect chains.
+  // Instead issue a short-lived exchange token; the client redeems it via a
+  // credentialed fetch which browsers always honour.
+  const exchangeToken = await authService.prepareGoogleExchange(req.user);
+  res.redirect(
+    `${primaryClientOrigin()}/auth/google/complete?token=${encodeURIComponent(exchangeToken)}`
+  );
+}
+
+async function googleExchange(req, res) {
+  const { token } = req.body;
+  if (!token) {
+    throw new ApiError(400, 'Missing exchange token');
+  }
+
+  const result = await authService.exchangeGoogleOAuthToken(token, metadata(req));
   setAuthCookies(res, result.accessToken, result.refreshToken);
-  res.redirect(`${primaryClientOrigin()}/dashboard`);
+  res.status(200).json({ user: result.user });
 }
 
 module.exports = {
@@ -128,4 +144,5 @@ module.exports = {
   forgotPassword,
   resetPassword,
   googleCallback,
+  googleExchange,
 };

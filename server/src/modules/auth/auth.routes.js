@@ -26,6 +26,8 @@ authRouter.post('/forgot-password', authRecoveryLimiter, asyncHandler(controller
 authRouter.post('/reset-password', authRecoveryLimiter, asyncHandler(controller.resetPassword));
 
 if (googleAuthEnabled) {
+  authRouter.post('/google/exchange', asyncHandler(controller.googleExchange));
+
   authRouter.get(
     '/google/start',
     passport.authenticate('google', {

@@ -4,6 +4,7 @@ import { HomePage } from '../../pages/HomePage';
 import { DashboardPage } from '../../features/dashboard/DashboardPage';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
 import { AuthPage } from '../../features/auth/pages/AuthPage';
+import { GoogleCompletePage } from '../../features/auth/pages/GoogleCompletePage';
 import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage';
 import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage';
@@ -67,6 +68,7 @@ export function AppRouter() {
         <Route path="/feed" element={<FeedPage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />
+        <Route path="/auth/google/complete" element={<GoogleCompletePage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />

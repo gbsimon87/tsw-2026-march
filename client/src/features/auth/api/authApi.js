@@ -28,4 +28,7 @@ export const authApi = {
   resetPassword(payload) {
     return apiClient.post('/auth/reset-password', payload);
   },
+  googleExchange(token) {
+    return apiClient.post('/auth/google/exchange', { token });
+  },
 };

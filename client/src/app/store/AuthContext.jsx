@@ -29,6 +29,11 @@ export function AuthProvider({ children }) {
         setUser(null);
         return result;
       },
+      async loginWithGoogleExchange(token) {
+        const result = await authApi.googleExchange(token);
+        setUser(result.user);
+        return result;
+      },
       async logout() {
         await authApi.logout();
         setUser(null);
