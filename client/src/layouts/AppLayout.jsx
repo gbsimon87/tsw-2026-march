@@ -34,13 +34,8 @@ export function AppLayout() {
               Feed
             </NavLink>
             {user ? (
-              <NavLink to="/dashboard" className={desktopNavLinkClass}>
-                Dashboard
-              </NavLink>
-            ) : null}
-            {user ? (
-              <NavLink to="/leagues" className={desktopNavLinkClass}>
-                Leagues
+              <NavLink to="/admin" className={desktopNavLinkClass}>
+                Admin
               </NavLink>
             ) : null}
             {!user ? (
@@ -138,20 +133,11 @@ export function AppLayout() {
             </NavLink>
             {user ? (
               <NavLink
-                to="/dashboard"
+                to="/admin"
                 className={mobileNavLinkClass}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Dashboard
-              </NavLink>
-            ) : null}
-            {user ? (
-              <NavLink
-                to="/leagues"
-                className={mobileNavLinkClass}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Leagues
+                Admin
               </NavLink>
             ) : null}
             {!user ? (

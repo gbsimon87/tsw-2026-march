@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
-import { DashboardPage } from '../../features/dashboard/DashboardPage';
+import { AdminPage } from '../../features/dashboard/AdminPage';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
 import { AuthPage } from '../../features/auth/pages/AuthPage';
 import { GoogleCompletePage } from '../../features/auth/pages/GoogleCompletePage';
@@ -19,7 +19,6 @@ import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
 import { GameDetailPage } from '../../features/games/pages/GameDetailPage';
-import { LeaguesPage } from '../../features/leagues/pages/LeaguesPage';
 import { NewLeaguePage } from '../../features/leagues/pages/NewLeaguePage';
 import { LeagueDetailPage } from '../../features/leagues/pages/LeagueDetailPage';
 import { LeagueManagePage } from '../../features/leagues/pages/LeagueManagePage';
@@ -110,14 +109,7 @@ export function AppRouter() {
         <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
         <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/teams/:teamId" element={<PublicTeamPage />} />
-        <Route
-          path="/leagues"
-          element={
-            <ProtectedRoute>
-              <LeaguesPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/leagues" element={<Navigate to="/admin" replace />} />
         <Route
           path="/leagues/new"
           element={
@@ -184,10 +176,10 @@ export function AppRouter() {
         />
         <Route path="/games/:gameId" element={<GameDetailPage />} />
         <Route
-          path="/dashboard"
+          path="/admin"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <AdminPage />
             </ProtectedRoute>
           }
         />

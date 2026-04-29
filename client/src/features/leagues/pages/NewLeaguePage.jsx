@@ -31,8 +31,10 @@ export function NewLeaguePage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">Create League</h1>
+      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
+        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+          Create League
+        </h1>
         <p className="mt-2 text-base text-slate-700">
           Start a new league with one active season and independent team branding.
         </p>

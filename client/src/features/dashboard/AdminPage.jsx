@@ -42,7 +42,7 @@ function QuickActionLink({ to, label, primary = false, children }) {
     <Link
       to={to}
       aria-label={label}
-      className={`flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
         primary
           ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-700'
           : 'border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50'
@@ -60,7 +60,7 @@ function QuickActionLink({ to, label, primary = false, children }) {
   );
 }
 
-export function DashboardPage() {
+export function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
@@ -75,23 +75,12 @@ export function DashboardPage() {
       const dateA = parseGameDate(gameA);
       const dateB = parseGameDate(gameB);
 
-      if (!dateA && !dateB) {
-        return 0;
-      }
-      if (!dateA) {
-        return 1;
-      }
-      if (!dateB) {
-        return -1;
-      }
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
       return dateB.getTime() - dateA.getTime();
     })
     .slice(0, 5);
-
-  const lastActivityDate = recentGames.length > 0 ? parseGameDate(recentGames[0]) : null;
-  const lastActivityText = lastActivityDate
-    ? lastActivityDate.toLocaleDateString()
-    : 'No games yet';
 
   useEffect(() => {
     Promise.all([teamsApi.list(), gamesApi.list(), leaguesApi.list()])
@@ -100,7 +89,7 @@ export function DashboardPage() {
         setGames(gamesResponse.games || []);
         setLeagues(leaguesResponse.leagues || []);
       })
-      .catch((loadError) => setError(loadError.message || 'Failed to load dashboard'))
+      .catch((loadError) => setError(loadError.message || 'Failed to load admin'))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -120,7 +109,7 @@ export function DashboardPage() {
   return (
     <main className="space-y-8">
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Dashboard</h1>
+        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Admin</h1>
         <p className="mt-2 text-base text-slate-700">
           Keep your team moving forward with fast actions and clear game context.
         </p>
@@ -139,7 +128,7 @@ export function DashboardPage() {
         <h2 id="quick-actions-heading" className="text-xl font-semibold text-slate-900">
           Quick Actions
         </h2>
-        <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <QuickActionLink to="/games/new" label="New Game" primary>
             <svg
               viewBox="0 0 24 24"
@@ -188,11 +177,12 @@ export function DashboardPage() {
               stroke="currentColor"
               strokeWidth="2"
             >
-              <path d="M8 21h8" />
-              <path d="M12 17v4" />
-              <path d="M7 4h10l1 7c0 3.31-2.69 6-6 6s-6-2.69-6-6z" />
-              <path d="M5 4H3" />
-              <path d="M21 4h-2" />
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+              <path d="M4 22h16" />
+              <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+              <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+              <path d="M18 2H6v7a6 6 0 0 0 12 0V2z" />
             </svg>
           </QuickActionLink>
         </div>
@@ -202,7 +192,7 @@ export function DashboardPage() {
         <h2 id="summary-heading" className="text-xl font-semibold text-slate-900">
           Summary
         </h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <article className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-sm text-slate-500">Teams</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
@@ -213,12 +203,6 @@ export function DashboardPage() {
             <p className="text-sm text-slate-500">Games</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {isLoading ? '...' : games.length}
-            </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-500">Last Activity</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">
-              {isLoading ? 'Loading...' : lastActivityText}
             </p>
           </article>
         </div>
@@ -233,15 +217,7 @@ export function DashboardPage() {
         </h2>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading games...</p> : null}
         {!isLoading && recentGames.length === 0 ? (
-          <div className="mt-3 space-y-3">
-            <p className="text-sm text-slate-700">No games recorded yet.</p>
-            <Link
-              to="/games/new"
-              className="inline-flex rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-            >
-              Start New Game
-            </Link>
-          </div>
+          <p className="mt-3 text-sm text-slate-600">No games recorded yet.</p>
         ) : null}
         {!isLoading && recentGames.length > 0 ? (
           <div className="mt-3 divide-y divide-slate-100">
@@ -270,9 +246,7 @@ export function DashboardPage() {
                       disabled={!canNavigateToGame}
                       className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
-                        if (gameId) {
-                          copyShareUrl(gameId);
-                        }
+                        if (gameId) copyShareUrl(gameId);
                       }}
                     >
                       <svg
@@ -298,9 +272,7 @@ export function DashboardPage() {
                       disabled={!canNavigateToGame}
                       className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
-                        if (gameId) {
-                          navigate(`/games/${gameId}`);
-                        }
+                        if (gameId) navigate(`/games/${gameId}`);
                       }}
                     >
                       <svg
@@ -320,9 +292,7 @@ export function DashboardPage() {
                       disabled={!canNavigateToGame}
                       className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
-                        if (gameId) {
-                          navigate(`/games/${gameId}/track`);
-                        }
+                        if (gameId) navigate(`/games/${gameId}/track`);
                       }}
                     >
                       <svg
@@ -350,17 +320,9 @@ export function DashboardPage() {
         aria-labelledby="leagues-heading"
         className="rounded-2xl border border-slate-200 bg-white p-5"
       >
-        <div className="flex items-center justify-between">
-          <h2 id="leagues-heading" className="text-xl font-semibold text-slate-900">
-            Your Leagues
-          </h2>
-          <Link
-            to="/leagues/new"
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
-            Create League
-          </Link>
-        </div>
+        <h2 id="leagues-heading" className="text-xl font-semibold text-slate-900">
+          Your Leagues
+        </h2>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading leagues...</p> : null}
         {!isLoading && leagues.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">No leagues yet.</p>
