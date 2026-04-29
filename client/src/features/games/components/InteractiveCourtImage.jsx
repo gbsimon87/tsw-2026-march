@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
-import { courtToImage, DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
 
 const COURT_ASPECT_RATIO = 420 / 760;
 const ROTATED_COURT_ASPECT_RATIO = 760 / 420;
@@ -28,7 +27,6 @@ function normalizeFromPointer(event, element, rotate90 = false) {
 export function InteractiveCourtImage({
   selectedPoint,
   onSelect,
-  calibration = DEFAULT_COURT_IMAGE_CALIBRATION,
   children,
   containerClassName = '',
   courtClassName = '',
@@ -37,118 +35,12 @@ export function InteractiveCourtImage({
   rotate90 = false,
   topControls = null,
 }) {
-  const [showCalibration, setShowCalibration] = useState(false);
-  const [draftRect, setDraftRect] = useState(calibration.courtRect);
-  const [dragState, setDragState] = useState(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const stageRef = useRef(null);
-
-  useEffect(() => {
-    setDraftRect(calibration.courtRect);
-  }, [calibration]);
-
-  const activeCalibration = useMemo(
-    () => ({
-      courtRect: draftRect,
-    }),
-    [draftRect]
-  );
 
   function onSelectPoint(event) {
     const point = normalizeFromPointer(event, event.currentTarget, rotate90);
     onSelect(point);
-  }
-
-  const rect = draftRect;
-  const centerTop = courtToImage({ x: 50, y: 0 }, activeCalibration);
-  const centerBottom = courtToImage({ x: 50, y: 100 }, activeCalibration);
-  const centerLeft = courtToImage({ x: 0, y: 50 }, activeCalibration);
-  const centerRight = courtToImage({ x: 100, y: 50 }, activeCalibration);
-  const northFt = courtToImage({ x: 50, y: 20.21 }, activeCalibration);
-  const southFt = courtToImage({ x: 50, y: 79.79 }, activeCalibration);
-
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function startDrag(event, corner) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    setDragState({
-      corner,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startRect: draftRect,
-    });
-  }
-
-  useEffect(() => {
-    if (!dragState) {
-      return undefined;
-    }
-
-    function onMove(event) {
-      const minSize = 20;
-      const dx = event.clientX - dragState.startClientX;
-      const dy = event.clientY - dragState.startClientY;
-
-      const deltaX = (dx / 420) * 100;
-      const deltaY = (dy / 760) * 100;
-
-      const start = dragState.startRect;
-      const left = start.left;
-      const top = start.top;
-      const right = start.left + start.width;
-      const bottom = start.top + start.height;
-
-      let nextLeft = left;
-      let nextTop = top;
-      let nextRight = right;
-      let nextBottom = bottom;
-
-      if (dragState.corner.includes('l')) {
-        nextLeft = clamp(left + deltaX, 0, right - minSize);
-      }
-      if (dragState.corner.includes('r')) {
-        nextRight = clamp(right + deltaX, left + minSize, 100);
-      }
-      if (dragState.corner.includes('t')) {
-        nextTop = clamp(top + deltaY, 0, bottom - minSize);
-      }
-      if (dragState.corner.includes('b')) {
-        nextBottom = clamp(bottom + deltaY, top + minSize, 100);
-      }
-
-      setDraftRect({
-        left: Number(nextLeft.toFixed(2)),
-        top: Number(nextTop.toFixed(2)),
-        width: Number((nextRight - nextLeft).toFixed(2)),
-        height: Number((nextBottom - nextTop).toFixed(2)),
-      });
-    }
-
-    function onUp() {
-      setDragState(null);
-    }
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-  }, [dragState]);
-
-  const calibrationJson = JSON.stringify({ courtRect: draftRect }, null, 2);
-
-  async function copyCalibration() {
-    try {
-      await navigator.clipboard.writeText(calibrationJson);
-    } catch {
-      // noop
-    }
   }
 
   useEffect(() => {
@@ -171,10 +63,7 @@ export function InteractiveCourtImage({
         width = height * targetAspect;
       }
 
-      setStageSize({
-        width,
-        height,
-      });
+      setStageSize({ width, height });
     }
 
     measure();
@@ -208,18 +97,10 @@ export function InteractiveCourtImage({
     <div
       className={`flex h-full min-h-0 flex-col overflow-hidden rounded border bg-white p-3 ${containerClassName}`.trim()}
     >
-      <div className="pointer-events-none absolute" />
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
-        <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex h-10 items-center justify-center rounded-full bg-white px-4 text-sm font-medium text-slate-900 shadow-lg transition hover:bg-slate-100"
-            onClick={() => setShowCalibration((value) => !value)}
-          >
-            {showCalibration ? 'Hide calibration' : 'Show calibration'}
-          </button>
-          {topControls}
-        </div>
+        {topControls ? (
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2">{topControls}</div>
+        ) : null}
 
         <div
           ref={stageRef}
@@ -251,80 +132,6 @@ export function InteractiveCourtImage({
                   draggable={false}
                 />
 
-                {showCalibration ? (
-                  <>
-                    <span
-                      className="pointer-events-none absolute border border-cyan-500"
-                      style={{
-                        left: `${rect.left}%`,
-                        top: `${rect.top}%`,
-                        width: `${rect.width}%`,
-                        height: `${rect.height}%`,
-                      }}
-                      data-testid="calibration-rect"
-                    />
-                    <button
-                      type="button"
-                      className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-700 bg-cyan-300"
-                      style={{ left: `${rect.left}%`, top: `${rect.top}%` }}
-                      onPointerDown={(event) => startDrag(event, 'lt')}
-                      aria-label="Top left calibration handle"
-                    />
-                    <button
-                      type="button"
-                      className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-700 bg-cyan-300"
-                      style={{ left: `${rect.left + rect.width}%`, top: `${rect.top}%` }}
-                      onPointerDown={(event) => startDrag(event, 'rt')}
-                      aria-label="Top right calibration handle"
-                    />
-                    <button
-                      type="button"
-                      className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-700 bg-cyan-300"
-                      style={{ left: `${rect.left}%`, top: `${rect.top + rect.height}%` }}
-                      onPointerDown={(event) => startDrag(event, 'lb')}
-                      aria-label="Bottom left calibration handle"
-                    />
-                    <button
-                      type="button"
-                      className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-700 bg-cyan-300"
-                      style={{
-                        left: `${rect.left + rect.width}%`,
-                        top: `${rect.top + rect.height}%`,
-                      }}
-                      onPointerDown={(event) => startDrag(event, 'rb')}
-                      aria-label="Bottom right calibration handle"
-                    />
-                    <span
-                      className="pointer-events-none absolute border-t border-cyan-400"
-                      style={{
-                        left: `${centerLeft.x}%`,
-                        top: `${centerLeft.y}%`,
-                        width: `${centerRight.x - centerLeft.x}%`,
-                      }}
-                      data-testid="calibration-midline-horizontal"
-                    />
-                    <span
-                      className="pointer-events-none absolute border-l border-cyan-400"
-                      style={{
-                        left: `${centerTop.x}%`,
-                        top: `${centerTop.y}%`,
-                        height: `${centerBottom.y - centerTop.y}%`,
-                      }}
-                      data-testid="calibration-midline-vertical"
-                    />
-                    <span
-                      className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500"
-                      style={{ left: `${northFt.x}%`, top: `${northFt.y}%` }}
-                      data-testid="calibration-north-ft"
-                    />
-                    <span
-                      className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500"
-                      style={{ left: `${southFt.x}%`, top: `${southFt.y}%` }}
-                      data-testid="calibration-south-ft"
-                    />
-                  </>
-                ) : null}
-
                 {selectedPoint ? (
                   <>
                     <span
@@ -348,32 +155,6 @@ export function InteractiveCourtImage({
           </div>
         </div>
       </div>
-      {showCalibration ? (
-        <div className="mt-2 space-y-2">
-          <pre
-            className="max-h-40 overflow-auto rounded bg-slate-900 p-2 text-[11px] text-cyan-200"
-            data-testid="calibration-values"
-          >
-            {calibrationJson}
-          </pre>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs"
-              onClick={copyCalibration}
-            >
-              Copy values
-            </button>
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs"
-              onClick={() => setDraftRect(calibration.courtRect)}
-            >
-              Reset
-            </button>
-          </div>
-        </div>
-      ) : null}
       {helperText ? <p className="mt-2 text-xs text-slate-500">{helperText}</p> : null}
     </div>
   );

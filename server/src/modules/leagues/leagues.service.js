@@ -192,6 +192,12 @@ function sanitizeLeagueTeam(team, options = {}) {
     status: team.status,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
+    ...(options.includeRosterCounts
+      ? {
+          rosterCount: options.includeRosterCounts.rosterCount,
+          activeRosterCount: options.includeRosterCounts.activeRosterCount,
+        }
+      : {}),
     ...(options.includeRoster ? { roster: options.includeRoster } : {}),
     ...(options.includeMembers ? { members: options.includeMembers } : {}),
     ...(options.includeJoinRequests ? { joinRequests: options.includeJoinRequests } : {}),
@@ -208,6 +214,26 @@ async function assertLeagueExists(leagueId) {
   if (!league) {
     throw new ApiError(404, 'League not found');
   }
+  return league;
+}
+
+async function assertLeagueViewer(userId, leagueId) {
+  const league = await assertLeagueExists(leagueId);
+  const isOwner = String(league.ownerUserId) === String(userId);
+
+  if (isOwner) {
+    return league;
+  }
+
+  const memberships = await listLeagueMembershipsForUser(userId);
+  const hasMembership = memberships.some(
+    (membership) => String(membership.leagueId) === String(league._id)
+  );
+
+  if (!hasMembership) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
   return league;
 }
 
@@ -344,16 +370,7 @@ async function listPublicLeagues() {
 }
 
 async function getLeagueForUser(userId, leagueId) {
-  const league = await assertLeagueExists(leagueId);
-  const isOwner = String(league.ownerUserId) === String(userId);
-  const memberships = await listLeagueMembershipsForUser(userId);
-  const hasMembership = memberships.some(
-    (membership) => String(membership.leagueId) === String(league._id)
-  );
-
-  if (!isOwner && !hasMembership) {
-    throw new ApiError(403, 'Forbidden');
-  }
+  const league = await assertLeagueViewer(userId, leagueId);
 
   const [teams, standings, games] = await Promise.all([
     listLeagueTeams(league._id),
@@ -452,9 +469,27 @@ async function createLeagueTeamForLeague(userId, leagueId, payload) {
 }
 
 async function listTeamsForLeagueViewer(userId, leagueId) {
-  await getLeagueForUser(userId, leagueId);
+  await assertLeagueViewer(userId, leagueId);
   const teams = await listLeagueTeams(leagueId);
-  return teams.map((team) => sanitizeLeagueTeam(team));
+  const rows = await Promise.all(
+    teams.map(async (team) => {
+      const players = await listLeaguePlayers(team._id);
+      return {
+        team,
+        rosterCount: players.length,
+        activeRosterCount: players.filter((player) => player.isActive).length,
+      };
+    })
+  );
+
+  return rows.map(({ team, rosterCount, activeRosterCount }) =>
+    sanitizeLeagueTeam(team, {
+      includeRosterCounts: {
+        rosterCount,
+        activeRosterCount,
+      },
+    })
+  );
 }
 
 async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
@@ -1343,6 +1378,25 @@ async function getLeagueStandings(leagueId) {
   });
 }
 
+function buildLeagueRosterSnapshot(players) {
+  return (players || [])
+    .filter((player) => player.isActive)
+    .map((player) => ({
+      leaguePlayerId: player._id,
+      displayName: player.displayName,
+      jerseyNumber: player.jerseyNumber ?? null,
+      position: normalizePosition(player.position),
+      claimedByUserId: player.claimedByUserId ?? null,
+      isClaimed: Boolean(player.claimedByUserId),
+      isActive: Boolean(player.isActive),
+    }));
+}
+
+async function getLeagueRosterSnapshotForTeam(leagueTeamId) {
+  const players = await listLeaguePlayers(leagueTeamId);
+  return buildLeagueRosterSnapshot(players);
+}
+
 async function getLeagueContextForGame(userId, payload, options = {}) {
   if (!mongoose.Types.ObjectId.isValid(payload.leagueId)) {
     throw new ApiError(400, 'Invalid league id');
@@ -1385,17 +1439,7 @@ async function getLeagueContextForGame(userId, payload, options = {}) {
     homeTeam,
     awayTeam,
     trackedTeam,
-    rosterSnapshot: trackedPlayers
-      .filter((player) => player.isActive)
-      .map((player) => ({
-        leaguePlayerId: player._id,
-        displayName: player.displayName,
-        jerseyNumber: player.jerseyNumber ?? null,
-        position: normalizePosition(player.position),
-        claimedByUserId: player.claimedByUserId ?? null,
-        isClaimed: Boolean(player.claimedByUserId),
-        isActive: Boolean(player.isActive),
-      })),
+    rosterSnapshot: buildLeagueRosterSnapshot(trackedPlayers),
   };
 }
 
@@ -1470,6 +1514,7 @@ module.exports = {
   listLeagueGames,
   getLeagueStandings,
   getLeagueContextForGame,
+  getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
 };

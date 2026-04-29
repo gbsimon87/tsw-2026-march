@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { gamesApi } from '../api/gamesApi';
+import { teamsApi } from '../../teams/api/teamsApi';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
 import {
   buildFreeThrowPayload,
@@ -79,17 +80,16 @@ export function GameTrackPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [rosterOverride, setRosterOverride] = useState(null);
   const [selectedShot, setSelectedShot] = useState(null);
   const [pendingFollowUpPrompt, setPendingFollowUpPrompt] = useState(null);
   const [lastTappedHoop, setLastTappedHoop] = useState('south');
   const [isSaving, setIsSaving] = useState(false);
   const [isTrackingFullscreen, setIsTrackingFullscreen] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(
-    typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false
-  );
   const [error, setError] = useState('');
   const [lastActionLabel, setLastActionLabel] = useState('');
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
+  const [lineupExpanded, setLineupExpanded] = useState(true);
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
@@ -98,12 +98,32 @@ export function GameTrackPage() {
   });
 
   useEffect(() => {
-    gamesApi
-      .getById(gameId)
-      .then((response) => {
-        setData(response);
-
+    async function loadGame() {
+      try {
+        const response = await gamesApi.getById(gameId);
         const isDualTeam = response.game?.trackingMode === 'dual_team';
+        const isStandalone =
+          response.game?.gameContext === 'standalone' || !response.game?.gameContext;
+
+        let resolvedResponse = response;
+
+        if (!isDualTeam && isStandalone && response.game?.teamId) {
+          const fromGame = response.team?.players || [];
+          const hasActivePlayers = fromGame.some((p) => p.isActive !== false);
+          if (!hasActivePlayers) {
+            try {
+              const teamRes = await teamsApi.getById(response.game.teamId);
+              if (teamRes.team?.players?.length) {
+                setRosterOverride(teamRes.team.players);
+              }
+            } catch {
+              // fall through — use whatever the game response has
+            }
+          }
+        }
+
+        setData(resolvedResponse);
+
         const nextState = {
           [TEAM_SIDES.HOME]: createEmptySideState(),
           [TEAM_SIDES.AWAY]: createEmptySideState(),
@@ -112,42 +132,33 @@ export function GameTrackPage() {
 
         if (isDualTeam) {
           for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
-            const players = response.participants?.[side]?.players || [];
+            const sidePlayers = response.participants?.[side]?.players || [];
             const currentLineupIds = response.lineups?.[side]?.currentPlayerIds || [];
             nextState[side] = {
               lineupDraft: response.lineups?.[side]?.startingPlayerIds || currentLineupIds || [],
-              selectedPlayerId: currentLineupIds[0] || players[0]?.id || '',
+              selectedPlayerId: currentLineupIds[0] || sidePlayers[0]?.id || '',
               substitutionState: { playerOutId: '', playerInId: '' },
             };
           }
           setActiveSide(response.game?.activeSideDefault || TEAM_SIDES.HOME);
         } else {
           const lineupIds = response.game?.currentLineupPlayerIds || [];
-          const activePlayers = (response.team?.players || []).filter((player) => player.isActive);
+          const roster = response.team?.players || [];
           nextState.oneSided = {
             lineupDraft: response.game?.startingLineupPlayerIds || lineupIds || [],
-            selectedPlayerId: lineupIds[0] || activePlayers[0]?.id || '',
+            selectedPlayerId: lineupIds[0] || roster[0]?.id || '',
             substitutionState: { playerOutId: '', playerInId: '' },
           };
         }
 
         setSideState(nextState);
-      })
-      .catch((loadError) => setError(loadError.message || 'Failed to load game'));
-  }, [gameId]);
-
-  useEffect(() => {
-    function syncOrientation() {
-      setIsLandscape(window.innerWidth > window.innerHeight);
+      } catch (loadError) {
+        setError(loadError.message || 'Failed to load game');
+      }
     }
 
-    syncOrientation();
-    window.addEventListener('resize', syncOrientation);
-
-    return () => {
-      window.removeEventListener('resize', syncOrientation);
-    };
-  }, []);
+    loadGame();
+  }, [gameId]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -169,15 +180,17 @@ export function GameTrackPage() {
   const activeKey = isDualTeam ? activeSide : 'oneSided';
   const currentSideState = sideState[activeKey] || createEmptySideState();
   const team = data?.team || null;
+  const teamId = data?.game?.teamId || null;
   const lineupIds = isDualTeam
     ? data?.lineups?.[activeSide]?.currentPlayerIds || []
     : data?.game?.currentLineupPlayerIds || [];
   const players = useMemo(() => {
     if (isDualTeam) {
-      return (participantsBySide[activeSide]?.players || []).filter((player) => player.isActive);
+      return participantsBySide[activeSide]?.players || [];
     }
-    return (team?.players || []).filter((player) => player.isActive);
-  }, [activeSide, isDualTeam, participantsBySide, team]);
+    const roster = rosterOverride || team?.players || [];
+    return roster;
+  }, [activeSide, isDualTeam, participantsBySide, rosterOverride, team]);
   const playersById = useMemo(() => {
     const entries = [];
     if (isDualTeam) {
@@ -195,6 +208,22 @@ export function GameTrackPage() {
   }, [isDualTeam, participantsBySide, team]);
   const onCourtPlayers = lineupIds.map((id) => playersById.get(id)).filter(Boolean);
   const benchPlayers = players.filter((player) => !lineupIds.includes(player.id));
+  const otherSide = activeSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME;
+  const playerSideMap = useMemo(() => {
+    if (!isDualTeam) return new Map();
+    const map = new Map();
+    for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
+      for (const player of participantsBySide[side]?.players || []) {
+        map.set(player.id, side);
+      }
+    }
+    return map;
+  }, [isDualTeam, participantsBySide]);
+  const otherTeamOnCourtPlayers = useMemo(() => {
+    if (!isDualTeam) return [];
+    const otherLineupIds = data?.lineups?.[otherSide]?.currentPlayerIds || [];
+    return otherLineupIds.map((id) => playersById.get(id)).filter(Boolean);
+  }, [isDualTeam, data, otherSide, playersById]);
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
 
@@ -374,20 +403,28 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     try {
-      const payload =
-        option === 'OPP_REB'
-          ? { statType: 'OPP_REB' }
-          : buildEventPayload({
-              playerId: option,
-              statType: pendingFollowUpPrompt.statType,
-            });
+      let payload;
+      let label;
+
+      if (option === 'OPP_REB') {
+        payload = { statType: 'OPP_REB' };
+        label = 'Opponent Rebound';
+      } else if (isDualTeam && pendingFollowUpPrompt.kind === 'rebound') {
+        const rebounderSide = playerSideMap.get(option) || activeSide;
+        const isOffensive = rebounderSide === activeSide;
+        const statType = isOffensive ? 'OREB' : 'DREB';
+        payload = { playerId: option, statType, teamSide: rebounderSide };
+        label = STAT_LABELS[statType] || statType;
+      } else {
+        payload = buildEventPayload({
+          playerId: option,
+          statType: pendingFollowUpPrompt.statType,
+        });
+        label = STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType;
+      }
+
       const response = await gamesApi.appendEvent(gameId, payload);
-      updateData(
-        response,
-        option === 'OPP_REB'
-          ? 'Opponent Rebound'
-          : STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType
-      );
+      updateData(response, label);
       clearEventPicker();
     } catch (submitError) {
       setError(
@@ -743,26 +780,76 @@ export function GameTrackPage() {
                       : 'Pick Player'}
                   </p>
                   <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                    <div className="space-y-2">
-                      {followUpPlayers.map((player) => (
-                        <button
-                          key={player.id}
-                          type="button"
-                          className={`flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-3 text-left transition ${
-                            currentSideState.selectedPlayerId === player.id
-                              ? 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                          }`}
-                          onClick={() =>
-                            pendingFollowUpPrompt
-                              ? handleFollowUpSelection(player.id)
-                              : updateSideState(activeKey, { selectedPlayerId: player.id })
-                          }
-                        >
-                          <span className="text-base font-semibold">{player.displayName}</span>
-                        </button>
-                      ))}
-                    </div>
+                    {isDualTeam && pendingFollowUpPrompt?.kind === 'rebound' ? (
+                      <div className="space-y-3">
+                        {[
+                          {
+                            side: activeSide,
+                            label: participantsBySide[activeSide]?.displayName || activeSide,
+                            reboundType: 'OREB',
+                            players: onCourtPlayers,
+                          },
+                          {
+                            side: otherSide,
+                            label: participantsBySide[otherSide]?.displayName || otherSide,
+                            reboundType: 'DREB',
+                            players: otherTeamOnCourtPlayers,
+                          },
+                        ].map((group) => (
+                          <div key={group.side}>
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              {group.label} — {group.reboundType}
+                            </p>
+                            <div className="space-y-1.5">
+                              {group.players.map((player) => (
+                                <button
+                                  key={player.id}
+                                  type="button"
+                                  className="flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-left text-sm font-semibold bg-slate-100 text-slate-800 transition hover:bg-slate-200"
+                                  onClick={() => handleFollowUpSelection(player.id)}
+                                >
+                                  {player.jerseyNumber != null ? (
+                                    <span className="mr-2 w-6 shrink-0 text-center text-xs font-bold opacity-50">
+                                      {player.jerseyNumber}
+                                    </span>
+                                  ) : null}
+                                  {player.displayName}
+                                </button>
+                              ))}
+                              {group.players.length === 0 ? (
+                                <p className="px-1 text-xs text-slate-400">No players on court</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {followUpPlayers.map((player) => (
+                          <button
+                            key={player.id}
+                            type="button"
+                            className={`flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-3 text-left transition ${
+                              currentSideState.selectedPlayerId === player.id
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                            }`}
+                            onClick={() =>
+                              pendingFollowUpPrompt
+                                ? handleFollowUpSelection(player.id)
+                                : updateSideState(activeKey, { selectedPlayerId: player.id })
+                            }
+                          >
+                            {player.jerseyNumber != null ? (
+                              <span className="mr-2 w-6 shrink-0 text-center text-sm font-bold opacity-50">
+                                {player.jerseyNumber}
+                              </span>
+                            ) : null}
+                            <span className="text-base font-semibold">{player.displayName}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -918,34 +1005,24 @@ export function GameTrackPage() {
   return (
     <main className="space-y-6">
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{game.title}</h1>
-            {isDualTeam ? (
-              <div className="mt-3 space-y-1 text-sm text-slate-700">
-                <p>
-                  {participantsBySide.home?.displayName || 'Home'} {gameSummary.homePoints || 0} -{' '}
-                  {gameSummary.awayPoints || 0} {participantsBySide.away?.displayName || 'Away'}
-                </p>
-                <p>Active side: {activeParticipant?.displayName || activeSide}</p>
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-slate-700">
-                {team?.name || 'Team'} {gameSummary.teamPoints || 0} -{' '}
-                {gameSummary.opponentPoints || 0} Opponent
+        <div>
+          <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+            {game.title}
+          </h1>
+          {isDualTeam ? (
+            <div className="mt-3 space-y-1 text-sm text-slate-700">
+              <p>
+                {participantsBySide.home?.displayName || 'Home'} {gameSummary.homePoints || 0} -{' '}
+                {gameSummary.awayPoints || 0} {participantsBySide.away?.displayName || 'Away'}
               </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={finishGame}
-              disabled={isSaving}
-              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
-            >
-              Finish Game
-            </button>
-          </div>
+              <p>Active side: {activeParticipant?.displayName || activeSide}</p>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-slate-700">
+              {team?.name || 'Team'} {gameSummary.teamPoints || 0} -{' '}
+              {gameSummary.opponentPoints || 0} Opponent
+            </p>
+          )}
         </div>
         {isDualTeam ? (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -977,6 +1054,53 @@ export function GameTrackPage() {
         <p className="text-sm font-medium text-emerald-700">{lastActionLabel}</p>
       ) : null}
 
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Live Box Score</h2>
+        {isDualTeam ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+              <div key={side} className="rounded-xl border border-slate-200 p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-semibold text-slate-900">
+                    {participantsBySide[side]?.displayName || side}
+                  </span>
+                  <span className="text-slate-600">{boxScoreTotals?.[side]?.points || 0} PTS</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-700">
+            <p>
+              PTS:{' '}
+              <span className="font-semibold text-slate-900">
+                {boxScore.teamTotals?.points || 0}
+              </span>
+            </p>
+            <p>
+              REB:{' '}
+              <span className="font-semibold text-slate-900">{boxScore.teamTotals?.reb || 0}</span>
+            </p>
+            <p>
+              AST:{' '}
+              <span className="font-semibold text-slate-900">{boxScore.teamTotals?.ast || 0}</span>
+            </p>
+            <p>
+              FG2%:{' '}
+              <span className="font-semibold text-slate-900">
+                {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
+              </span>
+            </p>
+            <p>
+              FG3%:{' '}
+              <span className="font-semibold text-slate-900">
+                {formatThreePointPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -995,52 +1119,117 @@ export function GameTrackPage() {
                 Fullscreen
               </button>
             </div>
-            <div className="mt-4">
+            <div className="relative mt-4">
               <InteractiveCourtImage
                 onSelect={onCourtSelect}
                 containerClassName="min-h-[26rem]"
                 courtClassName="min-h-[22rem]"
               />
+              {eventPicker}
             </div>
-            {eventPicker}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Lineup</h2>
+          {lineupIds.length >= 5 && !lineupExpanded ? (
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Lineup set</p>
+                <p className="text-xs text-slate-500">
+                  {onCourtPlayers.map((p) => p.displayName).join(', ')}
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={saveLineup}
-                disabled={isSaving}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => setLineupExpanded(true)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                Save Starting Five
+                Edit
               </button>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {players.map((player) => {
-                const checked = currentSideState.lineupDraft.includes(player.id);
-                return (
-                  <label
-                    key={player.id}
-                    className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2"
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Starting Lineup</h2>
+                  <p className="text-sm text-slate-500">
+                    {isDualTeam
+                      ? `${participantsBySide[activeSide]?.displayName || activeSide} — `
+                      : ''}
+                    {currentSideState.lineupDraft.length} / 5 selected
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {lineupIds.length >= 5 ? (
+                    <button
+                      type="button"
+                      onClick={() => setLineupExpanded(false)}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Hide
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={saveLineup}
+                    disabled={isSaving || currentSideState.lineupDraft.length !== 5}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        const nextDraft = event.target.checked
-                          ? [...currentSideState.lineupDraft, player.id]
-                          : currentSideState.lineupDraft.filter((id) => id !== player.id);
-                        updateSideState(activeKey, { lineupDraft: nextDraft });
-                      }}
-                    />
-                    <span className="text-sm font-medium text-slate-900">{player.displayName}</span>
-                  </label>
-                );
-              })}
+                    {isSaving ? 'Saving...' : 'Save Lineup'}
+                  </button>
+                </div>
+              </div>
+
+              {players.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <p className="font-semibold">No players found on this roster.</p>
+                  {teamId ? (
+                    <Link to={`/teams/${teamId}/edit`} className="mt-1 inline-block underline">
+                      Add players to this team
+                    </Link>
+                  ) : (
+                    <p className="mt-1">Go to Teams to add players before tracking.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {players.map((player) => {
+                    const checked = currentSideState.lineupDraft.includes(player.id);
+                    const isInactive = player.isActive === false;
+                    return (
+                      <label
+                        key={player.id}
+                        className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
+                          checked
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : isInactive
+                              ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="shrink-0 accent-white"
+                          checked={checked}
+                          disabled={isInactive}
+                          onChange={(event) => {
+                            if (isInactive) return;
+                            const nextDraft = event.target.checked
+                              ? [...currentSideState.lineupDraft, player.id]
+                              : currentSideState.lineupDraft.filter((id) => id !== player.id);
+                            updateSideState(activeKey, { lineupDraft: nextDraft });
+                          }}
+                        />
+                        <span className="text-sm font-medium">
+                          {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
+                          {player.displayName}
+                          {isInactive ? ' (inactive)' : ''}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -1072,6 +1261,7 @@ export function GameTrackPage() {
                   <option value="">Select on-court player</option>
                   {onCourtPlayers.map((player) => (
                     <option key={player.id} value={player.id}>
+                      {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
                       {player.displayName}
                     </option>
                   ))}
@@ -1094,6 +1284,7 @@ export function GameTrackPage() {
                   <option value="">Select bench player</option>
                   {benchPlayers.map((player) => (
                     <option key={player.id} value={player.id}>
+                      {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
                       {player.displayName}
                     </option>
                   ))}
@@ -1105,24 +1296,72 @@ export function GameTrackPage() {
 
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Player Selection</h2>
-            <div className="mt-4 space-y-2">
-              {players.map((player) => (
-                <button
-                  key={player.id}
-                  type="button"
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ${
-                    currentSideState.selectedPlayerId === player.id
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-800'
-                  }`}
-                  onClick={() => updateSideState(activeKey, { selectedPlayerId: player.id })}
-                >
-                  <span className="font-medium">{player.displayName}</span>
-                  {lineupIds.includes(player.id) ? <span className="text-xs">On court</span> : null}
-                </button>
-              ))}
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">Player Selection</h2>
+              {currentSideState.selectedPlayerId ? (
+                <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
+                  {players.find((p) => p.id === currentSideState.selectedPlayerId)?.displayName ||
+                    'Selected'}
+                </span>
+              ) : null}
             </div>
+            {lineupIds.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-500">Set and save a starting lineup first.</p>
+            ) : (
+              <div className="mt-3 space-y-1.5">
+                {onCourtPlayers.map((player) => (
+                  <button
+                    key={player.id}
+                    type="button"
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                      currentSideState.selectedPlayerId === player.id
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                    }`}
+                    onClick={() => updateSideState(activeKey, { selectedPlayerId: player.id })}
+                  >
+                    {player.jerseyNumber != null ? (
+                      <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                        {player.jerseyNumber}
+                      </span>
+                    ) : null}
+                    <span className="font-medium">{player.displayName}</span>
+                  </button>
+                ))}
+                {benchPlayers.filter((p) => p.isActive !== false).length > 0 ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                      Bench ({benchPlayers.filter((p) => p.isActive !== false).length})
+                    </summary>
+                    <div className="mt-1.5 space-y-1.5">
+                      {benchPlayers
+                        .filter((p) => p.isActive !== false)
+                        .map((player) => (
+                          <button
+                            key={player.id}
+                            type="button"
+                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                              currentSideState.selectedPlayerId === player.id
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                            }`}
+                            onClick={() =>
+                              updateSideState(activeKey, { selectedPlayerId: player.id })
+                            }
+                          >
+                            {player.jerseyNumber != null ? (
+                              <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                                {player.jerseyNumber}
+                              </span>
+                            ) : null}
+                            <span className="font-medium">{player.displayName}</span>
+                          </button>
+                        ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1230,82 +1469,58 @@ export function GameTrackPage() {
               ))}
             </div>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Live Box Score</h2>
-            {isDualTeam ? (
-              <div className="mt-4 grid gap-4">
-                {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                  <div key={side} className="rounded-xl border border-slate-200 p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-slate-900">
-                        {participantsBySide[side]?.displayName || side}
-                      </span>
-                      <span className="text-slate-600">
-                        {boxScoreTotals?.[side]?.points || 0} PTS
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 space-y-2 text-sm text-slate-700">
-                <p>PTS: {boxScore.teamTotals?.points || 0}</p>
-                <p>REB: {boxScore.teamTotals?.reb || 0}</p>
-                <p>AST: {boxScore.teamTotals?.ast || 0}</p>
-                <p>
-                  FG2%: {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
-                </p>
-                <p>
-                  FG3%:{' '}
-                  {formatThreePointPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
-                </p>
-              </div>
-            )}
-          </div>
         </div>
       </section>
 
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={finishGame}
+          disabled={isSaving}
+          className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+        >
+          Finish Game
+        </button>
+      </div>
+
       {isTrackingFullscreen ? (
-        <div className="fixed inset-0 z-50 bg-black/50 p-4">
-          <div className="mx-auto flex h-full max-w-6xl flex-col rounded-3xl bg-white p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-lg font-semibold text-slate-900">Fullscreen Tracking</h2>
-                {isDualTeam ? (
-                  <div className="flex flex-wrap gap-2">
-                    {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                      <button
-                        key={`fullscreen-${side}`}
-                        type="button"
-                        onClick={() => changeActiveSide(side)}
-                        className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                          activeSide === side
-                            ? 'bg-slate-900 text-white'
-                            : 'border border-slate-300 bg-white text-slate-800'
-                        }`}
-                      >
-                        {participantsBySide[side]?.displayName || side}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={closeTrackingOverlay}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800"
-              >
-                Close
-              </button>
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-base font-semibold text-slate-900">Tracking</h2>
+              {isDualTeam ? (
+                <div className="flex flex-wrap gap-2">
+                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                    <button
+                      key={`fullscreen-${side}`}
+                      type="button"
+                      onClick={() => changeActiveSide(side)}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                        activeSide === side
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-300 bg-white text-slate-800'
+                      }`}
+                    >
+                      {participantsBySide[side]?.displayName || side}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <div className={`min-h-0 flex-1 ${isLandscape ? 'h-[calc(100%-3.5rem)]' : ''}`}>
-              <InteractiveCourtImage
-                onSelect={onCourtSelect}
-                containerClassName="h-full min-h-[28rem]"
-                courtClassName="h-full min-h-[24rem]"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={closeTrackingOverlay}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+            >
+              Close
+            </button>
+          </div>
+          <div className="relative min-h-0 flex-1">
+            <InteractiveCourtImage
+              onSelect={onCourtSelect}
+              containerClassName="h-full"
+              courtClassName="h-full"
+            />
             {eventPicker}
           </div>
         </div>

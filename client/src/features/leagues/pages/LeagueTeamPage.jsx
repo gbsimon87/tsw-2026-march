@@ -11,6 +11,7 @@ export function LeagueTeamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [playerName, setPlayerName] = useState('');
+  const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
 
   useEffect(() => {
@@ -31,9 +32,16 @@ export function LeagueTeamPage() {
     if (!playerName.trim()) {
       return;
     }
+    const parsedJersey = Number(playerJerseyNumber);
+    const jerseyNumber =
+      playerJerseyNumber === '' || Number.isNaN(parsedJersey) ? undefined : parsedJersey;
     try {
-      await leaguesApi.addPlayer(leagueId, leagueTeamId, { displayName: playerName.trim() });
+      await leaguesApi.addPlayer(leagueId, leagueTeamId, {
+        displayName: playerName.trim(),
+        jerseyNumber,
+      });
       setPlayerName('');
+      setPlayerJerseyNumber('');
       await refresh();
     } catch (submitError) {
       setError(submitError.message || 'Failed to add player');
@@ -98,10 +106,6 @@ export function LeagueTeamPage() {
             <h2 className="mb-3 text-xl font-semibold text-slate-900">Roster</h2>
             <LeagueRosterTable roster={team.roster || []} />
           </section>
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            Roster edits are allowed even during in-progress league games. Existing league games use
-            a roster snapshot, so active tracking should not be corrupted by later roster edits.
-          </div>
           <form
             onSubmit={addPlayer}
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -114,6 +118,15 @@ export function LeagueTeamPage() {
                 placeholder="Player name"
                 value={playerName}
                 onChange={(event) => setPlayerName(event.target.value)}
+              />
+              <input
+                type="number"
+                className="w-24 rounded border border-slate-300 px-3 py-2"
+                placeholder="Jersey #"
+                min="0"
+                max="999"
+                value={playerJerseyNumber}
+                onChange={(event) => setPlayerJerseyNumber(event.target.value)}
               />
               <button
                 type="submit"

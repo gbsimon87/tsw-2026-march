@@ -102,7 +102,7 @@ describe('EditTeamPage', () => {
       });
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    expect(mockNavigate).toHaveBeenCalledWith('/admin');
   });
 
   test('allows updating a player name and jersey number', async () => {

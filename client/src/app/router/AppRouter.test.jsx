@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AppRouter } from './AppRouter';
 
@@ -9,6 +9,11 @@ const authMocks = vi.hoisted(() => ({
 
 const teamsApiMocks = vi.hoisted(() => ({
   listPublicExploreGames: vi.fn(() => Promise.resolve({ games: [] })),
+  listPublic: vi.fn(() => Promise.resolve({ teams: [] })),
+}));
+
+const leaguesApiMocks = vi.hoisted(() => ({
+  listPublic: vi.fn(() => Promise.resolve({ leagues: [] })),
 }));
 
 const feedApiMocks = vi.hoisted(() => ({
@@ -35,9 +40,19 @@ vi.mock('../../features/teams/api/teamsApi', () => ({
   teamsApi: teamsApiMocks,
 }));
 
+vi.mock('../../features/leagues/api/leaguesApi', () => ({
+  leaguesApi: leaguesApiMocks,
+}));
+
 vi.mock('../../features/feed/api/feedApi', () => ({
   feedApi: feedApiMocks,
 }));
+
+function LocationProbe() {
+  const location = useLocation();
+
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+}
 
 describe('AppRouter', () => {
   beforeEach(() => {
@@ -78,6 +93,7 @@ describe('AppRouter', () => {
     render(
       <MemoryRouter initialEntries={['/feed']}>
         <AppRouter />
+        <LocationProbe />
       </MemoryRouter>
     );
 
@@ -88,10 +104,9 @@ describe('AppRouter', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create post' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument();
-      expect(screen.getByText(/Don't have an account/i).querySelector('a')).toHaveAttribute(
-        'href',
-        '/register?redirectTo=%2Ffeed%3Fcompose%3D1'
+      expect(screen.getAllByRole('button', { name: 'Log in' }).length).toBeGreaterThan(0);
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/login?redirectTo=%2Ffeed%3Fcompose%3D1'
       );
     });
   });

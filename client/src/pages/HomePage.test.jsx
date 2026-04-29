@@ -11,7 +11,6 @@ vi.mock('../app/store/AuthContext', () => ({
 
 vi.mock('../features/teams/api/teamsApi', () => ({
   teamsApi: {
-    listPublicExploreGames: vi.fn(),
     listPublic: vi.fn(),
   },
 }));
@@ -31,31 +30,7 @@ describe('HomePage', () => {
     cleanup();
   });
 
-  test('renders explore games from distinct teams', async () => {
-    teamsApi.listPublicExploreGames.mockResolvedValue({
-      games: [
-        {
-          id: 'g1',
-          title: 'vs Falcons',
-          opponent: 'Falcons',
-          scheduledAt: '2026-03-10T00:00:00.000Z',
-          completedAt: '2026-03-10T02:00:00.000Z',
-          createdAt: '2026-03-10T00:00:00.000Z',
-          teamPoints: 72,
-          team: { id: 'team-1', name: 'TSW Blue' },
-        },
-        {
-          id: 'g2',
-          title: 'vs Lions',
-          opponent: 'Lions',
-          scheduledAt: '2026-03-09T00:00:00.000Z',
-          completedAt: '2026-03-09T02:00:00.000Z',
-          createdAt: '2026-03-09T00:00:00.000Z',
-          teamPoints: 61,
-          team: { id: 'team-2', name: 'TSW Red' },
-        },
-      ],
-    });
+  test('renders active leagues and featured public teams', async () => {
     teamsApi.listPublic.mockResolvedValue({
       teams: [{ id: 'team-1', name: 'TSW Blue', logo: null }],
     });
@@ -79,17 +54,10 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Explore' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Active Leagues' })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('link', { name: 'TSW Blue' })).toHaveAttribute('href', '/teams/team-1');
-    expect(screen.getByRole('link', { name: 'TSW Red' })).toHaveAttribute('href', '/teams/team-2');
-    expect(screen.getByRole('link', { name: /Open Falcons/i })).toHaveAttribute(
-      'href',
-      '/games/g1'
-    );
-    expect(screen.getByRole('link', { name: /Open Lions/i })).toHaveAttribute('href', '/games/g2');
-    expect(screen.getByRole('heading', { name: 'Active Leagues' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /TSW Blue/ })).toHaveAttribute('href', '/teams/team-1');
     expect(screen.getByRole('heading', { name: 'Featured Public Teams' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
       'href',
@@ -97,8 +65,7 @@ describe('HomePage', () => {
     );
   });
 
-  test('renders explore empty state when no public games are available', async () => {
-    teamsApi.listPublicExploreGames.mockResolvedValue({ games: [] });
+  test('renders empty states when no public leagues or teams are available', async () => {
     teamsApi.listPublic.mockResolvedValue({ teams: [] });
     leaguesApi.listPublic.mockResolvedValue({ leagues: [] });
 
@@ -109,12 +76,12 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/No public games to explore yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/No public leagues yet/i)).toBeInTheDocument();
     });
+    expect(screen.getByText(/No public teams yet/i)).toBeInTheDocument();
   });
 
   test('renders the three homepage audience images', async () => {
-    teamsApi.listPublicExploreGames.mockResolvedValue({ games: [] });
     teamsApi.listPublic.mockResolvedValue({ teams: [] });
     leaguesApi.listPublic.mockResolvedValue({ leagues: [] });
 

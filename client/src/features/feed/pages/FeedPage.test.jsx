@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { FeedPage } from './FeedPage';
 
@@ -68,17 +68,20 @@ describe('FeedPage', () => {
     cleanup();
   });
 
-  test('shows auth CTA when logged out', async () => {
+  test('routes logged-out composer action to login', async () => {
     authMocks.useAuth.mockReturnValue({ user: null });
 
     render(
-      <MemoryRouter>
-        <FeedPage />
+      <MemoryRouter initialEntries={['/feed']}>
+        <Routes>
+          <Route path="/feed" element={<FeedPage />} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
       </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Log in to post images/i)).toBeInTheDocument();
+      expect(screen.getByAltText('TSW Blue card logo')).toBeInTheDocument();
     });
 
     expect(screen.getByAltText('TSW Blue card logo')).toHaveAttribute(
@@ -87,6 +90,12 @@ describe('FeedPage', () => {
     );
     expect(screen.getByRole('button', { name: 'Create post' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create post' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Login page')).toBeInTheDocument();
+    });
   });
 
   test('shows modal composer and delete button when logged in', async () => {

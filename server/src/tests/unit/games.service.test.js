@@ -1,5 +1,6 @@
 jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamByIdAndOwner: jest.fn(),
+  findTeamById: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -28,6 +29,7 @@ jest.mock('../../modules/games/gameRecap.service', () => ({
 
 jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueContextForGame: jest.fn(),
+  getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
 }));
@@ -43,8 +45,13 @@ jest.mock('mongoose', () => ({
 const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
 const { createGame, findGameById, saveGame } = require('../../modules/games/games.repository');
 const {
+  getLeagueContextForGame,
+  getLeagueRosterSnapshotForTeam,
+} = require('../../modules/leagues/leagues.service');
+const {
   computeBoxScore,
   createGameForUser,
+  getGameForUser,
   setGameLineup,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
@@ -53,6 +60,67 @@ function buildPlayers(players) {
   const list = players.map((player) => ({ ...player }));
   list.id = (playerId) => list.find((player) => String(player._id) === String(playerId)) || null;
   return list;
+}
+
+function buildLeagueSnapshotPlayer(id, displayName) {
+  return {
+    _id: id,
+    leaguePlayerId: `${id}-league`,
+    displayName,
+    jerseyNumber: null,
+    position: null,
+    isActive: true,
+  };
+}
+
+function buildDualLeagueGame(overrides = {}) {
+  return {
+    _id: 'game-1',
+    ownerUserId: 'user-1',
+    gameContext: 'league',
+    trackingMode: 'dual_team',
+    leagueId: 'league-1',
+    homeLeagueTeamId: 'home-team',
+    awayLeagueTeamId: 'away-team',
+    trackedLeagueTeamId: 'home-team',
+    initialActiveSide: 'home',
+    homeParticipant: {
+      side: 'home',
+      participantType: 'league_team',
+      teamId: null,
+      leagueTeamId: 'home-team',
+      displayName: 'Home Squad',
+      logo: null,
+      colors: [],
+      billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+      entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+    },
+    awayParticipant: {
+      side: 'away',
+      participantType: 'league_team',
+      teamId: null,
+      leagueTeamId: 'away-team',
+      displayName: 'Away Squad',
+      logo: null,
+      colors: [],
+      billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+      entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+    },
+    title: 'Away Squad at Home Squad',
+    status: 'in_progress',
+    homeRosterSnapshot: [],
+    awayRosterSnapshot: [],
+    homeStartingLineupPlayerIds: [],
+    homeCurrentLineupPlayerIds: [],
+    awayStartingLineupPlayerIds: [],
+    awayCurrentLineupPlayerIds: [],
+    events: [],
+    scheduledAt: null,
+    completedAt: null,
+    createdAt: new Date('2026-03-12T00:00:00.000Z'),
+    updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    ...overrides,
+  };
 }
 
 describe('games service box score', () => {
@@ -193,6 +261,136 @@ describe('games service create game', () => {
       })
     );
     expect(result.videoUrl).toBe('https://youtu.be/dQw4w9WgXcQ');
+  });
+
+  test('creates dual league games with independent home and away roster snapshots', async () => {
+    const homeRosterSnapshot = [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')];
+    const awayRosterSnapshot = [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')];
+
+    getLeagueContextForGame.mockResolvedValue({
+      league: { _id: 'league-1' },
+      homeTeam: { _id: 'home-team', name: 'Home Squad', logo: null, colors: [] },
+      awayTeam: { _id: 'away-team', name: 'Away Squad', logo: null, colors: [] },
+      trackedTeam: { _id: 'away-team', name: 'Away Squad' },
+      rosterSnapshot: awayRosterSnapshot,
+    });
+    getLeagueRosterSnapshotForTeam.mockImplementation((leagueTeamId) =>
+      Promise.resolve(leagueTeamId === 'home-team' ? homeRosterSnapshot : awayRosterSnapshot)
+    );
+    createGame.mockImplementation(async (input) => ({
+      _id: 'game-1',
+      ...input,
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      homeStartingLineupPlayerIds: [],
+      homeCurrentLineupPlayerIds: [],
+      awayStartingLineupPlayerIds: [],
+      awayCurrentLineupPlayerIds: [],
+      events: [],
+      scheduledAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    }));
+
+    await createGameForUser('user-1', {
+      gameContext: 'league',
+      trackingMode: 'dual_team',
+      leagueId: 'league-1',
+      homeLeagueTeamId: 'home-team',
+      awayLeagueTeamId: 'away-team',
+      initialActiveSide: 'away',
+    });
+
+    expect(getLeagueContextForGame).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        trackedLeagueTeamId: 'away-team',
+      }),
+      { allowManager: true }
+    );
+    expect(createGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homeRosterSnapshot,
+        awayRosterSnapshot,
+      })
+    );
+  });
+});
+
+describe('games service roster snapshot repair', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getLeagueRosterSnapshotForTeam.mockReset();
+  });
+
+  test('backfills empty dual league participant rosters when loading a game', async () => {
+    const game = buildDualLeagueGame();
+    const homeRosterSnapshot = [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')];
+    const awayRosterSnapshot = [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')];
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    getLeagueRosterSnapshotForTeam.mockImplementation((leagueTeamId) =>
+      Promise.resolve(leagueTeamId === 'home-team' ? homeRosterSnapshot : awayRosterSnapshot)
+    );
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(result.participants.home.players).toEqual([
+      expect.objectContaining({ id: 'home-snap-1', displayName: 'Home One' }),
+    ]);
+    expect(result.participants.away.players).toEqual([
+      expect.objectContaining({ id: 'away-snap-1', displayName: 'Away One' }),
+    ]);
+    expect(result.boxScore.home.players).toEqual([
+      expect.objectContaining({ playerId: 'home-snap-1', displayName: 'Home One' }),
+    ]);
+    expect(saveGame).toHaveBeenCalledWith(game);
+  });
+
+  test('does not overwrite non-empty roster snapshots', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('existing-home-snap', 'Existing Home')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('existing-away-snap', 'Existing Away')],
+    });
+
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(getLeagueRosterSnapshotForTeam).not.toHaveBeenCalled();
+    expect(saveGame).not.toHaveBeenCalled();
+    expect(result.participants.home.players[0]).toEqual(
+      expect.objectContaining({ id: 'existing-home-snap', displayName: 'Existing Home' })
+    );
+  });
+
+  test('allows setting a lineup after backfilling an empty dual league roster', async () => {
+    const homeRosterSnapshot = [
+      buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+      buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      buildLeagueSnapshotPlayer('home-snap-3', 'Home Three'),
+      buildLeagueSnapshotPlayer('home-snap-4', 'Home Four'),
+      buildLeagueSnapshotPlayer('home-snap-5', 'Home Five'),
+    ];
+    const game = buildDualLeagueGame();
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    getLeagueRosterSnapshotForTeam.mockImplementation((leagueTeamId) =>
+      Promise.resolve(leagueTeamId === 'home-team' ? homeRosterSnapshot : [])
+    );
+
+    const playerIds = homeRosterSnapshot.map((player) => player._id);
+    const result = await setGameLineup('user-1', 'game-1', {
+      teamSide: 'home',
+      playerIds,
+    });
+
+    expect(game.homeStartingLineupPlayerIds).toEqual(playerIds);
+    expect(game.homeCurrentLineupPlayerIds).toEqual(playerIds);
+    expect(result.lineups.home.currentPlayerIds).toEqual(playerIds);
   });
 });
 

@@ -142,7 +142,7 @@ export function EditTeamPage() {
         homeVenue: normalizeVenue(homeVenue),
       });
       setTeam(response.team);
-      navigate('/dashboard');
+      navigate('/admin');
     } catch (submitError) {
       setError(submitError.message || 'Failed to update team');
     } finally {
@@ -264,7 +264,7 @@ export function EditTeamPage() {
             </p>
           </div>
           <Link
-            to="/dashboard"
+            to="/admin"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
           >
             Back
@@ -477,7 +477,6 @@ export function EditTeamPage() {
                 <button
                   type="submit"
                   disabled={isLoading || !team || isSubmitting}
-                  aria-label={isSubmitting ? 'Saving team changes' : 'Save team changes'}
                   className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                 >
                   {isSubmitting ? 'Saving...' : 'Save Changes'}

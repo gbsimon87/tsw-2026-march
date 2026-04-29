@@ -1,5 +1,6 @@
 jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamByIdAndOwner: jest.fn(),
+  findTeamById: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -25,6 +26,7 @@ jest.mock('../../modules/billing/billing.service', () => ({
 
 jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueContextForGame: jest.fn(),
+  getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
 }));

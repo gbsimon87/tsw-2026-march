@@ -110,11 +110,12 @@ function renderPage() {
 }
 
 function getEventPicker() {
-  return screen.getByRole('button', { name: /Close event picker/i }).parentElement?.parentElement;
+  const closeButtons = screen.getAllByRole('button', { name: /Close event picker/i });
+  return closeButtons.at(-1).parentElement?.parentElement;
 }
 
-function getOnCourtCard() {
-  return screen.getByText(/^On Court$/i).parentElement;
+function getActiveCourt() {
+  return screen.getAllByTestId('interactive-court-image').at(-1);
 }
 
 describe('GameTrackPage', () => {
@@ -135,18 +136,34 @@ describe('GameTrackPage', () => {
 
     apiMocks.getById.mockImplementation(() => Promise.resolve(currentResponse));
 
-    apiMocks.setLineup.mockImplementation((gameId, playerIds) => {
-      currentResponse = {
-        ...currentResponse,
-        game: {
-          ...currentResponse.game,
-          startingLineupPlayerIds: playerIds,
-          currentLineupPlayerIds: playerIds,
-        },
-      };
+    apiMocks.setLineup.mockImplementation((gameId, payload) => {
+      const playerIds = Array.isArray(payload) ? payload : payload.playerIds;
+
+      if (payload?.teamSide) {
+        currentResponse = {
+          ...currentResponse,
+          lineups: {
+            ...currentResponse.lineups,
+            [payload.teamSide]: {
+              startingPlayerIds: playerIds,
+              currentPlayerIds: playerIds,
+            },
+          },
+        };
+      } else {
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            startingLineupPlayerIds: playerIds,
+            currentLineupPlayerIds: playerIds,
+          },
+        };
+      }
 
       return Promise.resolve({
         game: currentResponse.game,
+        lineups: currentResponse.lineups,
         boxScore: currentResponse.boxScore,
         gameSummary: currentResponse.gameSummary,
       });
@@ -203,40 +220,37 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/Set starting five before tracking/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: /Open Full Screen Tracking/i })).toBeDisabled();
-    expect(screen.queryByText(/Selected Player/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+
+    expect(screen.getByText(/Set starting five before tracking/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Fullscreen Tracking/i)).not.toBeInTheDocument();
   });
 
   test('saves the starting five and enables full-screen tracking', async () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Set Starting Five/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Save Lineup/i })).toBeInTheDocument();
     });
 
     for (const player of ['Alex', 'Blake', 'Casey', 'Drew', 'Evan']) {
-      fireEvent.click(screen.getByRole('button', { name: player }));
+      fireEvent.click(screen.getByLabelText(player));
     }
 
-    fireEvent.click(screen.getByRole('button', { name: /Set Starting Five/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save Lineup/i }));
 
     await waitFor(() => {
-      expect(apiMocks.setLineup).toHaveBeenCalledWith('game-1', [
-        'player-1',
-        'player-2',
-        'player-3',
-        'player-4',
-        'player-5',
-      ]);
+      expect(apiMocks.setLineup).toHaveBeenCalledWith('game-1', {
+        playerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+      });
     });
 
-    expect(screen.getByRole('button', { name: /Open Full Screen Tracking/i })).toBeEnabled();
-    expect(screen.getByText(/Last action: Starting five set/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Bench$/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Flynn').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
+    expect(screen.getByText(/Starting five set/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
   });
 
   test('switches active side in fullscreen and clears transient event state for dual-team games', async () => {
@@ -290,16 +304,16 @@ describe('GameTrackPage', () => {
       expect(screen.getAllByRole('button', { name: 'Away Squad' }).length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(screen.getByTestId('interactive-court-image'));
+    fireEvent.click(getActiveCourt());
 
     await waitFor(() => {
-      expect(screen.getByText(/Add Event/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0);
     });
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Away Squad' })[0]);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Add Event/i)).not.toBeInTheDocument();
+      expect(screen.queryAllByText(/Add Event/i)).toHaveLength(0);
     });
   });
 
@@ -314,13 +328,13 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Open Full Screen Tracking/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
-    fireEvent.click(within(getOnCourtCard()).getByRole('button', { name: 'Blake' }));
+    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Blake' }));
 
-    const court = screen.getByTestId('interactive-court-image');
+    const court = getActiveCourt();
     court.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -334,14 +348,14 @@ describe('GameTrackPage', () => {
     });
 
     fireEvent.click(court, { clientX: 475, clientY: 900 });
-    fireEvent.click(screen.getByRole('button', { name: /Shot Make/i }));
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
 
     await waitFor(() => {
       expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByText(/Who assisted\?/i)).toBeInTheDocument();
     const overlay = getEventPicker();
+    expect(within(overlay).getByText(/Who assisted\?/i)).toBeInTheDocument();
     expect(within(overlay).queryByRole('button', { name: 'Flynn' })).not.toBeInTheDocument();
     expect(within(overlay).queryByRole('button', { name: 'Blake' })).not.toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'Alex' })).toBeInTheDocument();
@@ -362,12 +376,12 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Open Full Screen Tracking/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
 
-    const court = screen.getByTestId('interactive-court-image');
+    const court = getActiveCourt();
     court.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -381,14 +395,14 @@ describe('GameTrackPage', () => {
     });
 
     fireEvent.click(court, { clientX: 250, clientY: 800 });
-    fireEvent.click(screen.getByRole('button', { name: /FT Miss/i }));
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'FT-' }));
 
     await waitFor(() => {
       expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByText(/Who got the rebound\?/i)).toBeInTheDocument();
     const overlay = getEventPicker();
+    expect(within(overlay).getByText(/Who got the rebound\?/i)).toBeInTheDocument();
     for (const player of ['Alex', 'Blake', 'Casey', 'Drew', 'Evan']) {
       expect(within(overlay).getByRole('button', { name: player })).toBeInTheDocument();
     }
@@ -414,13 +428,13 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Open Full Screen Tracking/i })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Open Full Screen Tracking/i }));
-    fireEvent.click(within(getOnCourtCard()).getByRole('button', { name: 'Casey' }));
+    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Casey' }));
 
-    const court = screen.getByTestId('interactive-court-image');
+    const court = getActiveCourt();
     court.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -469,13 +483,13 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/^On Court$/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Alex' })).toBeInTheDocument();
     });
 
     const selects = screen.getAllByRole('combobox');
     fireEvent.change(selects[0], { target: { value: 'player-1' } });
     fireEvent.change(selects[1], { target: { value: 'player-6' } });
-    fireEvent.click(screen.getByRole('button', { name: /Make Substitution/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Record Sub/i }));
 
     await waitFor(() => {
       expect(apiMocks.appendEvent).toHaveBeenNthCalledWith(1, 'game-1', {
@@ -490,15 +504,12 @@ describe('GameTrackPage', () => {
       });
     });
 
-    const onCourtSection = screen.getByText(/^On Court$/i).parentElement;
-    const benchSection = screen.getByText(/^Bench$/i).parentElement;
-
-    expect(within(onCourtSection).getByRole('button', { name: 'Flynn' })).toBeInTheDocument();
-    expect(within(benchSection).getByText('Alex')).toBeInTheDocument();
-    expect(screen.getByText(/Last action: Substitution recorded/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Flynn' })).toBeInTheDocument();
+    expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Substitution recorded/i)).toBeInTheDocument();
   });
 
-  test('renders the live box score with expanded stat columns', async () => {
+  test('renders the live box score summary and quick actions', async () => {
     currentResponse = createResponse({
       game: {
         currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
@@ -561,10 +572,15 @@ describe('GameTrackPage', () => {
     expect(screen.getByText('STL')).toBeInTheDocument();
     expect(screen.getByText('TOV')).toBeInTheDocument();
     expect(screen.getByText('FOUL')).toBeInTheDocument();
-    expect(screen.queryByText('2/7')).not.toBeInTheDocument();
-    expect(screen.getAllByText('5/7').length).toBeGreaterThan(0);
-    expect(screen.getByText('71.4%')).toBeInTheDocument();
-    expect(screen.getByText('Team Total')).toBeInTheDocument();
-    expect(screen.getByText('18')).toBeInTheDocument();
+    expect(screen.getByText('DREB')).toBeInTheDocument();
+    expect(screen.getByText('66.7%')).toBeInTheDocument();
+    expect(screen.getByText('50.0%')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName?.toLowerCase() === 'p' &&
+          element.textContent.includes('24 - 18 Opponent')
+      )
+    ).toBeInTheDocument();
   });
 });

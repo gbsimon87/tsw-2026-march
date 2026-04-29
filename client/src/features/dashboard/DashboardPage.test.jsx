@@ -19,8 +19,15 @@ vi.mock('../games/api/gamesApi', () => ({
   },
 }));
 
+vi.mock('../leagues/api/leaguesApi', () => ({
+  leaguesApi: {
+    list: vi.fn(),
+  },
+}));
+
 import { teamsApi } from '../teams/api/teamsApi';
 import { gamesApi } from '../games/api/gamesApi';
+import { leaguesApi } from '../leagues/api/leaguesApi';
 
 function renderDashboard() {
   render(
@@ -33,6 +40,7 @@ function renderDashboard() {
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    leaguesApi.list.mockResolvedValue({ leagues: [] });
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn(),

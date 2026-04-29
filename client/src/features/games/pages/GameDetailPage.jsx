@@ -66,9 +66,19 @@ function formatGameDate(value) {
 }
 
 function canAccessReplay(team, entitlements) {
-  void team;
-  void entitlements;
-  return true;
+  if (entitlements?.canViewReplay === true) {
+    return true;
+  }
+
+  if (entitlements?.canViewReplay === false) {
+    return false;
+  }
+
+  if (team?.entitlements?.canViewReplay === true) {
+    return true;
+  }
+
+  return team?.billing?.plan === 'pro' && team?.billing?.subscriptionStatus === 'active';
 }
 
 function buildPlayersById(data, isDualTeam) {
@@ -213,6 +223,20 @@ export function GameDetailPage() {
       render: (row) => row.points || 0,
     },
     { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb || 0 },
+    {
+      id: 'oreb',
+      label: 'OREB',
+      align: 'right',
+      sortKey: 'oreb',
+      render: (row) => row.oreb || 0,
+    },
+    {
+      id: 'dreb',
+      label: 'DREB',
+      align: 'right',
+      sortKey: 'dreb',
+      render: (row) => row.dreb || 0,
+    },
     { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast || 0 },
     { id: 'stl', label: 'STL', align: 'right', sortKey: 'stl', render: (row) => row.stl || 0 },
     { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov || 0 },
@@ -321,12 +345,12 @@ export function GameDetailPage() {
         title={
           isDualTeam
             ? 'Replay is not available for league dual-team games yet'
-            : 'Replay is temporarily unavailable'
+            : 'Replay is only available for Pro users'
         }
         description={
           isDualTeam
             ? 'Replay remains disabled here until side-aware league replay is fully supported.'
-            : 'Replay is not available for this game right now.'
+            : 'Upgrade this team to Pro to unlock possession replay for tracked games.'
         }
       />
     );
@@ -391,6 +415,9 @@ export function GameDetailPage() {
         </button>
       </div>
       <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Printable Box Score
+        </p>
         <h1 className="text-2xl font-bold text-slate-900">{game.title}</h1>
         <p className="text-sm text-slate-700">
           {isDualTeam
@@ -398,7 +425,7 @@ export function GameDetailPage() {
             : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'}`}
         </p>
         <p className="text-sm text-slate-700">
-          Final:{' '}
+          Final Score:{' '}
           {isDualTeam
             ? `${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}`
             : `${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}`}
@@ -407,6 +434,28 @@ export function GameDetailPage() {
           Date: {formatGameDate(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
         </p>
       </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
+          Box Score: {statsView.label}
+        </div>
+        <StatsTable
+          columns={boxScoreColumns}
+          rows={statsView.rows}
+          tableClassName="w-full text-sm"
+        />
+      </div>
+      {isDualTeam && statsView.secondaryRows ? (
+        <div className="overflow-x-auto rounded border border-slate-200">
+          <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
+            Box Score: {statsView.secondaryLabel}
+          </div>
+          <StatsTable
+            columns={boxScoreColumns}
+            rows={statsView.secondaryRows}
+            tableClassName="w-full text-sm"
+          />
+        </div>
+      ) : null}
     </section>
   );
 

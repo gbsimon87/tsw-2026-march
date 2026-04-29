@@ -8,6 +8,7 @@ const { getTeamEntitlements, getBillingSummary } = require('../billing/billing.s
 const { buildGameRecap } = require('./gameRecap.service');
 const {
   getLeagueContextForGame,
+  getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
 } = require('../leagues/leagues.service');
@@ -491,7 +492,7 @@ function buildParticipantFromStandaloneTeam(team, side) {
 }
 
 function buildRosterSnapshotFromStandaloneTeam(team) {
-  return (team.players || [])
+  return (team?.players || [])
     .filter((player) => player.isActive)
     .map((player) => ({
       sourceType: 'team_player',
@@ -503,6 +504,76 @@ function buildRosterSnapshotFromStandaloneTeam(team) {
       isClaimed: false,
       isActive: Boolean(player.isActive),
     }));
+}
+
+function hasSnapshotPlayers(snapshot) {
+  return Array.isArray(snapshot) && snapshot.length > 0;
+}
+
+function fillEmptySnapshot(game, fieldName, snapshot) {
+  if (hasSnapshotPlayers(game[fieldName]) || !hasSnapshotPlayers(snapshot)) {
+    return false;
+  }
+
+  game[fieldName] = snapshot;
+  return true;
+}
+
+async function repairGameRosterSnapshots(game) {
+  if (!game || game.status !== 'in_progress') {
+    return false;
+  }
+
+  let repaired = false;
+
+  if (game.trackingMode === 'dual_team') {
+    if (game.gameContext === 'league') {
+      const [homeSnapshot, awaySnapshot] = await Promise.all([
+        !hasSnapshotPlayers(game.homeRosterSnapshot) && game.homeLeagueTeamId
+          ? getLeagueRosterSnapshotForTeam(game.homeLeagueTeamId)
+          : Promise.resolve([]),
+        !hasSnapshotPlayers(game.awayRosterSnapshot) && game.awayLeagueTeamId
+          ? getLeagueRosterSnapshotForTeam(game.awayLeagueTeamId)
+          : Promise.resolve([]),
+      ]);
+
+      repaired = fillEmptySnapshot(game, 'homeRosterSnapshot', homeSnapshot) || repaired;
+      repaired = fillEmptySnapshot(game, 'awayRosterSnapshot', awaySnapshot) || repaired;
+    } else {
+      const [homeTeam, awayTeam] = await Promise.all([
+        !hasSnapshotPlayers(game.homeRosterSnapshot) && game.homeTeamId
+          ? findTeamById(game.homeTeamId)
+          : Promise.resolve(null),
+        !hasSnapshotPlayers(game.awayRosterSnapshot) && game.awayTeamId
+          ? findTeamById(game.awayTeamId)
+          : Promise.resolve(null),
+      ]);
+
+      repaired =
+        fillEmptySnapshot(
+          game,
+          'homeRosterSnapshot',
+          buildRosterSnapshotFromStandaloneTeam(homeTeam)
+        ) || repaired;
+      repaired =
+        fillEmptySnapshot(
+          game,
+          'awayRosterSnapshot',
+          buildRosterSnapshotFromStandaloneTeam(awayTeam)
+        ) || repaired;
+    }
+  } else if (game.gameContext === 'league' && !hasSnapshotPlayers(game.rosterSnapshot)) {
+    const snapshot = game.trackedLeagueTeamId
+      ? await getLeagueRosterSnapshotForTeam(game.trackedLeagueTeamId)
+      : [];
+    repaired = fillEmptySnapshot(game, 'rosterSnapshot', snapshot) || repaired;
+  }
+
+  if (repaired) {
+    await saveGame(game);
+  }
+
+  return repaired;
 }
 
 function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
@@ -543,6 +614,8 @@ async function resolveDualGameParticipants(game) {
 }
 
 async function resolveGameTeamContext(userId, game) {
+  await repairGameRosterSnapshots(game);
+
   if (game.trackingMode === 'dual_team') {
     const participants = await resolveDualGameParticipants(game);
     const viewerSide =
@@ -666,14 +739,10 @@ async function createGameForUser(userId, payload) {
       },
       { allowManager: true }
     );
-    const awayContext = await getLeagueContextForGame(
-      userId,
-      {
-        ...payload,
-        trackedLeagueTeamId: payload.awayLeagueTeamId,
-      },
-      { allowManager: true }
-    );
+    const [homeRosterSnapshot, awayRosterSnapshot] = await Promise.all([
+      getLeagueRosterSnapshotForTeam(context.homeTeam._id),
+      getLeagueRosterSnapshotForTeam(context.awayTeam._id),
+    ]);
 
     const game = await createGame({
       ownerUserId: userId,
@@ -709,14 +778,8 @@ async function createGameForUser(userId, payload) {
         billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
         entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
       },
-      homeRosterSnapshot:
-        String(context.homeTeam._id) === String(context.trackedTeam._id)
-          ? context.rosterSnapshot
-          : awayContext.rosterSnapshot,
-      awayRosterSnapshot:
-        String(context.awayTeam._id) === String(awayContext.trackedTeam._id)
-          ? awayContext.rosterSnapshot
-          : context.rosterSnapshot,
+      homeRosterSnapshot,
+      awayRosterSnapshot,
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
@@ -821,7 +884,7 @@ async function getGameForUser(userId, gameId) {
   const gameSummary = buildGameSummary(game);
 
   return {
-    game: sanitizeGame(game, { includeOwnerUserId: true }),
+    game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
     opponentTeam,
     participants: participants

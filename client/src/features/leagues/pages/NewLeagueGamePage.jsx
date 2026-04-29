@@ -64,6 +64,11 @@ export function NewLeagueGamePage() {
 
   const hasValidMatchup =
     homeLeagueTeamId && awayLeagueTeamId && homeLeagueTeamId !== awayLeagueTeamId;
+  const homeTeam = teams.find((team) => team.id === homeLeagueTeamId) || null;
+  const awayTeam = teams.find((team) => team.id === awayLeagueTeamId) || null;
+  const shortRosterTeams = [homeTeam, awayTeam].filter(
+    (team) => typeof team?.activeRosterCount === 'number' && team.activeRosterCount < 5
+  );
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
@@ -130,16 +135,22 @@ export function NewLeagueGamePage() {
         {!hasValidMatchup ? (
           <p className="text-sm text-amber-700">Choose two different teams for this matchup.</p>
         ) : null}
+        {hasValidMatchup && shortRosterTeams.length > 0 ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <p className="font-semibold">One or more teams has fewer than five active players.</p>
+            <p className="mt-1">
+              {shortRosterTeams
+                .map((team) => `${team.name}: ${team.activeRosterCount || 0}/5 active`)
+                .join(', ')}
+            </p>
+          </div>
+        ) : null}
         <label className="block">
           <span className="mb-1 block text-sm text-slate-700">Title (optional)</span>
           <input
             type="text"
             className="w-full rounded border border-slate-300 px-3 py-2"
-            placeholder={
-              league
-                ? `${teams.find((team) => team.id === awayLeagueTeamId)?.name || 'Away'} at ${teams.find((team) => team.id === homeLeagueTeamId)?.name || 'Home'}`
-                : ''
-            }
+            placeholder={league ? `${awayTeam?.name || 'Away'} at ${homeTeam?.name || 'Home'}` : ''}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
           />
