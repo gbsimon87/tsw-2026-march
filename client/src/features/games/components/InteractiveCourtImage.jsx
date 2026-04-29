@@ -30,10 +30,11 @@ export function InteractiveCourtImage({
   children,
   containerClassName = '',
   courtClassName = '',
-  helperText = 'Tap/click the court image to select shot location.',
+  helperText = 'Tap/click the court image to select play location.',
   imageClassName = '',
   rotate90 = false,
   topControls = null,
+  flat = false,
 }) {
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const stageRef = useRef(null);
@@ -95,7 +96,7 @@ export function InteractiveCourtImage({
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden rounded border bg-white p-3 ${containerClassName}`.trim()}
+      className={`flex h-full min-h-0 flex-col overflow-hidden ${flat ? '' : 'rounded border bg-white p-3'} ${containerClassName}`.trim()}
     >
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
         {topControls ? (

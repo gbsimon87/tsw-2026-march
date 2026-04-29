@@ -89,7 +89,6 @@ export function GameTrackPage() {
   const [error, setError] = useState('');
   const [lastActionLabel, setLastActionLabel] = useState('');
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
-  const [lineupExpanded, setLineupExpanded] = useState(true);
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
@@ -176,6 +175,7 @@ export function GameTrackPage() {
   }, [isTrackingFullscreen]);
 
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
+  const isLeagueGame = data?.game?.gameContext === 'league';
   const participantsBySide = useMemo(() => data?.participants || {}, [data?.participants]);
   const activeKey = isDualTeam ? activeSide : 'oneSided';
   const currentSideState = sideState[activeKey] || createEmptySideState();
@@ -639,6 +639,10 @@ export function GameTrackPage() {
       return;
     }
 
+    if (!requireLineup()) {
+      return;
+    }
+
     if (
       !currentSideState.substitutionState.playerOutId ||
       !currentSideState.substitutionState.playerInId
@@ -722,8 +726,6 @@ export function GameTrackPage() {
       : onCourtPlayers
     : onCourtPlayers;
 
-  const activeParticipant = isDualTeam ? participantsBySide[activeSide] : team;
-
   const eventPicker =
     selectedShot || pendingFollowUpPrompt ? (
       <>
@@ -733,9 +735,9 @@ export function GameTrackPage() {
           className="absolute inset-0 bg-slate-950/20"
           onClick={clearEventPicker}
         />
-        <div className="absolute inset-0 flex items-center justify-center px-3 landscape:justify-end landscape:px-3 landscape:pr-4">
+        <div className="absolute inset-0 flex items-center justify-center px-3 landscape:px-3 landscape:pr-4">
           <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-lg landscape:w-[26rem] landscape:max-w-none landscape:-rotate-90 landscape:origin-center"
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-lg landscape:w-[26rem] landscape:max-w-none landscape:origin-center"
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
@@ -853,7 +855,7 @@ export function GameTrackPage() {
                   </div>
                 </div>
 
-                <div className="flex min-h-0 flex-col space-y-1">
+                <div className="flex flex-col space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Action
                   </p>
@@ -933,6 +935,14 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
+                            className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-60"
+                            disabled={isSaving}
+                            onClick={() => addReboundEvent('OREB')}
+                          >
+                            OREB
+                          </button>
+                          <button
+                            type="button"
                             className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('STL')}
@@ -995,54 +1005,64 @@ export function GameTrackPage() {
       </>
     ) : null;
 
-  const boxScoreTotals = isDualTeam
-    ? {
-        home: boxScore.home?.totals,
-        away: boxScore.away?.totals,
-      }
-    : null;
-
   return (
-    <main className="space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
-        <div>
-          <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-            {game.title}
-          </h1>
-          {isDualTeam ? (
-            <div className="mt-3 space-y-1 text-sm text-slate-700">
-              <p>
-                {participantsBySide.home?.displayName || 'Home'} {gameSummary.homePoints || 0} -{' '}
-                {gameSummary.awayPoints || 0} {participantsBySide.away?.displayName || 'Away'}
-              </p>
-              <p>Active side: {activeParticipant?.displayName || activeSide}</p>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-700">
-              {team?.name || 'Team'} {gameSummary.teamPoints || 0} -{' '}
-              {gameSummary.opponentPoints || 0} Opponent
-            </p>
-          )}
-        </div>
+    <main className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{game.title}</p>
         {isDualTeam ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-              <button
-                key={side}
-                type="button"
-                onClick={() => changeActiveSide(side)}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold ${
-                  activeSide === side
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-300 bg-white text-slate-800'
-                }`}
-              >
-                {participantsBySide[side]?.displayName || side}
-              </button>
-            ))}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="text-center">
+              <p className="text-xs font-medium text-slate-500">
+                {participantsBySide.home?.displayName || 'Home'}
+              </p>
+              <p className="text-3xl font-bold text-slate-900">{gameSummary.homePoints || 0}</p>
+            </div>
+            <span className="text-xl font-bold text-slate-300">—</span>
+            <div className="text-center">
+              <p className="text-xs font-medium text-slate-500">
+                {participantsBySide.away?.displayName || 'Away'}
+              </p>
+              <p className="text-3xl font-bold text-slate-900">{gameSummary.awayPoints || 0}</p>
+            </div>
           </div>
-        ) : null}
-      </section>
+        ) : (
+          <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
+            <div className="flex items-end gap-4">
+              <div>
+                <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
+                <p className="text-3xl font-bold text-slate-900">{gameSummary.teamPoints || 0}</p>
+              </div>
+              <span className="mb-1 text-xl font-bold text-slate-300">—</span>
+              <div>
+                <p className="text-xs font-medium text-slate-500">Opponent</p>
+                <p className="text-3xl font-bold text-slate-900">
+                  {gameSummary.opponentPoints || 0}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+              <span>
+                REB <strong className="text-slate-700">{boxScore.teamTotals?.reb || 0}</strong>
+              </span>
+              <span>
+                AST <strong className="text-slate-700">{boxScore.teamTotals?.ast || 0}</strong>
+              </span>
+              <span>
+                FG2%{' '}
+                <strong className="text-slate-700">
+                  {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
+                </strong>
+              </span>
+              <span>
+                FG3%{' '}
+                <strong className="text-slate-700">
+                  {formatThreePointPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
+                </strong>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1054,70 +1074,44 @@ export function GameTrackPage() {
         <p className="text-sm font-medium text-emerald-700">{lastActionLabel}</p>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Live Box Score</h2>
-        {isDualTeam ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-              <div key={side} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-semibold text-slate-900">
-                    {participantsBySide[side]?.displayName || side}
-                  </span>
-                  <span className="text-slate-600">{boxScoreTotals?.[side]?.points || 0} PTS</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-700">
-            <p>
-              PTS:{' '}
-              <span className="font-semibold text-slate-900">
-                {boxScore.teamTotals?.points || 0}
-              </span>
-            </p>
-            <p>
-              REB:{' '}
-              <span className="font-semibold text-slate-900">{boxScore.teamTotals?.reb || 0}</span>
-            </p>
-            <p>
-              AST:{' '}
-              <span className="font-semibold text-slate-900">{boxScore.teamTotals?.ast || 0}</span>
-            </p>
-            <p>
-              FG2%:{' '}
-              <span className="font-semibold text-slate-900">
-                {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
-              </span>
-            </p>
-            <p>
-              FG3%:{' '}
-              <span className="font-semibold text-slate-900">
-                {formatThreePointPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
-              </span>
-            </p>
-          </div>
-        )}
-      </div>
-
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">Tracking Surface</h2>
-                <p className="text-sm text-slate-600">
-                  {activeParticipant?.displayName || 'Team'} offense and stat capture
-                </p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
+                {isDualTeam
+                  ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                      <button
+                        key={side}
+                        type="button"
+                        onClick={() => changeActiveSide(side)}
+                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                          activeSide === side
+                            ? 'bg-slate-900 text-white'
+                            : 'border border-slate-300 bg-white text-slate-800'
+                        }`}
+                      >
+                        {participantsBySide[side]?.displayName || side}
+                      </button>
+                    ))
+                  : null}
+                <button
+                  type="button"
+                  onClick={openTrackingOverlay}
+                  aria-label="Open fullscreen tracking"
+                  className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
+                >
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+                  </svg>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={openTrackingOverlay}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
-              >
-                Fullscreen
-              </button>
             </div>
             <div className="relative mt-4">
               <InteractiveCourtImage
@@ -1129,25 +1123,9 @@ export function GameTrackPage() {
             </div>
           </div>
 
-          {lineupIds.length >= 5 && !lineupExpanded ? (
-            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Lineup set</p>
-                <p className="text-xs text-slate-500">
-                  {onCourtPlayers.map((p) => p.displayName).join(', ')}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLineupExpanded(true)}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Edit
-              </button>
-            </div>
-          ) : (
+          {lineupIds.length < 5 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Starting Lineup</h2>
                   <p className="text-sm text-slate-500">
@@ -1157,16 +1135,19 @@ export function GameTrackPage() {
                     {currentSideState.lineupDraft.length} / 5 selected
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {lineupIds.length >= 5 ? (
-                    <button
-                      type="button"
-                      onClick={() => setLineupExpanded(false)}
-                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      Hide
-                    </button>
-                  ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {isDualTeam
+                    ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                        <button
+                          key={`lineup-${side}`}
+                          type="button"
+                          onClick={() => changeActiveSide(side)}
+                          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSide === side ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-800'}`}
+                        >
+                          {participantsBySide[side]?.displayName || side}
+                        </button>
+                      ))
+                    : null}
                   <button
                     type="button"
                     onClick={saveLineup}
@@ -1229,19 +1210,25 @@ export function GameTrackPage() {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Substitution</h2>
-              <button
-                type="button"
-                onClick={saveSubstitution}
-                disabled={isSaving}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-              >
-                Record Sub
-              </button>
+              {isDualTeam ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                    <button
+                      key={`sub-${side}`}
+                      type="button"
+                      onClick={() => changeActiveSide(side)}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${activeSide === side ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-800'}`}
+                    >
+                      {participantsBySide[side]?.displayName || side}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block">
@@ -1291,163 +1278,122 @@ export function GameTrackPage() {
                 </select>
               </label>
             </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={saveSubstitution}
+                disabled={isSaving}
+                className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+              >
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M4 7h12M13 4l3 3-3 3" />
+                  <path d="M16 13H4M7 10l-3 3 3 3" />
+                </svg>
+                Record Sub
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">Player Selection</h2>
-              {currentSideState.selectedPlayerId ? (
-                <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
-                  {players.find((p) => p.id === currentSideState.selectedPlayerId)?.displayName ||
-                    'Selected'}
-                </span>
-              ) : null}
-            </div>
-            {lineupIds.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">Set and save a starting lineup first.</p>
-            ) : (
-              <div className="mt-3 space-y-1.5">
-                {onCourtPlayers.map((player) => (
-                  <button
-                    key={player.id}
-                    type="button"
-                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
-                      currentSideState.selectedPlayerId === player.id
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                    }`}
-                    onClick={() => updateSideState(activeKey, { selectedPlayerId: player.id })}
-                  >
-                    {player.jerseyNumber != null ? (
-                      <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
-                        {player.jerseyNumber}
-                      </span>
-                    ) : null}
-                    <span className="font-medium">{player.displayName}</span>
-                  </button>
-                ))}
-                {benchPlayers.filter((p) => p.isActive !== false).length > 0 ? (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
-                      Bench ({benchPlayers.filter((p) => p.isActive !== false).length})
-                    </summary>
-                    <div className="mt-1.5 space-y-1.5">
-                      {benchPlayers
-                        .filter((p) => p.isActive !== false)
-                        .map((player) => (
-                          <button
-                            key={player.id}
-                            type="button"
-                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
-                              currentSideState.selectedPlayerId === player.id
-                                ? 'bg-slate-900 text-white'
-                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                            }`}
-                            onClick={() =>
-                              updateSideState(activeKey, { selectedPlayerId: player.id })
-                            }
-                          >
-                            {player.jerseyNumber != null ? (
-                              <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
-                                {player.jerseyNumber}
-                              </span>
-                            ) : null}
-                            <span className="font-medium">{player.displayName}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </details>
+          {!isLeagueGame ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-slate-900">Player Selection</h2>
+                {currentSideState.selectedPlayerId ? (
+                  <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
+                    {players.find((p) => p.id === currentSideState.selectedPlayerId)?.displayName ||
+                      'Selected'}
+                  </span>
                 ) : null}
               </div>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Quick Actions</h2>
-              <button
-                type="button"
-                onClick={undoLastEvent}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800"
-              >
-                Undo Last
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => addQuickStatEvent('STL')}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-              >
-                STL
-              </button>
-              <button
-                type="button"
-                onClick={() => addQuickStatEvent('TOV')}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-              >
-                TOV
-              </button>
-              <button
-                type="button"
-                onClick={() => addQuickStatEvent('FOUL')}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-              >
-                FOUL
-              </button>
-              <button
-                type="button"
-                onClick={() => addReboundEvent('DREB')}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-              >
-                DREB
-              </button>
-              {!isDualTeam ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => addOpponentScore('OPP_FT_MADE')}
-                    className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white"
-                  >
-                    Opp +1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addOpponentScore('OPP_FG2_MADE')}
-                    className="rounded-lg bg-rose-800 px-3 py-2 text-sm font-semibold text-white"
-                  >
-                    Opp +2
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addOpponentScore('OPP_FG3_MADE')}
-                    className="rounded-lg bg-rose-900 px-3 py-2 text-sm font-semibold text-white"
-                  >
-                    Opp +3
-                  </button>
-                </>
+              {lineupIds.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-500">Set and save a starting lineup first.</p>
               ) : (
-                <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  Switch sides to record stats for the other team.
+                <div className="mt-3 space-y-1.5">
+                  {onCourtPlayers.map((player) => (
+                    <button
+                      key={player.id}
+                      type="button"
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                        currentSideState.selectedPlayerId === player.id
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                      }`}
+                      onClick={() => updateSideState(activeKey, { selectedPlayerId: player.id })}
+                    >
+                      {player.jerseyNumber != null ? (
+                        <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                          {player.jerseyNumber}
+                        </span>
+                      ) : null}
+                      <span className="font-medium">{player.displayName}</span>
+                    </button>
+                  ))}
+                  {benchPlayers.filter((p) => p.isActive !== false).length > 0 ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                        Bench ({benchPlayers.filter((p) => p.isActive !== false).length})
+                      </summary>
+                      <div className="mt-1.5 space-y-1.5">
+                        {benchPlayers
+                          .filter((p) => p.isActive !== false)
+                          .map((player) => (
+                            <button
+                              key={player.id}
+                              type="button"
+                              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                                currentSideState.selectedPlayerId === player.id
+                                  ? 'bg-slate-900 text-white'
+                                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                              }`}
+                              onClick={() =>
+                                updateSideState(activeKey, { selectedPlayerId: player.id })
+                              }
+                            >
+                              {player.jerseyNumber != null ? (
+                                <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                                  {player.jerseyNumber}
+                                </span>
+                              ) : null}
+                              <span className="font-medium">{player.displayName}</span>
+                            </button>
+                          ))}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               )}
             </div>
-          </div>
+          ) : null}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+            <div>
               <h2 className="text-lg font-semibold text-slate-900">Recent Events</h2>
-              {recentEvents.length > 3 ? (
+              <div className="mt-2 flex items-center gap-2">
+                {recentEvents.length > 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllRecentEvents((value) => !value)}
+                    className="text-sm font-medium text-sky-700 hover:underline"
+                  >
+                    {showAllRecentEvents ? 'Show less' : 'Show all'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => setShowAllRecentEvents((value) => !value)}
-                  className="text-sm font-medium text-sky-700 hover:underline"
+                  onClick={undoLastEvent}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
                 >
-                  {showAllRecentEvents ? 'Show less' : 'Show all'}
+                  Undo Last
                 </button>
-              ) : null}
+              </div>
             </div>
             <div className="mt-4 space-y-2">
               {visibleRecentEvents.map((event) => (
@@ -1484,10 +1430,12 @@ export function GameTrackPage() {
       </div>
 
       {isTrackingFullscreen ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+        <div
+          className="fixed z-50 flex flex-col bg-white"
+          style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+        >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-base font-semibold text-slate-900">Tracking</h2>
               {isDualTeam ? (
                 <div className="flex flex-wrap gap-2">
                   {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
@@ -1510,9 +1458,18 @@ export function GameTrackPage() {
             <button
               type="button"
               onClick={closeTrackingOverlay}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+              aria-label="Close fullscreen tracking"
+              className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
             >
-              Close
+              <svg
+                viewBox="0 0 20 20"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="m5 5 10 10M15 5 5 15" />
+              </svg>
             </button>
           </div>
           <div className="relative min-h-0 flex-1">
@@ -1520,6 +1477,8 @@ export function GameTrackPage() {
               onSelect={onCourtSelect}
               containerClassName="h-full"
               courtClassName="h-full"
+              helperText=""
+              flat
             />
             {eventPicker}
           </div>

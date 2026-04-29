@@ -971,7 +971,9 @@ async function appendEventForUser(userId, gameId, payload) {
       throw new ApiError(400, 'Opponent aggregate events are not allowed for dual-team games');
     }
 
-    requireBothLineups(game);
+    if (payload.statType !== STAT_TYPES.SUB_IN) {
+      requireBothLineups(game);
+    }
 
     const teamDoc = getTeamDocForSide(game, context.participants, payload.teamSide, null);
     if (payload.playerId) {

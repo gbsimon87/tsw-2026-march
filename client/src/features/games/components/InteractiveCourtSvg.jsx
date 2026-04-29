@@ -231,7 +231,7 @@ export function InteractiveCourtSvg({ selectedPoint, onSelect }) {
           </>
         ) : null}
       </svg>
-      <p className="mt-2 text-xs text-slate-500">Tap/click the court to select shot location.</p>
+      <p className="mt-2 text-xs text-slate-500">Tap/click the court to select play location.</p>
     </div>
   );
 }
