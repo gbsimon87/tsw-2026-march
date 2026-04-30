@@ -7,7 +7,6 @@ import {
   ShareCardMetaStrip,
   ShareCardShell,
   ShareCardStatPill,
-  ShareCardSubtitle,
   ShareCardTitle,
 } from '../cards/ShareCardPrimitives';
 import { buildInitials, formatPercentage } from './cardUtils';
@@ -34,15 +33,15 @@ function TeamCardContent({ imageSrc, teamCard }) {
         />
         <div className="min-w-0 flex-1">
           <ShareCardTitle>{teamCard.teamName}</ShareCardTitle>
-          <ShareCardSubtitle className="mt-3">
+          {/* <ShareCardSubtitle className="mt-3">
             {teamCard.summary.gamesCount} completed public games
-          </ShareCardSubtitle>
-          <p
+          </ShareCardSubtitle> */}
+          {/* <p
             className="mt-4 text-[11px] font-bold uppercase tracking-[0.24em]"
             style={{ color: teamColors[1] || teamColors[0] || '#a5f3fc' }}
           >
             Public Team Snapshot
-          </p>
+          </p> */}
         </div>
       </div>
 

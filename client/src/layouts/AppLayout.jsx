@@ -43,11 +43,7 @@ export function AppLayout() {
                 Sign in
               </NavLink>
             ) : (
-              <button
-                type="button"
-                className="rounded bg-slate-800 px-3 py-1 text-sm text-white"
-                onClick={logout}
-              >
+              <button type="button" className="rounded py-1 text-sm text-dark" onClick={logout}>
                 Logout
               </button>
             )}
@@ -151,7 +147,7 @@ export function AppLayout() {
             ) : (
               <button
                 type="button"
-                className="w-fit rounded bg-slate-800 px-3 py-1 text-sm text-white"
+                className="w-fit rounded py-1 text-sm text-dark"
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   logout();

@@ -109,7 +109,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           </div>
         </div>
         <div
-          class="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+          class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
         >
           <div
             class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
@@ -258,7 +258,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           </div>
         </div>
         <div
-          class="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+          class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
         >
           <div
             class="grid grid-cols-3 gap-2"
@@ -394,7 +394,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           </div>
         </div>
         <div
-          class="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+          class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
         >
           <div
             class="grid grid-cols-2 gap-2"

@@ -39,7 +39,11 @@ export function Modal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm"
+      style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+      onClick={onClose}
+    >
       <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
         <div
           role="dialog"

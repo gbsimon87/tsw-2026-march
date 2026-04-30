@@ -158,7 +158,7 @@ export function ShareCardStatPill({ label, value, emphasis = false }) {
 
 export function ShareCardMetaStrip({ children }) {
   return (
-    <div className="mt-auto rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm">
+    <div className="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm">
       {children}
     </div>
   );
@@ -167,7 +167,7 @@ export function ShareCardMetaStrip({ children }) {
 export function ShareCardTitle({ children, lines = 2, className = '' }) {
   return (
     <h3
-      className={`text-[1.9rem] font-black leading-[1.02] text-white ${className}`}
+      className={`text-[1.75rem] font-black leading-[1.02] text-white ${className}`}
       style={clampStyle(lines)}
     >
       {children}
