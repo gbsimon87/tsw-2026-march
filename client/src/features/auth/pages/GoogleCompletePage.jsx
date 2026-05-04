@@ -19,7 +19,7 @@ export function GoogleCompletePage() {
     }
 
     loginWithGoogleExchange(token)
-      .then(() => navigate('/dashboard', { replace: true }))
+      .then(() => navigate('/feed', { replace: true }))
       .catch(() => navigate('/login?oauthError=google_unavailable', { replace: true }));
   }, [loginWithGoogleExchange, navigate, searchParams]);
 
