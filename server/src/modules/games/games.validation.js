@@ -109,6 +109,7 @@ const statTypeSchema = z.enum([
   STAT_TYPES.OREB,
   STAT_TYPES.DREB,
   STAT_TYPES.STL,
+  STAT_TYPES.BLK,
   STAT_TYPES.TOV,
   STAT_TYPES.FOUL,
   STAT_TYPES.SUB_IN,
@@ -142,6 +143,7 @@ const nonShotStatTypeSchema = z.enum([
   STAT_TYPES.OREB,
   STAT_TYPES.DREB,
   STAT_TYPES.STL,
+  STAT_TYPES.BLK,
   STAT_TYPES.TOV,
   STAT_TYPES.FOUL,
 ]);

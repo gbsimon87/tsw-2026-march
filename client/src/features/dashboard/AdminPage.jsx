@@ -37,6 +37,10 @@ function getGameStatus(game) {
   return 'Scheduled';
 }
 
+function getGameContextLabel(game) {
+  return game?.gameContext === 'league' ? 'League game' : 'One-off game';
+}
+
 function QuickActionLink({ to, label, primary = false, children }) {
   return (
     <Link
@@ -80,7 +84,7 @@ export function AdminPage() {
       if (!dateB) return -1;
       return dateB.getTime() - dateA.getTime();
     })
-    .slice(0, 5);
+    .slice(0, 3);
 
   useEffect(() => {
     Promise.all([teamsApi.list(), gamesApi.list(), leaguesApi.list()])
@@ -124,88 +128,46 @@ export function AdminPage() {
         </p>
       ) : null}
 
-      <section aria-labelledby="quick-actions-heading" className="space-y-3">
-        <h2 id="quick-actions-heading" className="text-xl font-semibold text-slate-900">
-          Quick Actions
-        </h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <QuickActionLink to="/games/new" label="New Game" primary>
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
-          </QuickActionLink>
-          <QuickActionLink to="/games" label="Games">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M4 19h16" />
-              <path d="M7 16V8" />
-              <path d="M12 16V5" />
-              <path d="M17 16v-4" />
-            </svg>
-          </QuickActionLink>
-          <QuickActionLink to="/teams" label="Teams">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="10" cy="7" r="3" />
-              <path d="M19 8v6" />
-              <path d="M16 11h6" />
-            </svg>
-          </QuickActionLink>
-          <QuickActionLink to="/leagues/new" label="New League">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-              <path d="M4 22h16" />
-              <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-              <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-              <path d="M18 2H6v7a6 6 0 0 0 12 0V2z" />
-            </svg>
-          </QuickActionLink>
-        </div>
-      </section>
-
-      <section aria-labelledby="summary-heading" className="space-y-3">
-        <h2 id="summary-heading" className="text-xl font-semibold text-slate-900">
-          Summary
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <article className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-500">Teams</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {isLoading ? '...' : teams.length}
+      <section
+        aria-labelledby="leagues-heading"
+        className="rounded-2xl border border-slate-200 bg-white p-5"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="leagues-heading" className="text-xl font-semibold text-slate-900">
+              Your Leagues
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Manage league teams, standings, fixtures, and games from one place.
             </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-500">Games</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {isLoading ? '...' : games.length}
-            </p>
-          </article>
+          </div>
+          <Link
+            to="/leagues/new"
+            className="inline-flex items-center justify-center rounded-lg border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+          >
+            New League
+          </Link>
         </div>
+        {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading leagues...</p> : null}
+        {!isLoading && leagues.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-600">No leagues yet.</p>
+        ) : null}
+        {!isLoading && leagues.length > 0 ? (
+          <div className="mt-4 grid gap-3">
+            {leagues.map((league) => (
+              <Link
+                key={league.id}
+                to={`/leagues/${league.id}`}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+              >
+                <p className="font-semibold text-slate-900">{league.name}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {league.seasonLabel || 'Season TBD'} • {league.status}
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section
@@ -215,6 +177,9 @@ export function AdminPage() {
         <h2 id="recent-games-heading" className="text-xl font-semibold text-slate-900">
           Recent Games
         </h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Showing all owner games returned by the games API, including league games.
+        </p>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading games...</p> : null}
         {!isLoading && recentGames.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">No games recorded yet.</p>
@@ -229,17 +194,21 @@ export function AdminPage() {
               return (
                 <article
                   key={gameId || `${getGameTitle(game, index)}-${index}`}
-                  className="flex items-start justify-between gap-3 py-3"
+                  className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-slate-900">{getGameTitle(game, index)}</p>
-                    <p className="text-sm text-slate-600">
-                      {gameDate ? gameDate.toLocaleDateString() : 'Date unavailable'} •{' '}
-                      {getGameStatus(game)}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                      <span>{gameDate ? gameDate.toLocaleDateString() : 'Date unavailable'}</span>
+                      <span>•</span>
+                      <span>{getGameStatus(game)}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                        {getGameContextLabel(game)}
+                      </span>
+                    </div>
                     <p className="text-sm text-slate-600">Opponent: {game.opponent || 'N/A'}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                     <button
                       type="button"
                       aria-label={`Copy share link for ${getGameTitle(game, index)}`}
@@ -316,33 +285,82 @@ export function AdminPage() {
         ) : null}
       </section>
 
-      <section
-        aria-labelledby="leagues-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-5"
-      >
-        <h2 id="leagues-heading" className="text-xl font-semibold text-slate-900">
-          Your Leagues
+      <section aria-labelledby="quick-actions-heading" className="space-y-3">
+        <h2 id="quick-actions-heading" className="text-xl font-semibold text-slate-900">
+          One-off Tools
         </h2>
-        {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading leagues...</p> : null}
-        {!isLoading && leagues.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-600">No leagues yet.</p>
-        ) : null}
-        {!isLoading && leagues.length > 0 ? (
-          <div className="mt-4 grid gap-3">
-            {leagues.map((league) => (
-              <Link
-                key={league.id}
-                to={`/leagues/${league.id}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-              >
-                <p className="font-semibold text-slate-900">{league.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {league.seasonLabel || 'Season TBD'} • {league.status}
-                </p>
-              </Link>
-            ))}
-          </div>
-        ) : null}
+        <p className="text-sm text-slate-600">
+          Use these for standalone teams and games outside league management.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <QuickActionLink to="/games/new" label="New Game" primary>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          </QuickActionLink>
+          <QuickActionLink to="/games" label="Games">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M4 19h16" />
+              <path d="M7 16V8" />
+              <path d="M12 16V5" />
+              <path d="M17 16v-4" />
+            </svg>
+          </QuickActionLink>
+          <QuickActionLink to="/teams" label="Teams">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="10" cy="7" r="3" />
+              <path d="M19 8v6" />
+              <path d="M16 11h6" />
+            </svg>
+          </QuickActionLink>
+        </div>
+      </section>
+
+      <section aria-labelledby="summary-heading" className="space-y-3">
+        <h2 id="summary-heading" className="text-xl font-semibold text-slate-900">
+          Summary
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-sm text-slate-500">Leagues</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {isLoading ? '...' : leagues.length}
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-sm text-slate-500">One-off Teams</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {isLoading ? '...' : teams.length}
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-sm text-slate-500">All Games</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {isLoading ? '...' : games.length}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">Includes league games.</p>
+          </article>
+        </div>
       </section>
     </main>
   );

@@ -44,6 +44,7 @@ function emptyLine(player) {
     oreb: 0,
     dreb: 0,
     stl: 0,
+    blk: 0,
     tov: 0,
     foul: 0,
     reb: 0,
@@ -98,6 +99,10 @@ function applyEventToLine(line, statType) {
   }
   if (statType === 'STL') {
     line.stl += 1;
+    return;
+  }
+  if (statType === 'BLK') {
+    line.blk += 1;
     return;
   }
   if (statType === 'TOV') {
@@ -175,6 +180,7 @@ export function GameReplayPanel({ events, players }) {
     { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
     { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast },
     { id: 'stl', label: 'STL', align: 'right', sortKey: 'stl', render: (row) => row.stl },
+    { id: 'blk', label: 'BLK', align: 'right', sortKey: 'blk', render: (row) => row.blk || 0 },
     { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov },
     { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul },
     {

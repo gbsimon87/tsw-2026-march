@@ -41,10 +41,11 @@ export function PublicLeaguePlayerPage() {
         reb: summary.reb + game.stats.reb,
         ast: summary.ast + game.stats.ast,
         stl: summary.stl + game.stats.stl,
+        blk: summary.blk + (game.stats.blk || 0),
         tov: summary.tov + game.stats.tov,
         foul: summary.foul + game.stats.foul,
       }),
-      { points: 0, reb: 0, ast: 0, stl: 0, tov: 0, foul: 0 }
+      { points: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, foul: 0 }
     );
   }, [data]);
 
@@ -112,6 +113,7 @@ export function PublicLeaguePlayerPage() {
                 <th className="px-3 py-2 text-right">REB</th>
                 <th className="px-3 py-2 text-right">AST</th>
                 <th className="px-3 py-2 text-right">STL</th>
+                <th className="px-3 py-2 text-right">BLK</th>
                 <th className="px-3 py-2 text-right">TOV</th>
                 <th className="px-3 py-2 text-right">FOUL</th>
               </tr>
@@ -132,6 +134,7 @@ export function PublicLeaguePlayerPage() {
                   <td className="px-3 py-2 text-right">{game.stats.reb}</td>
                   <td className="px-3 py-2 text-right">{game.stats.ast}</td>
                   <td className="px-3 py-2 text-right">{game.stats.stl}</td>
+                  <td className="px-3 py-2 text-right">{game.stats.blk || 0}</td>
                   <td className="px-3 py-2 text-right">{game.stats.tov}</td>
                   <td className="px-3 py-2 text-right">{game.stats.foul}</td>
                 </tr>

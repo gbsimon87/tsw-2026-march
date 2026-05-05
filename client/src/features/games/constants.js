@@ -26,6 +26,7 @@ export const STAT_LABELS = {
   OREB: 'Offensive Rebound',
   DREB: 'Defensive Rebound',
   STL: 'Steal',
+  BLK: 'Block',
   TOV: 'Turnover',
   FOUL: 'Foul',
   SUB_IN: 'Sub In',

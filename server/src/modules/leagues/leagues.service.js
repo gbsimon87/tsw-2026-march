@@ -630,6 +630,7 @@ function buildLeaguePlayerSummary(gameRows) {
       oreb: summary.oreb + game.stats.oreb,
       dreb: summary.dreb + game.stats.dreb,
       stl: summary.stl + game.stats.stl,
+      blk: summary.blk + (game.stats.blk || 0),
       tov: summary.tov + game.stats.tov,
       foul: summary.foul + game.stats.foul,
       reb: summary.reb + game.stats.reb,
@@ -645,12 +646,14 @@ function buildLeaguePlayerSummary(gameRows) {
     reb: totals.reb,
     ast: totals.ast,
     stl: totals.stl,
+    blk: totals.blk,
     tov: totals.tov,
     foul: totals.foul,
     pointsPerGame: gamesCount > 0 ? totals.points / gamesCount : 0,
     reboundsPerGame: gamesCount > 0 ? totals.reb / gamesCount : 0,
     assistsPerGame: gamesCount > 0 ? totals.ast / gamesCount : 0,
     stealsPerGame: gamesCount > 0 ? totals.stl / gamesCount : 0,
+    blocksPerGame: gamesCount > 0 ? totals.blk / gamesCount : 0,
     turnoversPerGame: gamesCount > 0 ? totals.tov / gamesCount : 0,
     foulsPerGame: gamesCount > 0 ? totals.foul / gamesCount : 0,
   };
@@ -1104,6 +1107,7 @@ function emptyStats(playerId, displayName) {
     oreb: 0,
     dreb: 0,
     stl: 0,
+    blk: 0,
     tov: 0,
     foul: 0,
     reb: 0,
@@ -1158,6 +1162,10 @@ function applyEventToLine(line, statType) {
   }
   if (statType === 'STL') {
     line.stl += 1;
+    return;
+  }
+  if (statType === 'BLK') {
+    line.blk += 1;
     return;
   }
   if (statType === 'TOV') {

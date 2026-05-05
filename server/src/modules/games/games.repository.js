@@ -46,6 +46,7 @@ const shotEventSchema = new mongoose.Schema(
         STAT_TYPES.OREB,
         STAT_TYPES.DREB,
         STAT_TYPES.STL,
+        STAT_TYPES.BLK,
         STAT_TYPES.TOV,
         STAT_TYPES.FOUL,
         STAT_TYPES.SUB_IN,

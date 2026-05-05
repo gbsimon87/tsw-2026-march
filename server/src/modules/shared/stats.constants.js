@@ -26,6 +26,7 @@ const STAT_TYPES = {
   OREB: 'OREB',
   DREB: 'DREB',
   STL: 'STL',
+  BLK: 'BLK',
   TOV: 'TOV',
   FOUL: 'FOUL',
   SUB_IN: 'SUB_IN',

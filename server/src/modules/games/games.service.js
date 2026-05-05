@@ -146,6 +146,7 @@ function emptyStats(playerId, displayName) {
     oreb: 0,
     dreb: 0,
     stl: 0,
+    blk: 0,
     tov: 0,
     foul: 0,
     reb: 0,
@@ -200,6 +201,10 @@ function applyEventToRow(row, statType) {
   }
   if (statType === STAT_TYPES.STL) {
     row.stl += 1;
+    return;
+  }
+  if (statType === STAT_TYPES.BLK) {
+    row.blk += 1;
     return;
   }
   if (statType === STAT_TYPES.TOV) {
@@ -350,6 +355,7 @@ function buildBoxScoreForSide(game, team, side) {
       oreb: players.reduce((total, row) => total + row.oreb, 0),
       dreb: players.reduce((total, row) => total + row.dreb, 0),
       stl: players.reduce((total, row) => total + row.stl, 0),
+      blk: players.reduce((total, row) => total + (row.blk || 0), 0),
       tov: players.reduce((total, row) => total + row.tov, 0),
       foul: players.reduce((total, row) => total + row.foul, 0),
       reb: players.reduce((total, row) => total + row.reb, 0),
@@ -404,6 +410,7 @@ function computeBoxScore(game, team, options = {}) {
       oreb: players.reduce((total, row) => total + row.oreb, 0),
       dreb: players.reduce((total, row) => total + row.dreb, 0),
       stl: players.reduce((total, row) => total + row.stl, 0),
+      blk: players.reduce((total, row) => total + (row.blk || 0), 0),
       tov: players.reduce((total, row) => total + row.tov, 0),
       foul: players.reduce((total, row) => total + row.foul, 0),
       reb: players.reduce((total, row) => total + row.reb, 0),
@@ -992,6 +999,7 @@ async function appendEventForUser(userId, gameId, payload) {
         STAT_TYPES.OREB,
         STAT_TYPES.DREB,
         STAT_TYPES.STL,
+        STAT_TYPES.BLK,
         STAT_TYPES.TOV,
         STAT_TYPES.FOUL,
       ].includes(payload.statType)
@@ -1057,6 +1065,7 @@ async function appendEventForUser(userId, gameId, payload) {
       STAT_TYPES.OREB,
       STAT_TYPES.DREB,
       STAT_TYPES.STL,
+      STAT_TYPES.BLK,
       STAT_TYPES.TOV,
       STAT_TYPES.FOUL,
     ].includes(payload.statType)

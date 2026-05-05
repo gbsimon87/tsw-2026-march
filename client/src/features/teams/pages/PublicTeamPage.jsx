@@ -178,6 +178,7 @@ export function PublicTeamPage() {
         oreb: 0,
         dreb: 0,
         stl: 0,
+        blk: 0,
         tov: 0,
         foul: 0,
         reb: 0,
@@ -280,6 +281,13 @@ export function PublicTeamPage() {
       align: 'right',
       sortValue: (row) => row.stl,
       render: (row) => row.stl,
+    },
+    {
+      id: 'blk',
+      label: 'BLK',
+      align: 'right',
+      sortValue: (row) => row.blk || 0,
+      render: (row) => row.blk || 0,
     },
     {
       id: 'rpg',

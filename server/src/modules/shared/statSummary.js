@@ -28,6 +28,7 @@ function createEmptyFullTeamStatSummary() {
     reb: 0,
     ast: 0,
     stl: 0,
+    blk: 0,
     tov: 0,
     foul: 0,
   };
@@ -150,6 +151,11 @@ function applyEventToFullTeamStatSummary(summary, statType) {
 
   if (statType === STAT_TYPES.STL) {
     summary.stl += 1;
+    return summary;
+  }
+
+  if (statType === STAT_TYPES.BLK) {
+    summary.blk += 1;
     return summary;
   }
 

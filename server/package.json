@@ -6,6 +6,7 @@
     "dev": "ENV_FILE=../env/server/.env.development nodemon src/server.js",
     "start": "ENV_FILE=../env/server/.env.production node src/server.js",
     "seed": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed.js",
+    "seed:we-ball": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed-we-ball-saturday.js",
     "build": "echo \"No build step for Node API\"",
     "stripe-listen": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks",
     "lint": "eslint . --ext .js",
