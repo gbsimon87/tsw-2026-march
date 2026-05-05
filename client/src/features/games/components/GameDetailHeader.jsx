@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { getGameHeaderImage } from '../../feed/cardImage';
+import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 
 function formatDateTime(value) {
   if (!value) {
@@ -30,23 +30,6 @@ function getStatusLabel(game, recap) {
   return game?.status || 'Game Detail';
 }
 
-function getMatchupTitle({ game, team, participants, isDualTeam, recap }) {
-  if (isDualTeam) {
-    return `${participants?.away?.displayName || 'Away'} at ${
-      participants?.home?.displayName || 'Home'
-    }`;
-  }
-
-  const teamName = recap?.team?.name || team?.name || 'Team';
-  const opponentName = recap?.opponent?.name || game?.opponent;
-
-  if (opponentName) {
-    return `${teamName} vs ${opponentName}`;
-  }
-
-  return game?.title || teamName;
-}
-
 function getScoreboardTeams({ game, team, participants, isDualTeam, recap }) {
   if (isDualTeam) {
     return {
@@ -65,6 +48,7 @@ export function GameDetailHeader({
   gameId,
   game,
   team,
+  league = null,
   participants,
   isDualTeam = false,
   recap,
@@ -73,7 +57,6 @@ export function GameDetailHeader({
   actions = null,
   className = '',
 }) {
-  const matchupTitle = getMatchupTitle({ game, team, participants, isDualTeam, recap });
   const statusLabel = getStatusLabel(game, recap);
   const { homeName, awayName } = getScoreboardTeams({
     game,
@@ -112,14 +95,19 @@ export function GameDetailHeader({
       <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="flex items-start gap-4">
           <img
-            src={getGameHeaderImage(team)}
-            alt={`${team?.name || recap?.team?.name || 'Team'} logo`}
+            src={
+              game?.gameContext === 'league'
+                ? getLeagueHeaderImage(league)
+                : getGameHeaderImage(team)
+            }
+            alt={
+              game?.gameContext === 'league'
+                ? `${league?.name || 'League'} logo`
+                : `${team?.name || recap?.team?.name || 'Team'} logo`
+            }
             className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
           <div>
-            <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-              {matchupTitle}
-            </h1>
             <p className="mt-2 text-base text-slate-700">
               {game?.gameContext === 'league' ? 'League game' : 'One-off game'}
             </p>

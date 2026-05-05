@@ -108,6 +108,7 @@ function sanitizeLeague(league, options = {}) {
     seasonLabel: league.seasonLabel ?? null,
     status: league.status,
     isPublic: Boolean(league.isPublic),
+    logo: sanitizeLogo(league.logo),
     billing: normalizeLeagueBilling(league),
     createdAt: league.createdAt,
     updatedAt: league.updatedAt,
@@ -771,6 +772,53 @@ async function removeLeagueTeamLogo(userId, leagueId, leagueTeamId) {
   }
 
   return sanitizeLeagueTeam(team);
+}
+
+async function uploadLeagueLogo(userId, leagueId, file) {
+  const league = await assertLeagueOwner(userId, leagueId);
+
+  if (!isCloudinaryConfigured()) {
+    throw new ApiError(503, 'Image upload is not configured');
+  }
+  if (!file) {
+    throw new ApiError(400, 'Logo file is required');
+  }
+  if (!TEAM_LOGO_MIME_TYPES.has(file.mimetype)) {
+    throw new ApiError(400, 'Logo must be a JPEG, PNG, or WebP image');
+  }
+  if (file.size > env.TEAM_LOGO_MAX_BYTES) {
+    throw new ApiError(400, 'Logo exceeds upload size limit');
+  }
+
+  const previousLogo = league.logo;
+  const upload = await uploadImageBuffer(file);
+  league.logo = {
+    url: upload.secure_url,
+    publicId: upload.public_id,
+    width: upload.width ?? null,
+    height: upload.height ?? null,
+    mimeType: file.mimetype,
+  };
+  await saveLeague(league);
+
+  if (previousLogo?.publicId && previousLogo.publicId !== upload.public_id) {
+    await destroyImage(previousLogo.publicId).catch(() => null);
+  }
+
+  return sanitizeLeague(league);
+}
+
+async function removeLeagueLogo(userId, leagueId) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  const previousLogo = league.logo;
+  league.logo = null;
+  await saveLeague(league);
+
+  if (previousLogo?.publicId) {
+    await destroyImage(previousLogo.publicId).catch(() => null);
+  }
+
+  return sanitizeLeague(league);
 }
 
 async function addPlayerToLeagueTeam(userId, leagueId, leagueTeamId, payload) {
@@ -1510,6 +1558,8 @@ module.exports = {
   getPublicLeagueTeamBySlug,
   updateLeagueTeamForLeague,
   archiveLeagueTeamForLeague,
+  uploadLeagueLogo,
+  removeLeagueLogo,
   uploadLeagueTeamLogo,
   removeLeagueTeamLogo,
   addPlayerToLeagueTeam,

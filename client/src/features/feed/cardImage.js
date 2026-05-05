@@ -1,5 +1,6 @@
 import playerPlaceholder from '../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
+import leaguePlaceholder from '../../assets/placeholders/league-logo-placeholder.svg';
 
 export function getPlayerCardImage(playerCard) {
   return playerCard?.playerImage?.url || playerCard?.teamLogo?.url || playerPlaceholder;
@@ -23,4 +24,8 @@ export function getTeamHeaderImage(team) {
 
 export function getGameHeaderImage(team) {
   return team?.logo?.url || teamPlaceholder;
+}
+
+export function getLeagueHeaderImage(league) {
+  return league?.logo?.url || leaguePlaceholder;
 }

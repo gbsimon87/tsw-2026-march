@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
+import { getLeagueHeaderImage } from '../../feed/cardImage';
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
@@ -28,10 +29,19 @@ export function PublicLeaguePage() {
   return (
     <main className="space-y-8">
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{league.name}</h1>
-        <p className="mt-2 text-base text-slate-700">
-          {league.seasonLabel || 'Season TBD'} • Public league standings and game results.
-        </p>
+        <div className="flex items-center gap-5">
+          <img
+            src={getLeagueHeaderImage(league)}
+            alt={`${league.name} logo`}
+            className="h-16 w-16 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          />
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{league.name}</h1>
+            <p className="mt-2 text-base text-slate-700">
+              {league.seasonLabel || 'Season TBD'} • Public league standings and game results.
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">

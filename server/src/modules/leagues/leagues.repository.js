@@ -20,6 +20,7 @@ const leagueSchema = new mongoose.Schema(
     seasonLabel: { type: String, trim: true, default: null },
     status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
     isPublic: { type: Boolean, default: true },
+    logo: { type: logoSchema, default: null },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     subscriptionStatus: {
       type: String,

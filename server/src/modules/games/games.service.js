@@ -925,6 +925,7 @@ async function getGameForUser(userId, gameId) {
           name: league.name,
           slug: league.slug,
           seasonLabel: league.seasonLabel ?? null,
+          logo: league.logo?.url ? { url: league.logo.url } : null,
         }
       : null,
     boxScore,

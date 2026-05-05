@@ -21,7 +21,6 @@ import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
 import { GameDetailPage } from '../../features/games/pages/GameDetailPage';
 import { AdminNewLeaguePage } from '../../features/leagues/pages/AdminNewLeaguePage';
 import { AdminLeaguePage } from '../../features/leagues/pages/AdminLeaguePage';
-import { AdminLeagueSettingsPage } from '../../features/leagues/pages/AdminLeagueSettingsPage';
 import { AdminLeagueTeamPage } from '../../features/leagues/pages/AdminLeagueTeamPage';
 import { AdminNewLeagueGamePage } from '../../features/leagues/pages/AdminNewLeagueGamePage';
 import { PublicLeaguePage } from '../../features/leagues/pages/PublicLeaguePage';
@@ -122,7 +121,7 @@ export function AppRouter() {
         <Route path="/leagues/new" element={<Navigate to="/admin/leagues/new" replace />} />
         <Route
           path="/leagues/:leagueId/manage"
-          element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId/settings" />}
+          element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId" />}
         />
         <Route
           path="/leagues/:leagueId/teams/:leagueTeamId"
@@ -149,14 +148,6 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <AdminLeaguePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/leagues/:leagueId/settings"
-          element={
-            <ProtectedRoute>
-              <AdminLeagueSettingsPage />
             </ProtectedRoute>
           }
         />

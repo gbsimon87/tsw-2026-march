@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
+import { getLeagueHeaderImage } from '../features/feed/cardImage';
 import basketballImage1 from '../assets/home/basketball_image_1.png';
 import basketballImage2 from '../assets/home/basketball_image_2.png';
 import basketballImage3 from '../assets/home/basketball_image_3.png';
@@ -118,9 +119,16 @@ export function HomePage() {
                 key={league.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
               >
-                <h3 aria-label={league.name} className="text-lg font-semibold text-slate-900">
-                  {league.name}
-                </h3>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={getLeagueHeaderImage(league)}
+                    alt={`${league.name} logo`}
+                    className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                  />
+                  <h3 aria-label={league.name} className="text-lg font-semibold text-slate-900">
+                    {league.name}
+                  </h3>
+                </div>
                 <p className="mt-2 text-sm text-slate-600">{league.seasonLabel || 'Season TBD'}</p>
                 <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold">
                   <Link to={`/league/${league.slug}`} className="text-sky-700 hover:underline">

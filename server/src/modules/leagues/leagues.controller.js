@@ -124,6 +124,18 @@ async function archiveTeam(req, res) {
   res.status(200).json({ team });
 }
 
+async function uploadLeagueLogo(req, res) {
+  const userId = requireAuthUserId(req);
+  const league = await leaguesService.uploadLeagueLogo(userId, req.params.leagueId, req.file);
+  res.status(200).json({ league });
+}
+
+async function removeLeagueLogo(req, res) {
+  const userId = requireAuthUserId(req);
+  const league = await leaguesService.removeLeagueLogo(userId, req.params.leagueId);
+  res.status(200).json({ league });
+}
+
 async function uploadTeamLogo(req, res) {
   const userId = requireAuthUserId(req);
   const team = await leaguesService.uploadLeagueTeamLogo(
@@ -332,6 +344,8 @@ module.exports = {
   getPublicPlayer,
   updateTeam,
   archiveTeam,
+  uploadLeagueLogo,
+  removeLeagueLogo,
   uploadTeamLogo,
   removeTeamLogo,
   addPlayer,

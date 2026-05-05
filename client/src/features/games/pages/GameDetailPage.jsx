@@ -467,6 +467,7 @@ export function GameDetailPage() {
           gameId={game.id}
           game={game}
           team={team}
+          league={data.league}
           participants={participants}
           isDualTeam={isDualTeam}
           recap={recap}

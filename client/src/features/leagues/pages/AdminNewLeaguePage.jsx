@@ -8,6 +8,7 @@ export function AdminNewLeaguePage() {
   const [name, setName] = useState('');
   const [seasonLabel, setSeasonLabel] = useState('');
   const [description, setDescription] = useState('');
+  const [logoFile, setLogoFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -17,11 +18,16 @@ export function AdminNewLeaguePage() {
     setIsSubmitting(true);
 
     try {
-      const response = await leaguesApi.create({
-        name,
-        seasonLabel,
-        description,
-      });
+      const response = await leaguesApi.create({ name, seasonLabel, description });
+      if (logoFile && response.league?.id) {
+        try {
+          const formData = new FormData();
+          formData.append('logo', logoFile);
+          await leaguesApi.uploadLogo(response.league.id, formData);
+        } catch {
+          // Logo upload failure is non-fatal — league was created
+        }
+      }
       navigate(`/admin/leagues/${response.league.id}`);
     } catch (submitError) {
       setError(submitError.message || 'Failed to create league');
@@ -82,6 +88,33 @@ export function AdminNewLeaguePage() {
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
+        <div>
+          <span className="mb-1 block text-sm text-slate-700">Logo (optional)</span>
+          <div className="flex flex-wrap items-center gap-3">
+            {logoFile ? (
+              <img
+                src={URL.createObjectURL(logoFile)}
+                alt="Logo preview"
+                className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover"
+              />
+            ) : null}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
+              onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
+            />
+            {logoFile ? (
+              <button
+                type="button"
+                onClick={() => setLogoFile(null)}
+                className="text-sm text-slate-500 hover:text-slate-700"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
+        </div>
         <button
           type="submit"
           disabled={isSubmitting}
