@@ -480,7 +480,7 @@ export function GameDetailPage() {
   const leagueBreadcrumbs =
     isDualTeam && data.league
       ? [
-          { label: 'Leagues', href: '/leagues' },
+          { label: 'Leagues' },
           { label: data.league.name, href: `/league/${data.league.slug}` },
           { label: game.title || 'Game' },
         ]

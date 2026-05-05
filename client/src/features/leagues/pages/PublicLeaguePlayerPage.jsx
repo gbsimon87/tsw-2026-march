@@ -66,7 +66,7 @@ export function PublicLeaguePlayerPage() {
       : player.displayName;
 
   const breadcrumbs = [
-    { label: 'Leagues', href: '/leagues' },
+    { label: 'Leagues' },
     { label: league.name, href: `/league/${league.slug}` },
     { label: team.name, href: `/league/${league.slug}/teams/${team.slug}` },
     { label: player.displayName },
