@@ -1,20 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
-
-function formatGameDate(game) {
-  const rawValue = game.completedAt || game.scheduledAt || null;
-  if (!rawValue) {
-    return 'Date unavailable';
-  }
-
-  const parsed = new Date(rawValue);
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Date unavailable';
-  }
-
-  return parsed.toLocaleDateString();
-}
+import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 
 export function PublicLeagueGamesPage() {
   const { leagueSlug } = useParams();
@@ -64,34 +51,15 @@ export function PublicLeagueGamesPage() {
         </div>
       </section>
 
-      <section className="grid gap-3">
+      <section>
         {games.length === 0 ? (
           <p className="text-sm text-slate-600">No league games yet.</p>
         ) : (
-          games.map((game) => (
-            <Link
-              key={game.id}
-              to={`/games/${game.id}`}
-              className="rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300"
-            >
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="font-semibold text-slate-900">{game.title}</p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {game.awayTeamName} at {game.homeTeamName}
-                  </p>
-                </div>
-                <div className="text-sm text-slate-500">
-                  <p>{formatGameDate(game)}</p>
-                  <p>
-                    {game.homePoints != null && game.awayPoints != null
-                      ? `${game.homePoints} - ${game.awayPoints}`
-                      : 'Score pending'}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))
+          <div className="grid gap-4 md:grid-cols-2">
+            {games.map((game) => (
+              <LeagueGameCard key={game.id} game={game} />
+            ))}
+          </div>
         )}
       </section>
     </main>

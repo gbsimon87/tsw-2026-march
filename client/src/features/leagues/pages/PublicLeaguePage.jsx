@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
+import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
@@ -60,6 +61,10 @@ export function PublicLeaguePage() {
             const team = (league.teams || []).find((t) => t.id === row.teamId);
             return team?.slug ? `/league/${league.slug}/teams/${team.slug}` : null;
           }}
+          getTeamLogo={(row) => {
+            const team = (league.teams || []).find((t) => t.id === row.teamId);
+            return team?.logo?.url ?? null;
+          }}
           className="mt-4"
         />
       </section>
@@ -74,26 +79,11 @@ export function PublicLeaguePage() {
             View all games
           </Link>
         </div>
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           {(league.games || []).length === 0 ? (
             <p className="text-sm text-slate-600">No league games yet.</p>
           ) : (
-            (league.games || []).map((game) => (
-              <Link
-                key={game.id}
-                to={`/games/${game.id}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-              >
-                <p className="font-semibold text-slate-900">
-                  {game.homeTeamName || 'Unknown Team'} vs {game.awayTeamName || 'Unknown Team'}
-                </p>
-                {game.homePoints != null && game.awayPoints != null ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {game.homePoints}–{game.awayPoints}
-                  </p>
-                ) : null}
-              </Link>
-            ))
+            (league.games || []).map((game) => <LeagueGameCard key={game.id} game={game} />)
           )}
         </div>
       </section>

@@ -144,12 +144,9 @@ export function AdminPage() {
               Manage league teams, standings, fixtures, and games from one place.
             </p>
           </div>
-          <Link
-            to="/admin/leagues/new"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
+          <span className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400">
             New League
-          </Link>
+          </span>
         </div>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading leagues...</p> : null}
         {!isLoading && leagues.length === 0 ? (

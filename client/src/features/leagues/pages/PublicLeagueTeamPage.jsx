@@ -3,6 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { LeagueRosterTable } from '../components/LeagueRosterTable';
 import { leaguesApi } from '../api/leaguesApi';
+import { getLeagueHeaderImage } from '../../feed/cardImage';
+import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 export function PublicLeagueTeamPage() {
   const { leagueSlug, teamSlug } = useParams();
@@ -54,13 +57,102 @@ export function PublicLeagueTeamPage() {
   return (
     <main className="space-y-8">
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-          {league.name}
-        </p>
+        <div className="flex items-center gap-2">
+          <img
+            src={getLeagueHeaderImage(league)}
+            alt={`${league.name} logo`}
+            className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          />
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {league.name}
+          </p>
+        </div>
         <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
         <p className="mt-2 text-base text-slate-700">
           Standings position: {team.standingsPosition || 'N/A'}
         </p>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-slate-900">Player Stats</h2>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
+                <th className="px-3 py-2 text-left">Player</th>
+                <th className="px-3 py-2 text-right">PTS</th>
+                <th className="px-3 py-2 text-right">REB</th>
+                <th className="px-3 py-2 text-right">AST</th>
+                <th className="px-3 py-2 text-right">STL</th>
+                <th className="px-3 py-2 text-right">TOV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(team.stats || []).map((row) => (
+                <tr key={row.playerId} className="border-t border-slate-200">
+                  <td className="px-3 py-2 font-medium text-slate-900">
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={playerPlaceholder}
+                        alt=""
+                        className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      />
+                      <Link
+                        to={`/league/${league.slug}/teams/${team.slug}/players/${row.playerId}`}
+                        className="underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+                      >
+                        {row.displayName}
+                      </Link>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right">{row.points}</td>
+                  <td className="px-3 py-2 text-right">{row.reb}</td>
+                  <td className="px-3 py-2 text-right">{row.ast}</td>
+                  <td className="px-3 py-2 text-right">{row.stl}</td>
+                  <td className="px-3 py-2 text-right">{row.tov}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-slate-900">League Games</h2>
+        <div className="mt-4 grid gap-3">
+          {(team.games || []).length === 0 ? (
+            <p className="text-sm text-slate-600">No league games yet.</p>
+          ) : (
+            (team.games || []).map((game) => (
+              <Link
+                key={game.id}
+                to={`/games/${game.id}`}
+                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+              >
+                <img
+                  src={game.homeTeamLogoUrl || teamPlaceholder}
+                  alt=""
+                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                />
+                <div className="min-w-0 flex-1 text-center">
+                  <p className="font-semibold text-slate-900">
+                    {game.homeTeamName || 'Unknown Team'} vs {game.awayTeamName || 'Unknown Team'}
+                  </p>
+                  {game.homePoints != null && game.awayPoints != null ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {game.homePoints}–{game.awayPoints}
+                    </p>
+                  ) : null}
+                </div>
+                <img
+                  src={game.awayTeamLogoUrl || teamPlaceholder}
+                  alt=""
+                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                />
+              </Link>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -121,68 +213,6 @@ export function PublicLeagueTeamPage() {
           </form>
         </section>
       ) : null}
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Player Stats</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Player</th>
-                <th className="px-3 py-2 text-right">PTS</th>
-                <th className="px-3 py-2 text-right">REB</th>
-                <th className="px-3 py-2 text-right">AST</th>
-                <th className="px-3 py-2 text-right">STL</th>
-                <th className="px-3 py-2 text-right">TOV</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(team.stats || []).map((row) => (
-                <tr key={row.playerId} className="border-t border-slate-200">
-                  <td className="px-3 py-2 font-medium text-slate-900">
-                    <Link
-                      to={`/league/${league.slug}/teams/${team.slug}/players/${row.playerId}`}
-                      className="underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
-                    >
-                      {row.displayName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-right">{row.points}</td>
-                  <td className="px-3 py-2 text-right">{row.reb}</td>
-                  <td className="px-3 py-2 text-right">{row.ast}</td>
-                  <td className="px-3 py-2 text-right">{row.stl}</td>
-                  <td className="px-3 py-2 text-right">{row.tov}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">League Games</h2>
-        <div className="mt-4 grid gap-3">
-          {(team.games || []).length === 0 ? (
-            <p className="text-sm text-slate-600">No league games yet.</p>
-          ) : (
-            (team.games || []).map((game) => (
-              <Link
-                key={game.id}
-                to={`/games/${game.id}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-              >
-                <p className="font-semibold text-slate-900">{game.title}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {game.homeTeamName} vs {game.awayTeamName}
-                  {game.homePoints != null && game.awayPoints != null
-                    ? ` • ${game.homePoints}-${game.awayPoints}`
-                    : ''}
-                </p>
-              </Link>
-            ))
-          )}
-        </div>
-      </section>
     </main>
   );
 }

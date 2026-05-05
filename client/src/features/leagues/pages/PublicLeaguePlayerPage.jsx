@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
+import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 
 function formatGameDate(game) {
   const rawValue = game.completedAt || game.scheduledAt || game.createdAt || null;
@@ -69,7 +70,14 @@ export function PublicLeaguePlayerPage() {
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
           Public League Player
         </p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">{playerLabel}</h1>
+        <div className="mt-2 flex items-center gap-4">
+          <img
+            src={playerPlaceholder}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          />
+          <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{playerLabel}</h1>
+        </div>
         <p className="mt-2 text-base text-slate-700">
           <Link to={`/league/${league.slug}`} className="hover:underline">
             {league.name}

@@ -15,6 +15,9 @@ export function AdminLeagueTeamPage() {
   const [playerName, setPlayerName] = useState('');
   const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
+  const [logoFile, setLogoFile] = useState(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState('');
 
   useEffect(() => {
     Promise.all([leaguesApi.getTeam(leagueId, leagueTeamId), leaguesApi.getById(leagueId)])
@@ -79,6 +82,36 @@ export function AdminLeagueTeamPage() {
   async function removeMember(memberId) {
     await leaguesApi.removeMember(leagueId, leagueTeamId, memberId);
     await refresh();
+  }
+
+  async function onUploadLogo() {
+    if (!logoFile) return;
+    setLogoError('');
+    setIsUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+      const response = await leaguesApi.uploadTeamLogo(leagueId, leagueTeamId, formData);
+      setTeam(response.team);
+      setLogoFile(null);
+    } catch (uploadError) {
+      setLogoError(uploadError.message || 'Failed to upload logo');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  }
+
+  async function onRemoveLogo() {
+    setLogoError('');
+    setIsUploadingLogo(true);
+    try {
+      const response = await leaguesApi.removeTeamLogo(leagueId, leagueTeamId);
+      setTeam(response.team);
+    } catch (uploadError) {
+      setLogoError(uploadError.message || 'Failed to remove logo');
+    } finally {
+      setIsUploadingLogo(false);
+    }
   }
 
   if (isLoading) {
@@ -186,6 +219,50 @@ export function AdminLeagueTeamPage() {
             />
           </section>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-slate-900">Team Logo</h2>
+        <p className="mt-1 text-sm text-slate-600">Shown on public team pages and standings.</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {team.logo?.url ? (
+            <img
+              src={team.logo.url}
+              alt="Team logo"
+              className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover"
+            />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-400">
+              None
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
+            disabled={isUploadingLogo}
+            onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
+          />
+          <button
+            type="button"
+            disabled={!logoFile || isUploadingLogo}
+            onClick={onUploadLogo}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {isUploadingLogo ? 'Saving...' : 'Upload'}
+          </button>
+          {team.logo?.url ? (
+            <button
+              type="button"
+              disabled={isUploadingLogo}
+              onClick={onRemoveLogo}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+        {logoError ? <p className="mt-3 text-sm text-red-600">{logoError}</p> : null}
       </section>
     </main>
   );

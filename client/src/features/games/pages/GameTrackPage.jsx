@@ -855,18 +855,18 @@ export function GameTrackPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col space-y-1">
+                <div className="flex flex-col space-y-1 overflow-hidden">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Action
                   </p>
-                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                    <div className="grid gap-2 landscape:content-start">
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    <div className="grid gap-1.5">
                       {pendingFollowUpPrompt ? (
                         <>
                           {pendingFollowUpPrompt.kind === 'assist' ? (
                             <button
                               type="button"
-                              className="min-h-11 rounded-lg bg-slate-100 px-3 py-3 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-200"
+                              className="w-full rounded-lg bg-slate-100 px-2 py-2 text-left text-xs font-semibold text-slate-800 transition hover:bg-slate-200"
                               disabled={isSaving}
                               onClick={() => handleFollowUpSelection('NO_ASSIST')}
                             >
@@ -875,27 +875,27 @@ export function GameTrackPage() {
                           ) : !isDualTeam ? (
                             <button
                               type="button"
-                              className="min-h-11 rounded-lg bg-rose-100 px-3 py-3 text-left text-sm font-semibold text-rose-800 transition hover:bg-rose-200"
+                              className="w-full rounded-lg bg-rose-100 px-2 py-2 text-left text-xs font-semibold text-rose-800 transition hover:bg-rose-200"
                               disabled={isSaving}
                               onClick={() => handleFollowUpSelection('OPP_REB')}
                             >
-                              Opponent Rebound
+                              Opp Rebound
                             </button>
                           ) : null}
                           <button
                             type="button"
-                            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                             disabled={isSaving}
                             onClick={() => clearEventPicker()}
                           >
-                            Dismiss Prompt
+                            Dismiss
                           </button>
                         </>
                       ) : (
                         <>
                           <button
                             type="button"
-                            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className="w-full rounded-lg bg-slate-900 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addShotEvent('made')}
                           >
@@ -903,7 +903,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-600 disabled:opacity-60"
+                            className="w-full rounded-lg bg-slate-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-600 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addShotEvent('miss')}
                           >
@@ -911,7 +911,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                            className="w-full rounded-lg bg-emerald-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addFreeThrowEvent('made')}
                           >
@@ -919,7 +919,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+                            className="w-full rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addFreeThrowEvent('miss')}
                           >
@@ -927,7 +927,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                            className="w-full rounded-lg bg-amber-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addReboundEvent('DREB')}
                           >
@@ -935,7 +935,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-60"
+                            className="w-full rounded-lg bg-amber-600 px-2 py-2 text-xs font-semibold text-white transition hover:bg-amber-500 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addReboundEvent('OREB')}
                           >
@@ -943,7 +943,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('STL')}
                           >
@@ -951,7 +951,15 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            disabled={isSaving}
+                            onClick={() => addQuickStatEvent('BLK')}
+                          >
+                            BLK
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('TOV')}
                           >
@@ -959,7 +967,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('FOUL')}
                           >
@@ -969,7 +977,7 @@ export function GameTrackPage() {
                             <>
                               <button
                                 type="button"
-                                className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:opacity-60"
+                                className="w-full rounded-lg bg-rose-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-rose-600 disabled:opacity-60"
                                 disabled={isSaving}
                                 onClick={() => addOpponentScore('OPP_FT_MADE')}
                               >
@@ -977,7 +985,7 @@ export function GameTrackPage() {
                               </button>
                               <button
                                 type="button"
-                                className="rounded-lg bg-rose-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                                className="w-full rounded-lg bg-rose-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
                                 disabled={isSaving}
                                 onClick={() => addOpponentScore('OPP_FG2_MADE')}
                               >
@@ -985,7 +993,7 @@ export function GameTrackPage() {
                               </button>
                               <button
                                 type="button"
-                                className="rounded-lg bg-rose-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:opacity-60"
+                                className="w-full rounded-lg bg-rose-900 px-2 py-2 text-xs font-semibold text-white transition hover:bg-rose-800 disabled:opacity-60"
                                 disabled={isSaving}
                                 onClick={() => addOpponentScore('OPP_FG3_MADE')}
                               >

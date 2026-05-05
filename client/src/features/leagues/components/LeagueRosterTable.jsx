@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 
 export function LeagueRosterTable({ roster = [], getPlayerHref = null, bare = false }) {
   return (
@@ -20,16 +21,23 @@ export function LeagueRosterTable({ roster = [], getPlayerHref = null, bare = fa
           {roster.map((player) => (
             <tr key={player.id} className="border-t border-slate-200">
               <td className="px-3 py-2 font-medium text-slate-900">
-                {getPlayerHref ? (
-                  <Link
-                    to={getPlayerHref(player)}
-                    className="underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
-                  >
-                    {player.displayName}
-                  </Link>
-                ) : (
-                  player.displayName
-                )}
+                <div className="flex items-center gap-2">
+                  <img
+                    src={playerPlaceholder}
+                    alt=""
+                    className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                  />
+                  {getPlayerHref ? (
+                    <Link
+                      to={getPlayerHref(player)}
+                      className="underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+                    >
+                      {player.displayName}
+                    </Link>
+                  ) : (
+                    player.displayName
+                  )}
+                </div>
               </td>
               <td className="px-3 py-2 text-right">{player.jerseyNumber ?? '--'}</td>
               <td className="px-3 py-2 text-right">{player.position || '--'}</td>

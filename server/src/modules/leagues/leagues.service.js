@@ -678,7 +678,7 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
     throw new ApiError(404, 'League player not found');
   }
 
-  const games = await listLeagueGames(league._id, { publicOnly: true });
+  const games = await listLeagueGamesByLeagueId(league._id);
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id);
 
   return {
@@ -1315,6 +1315,8 @@ function createLeagueGameRow(game, teamsById) {
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
     homeTeamName: teamsById.get(String(game.homeLeagueTeamId))?.name || null,
     awayTeamName: teamsById.get(String(game.awayLeagueTeamId))?.name || null,
+    homeTeamLogoUrl: teamsById.get(String(game.homeLeagueTeamId))?.logo?.url || null,
+    awayTeamLogoUrl: teamsById.get(String(game.awayLeagueTeamId))?.logo?.url || null,
     homePoints: isCompleted ? score.homePoints : null,
     awayPoints: isCompleted ? score.awayPoints : null,
     teamPoints: isCompleted ? score.homePoints : null,

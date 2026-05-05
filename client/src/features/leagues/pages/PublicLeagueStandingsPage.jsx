@@ -53,7 +53,17 @@ export function PublicLeagueStandingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold text-slate-900">Standings</h2>
-        <LeagueStandingsTable standings={standings} />
+        <LeagueStandingsTable
+          standings={standings}
+          getTeamHref={(row) => {
+            const team = (league.teams || []).find((t) => t.id === row.teamId);
+            return team?.slug ? `/league/${league.slug}/teams/${team.slug}` : null;
+          }}
+          getTeamLogo={(row) => {
+            const team = (league.teams || []).find((t) => t.id === row.teamId);
+            return team?.logo?.url ?? null;
+          }}
+        />
       </section>
     </main>
   );
