@@ -6,6 +6,7 @@ import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
 export function PublicLeagueTeamPage() {
   const { leagueSlug, teamSlug } = useParams();
@@ -54,8 +55,15 @@ export function PublicLeagueTeamPage() {
     }
   }
 
+  const breadcrumbs = [
+    { label: 'Leagues', href: '/leagues' },
+    { label: league.name, href: `/league/${league.slug}` },
+    { label: team.name },
+  ];
+
   return (
     <main className="space-y-8">
+      <Breadcrumbs crumbs={breadcrumbs} />
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
         <div className="flex items-center gap-2">
           <img

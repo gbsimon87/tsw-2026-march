@@ -63,17 +63,23 @@ async function resolveImagePayload(post) {
 
 async function resolveGameCardPayload(post) {
   const payload = await getPublicGame(String(post.gameCard.gameId));
+  const isDualTeam = payload.game.trackingMode === 'dual_team';
 
   return {
     image: null,
     gameCard: {
       gameId: payload.game.id,
       gameUrl: `/games/${payload.game.id}`,
-      teamId: payload.team.id,
-      teamName: payload.team.name,
-      teamLogo: payload.team.logo ?? null,
-      teamColors: payload.team.colors ?? [],
-      opponent: payload.game.opponent,
+      teamId: payload.team?.id ?? null,
+      teamName: isDualTeam
+        ? `${payload.participants?.home?.displayName || 'Home'} vs ${payload.participants?.away?.displayName || 'Away'}`
+        : (payload.team?.name ?? null),
+      teamLogo: isDualTeam
+        ? (payload.participants?.home?.logo ?? null)
+        : (payload.team?.logo ?? null),
+      teamColors: payload.team?.colors ?? [],
+      opponent: isDualTeam ? null : payload.game.opponent,
+      participants: isDualTeam ? payload.participants : null,
       recap: payload.recap,
     },
     playerCard: null,
@@ -267,7 +273,7 @@ async function createGameCardPostForUser(userId, input) {
     caption: sanitizeCaption(payload.caption),
     gameCard: {
       gameId: payload.gameId,
-      teamId: game.teamId,
+      teamId: game.teamId || null,
     },
   });
 

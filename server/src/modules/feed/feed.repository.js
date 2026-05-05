@@ -14,7 +14,7 @@ const imageSchema = new mongoose.Schema(
 const gameCardSchema = new mongoose.Schema(
   {
     gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
-    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, default: null },
   },
   { _id: false }
 );

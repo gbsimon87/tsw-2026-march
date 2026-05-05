@@ -58,6 +58,7 @@ export function FeedComposer({
   initialSelectedPlayer = { teamId: '', playerId: '' },
   initialPlayerOption = null,
 }) {
+  const isLockedToGame = !!(initialSelectedGameId && initialTab === 'game');
   const [activeTab, setActiveTab] = useState(initialTab);
   const [caption, setCaption] = useState('');
   const [imageFile, setImageFile] = useState(null);
@@ -164,6 +165,60 @@ export function FeedComposer({
     }
   }
 
+  if (isLockedToGame) {
+    const gameTitle = initialGameOption?.title || initialGameOption?.team?.name || 'Game';
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Sharing game recap
+          </p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-900">{gameTitle}</p>
+          {initialGameOption?.score ? (
+            <p className="mt-1 text-xl font-bold tabular-nums text-slate-700">
+              {initialGameOption.score}
+            </p>
+          ) : null}
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700">
+              Caption <span className="font-normal text-slate-400">(optional)</span>
+            </span>
+            <textarea
+              className="w-full rounded border px-3 py-2 text-sm"
+              rows={3}
+              maxLength={280}
+              value={caption}
+              onChange={(event) => setCaption(event.target.value)}
+              placeholder="Add a caption..."
+              autoFocus
+            />
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Posting...' : 'Post to Feed'}
+            </button>
+            {onCancel ? (
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                onClick={onCancel}
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
@@ -215,7 +270,7 @@ export function FeedComposer({
               <option value="">Select game</option>
               {options.games.map((game) => (
                 <option key={game.id} value={game.id}>
-                  {game.team?.name} - {game.opponent || game.title}
+                  {game.title || `${game.team?.name || 'Game'} - ${game.opponent || ''}`}
                 </option>
               ))}
             </select>

@@ -199,11 +199,11 @@ export function GameRecapPanel({
           </div>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-3">
+        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 p-3">
           <img
             src={recapCardDataUrl}
             alt="Shareable game recap card preview"
-            className="mx-auto block w-full max-w-[320px] rounded-xl border border-slate-800 bg-slate-950 shadow-sm"
+            className="mx-auto block w-full max-w-[320px] rounded-xl bg-slate-950 shadow-sm"
           />
         </div>
       </section>

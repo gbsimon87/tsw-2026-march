@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
 function formatGameDate(game) {
   const rawValue = game.completedAt || game.scheduledAt || game.createdAt || null;
@@ -64,8 +65,16 @@ export function PublicLeaguePlayerPage() {
       ? `#${player.jerseyNumber} ${player.displayName}`
       : player.displayName;
 
+  const breadcrumbs = [
+    { label: 'Leagues', href: '/leagues' },
+    { label: league.name, href: `/league/${league.slug}` },
+    { label: team.name, href: `/league/${league.slug}/teams/${team.slug}` },
+    { label: player.displayName },
+  ];
+
   return (
     <main className="mx-auto max-w-5xl space-y-6">
+      <Breadcrumbs crumbs={breadcrumbs} />
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
           Public League Player

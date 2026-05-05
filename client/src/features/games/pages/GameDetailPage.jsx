@@ -13,6 +13,7 @@ import { GameRecapPanel } from '../components/GameRecapPanel';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
@@ -401,14 +402,17 @@ export function GameDetailPage() {
     }, 1500);
   }
 
-  const initialGameOption =
-    game?.id && team?.name
-      ? {
-          id: game.id,
-          team: { name: team.name },
-          opponent: game.opponent || game.title || recap?.opponent?.name || 'Opponent',
-        }
-      : null;
+  const initialGameOption = game?.id
+    ? {
+        id: game.id,
+        title: isDualTeam
+          ? `${getParticipantName(participants, 'home')} vs ${getParticipantName(participants, 'away')}`
+          : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'}`,
+        score: isDualTeam
+          ? `${gameSummary.homePoints ?? 0} – ${gameSummary.awayPoints ?? 0}`
+          : `${gameSummary.teamPoints ?? 0} – ${gameSummary.opponentPoints ?? 0}`,
+      }
+    : null;
 
   const printContent = (
     <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 text-slate-900">
@@ -473,8 +477,18 @@ export function GameDetailPage() {
     </section>
   );
 
+  const leagueBreadcrumbs =
+    isDualTeam && data.league
+      ? [
+          { label: 'Leagues', href: '/leagues' },
+          { label: data.league.name, href: `/league/${data.league.slug}` },
+          { label: game.title || 'Game' },
+        ]
+      : null;
+
   return (
     <section className="space-y-4">
+      {!isPrintMode && leagueBreadcrumbs ? <Breadcrumbs crumbs={leagueBreadcrumbs} /> : null}
       {!isPrintMode ? (
         <GameDetailHeader
           gameId={game.id}

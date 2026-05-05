@@ -146,9 +146,11 @@ export function ShareCardLogoBadge({
 export function ShareCardStatPill({ label, value, emphasis = false }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm">
-      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{label}</p>
+      <p className="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">
+        {label}
+      </p>
       <p
-        className={`mt-1 font-black ${emphasis ? 'text-2xl text-white' : 'text-xl text-slate-100'}`}
+        className={`mt-1 text-center font-black ${emphasis ? 'text-2xl text-white' : 'text-xl text-slate-100'}`}
       >
         {value}
       </p>

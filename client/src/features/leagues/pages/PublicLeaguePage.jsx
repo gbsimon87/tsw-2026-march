@@ -4,6 +4,7 @@ import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
@@ -27,8 +28,11 @@ export function PublicLeaguePage() {
     return <p className="text-sm text-red-600">{error || 'League not found'}</p>;
   }
 
+  const breadcrumbs = [{ label: 'Leagues', href: '/leagues' }, { label: league.name }];
+
   return (
     <main className="space-y-8">
+      <Breadcrumbs crumbs={breadcrumbs} />
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
         <div className="flex items-center gap-5">
           <img
