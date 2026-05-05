@@ -63,9 +63,10 @@ export function PublicLeagueTeamPage() {
         </p>
       </section>
 
-      <section className="space-y-3">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-semibold text-slate-900">Roster</h2>
         <LeagueRosterTable
+          bare
           roster={team.roster || []}
           getPlayerHref={(player) =>
             `/league/${league.slug}/teams/${team.slug}/players/${player.id}`

@@ -546,9 +546,10 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
     throw new ApiError(404, 'League team not found');
   }
 
-  const [players, games, standings] = await Promise.all([
+  const [players, games, rawGames, standings] = await Promise.all([
     listLeaguePlayers(team._id),
-    listLeagueGames(league._id, { publicOnly: true }),
+    listLeagueGames(league._id),
+    listLeagueGamesByLeagueId(league._id),
     getLeagueStandings(league._id),
   ]);
   const teamGames = games.filter(
@@ -556,7 +557,12 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
       String(game.homeLeagueTeamId) === String(team._id) ||
       String(game.awayLeagueTeamId) === String(team._id)
   );
-  const playerStats = buildLeagueTeamPlayerStats(teamGames, team._id);
+  const rawTeamGames = rawGames.filter(
+    (game) =>
+      String(game.homeLeagueTeamId) === String(team._id) ||
+      String(game.awayLeagueTeamId) === String(team._id)
+  );
+  const playerStats = buildLeagueTeamPlayerStats(rawTeamGames, team._id);
   const standingsRow = standings.find((row) => row.teamId === String(team._id)) || null;
 
   return {

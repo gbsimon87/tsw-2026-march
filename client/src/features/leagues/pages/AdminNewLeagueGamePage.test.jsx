@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { gamesApi } from '../../games/api/gamesApi';
-import { NewLeagueGamePage } from './NewLeagueGamePage';
+import { AdminNewLeagueGamePage } from './AdminNewLeagueGamePage';
 import { leaguesApi } from '../api/leaguesApi';
 
 const mockNavigate = vi.fn();
@@ -30,15 +30,15 @@ vi.mock('../api/leaguesApi', () => ({
 
 function renderPage() {
   render(
-    <MemoryRouter initialEntries={['/leagues/league-1/games/new']}>
+    <MemoryRouter initialEntries={['/admin/leagues/league-1/games/new']}>
       <Routes>
-        <Route path="/leagues/:leagueId/games/new" element={<NewLeagueGamePage />} />
+        <Route path="/admin/leagues/:leagueId/games/new" element={<AdminNewLeagueGamePage />} />
       </Routes>
     </MemoryRouter>
   );
 }
 
-describe('NewLeagueGamePage', () => {
+describe('AdminNewLeagueGamePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

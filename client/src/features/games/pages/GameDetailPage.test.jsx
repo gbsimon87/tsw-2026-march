@@ -304,10 +304,14 @@ describe('GameDetailPage', () => {
     );
     expect(screen.getAllByText('TSW Team').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Wildcats/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Status: completed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Recorded:/i)).toBeInTheDocument();
-    expect(screen.getByText(/Finished:/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'TSW Team' })).toHaveAttribute('href', '/teams/team-1');
+    expect(screen.getByRole('heading', { name: 'TSW Team vs Wildcats' })).toBeInTheDocument();
+    expect(screen.queryByText(/Status: completed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Recorded:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Finished:/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View Team' })).toHaveAttribute(
+      'href',
+      '/teams/team-1'
+    );
     expect(screen.queryByText(/^Team:/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Top Performer/i).length).toBeGreaterThan(0);
     expect(

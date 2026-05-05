@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
 import { AdminPage } from '../../features/dashboard/AdminPage';
@@ -19,11 +19,11 @@ import { NewGamePage } from '../../features/games/pages/NewGamePage';
 import { GamesListPage } from '../../features/games/pages/GamesListPage';
 import { GameTrackPage } from '../../features/games/pages/GameTrackPage';
 import { GameDetailPage } from '../../features/games/pages/GameDetailPage';
-import { NewLeaguePage } from '../../features/leagues/pages/NewLeaguePage';
-import { LeagueDetailPage } from '../../features/leagues/pages/LeagueDetailPage';
-import { LeagueManagePage } from '../../features/leagues/pages/LeagueManagePage';
-import { LeagueTeamPage } from '../../features/leagues/pages/LeagueTeamPage';
-import { NewLeagueGamePage } from '../../features/leagues/pages/NewLeagueGamePage';
+import { AdminNewLeaguePage } from '../../features/leagues/pages/AdminNewLeaguePage';
+import { AdminLeaguePage } from '../../features/leagues/pages/AdminLeaguePage';
+import { AdminLeagueSettingsPage } from '../../features/leagues/pages/AdminLeagueSettingsPage';
+import { AdminLeagueTeamPage } from '../../features/leagues/pages/AdminLeagueTeamPage';
+import { AdminNewLeagueGamePage } from '../../features/leagues/pages/AdminNewLeagueGamePage';
 import { PublicLeaguePage } from '../../features/leagues/pages/PublicLeaguePage';
 import { PublicLeagueStandingsPage } from '../../features/leagues/pages/PublicLeagueStandingsPage';
 import { PublicLeagueGamesPage } from '../../features/leagues/pages/PublicLeagueGamesPage';
@@ -56,6 +56,15 @@ function LandingRoute() {
   }
 
   return <HomePage />;
+}
+
+function LegacyLeagueRedirect({ target }) {
+  const { leagueId, leagueTeamId } = useParams();
+  const targetPath = target
+    .replace(':leagueId', leagueId || '')
+    .replace(':leagueTeamId', leagueTeamId || '');
+
+  return <Navigate to={targetPath} replace />;
 }
 
 export function AppRouter() {
@@ -110,43 +119,60 @@ export function AppRouter() {
         <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/teams/:teamId" element={<PublicTeamPage />} />
         <Route path="/leagues" element={<Navigate to="/admin" replace />} />
-        <Route
-          path="/leagues/new"
-          element={
-            <ProtectedRoute>
-              <NewLeaguePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/leagues/:leagueId"
-          element={
-            <ProtectedRoute>
-              <LeagueDetailPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/leagues/new" element={<Navigate to="/admin/leagues/new" replace />} />
         <Route
           path="/leagues/:leagueId/manage"
-          element={
-            <ProtectedRoute>
-              <LeagueManagePage />
-            </ProtectedRoute>
-          }
+          element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId/settings" />}
         />
         <Route
           path="/leagues/:leagueId/teams/:leagueTeamId"
+          element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId/teams/:leagueTeamId" />}
+        />
+        <Route
+          path="/leagues/:leagueId/games/new"
+          element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId/games/new" />}
+        />
+        <Route
+          path="/leagues/:leagueId"
+          element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId" />}
+        />
+        <Route
+          path="/admin/leagues/new"
           element={
             <ProtectedRoute>
-              <LeagueTeamPage />
+              <AdminNewLeaguePage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/leagues/:leagueId/games/new"
+          path="/admin/leagues/:leagueId"
           element={
             <ProtectedRoute>
-              <NewLeagueGamePage />
+              <AdminLeaguePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/leagues/:leagueId/settings"
+          element={
+            <ProtectedRoute>
+              <AdminLeagueSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/leagues/:leagueId/teams/:leagueTeamId"
+          element={
+            <ProtectedRoute>
+              <AdminLeagueTeamPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/leagues/:leagueId/games/new"
+          element={
+            <ProtectedRoute>
+              <AdminNewLeagueGamePage />
             </ProtectedRoute>
           }
         />

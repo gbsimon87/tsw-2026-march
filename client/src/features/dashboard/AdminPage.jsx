@@ -4,6 +4,7 @@ import { useAuth } from '../../app/store/AuthContext';
 import { teamsApi } from '../teams/api/teamsApi';
 import { gamesApi } from '../games/api/gamesApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
+import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 function parseGameDate(game) {
   const rawDate =
@@ -112,6 +113,8 @@ export function AdminPage() {
 
   return (
     <main className="space-y-8">
+      <Breadcrumbs crumbs={[{ label: 'Admin' }]} />
+
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
         <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Admin</h1>
         <p className="mt-2 text-base text-slate-700">
@@ -142,7 +145,7 @@ export function AdminPage() {
             </p>
           </div>
           <Link
-            to="/leagues/new"
+            to="/admin/leagues/new"
             className="inline-flex items-center justify-center rounded-lg border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
             New League
@@ -157,7 +160,7 @@ export function AdminPage() {
             {leagues.map((league) => (
               <Link
                 key={league.id}
-                to={`/leagues/${league.id}`}
+                to={`/admin/leagues/${league.id}`}
                 className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
               >
                 <p className="font-semibold text-slate-900">{league.name}</p>
@@ -285,14 +288,17 @@ export function AdminPage() {
         ) : null}
       </section>
 
-      <section aria-labelledby="quick-actions-heading" className="space-y-3">
+      <section
+        aria-labelledby="quick-actions-heading"
+        className="rounded-2xl border border-slate-200 bg-white p-5"
+      >
         <h2 id="quick-actions-heading" className="text-xl font-semibold text-slate-900">
           One-off Tools
         </h2>
-        <p className="text-sm text-slate-600">
+        <p className="mt-1 text-sm text-slate-600">
           Use these for standalone teams and games outside league management.
         </p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <QuickActionLink to="/games/new" label="New Game" primary>
             <svg
               viewBox="0 0 24 24"
@@ -336,11 +342,14 @@ export function AdminPage() {
         </div>
       </section>
 
-      <section aria-labelledby="summary-heading" className="space-y-3">
+      <section
+        aria-labelledby="summary-heading"
+        className="rounded-2xl border border-slate-200 bg-white p-5"
+      >
         <h2 id="summary-heading" className="text-xl font-semibold text-slate-900">
           Summary
         </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-sm text-slate-500">Leagues</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">

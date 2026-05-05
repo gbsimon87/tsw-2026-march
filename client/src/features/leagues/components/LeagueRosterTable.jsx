@@ -1,8 +1,12 @@
 import { Link } from 'react-router-dom';
 
-export function LeagueRosterTable({ roster = [], getPlayerHref = null }) {
+export function LeagueRosterTable({ roster = [], getPlayerHref = null, bare = false }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+    <div
+      className={
+        bare ? 'overflow-x-auto' : 'overflow-x-auto rounded-2xl border border-slate-200 bg-white'
+      }
+    >
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-600">
           <tr>

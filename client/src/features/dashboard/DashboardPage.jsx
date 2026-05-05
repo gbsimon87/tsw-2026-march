@@ -180,7 +180,7 @@ export function DashboardPage() {
               <path d="M16 11h6" />
             </svg>
           </QuickActionLink>
-          <QuickActionLink to="/leagues/new" label="New League">
+          <QuickActionLink to="/admin/leagues/new" label="New League">
             <svg
               viewBox="0 0 24 24"
               className="h-5 w-5"
@@ -355,7 +355,7 @@ export function DashboardPage() {
             Your Leagues
           </h2>
           <Link
-            to="/leagues/new"
+            to="/admin/leagues/new"
             className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
             Create League
@@ -370,7 +370,7 @@ export function DashboardPage() {
             {leagues.map((league) => (
               <Link
                 key={league.id}
-                to={`/leagues/${league.id}`}
+                to={`/admin/leagues/${league.id}`}
                 className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
               >
                 <p className="font-semibold text-slate-900">{league.name}</p>

@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { gamesApi } from '../../games/api/gamesApi';
 import { TEAM_SIDES } from '../../games/constants';
 import { leaguesApi } from '../api/leaguesApi';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
-export function NewLeagueGamePage() {
+export function AdminNewLeagueGamePage() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
   const [league, setLeague] = useState(null);
@@ -72,6 +73,14 @@ export function NewLeagueGamePage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
+      <Breadcrumbs
+        crumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: league?.name || 'League', href: `/admin/leagues/${leagueId}` },
+          { label: 'Schedule Game' },
+        ]}
+      />
+
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
         <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">Schedule League Game</h1>
         <p className="mt-2 text-base text-slate-700">

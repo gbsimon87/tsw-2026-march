@@ -4,10 +4,12 @@ import { LeagueMembersPanel } from '../components/LeagueMembersPanel';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
 import { LeagueRosterTable } from '../components/LeagueRosterTable';
 import { leaguesApi } from '../api/leaguesApi';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
-export function LeagueTeamPage() {
+export function AdminLeagueTeamPage() {
   const { leagueId, leagueTeamId } = useParams();
   const [team, setTeam] = useState(null);
+  const [leagueName, setLeagueName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [playerName, setPlayerName] = useState('');
@@ -15,9 +17,11 @@ export function LeagueTeamPage() {
   const [managerEmail, setManagerEmail] = useState('');
 
   useEffect(() => {
-    leaguesApi
-      .getTeam(leagueId, leagueTeamId)
-      .then((response) => setTeam(response.team))
+    Promise.all([leaguesApi.getTeam(leagueId, leagueTeamId), leaguesApi.getById(leagueId)])
+      .then(([teamResponse, leagueResponse]) => {
+        setTeam(teamResponse.team);
+        setLeagueName(leagueResponse.league?.name || '');
+      })
       .catch((loadError) => setError(loadError.message || 'Failed to load league team'))
       .finally(() => setIsLoading(false));
   }, [leagueId, leagueTeamId]);
@@ -87,6 +91,14 @@ export function LeagueTeamPage() {
 
   return (
     <main className="space-y-8">
+      <Breadcrumbs
+        crumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: leagueName || 'League', href: `/admin/leagues/${leagueId}` },
+          { label: team.name },
+        ]}
+      />
+
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
         <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
         <p className="mt-2 text-base text-slate-700">

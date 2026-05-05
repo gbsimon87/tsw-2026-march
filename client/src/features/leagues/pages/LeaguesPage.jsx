@@ -36,7 +36,7 @@ export function LeaguesPage() {
         </h2>
         <div className="flex flex-wrap gap-3">
           <Link
-            to="/leagues/new"
+            to="/admin/leagues/new"
             className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
           >
             Create League
@@ -55,7 +55,7 @@ export function LeaguesPage() {
             {leagues.map((league) => (
               <Link
                 key={league.id}
-                to={`/leagues/${league.id}`}
+                to={`/admin/leagues/${league.id}`}
                 className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
               >
                 <p className="font-semibold text-slate-900">{league.name}</p>

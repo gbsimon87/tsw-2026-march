@@ -34,7 +34,7 @@ export function PublicLeaguePage() {
         </p>
       </section>
 
-      <section className="space-y-3">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold text-slate-900">Standings</h2>
           <Link
@@ -44,60 +44,47 @@ export function PublicLeaguePage() {
             View full standings
           </Link>
         </div>
-        <LeagueStandingsTable standings={league.standings || []} />
+        <LeagueStandingsTable
+          standings={league.standings || []}
+          getTeamHref={(row) => {
+            const team = (league.teams || []).find((t) => t.id === row.teamId);
+            return team?.slug ? `/league/${league.slug}/teams/${team.slug}` : null;
+          }}
+          className="mt-4"
+        />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h2 className="text-xl font-semibold text-slate-900">Teams</h2>
-          <div className="mt-4 grid gap-3">
-            {(league.teams || []).length === 0 ? (
-              <p className="text-sm text-slate-600">No teams yet.</p>
-            ) : (
-              (league.teams || []).map((team) => (
-                <Link
-                  key={team.id}
-                  to={`/league/${league.slug}/teams/${team.slug}`}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-                >
-                  <p className="font-semibold text-slate-900">{team.name}</p>
-                </Link>
-              ))
-            )}
-          </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-slate-900">Games</h2>
+          <Link
+            to={`/league/${league.slug}/games`}
+            className="text-sm font-medium text-sky-700 hover:underline"
+          >
+            View all games
+          </Link>
         </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-slate-900">Games</h2>
-            <Link
-              to={`/league/${league.slug}/games`}
-              className="text-sm font-medium text-sky-700 hover:underline"
-            >
-              View all games
-            </Link>
-          </div>
-          <div className="mt-4 grid gap-3">
-            {(league.games || []).length === 0 ? (
-              <p className="text-sm text-slate-600">No league games yet.</p>
-            ) : (
-              (league.games || []).map((game) => (
-                <Link
-                  key={game.id}
-                  to={`/games/${game.id}`}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-                >
-                  <p className="font-semibold text-slate-900">{game.title}</p>
+        <div className="mt-4 grid gap-3">
+          {(league.games || []).length === 0 ? (
+            <p className="text-sm text-slate-600">No league games yet.</p>
+          ) : (
+            (league.games || []).map((game) => (
+              <Link
+                key={game.id}
+                to={`/games/${game.id}`}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+              >
+                <p className="font-semibold text-slate-900">
+                  {game.homeTeamName || 'Unknown Team'} vs {game.awayTeamName || 'Unknown Team'}
+                </p>
+                {game.homePoints != null && game.awayPoints != null ? (
                   <p className="mt-1 text-xs text-slate-500">
-                    {game.homeTeamName} vs {game.awayTeamName}
-                    {game.homePoints != null && game.awayPoints != null
-                      ? ` • ${game.homePoints}-${game.awayPoints}`
-                      : ''}
+                    {game.homePoints}–{game.awayPoints}
                   </p>
-                </Link>
-              ))
-            )}
-          </div>
+                ) : null}
+              </Link>
+            ))
+          )}
         </div>
       </section>
     </main>

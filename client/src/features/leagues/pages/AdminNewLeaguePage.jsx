@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
-export function NewLeaguePage() {
+export function AdminNewLeaguePage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [seasonLabel, setSeasonLabel] = useState('');
@@ -21,7 +22,7 @@ export function NewLeaguePage() {
         seasonLabel,
         description,
       });
-      navigate(`/leagues/${response.league.id}`);
+      navigate(`/admin/leagues/${response.league.id}`);
     } catch (submitError) {
       setError(submitError.message || 'Failed to create league');
     } finally {
@@ -31,6 +32,8 @@ export function NewLeaguePage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
+      <Breadcrumbs crumbs={[{ label: 'Admin', href: '/admin' }, { label: 'New League' }]} />
+
       <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
         <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
           Create League
