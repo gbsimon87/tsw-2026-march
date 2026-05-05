@@ -12,6 +12,7 @@ const {
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
 } = require('../leagues/leagues.service');
+const { findLeagueTeamById } = require('../leagues/leagues.repository');
 
 function sanitizeEvent(event) {
   return {
@@ -833,26 +834,69 @@ async function createGameForUser(userId, payload) {
 
 async function listGamesForUser(userId, filter = {}) {
   const games = await listGamesByOwner(userId, filter);
-  return games.map((game) => ({
-    id: String(game._id),
-    teamId: game.teamId ? String(game.teamId) : null,
-    gameContext: game.gameContext || 'standalone',
-    trackingMode: game.trackingMode || 'one_sided',
-    leagueId: game.leagueId ? String(game.leagueId) : null,
-    homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
-    awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
-    homeTeamId: game.homeTeamId ? String(game.homeTeamId) : null,
-    awayTeamId: game.awayTeamId ? String(game.awayTeamId) : null,
-    trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
-    title: game.title,
-    opponent: game.opponent ?? null,
-    status: game.status,
-    scheduledAt: game.scheduledAt ?? null,
-    completedAt: game.completedAt ?? null,
-    eventCount: (game.events || []).length,
-    createdAt: game.createdAt,
-    updatedAt: game.updatedAt,
-  }));
+
+  const standaloneTeamIds = new Set();
+  const leagueTeamIds = new Set();
+  for (const game of games) {
+    if (game.homeTeamId) standaloneTeamIds.add(String(game.homeTeamId));
+    if (game.awayTeamId) standaloneTeamIds.add(String(game.awayTeamId));
+    if (game.teamId) standaloneTeamIds.add(String(game.teamId));
+    if (game.homeLeagueTeamId) leagueTeamIds.add(String(game.homeLeagueTeamId));
+    if (game.awayLeagueTeamId) leagueTeamIds.add(String(game.awayLeagueTeamId));
+    if (game.trackedLeagueTeamId) leagueTeamIds.add(String(game.trackedLeagueTeamId));
+  }
+
+  const [standaloneTeams, leagueTeams] = await Promise.all([
+    standaloneTeamIds.size > 0
+      ? Promise.all([...standaloneTeamIds].map((id) => findTeamById(id).catch(() => null)))
+      : [],
+    leagueTeamIds.size > 0
+      ? Promise.all([...leagueTeamIds].map((id) => findLeagueTeamById(id).catch(() => null)))
+      : [],
+  ]);
+
+  const teamLogoById = new Map();
+  for (const team of standaloneTeams) {
+    if (team) teamLogoById.set(String(team._id), team.logo?.url || null);
+  }
+  for (const team of leagueTeams) {
+    if (team) teamLogoById.set(String(team._id), team.logo?.url || null);
+  }
+
+  function resolveLogoUrl(game) {
+    const homeId = game.homeTeamId || game.homeLeagueTeamId || game.teamId;
+    const awayId = game.awayTeamId || game.awayLeagueTeamId;
+    return {
+      homeLogoUrl: homeId ? (teamLogoById.get(String(homeId)) ?? null) : null,
+      awayLogoUrl: awayId ? (teamLogoById.get(String(awayId)) ?? null) : null,
+    };
+  }
+
+  return games.map((game) => {
+    const { homeLogoUrl, awayLogoUrl } = resolveLogoUrl(game);
+    return {
+      id: String(game._id),
+      teamId: game.teamId ? String(game.teamId) : null,
+      gameContext: game.gameContext || 'standalone',
+      trackingMode: game.trackingMode || 'one_sided',
+      leagueId: game.leagueId ? String(game.leagueId) : null,
+      homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
+      awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
+      homeTeamId: game.homeTeamId ? String(game.homeTeamId) : null,
+      awayTeamId: game.awayTeamId ? String(game.awayTeamId) : null,
+      trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
+      title: game.title,
+      opponent: game.opponent ?? null,
+      status: game.status,
+      scheduledAt: game.scheduledAt ?? null,
+      completedAt: game.completedAt ?? null,
+      eventCount: (game.events || []).length,
+      createdAt: game.createdAt,
+      updatedAt: game.updatedAt,
+      homeLogoUrl,
+      awayLogoUrl,
+    };
+  });
 }
 
 async function updateGameForUser(userId, gameId, payload) {
@@ -890,6 +934,24 @@ async function getGameForUser(userId, gameId) {
       : computeBoxScore(game, teamDoc);
   const gameSummary = buildGameSummary(game);
 
+  // Fetch fresh logos for dual-team games so uploads after game creation are reflected
+  let freshLogoByLeagueTeamId = new Map();
+  if (game.trackingMode === 'dual_team') {
+    const ids = [game.homeLeagueTeamId, game.awayLeagueTeamId].filter(Boolean);
+    const teams = await Promise.all(ids.map((id) => findLeagueTeamById(id).catch(() => null)));
+    for (const t of teams) {
+      if (t) freshLogoByLeagueTeamId.set(String(t._id), t.logo?.url || null);
+    }
+  }
+
+  function resolveParticipantLogo(participant, leagueTeamId) {
+    if (leagueTeamId) {
+      const fresh = freshLogoByLeagueTeamId.get(String(leagueTeamId));
+      if (fresh !== undefined) return fresh ? { url: fresh } : null;
+    }
+    return participant.logo || null;
+  }
+
   return {
     game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
@@ -899,10 +961,12 @@ async function getGameForUser(userId, gameId) {
           home: {
             id: participants.home.teamId || participants.home.leagueTeamId,
             ...participants.home,
+            logo: resolveParticipantLogo(participants.home, game.homeLeagueTeamId),
           },
           away: {
             id: participants.away.teamId || participants.away.leagueTeamId,
             ...participants.away,
+            logo: resolveParticipantLogo(participants.away, game.awayLeagueTeamId),
           },
         }
       : null,

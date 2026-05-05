@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
+import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 function formatDateTime(value) {
   if (!value) {
@@ -72,50 +73,56 @@ export function GameDetailHeader({
     <section
       className={`rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8 ${className}`}
     >
-      <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3 text-slate-900">
-          <div className="text-left">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {homeName}
-            </p>
-            <p className="text-4xl font-bold md:text-5xl">{homePoints}</p>
-          </div>
-          <p className="pb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             {statusLabel}
-          </p>
-          <div className="text-right">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {awayName}
-            </p>
-            <p className="text-4xl font-bold md:text-5xl">{awayPoints}</p>
-          </div>
+          </span>
+          <span className="text-xs text-slate-400">
+            {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
+          </span>
+        </div>
+        <div className="space-y-3 px-4 py-4">
+          {[
+            {
+              logo: isDualTeam
+                ? participants?.home?.logo?.url || teamPlaceholder
+                : game?.gameContext === 'league'
+                  ? getLeagueHeaderImage(league)
+                  : getGameHeaderImage(team),
+              name: homeName,
+              points: homePoints,
+              won: homePoints > awayPoints,
+            },
+            {
+              logo: isDualTeam ? participants?.away?.logo?.url || teamPlaceholder : teamPlaceholder,
+              name: awayName,
+              points: awayPoints,
+              won: awayPoints > homePoints,
+            },
+          ].map((side) => (
+            <div key={side.name} className="flex items-center gap-3">
+              <img
+                src={side.logo}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+              />
+              <span
+                className={`flex-1 truncate text-sm font-semibold ${side.won ? 'text-slate-900' : 'text-slate-500'}`}
+              >
+                {side.name}
+              </span>
+              <span
+                className={`tabular-nums text-3xl font-bold md:text-4xl ${side.won ? 'text-slate-900' : 'text-slate-400'}`}
+              >
+                {side.points}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="flex items-start gap-4">
-          <img
-            src={
-              game?.gameContext === 'league'
-                ? getLeagueHeaderImage(league)
-                : getGameHeaderImage(team)
-            }
-            alt={
-              game?.gameContext === 'league'
-                ? `${league?.name || 'League'} logo`
-                : `${team?.name || recap?.team?.name || 'Team'} logo`
-            }
-            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
-          />
-          <div>
-            <p className="mt-2 text-base text-slate-700">
-              {game?.gameContext === 'league' ? 'League game' : 'One-off game'}
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              {formatDateTime(recap?.playedAt || game?.scheduledAt || game?.createdAt)}
-            </p>
-          </div>
-        </div>
+      <div className="mt-4 flex flex-wrap gap-2">
         {team?.id && !isDualTeam ? (
           <Link
             to={`/teams/${team.id}`}

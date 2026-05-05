@@ -56,6 +56,8 @@ function buildTopPerformers(boxScore) {
       points: row.points,
       reb: row.reb,
       ast: row.ast,
+      teamSide: row.teamSide || null,
+      teamName: row.teamName || null,
     }));
 }
 
@@ -138,9 +140,41 @@ function buildGameRecap(game, team, boxScore) {
       },
       playedAt: game?.completedAt || game?.scheduledAt || game?.createdAt || null,
       topPerformers: buildTopPerformers([
-        ...(boxScore?.home?.players || []),
-        ...(boxScore?.away?.players || []),
+        ...(boxScore?.home?.players || []).map((p) => ({
+          ...p,
+          teamSide: 'home',
+          teamName: team?.home?.displayName || 'Home',
+        })),
+        ...(boxScore?.away?.players || []).map((p) => ({
+          ...p,
+          teamSide: 'away',
+          teamName: team?.away?.displayName || 'Away',
+        })),
       ]),
+      homeStats: {
+        points: boxScore?.home?.totals?.points || 0,
+        fg2: bySide.home.fg2,
+        fg3: bySide.home.fg3,
+        ft: bySide.home.ft,
+        reb: boxScore?.home?.totals?.reb || 0,
+        ast: boxScore?.home?.totals?.ast || 0,
+        stl: boxScore?.home?.totals?.stl || 0,
+        blk: boxScore?.home?.totals?.blk || 0,
+        tov: boxScore?.home?.totals?.tov || 0,
+        foul: boxScore?.home?.totals?.foul || 0,
+      },
+      awayStats: {
+        points: boxScore?.away?.totals?.points || 0,
+        fg2: bySide.away.fg2,
+        fg3: bySide.away.fg3,
+        ft: bySide.away.ft,
+        reb: boxScore?.away?.totals?.reb || 0,
+        ast: boxScore?.away?.totals?.ast || 0,
+        stl: boxScore?.away?.totals?.stl || 0,
+        blk: boxScore?.away?.totals?.blk || 0,
+        tov: boxScore?.away?.totals?.tov || 0,
+        foul: boxScore?.away?.totals?.foul || 0,
+      },
       teamStats: {
         points: boxScore?.home?.totals?.points || 0,
         fg2: bySide.home.fg2,

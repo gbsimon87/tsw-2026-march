@@ -5,6 +5,8 @@ import { teamsApi } from '../teams/api/teamsApi';
 import { gamesApi } from '../games/api/gamesApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
+import { getLeagueHeaderImage } from '../feed/cardImage';
+import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
 
 function parseGameDate(game) {
   const rawDate =
@@ -158,12 +160,19 @@ export function AdminPage() {
               <Link
                 key={league.id}
                 to={`/admin/leagues/${league.id}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
               >
-                <p className="font-semibold text-slate-900">{league.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {league.seasonLabel || 'Season TBD'} • {league.status}
-                </p>
+                <img
+                  src={getLeagueHeaderImage(league)}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                />
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-900">{league.name}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {league.seasonLabel || 'Season TBD'} • {league.status}
+                  </p>
+                </div>
               </Link>
             ))}
           </div>
@@ -196,17 +205,30 @@ export function AdminPage() {
                   key={gameId || `${getGameTitle(game, index)}-${index}`}
                   className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between"
                 >
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900">{getGameTitle(game, index)}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                      <span>{gameDate ? gameDate.toLocaleDateString() : 'Date unavailable'}</span>
-                      <span>•</span>
-                      <span>{getGameStatus(game)}</span>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                        {getGameContextLabel(game)}
-                      </span>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex shrink-0 items-center">
+                      <img
+                        src={game.homeLogoUrl || teamPlaceholder}
+                        alt=""
+                        className="h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
+                      />
+                      <img
+                        src={game.awayLogoUrl || teamPlaceholder}
+                        alt=""
+                        className="-ml-2 h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
+                      />
                     </div>
-                    <p className="text-sm text-slate-600">Opponent: {game.opponent || 'N/A'}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">{getGameTitle(game, index)}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                        <span>{gameDate ? gameDate.toLocaleDateString() : 'Date unavailable'}</span>
+                        <span>•</span>
+                        <span>{getGameStatus(game)}</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          {getGameContextLabel(game)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                     <button
