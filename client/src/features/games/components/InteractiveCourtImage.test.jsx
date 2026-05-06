@@ -1,42 +1,87 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { InteractiveCourtImage } from './InteractiveCourtImage';
+
+const originalMatchMedia = window.matchMedia;
+
+function setElementRect(element, rect) {
+  element.getBoundingClientRect = vi.fn(() => ({
+    left: 0,
+    top: 0,
+    right: rect.width,
+    bottom: rect.height,
+    x: 0,
+    y: 0,
+    width: rect.width,
+    height: rect.height,
+    toJSON: () => {},
+  }));
+}
+
+function mockMatchMedia(matches) {
+  const mediaQueryList = {
+    matches,
+    media: '',
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  };
+
+  window.matchMedia = vi.fn(() => mediaQueryList);
+
+  return mediaQueryList;
+}
 
 describe('InteractiveCourtImage', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    window.matchMedia = originalMatchMedia;
   });
 
-  test('toggles calibration overlay', () => {
+  test('renders the court image', () => {
     render(<InteractiveCourtImage selectedPoint={null} onSelect={vi.fn()} />);
 
-    expect(screen.queryByTestId('calibration-rect')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Show calibration/i }));
-
-    expect(screen.getByTestId('calibration-rect')).toBeInTheDocument();
-    expect(screen.getByTestId('calibration-midline-horizontal')).toBeInTheDocument();
-    expect(screen.getByTestId('calibration-midline-vertical')).toBeInTheDocument();
-    expect(screen.getByTestId('calibration-north-ft')).toBeInTheDocument();
-    expect(screen.getByTestId('calibration-south-ft')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Hide calibration/i }));
-    expect(screen.queryByTestId('calibration-rect')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Basketball court image/i })).toBeInTheDocument();
+    expect(screen.getByAltText(/Basketball court/i)).toBeInTheDocument();
   });
 
-  test('updates calibration values when dragging a handle', () => {
+  test('maps selected points without rotation', () => {
+    const onSelect = vi.fn();
+    render(<InteractiveCourtImage selectedPoint={null} onSelect={onSelect} />);
+
+    const image = screen.getByTestId('interactive-court-image');
+    setElementRect(image, { width: 200, height: 400 });
+
+    fireEvent.click(image, { clientX: 50, clientY: 300 });
+
+    expect(onSelect).toHaveBeenCalledWith({ x: 25, y: 75 });
+  });
+
+  test('maps selected points when rotated right', () => {
+    const onSelect = vi.fn();
+    render(<InteractiveCourtImage selectedPoint={null} onSelect={onSelect} rotate90 />);
+
+    const image = screen.getByTestId('interactive-court-image');
+    setElementRect(image, { width: 200, height: 400 });
+
+    fireEvent.click(image, { clientX: 50, clientY: 300 });
+
+    expect(onSelect).toHaveBeenCalledWith({ x: 75, y: 75 });
+  });
+
+  test('rotates right on mobile landscape', async () => {
+    mockMatchMedia(true);
+
     render(<InteractiveCourtImage selectedPoint={null} onSelect={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Show calibration/i }));
-
-    const before = screen.getByTestId('calibration-values').textContent;
-    const handle = screen.getByRole('button', { name: /Top left calibration handle/i });
-
-    fireEvent.pointerDown(handle, { clientX: 100, clientY: 100 });
-    fireEvent.pointerMove(window, { clientX: 130, clientY: 130 });
-    fireEvent.pointerUp(window);
-
-    const after = screen.getByTestId('calibration-values').textContent;
-    expect(after).not.toEqual(before);
+    await waitFor(() => {
+      expect(screen.getByTestId('interactive-court-image')).toHaveStyle({
+        transform: 'translate(-50%, -50%) rotate(90deg)',
+      });
+    });
   });
 });

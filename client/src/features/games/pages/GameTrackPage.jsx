@@ -96,6 +96,7 @@ export function GameTrackPage() {
     [TEAM_SIDES.AWAY]: createEmptySideState(),
     oneSided: createEmptySideState(),
   });
+  const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
 
   useEffect(() => {
     async function loadGame() {
@@ -159,6 +160,22 @@ export function GameTrackPage() {
 
     loadGame();
   }, [gameId]);
+
+  useEffect(() => {
+    if (!isEventPickerOpen) {
+      return undefined;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+    };
+  }, [isEventPickerOpen]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -712,177 +729,214 @@ export function GameTrackPage() {
       ? onCourtPlayers.filter((player) => player.id !== pendingFollowUpPrompt.actorPlayerId)
       : onCourtPlayers
     : onCourtPlayers;
+  const eventPickerShellClass =
+    'fixed inset-0 z-[60] flex items-stretch justify-center bg-slate-950/35 p-2 backdrop-blur-[1px] sm:p-3';
+  const eventPickerPanelClass =
+    'flex h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
+  const eventPickerBodyClass = 'flex h-full min-h-0 w-full flex-col';
+  const eventPickerGridClass =
+    'mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),minmax(12rem,0.78fr)] landscape:grid-rows-none md:grid-cols-[minmax(0,1fr),minmax(13rem,0.8fr)]';
+  const playerButtonClass = (isSelected = false) =>
+    `grid min-h-12 w-full grid-cols-[2.5rem,3.5rem,minmax(0,1fr)] items-center gap-2 rounded-xl px-3 py-2 text-left transition landscape:min-h-10 landscape:grid-cols-[2.25rem,3rem,minmax(0,1fr)] landscape:py-1.5 md:min-h-14 md:grid-cols-[2.75rem,4rem,minmax(0,1fr)] md:py-2.5 ${
+      isSelected ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+    }`;
+  const playerAvatarClass =
+    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-black text-slate-500 ring-2 ring-white/80 landscape:h-8 landscape:w-8 md:h-10 md:w-10';
+  const playerNumberClass =
+    'flex h-9 w-12 shrink-0 items-center justify-center rounded-lg bg-white/80 text-xl font-black tabular-nums text-slate-950 shadow-sm landscape:h-8 landscape:w-10 landscape:text-lg md:h-11 md:w-14 md:text-2xl';
+  const playerNameClass =
+    'min-w-0 truncate text-base font-semibold leading-tight text-current opacity-85 landscape:text-sm md:text-sm';
+  const actionColumnClass = 'flex min-h-0 flex-col overflow-hidden';
+  const actionScrollerClass = 'min-h-0 overflow-y-auto landscape:flex-1 md:flex-1';
+  const actionGridClass =
+    'grid grid-cols-2 gap-2 landscape:grid-cols-1 landscape:gap-1.5 md:grid-cols-1';
+  const actionGroupClass = 'min-w-0';
+  const actionPairClass = 'grid grid-cols-2 gap-1.5';
+  const actionTripleClass = 'grid grid-cols-3 gap-1.5';
+  const actionButtonClass = (tone = 'slate') => {
+    const tones = {
+      make: 'bg-emerald-700 text-white hover:bg-emerald-600',
+      miss: 'bg-rose-700 text-white hover:bg-rose-600',
+      ft: 'bg-sky-700 text-white hover:bg-sky-600',
+      rebound: 'bg-amber-600 text-white hover:bg-amber-500',
+      defense: 'bg-indigo-700 text-white hover:bg-indigo-600',
+      foul: 'bg-orange-700 text-white hover:bg-orange-600',
+      opponent: 'bg-rose-800 text-white hover:bg-rose-700',
+      slate: 'bg-slate-100 text-slate-800 hover:bg-slate-200',
+    };
 
-  const eventPicker =
-    selectedShot || pendingFollowUpPrompt ? (
-      <>
-        <button
-          type="button"
-          aria-label="Cancel event input"
-          className="absolute inset-0 bg-slate-950/20"
-          onClick={clearEventPicker}
-        />
-        <div className="absolute inset-0 flex items-center justify-center px-3 landscape:px-3 landscape:pr-4">
-          <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-lg landscape:w-[26rem] landscape:max-w-none landscape:origin-center"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <div className="w-full min-h-[26rem] landscape:h-[19rem] landscape:min-h-0">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Add Event</p>
-                  <p className="text-xs text-slate-600">
-                    {pendingFollowUpPrompt
-                      ? pendingFollowUpPrompt.kind === 'assist'
-                        ? 'Who assisted?'
-                        : 'Who got the rebound?'
-                      : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close event picker"
-                  className="rounded-md border border-slate-300 p-1 text-slate-600 transition hover:bg-slate-50"
-                  onClick={() => clearEventPicker()}
-                >
-                  <svg
-                    viewBox="0 0 20 20"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="m5 5 10 10" />
-                    <path d="M15 5 5 15" />
-                  </svg>
-                </button>
-              </div>
+    return `w-full rounded-xl px-3 py-3 text-center text-base font-bold transition disabled:opacity-60 landscape:py-2 landscape:text-sm md:py-3 md:text-base ${tones[tone] || tones.slate}`;
+  };
 
-              <div className="mt-3 grid h-[18rem] grid-cols-[minmax(0,1fr),8.5rem] gap-3 landscape:h-[calc(100%-2.25rem)] landscape:grid-cols-[minmax(0,1fr),8.5rem]">
-                <div className="flex min-h-0 flex-col space-y-1 overflow-hidden">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {pendingFollowUpPrompt
-                      ? pendingFollowUpPrompt.kind === 'assist'
-                        ? 'Pick Assister'
-                        : 'Pick Rebounder'
-                      : 'Pick Player'}
-                  </p>
-                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                    {isDualTeam && pendingFollowUpPrompt?.kind === 'rebound' ? (
-                      <div className="space-y-3">
-                        {[
-                          {
-                            side: activeSide,
-                            label: participantsBySide[activeSide]?.displayName || activeSide,
-                            reboundType: 'OREB',
-                            players: onCourtPlayers,
-                          },
-                          {
-                            side: otherSide,
-                            label: participantsBySide[otherSide]?.displayName || otherSide,
-                            reboundType: 'DREB',
-                            players: otherTeamOnCourtPlayers,
-                          },
-                        ].map((group) => (
-                          <div key={group.side}>
-                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                              {group.label} — {group.reboundType}
-                            </p>
-                            <div className="space-y-1.5">
-                              {group.players.map((player) => (
-                                <button
-                                  key={player.id}
-                                  type="button"
-                                  className="flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-left text-sm font-semibold bg-slate-100 text-slate-800 transition hover:bg-slate-200"
-                                  onClick={() => handleFollowUpSelection(player.id)}
-                                >
-                                  {player.jerseyNumber != null ? (
-                                    <span className="mr-2 w-6 shrink-0 text-center text-xs font-bold opacity-50">
-                                      {player.jerseyNumber}
-                                    </span>
-                                  ) : null}
-                                  {player.displayName}
-                                </button>
-                              ))}
-                              {group.players.length === 0 ? (
-                                <p className="px-1 text-xs text-slate-400">No players on court</p>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {followUpPlayers.map((player) => (
-                          <button
-                            key={player.id}
-                            type="button"
-                            className={`flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-3 text-left transition ${
-                              currentSideState.selectedPlayerId === player.id
-                                ? 'bg-slate-900 text-white'
-                                : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                            }`}
-                            onClick={() =>
-                              pendingFollowUpPrompt
-                                ? handleFollowUpSelection(player.id)
-                                : updateSideState(activeKey, { selectedPlayerId: player.id })
-                            }
-                          >
-                            {player.jerseyNumber != null ? (
-                              <span className="mr-2 w-6 shrink-0 text-center text-sm font-bold opacity-50">
-                                {player.jerseyNumber}
+  const eventPicker = isEventPickerOpen ? (
+    <div
+      aria-modal="true"
+      className={eventPickerShellClass}
+      role="dialog"
+      onClick={clearEventPicker}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <div
+        className={eventPickerPanelClass}
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className={eventPickerBodyClass}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Add Event</p>
+              <p className="text-xs text-slate-600">
+                {pendingFollowUpPrompt
+                  ? pendingFollowUpPrompt.kind === 'assist'
+                    ? 'Who assisted?'
+                    : 'Who got the rebound?'
+                  : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Close event picker"
+              className="rounded-md border border-slate-300 p-1 text-slate-600 transition hover:bg-slate-50"
+              onClick={() => clearEventPicker()}
+            >
+              <svg
+                viewBox="0 0 20 20"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="m5 5 10 10" />
+                <path d="M15 5 5 15" />
+              </svg>
+            </button>
+          </div>
+
+          <div className={eventPickerGridClass}>
+            <div className="flex min-h-0 flex-col space-y-1 overflow-hidden">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {pendingFollowUpPrompt
+                  ? pendingFollowUpPrompt.kind === 'assist'
+                    ? 'Pick Assister'
+                    : 'Pick Rebounder'
+                  : 'Pick Player'}
+              </p>
+              <div className="min-h-0 overflow-y-auto pr-1">
+                {isDualTeam && pendingFollowUpPrompt?.kind === 'rebound' ? (
+                  <div className="space-y-3">
+                    {[
+                      {
+                        side: activeSide,
+                        label: participantsBySide[activeSide]?.displayName || activeSide,
+                        reboundType: 'OREB',
+                        players: onCourtPlayers,
+                      },
+                      {
+                        side: otherSide,
+                        label: participantsBySide[otherSide]?.displayName || otherSide,
+                        reboundType: 'DREB',
+                        players: otherTeamOnCourtPlayers,
+                      },
+                    ].map((group) => (
+                      <div key={group.side}>
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          {group.label} — {group.reboundType}
+                        </p>
+                        <div className="space-y-1.5">
+                          {group.players.map((player) => (
+                            <button
+                              key={player.id}
+                              type="button"
+                              className={playerButtonClass(false)}
+                              onClick={() => handleFollowUpSelection(player.id)}
+                            >
+                              <span className={playerAvatarClass} aria-hidden="true">
+                                {(player.displayName || '?').trim().charAt(0).toUpperCase() || '?'}
                               </span>
-                            ) : null}
-                            <span className="text-base font-semibold">{player.displayName}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col space-y-1 overflow-hidden">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Action
-                  </p>
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    <div className="grid gap-1.5">
-                      {pendingFollowUpPrompt ? (
-                        <>
-                          {pendingFollowUpPrompt.kind === 'assist' ? (
-                            <button
-                              type="button"
-                              className="w-full rounded-lg bg-slate-100 px-2 py-2 text-left text-xs font-semibold text-slate-800 transition hover:bg-slate-200"
-                              disabled={isSaving}
-                              onClick={() => handleFollowUpSelection('NO_ASSIST')}
-                            >
-                              No Assist
+                              <span className={playerNumberClass}>
+                                {player.jerseyNumber ?? '—'}
+                              </span>
+                              <span className={playerNameClass}>{player.displayName}</span>
                             </button>
-                          ) : !isDualTeam ? (
-                            <button
-                              type="button"
-                              className="w-full rounded-lg bg-rose-100 px-2 py-2 text-left text-xs font-semibold text-rose-800 transition hover:bg-rose-200"
-                              disabled={isSaving}
-                              onClick={() => handleFollowUpSelection('OPP_REB')}
-                            >
-                              Opp Rebound
-                            </button>
+                          ))}
+                          {group.players.length === 0 ? (
+                            <p className="px-1 text-xs text-slate-400">No players on court</p>
                           ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {followUpPlayers.map((player) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        className={playerButtonClass(
+                          currentSideState.selectedPlayerId === player.id
+                        )}
+                        onClick={() =>
+                          pendingFollowUpPrompt
+                            ? handleFollowUpSelection(player.id)
+                            : updateSideState(activeKey, { selectedPlayerId: player.id })
+                        }
+                      >
+                        <span className={playerAvatarClass} aria-hidden="true">
+                          {/* {(player.displayName || '?').trim().charAt(0).toUpperCase() || '?'} */}
+                        </span>
+                        <span className={playerNumberClass}>{player.jerseyNumber ?? '—'}</span>
+                        <span className={playerNameClass}>{player.displayName}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className={actionColumnClass}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Action</p>
+              <div className={actionScrollerClass}>
+                <div className={actionGridClass}>
+                  {pendingFollowUpPrompt ? (
+                    <>
+                      {pendingFollowUpPrompt.kind === 'assist' ? (
+                        <button
+                          type="button"
+                          className={actionButtonClass('slate')}
+                          disabled={isSaving}
+                          onClick={() => handleFollowUpSelection('NO_ASSIST')}
+                        >
+                          No Assist
+                        </button>
+                      ) : !isDualTeam ? (
+                        <button
+                          type="button"
+                          className={actionButtonClass('opponent')}
+                          disabled={isSaving}
+                          onClick={() => handleFollowUpSelection('OPP_REB')}
+                        >
+                          Opp Rebound
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                        disabled={isSaving}
+                        onClick={() => clearEventPicker()}
+                      >
+                        Dismiss
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className={actionGroupClass}>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Shot
+                        </p>
+                        <div className={actionPairClass}>
                           <button
                             type="button"
-                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                            disabled={isSaving}
-                            onClick={() => clearEventPicker()}
-                          >
-                            Dismiss
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="w-full rounded-lg bg-slate-900 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className={actionButtonClass('make')}
                             disabled={isSaving}
                             onClick={() => addShotEvent('made')}
                           >
@@ -890,15 +944,22 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-slate-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-600 disabled:opacity-60"
+                            className={actionButtonClass('miss')}
                             disabled={isSaving}
                             onClick={() => addShotEvent('miss')}
                           >
                             Miss
                           </button>
+                        </div>
+                      </div>
+                      <div className={actionGroupClass}>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Free Throw
+                        </p>
+                        <div className={actionPairClass}>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-emerald-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                            className={actionButtonClass('ft')}
                             disabled={isSaving}
                             onClick={() => addFreeThrowEvent('made')}
                           >
@@ -906,15 +967,22 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+                            className={actionButtonClass('miss')}
                             disabled={isSaving}
                             onClick={() => addFreeThrowEvent('miss')}
                           >
                             FT-
                           </button>
+                        </div>
+                      </div>
+                      <div className={actionGroupClass}>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Rebound
+                        </p>
+                        <div className={actionPairClass}>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-amber-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                            className={actionButtonClass('rebound')}
                             disabled={isSaving}
                             onClick={() => addReboundEvent('DREB')}
                           >
@@ -922,15 +990,22 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-amber-600 px-2 py-2 text-xs font-semibold text-white transition hover:bg-amber-500 disabled:opacity-60"
+                            className={actionButtonClass('rebound')}
                             disabled={isSaving}
                             onClick={() => addReboundEvent('OREB')}
                           >
                             OREB
                           </button>
+                        </div>
+                      </div>
+                      <div className={actionGroupClass}>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Possession
+                        </p>
+                        <div className={actionTripleClass}>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className={actionButtonClass('defense')}
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('STL')}
                           >
@@ -938,7 +1013,7 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className={actionButtonClass('defense')}
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('BLK')}
                           >
@@ -946,59 +1021,70 @@ export function GameTrackPage() {
                           </button>
                           <button
                             type="button"
-                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                            className={actionButtonClass('foul')}
                             disabled={isSaving}
                             onClick={() => addQuickStatEvent('TOV')}
                           >
                             TOV
                           </button>
-                          <button
-                            type="button"
-                            className="w-full rounded-lg bg-slate-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
-                            disabled={isSaving}
-                            onClick={() => addQuickStatEvent('FOUL')}
-                          >
-                            FOUL
-                          </button>
-                          {!isDualTeam ? (
-                            <>
-                              <button
-                                type="button"
-                                className="w-full rounded-lg bg-rose-700 px-2 py-2 text-xs font-semibold text-white transition hover:bg-rose-600 disabled:opacity-60"
-                                disabled={isSaving}
-                                onClick={() => addOpponentScore('OPP_FT_MADE')}
-                              >
-                                Opp +1
-                              </button>
-                              <button
-                                type="button"
-                                className="w-full rounded-lg bg-rose-800 px-2 py-2 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
-                                disabled={isSaving}
-                                onClick={() => addOpponentScore('OPP_FG2_MADE')}
-                              >
-                                Opp +2
-                              </button>
-                              <button
-                                type="button"
-                                className="w-full rounded-lg bg-rose-900 px-2 py-2 text-xs font-semibold text-white transition hover:bg-rose-800 disabled:opacity-60"
-                                disabled={isSaving}
-                                onClick={() => addOpponentScore('OPP_FG3_MADE')}
-                              >
-                                Opp +3
-                              </button>
-                            </>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  </div>
+                        </div>
+                      </div>
+                      <div className={actionGroupClass}>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Foul
+                        </p>
+                        <button
+                          type="button"
+                          className={actionButtonClass('foul')}
+                          disabled={isSaving}
+                          onClick={() => addQuickStatEvent('FOUL')}
+                        >
+                          FOUL
+                        </button>
+                      </div>
+                      {!isDualTeam ? (
+                        <div className={actionGroupClass}>
+                          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            Opponent
+                          </p>
+                          <div className={actionTripleClass}>
+                            <button
+                              type="button"
+                              className={actionButtonClass('opponent')}
+                              disabled={isSaving}
+                              onClick={() => addOpponentScore('OPP_FT_MADE')}
+                            >
+                              +1
+                            </button>
+                            <button
+                              type="button"
+                              className={actionButtonClass('opponent')}
+                              disabled={isSaving}
+                              onClick={() => addOpponentScore('OPP_FG2_MADE')}
+                            >
+                              +2
+                            </button>
+                            <button
+                              type="button"
+                              className={actionButtonClass('opponent')}
+                              disabled={isSaving}
+                              onClick={() => addOpponentScore('OPP_FG3_MADE')}
+                            >
+                              +3
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </>
-    ) : null;
+      </div>
+    </div>
+  ) : null;
 
   return (
     <main className="space-y-4">
@@ -1065,11 +1151,7 @@ export function GameTrackPage() {
         </p>
       ) : null}
 
-      {lastActionLabel ? (
-        <p className="text-sm font-medium text-emerald-700">{lastActionLabel}</p>
-      ) : null}
-
-      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+      <section className="grid gap-4 xl:grid-cols-2">
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
@@ -1116,6 +1198,12 @@ export function GameTrackPage() {
               />
               {eventPicker}
             </div>
+
+            {lastActionLabel ? (
+              <div className="relative mt-4">
+                <p className="text-sm font-medium text-emerald-700">{lastActionLabel}</p>
+              </div>
+            ) : null}
           </div>
 
           {lineupIds.length < 5 ? (
@@ -1206,7 +1294,9 @@ export function GameTrackPage() {
               )}
             </div>
           ) : null}
+        </div>
 
+        <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Substitution</h2>
@@ -1225,7 +1315,7 @@ export function GameTrackPage() {
                 </div>
               ) : null}
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <label className="block">
                 <span className="mb-1 block text-sm text-slate-700">Player Out</span>
                 <select
@@ -1294,9 +1384,7 @@ export function GameTrackPage() {
               </button>
             </div>
           </div>
-        </div>
 
-        <div className="space-y-4">
           {!isLeagueGame ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between gap-2">
@@ -1367,51 +1455,51 @@ export function GameTrackPage() {
               )}
             </div>
           ) : null}
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Recent Events</h2>
-              <div className="mt-2 flex items-center gap-2">
-                {recentEvents.length > 3 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllRecentEvents((value) => !value)}
-                    className="text-sm font-medium text-sky-700 hover:underline"
-                  >
-                    {showAllRecentEvents ? 'Show less' : 'Show all'}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={undoLastEvent}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
-                >
-                  Undo Last
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              {visibleRecentEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
-                >
-                  <div className="text-sm text-slate-800">
-                    {formatEventLabel(event, playersById, participantsBySide, isDualTeam)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeEvent(event.id)}
-                    className="text-xs font-semibold text-rose-700"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Recent Events</h2>
+          <div className="mt-2 flex items-center gap-2">
+            {recentEvents.length > 3 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllRecentEvents((value) => !value)}
+                className="text-sm font-medium text-sky-700 hover:underline"
+              >
+                {showAllRecentEvents ? 'Show less' : 'Show all'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={undoLastEvent}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+            >
+              Undo Last
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 space-y-2">
+          {visibleRecentEvents.map((event) => (
+            <div
+              key={event.id}
+              className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+            >
+              <div className="text-sm text-slate-800">
+                {formatEventLabel(event, playersById, participantsBySide, isDualTeam)}
+              </div>
+              <button
+                type="button"
+                onClick={() => removeEvent(event.id)}
+                className="text-xs font-semibold text-rose-700"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="flex justify-end">
         <button

@@ -3,6 +3,8 @@ import courtImage from '../../../assets/courts/basketball_court_1.png';
 
 const COURT_ASPECT_RATIO = 420 / 760;
 const ROTATED_COURT_ASPECT_RATIO = 760 / 420;
+const MOBILE_LANDSCAPE_QUERY =
+  '(orientation: landscape) and (max-height: 600px) and (pointer: coarse)';
 
 function normalizeFromPointer(event, element, rotate90 = false) {
   const rect = element.getBoundingClientRect();
@@ -37,12 +39,34 @@ export function InteractiveCourtImage({
   flat = false,
 }) {
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [isMobileLandscape, setIsMobileLandscape] = useState(false);
   const stageRef = useRef(null);
+  const shouldRotate90 = rotate90 || isMobileLandscape;
 
   function onSelectPoint(event) {
-    const point = normalizeFromPointer(event, event.currentTarget, rotate90);
+    const point = normalizeFromPointer(event, event.currentTarget, shouldRotate90);
     onSelect(point);
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia(MOBILE_LANDSCAPE_QUERY);
+    const updateIsMobileLandscape = () => {
+      setIsMobileLandscape(mediaQuery.matches);
+    };
+
+    updateIsMobileLandscape();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateIsMobileLandscape);
+      return () => {
+        mediaQuery.removeEventListener('change', updateIsMobileLandscape);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     const element = stageRef.current;
@@ -54,7 +78,7 @@ export function InteractiveCourtImage({
       const rect = element.getBoundingClientRect();
       const availableWidth = rect.width || 1;
       const availableHeight = rect.height || 1;
-      const targetAspect = rotate90 ? ROTATED_COURT_ASPECT_RATIO : COURT_ASPECT_RATIO;
+      const targetAspect = shouldRotate90 ? ROTATED_COURT_ASPECT_RATIO : COURT_ASPECT_RATIO;
 
       let width = availableWidth;
       let height = width / targetAspect;
@@ -84,9 +108,9 @@ export function InteractiveCourtImage({
     return () => {
       resizeObserver.disconnect();
     };
-  }, [rotate90]);
+  }, [shouldRotate90]);
 
-  const rotatedContentStyle = rotate90
+  const rotatedContentStyle = shouldRotate90
     ? {
         width: `${stageSize.height}px`,
         height: `${stageSize.width}px`,

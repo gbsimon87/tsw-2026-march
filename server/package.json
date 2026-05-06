@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "ENV_FILE=../env/server/.env.development nodemon src/server.js",
+    "dev-host": "npm run dev -- --host",
     "start": "ENV_FILE=../env/server/.env.production node src/server.js",
     "seed": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed.js",
     "seed:we-ball": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed-we-ball-saturday.js",
