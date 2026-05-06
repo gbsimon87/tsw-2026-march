@@ -75,10 +75,19 @@ export function PublicLeagueTeamPage() {
             {league.name}
           </p>
         </div>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Standings position: {team.standingsPosition || 'N/A'}
-        </p>
+        <div className="mt-2 flex items-center gap-4">
+          <img
+            src={team.logo?.url || teamPlaceholder}
+            alt={`${team.name} logo`}
+            className="h-16 w-16 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          />
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
+            <p className="mt-2 text-base text-slate-700">
+              Standings position: {team.standingsPosition || 'N/A'}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">

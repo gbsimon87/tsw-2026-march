@@ -579,7 +579,7 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
   };
 }
 
-function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId) {
+function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsById = new Map()) {
   const gameRows = [];
 
   for (const game of games) {
@@ -609,6 +609,13 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId) {
         String(game.homeLeagueTeamId) === String(leagueTeamId)
           ? game.awayTeamName
           : game.homeTeamName,
+      opponentLogoUrl: (() => {
+        const opponentTeamId =
+          String(game.homeLeagueTeamId) === String(leagueTeamId)
+            ? String(game.awayLeagueTeamId)
+            : String(game.homeLeagueTeamId);
+        return teamsById.get(opponentTeamId)?.logo?.url || null;
+      })(),
       opponentDestination: {
         kind: 'game',
         href: `/games/${game.id || game._id}`,
@@ -678,8 +685,12 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
     throw new ApiError(404, 'League player not found');
   }
 
-  const games = await listLeagueGamesByLeagueId(league._id);
-  const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id);
+  const [games, allTeams] = await Promise.all([
+    listLeagueGamesByLeagueId(league._id),
+    listLeagueTeams(league._id),
+  ]);
+  const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
+  const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
 
   return {
     league: sanitizeLeague(league),

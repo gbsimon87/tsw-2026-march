@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 
 function formatGameDate(game) {
@@ -76,9 +78,31 @@ export function PublicLeaguePlayerPage() {
     <main className="mx-auto max-w-5xl space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Public League Player
-        </p>
+        <div className="flex items-center gap-2">
+          <img
+            src={getLeagueHeaderImage(league)}
+            alt={`${league.name} logo`}
+            className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          />
+          <Link
+            to={`/league/${league.slug}`}
+            className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 hover:underline"
+          >
+            {league.name}
+          </Link>
+          <span className="text-slate-300">•</span>
+          <img
+            src={team.logo?.url || teamPlaceholder}
+            alt={`${team.name} logo`}
+            className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          />
+          <Link
+            to={`/league/${league.slug}/teams/${team.slug}`}
+            className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 hover:underline"
+          >
+            {team.name}
+          </Link>
+        </div>
         <div className="mt-2 flex items-center gap-4">
           <img
             src={playerPlaceholder}
@@ -87,15 +111,6 @@ export function PublicLeaguePlayerPage() {
           />
           <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{playerLabel}</h1>
         </div>
-        <p className="mt-2 text-base text-slate-700">
-          <Link to={`/league/${league.slug}`} className="hover:underline">
-            {league.name}
-          </Link>{' '}
-          •{' '}
-          <Link to={`/league/${league.slug}/teams/${team.slug}`} className="hover:underline">
-            {team.name}
-          </Link>
-        </p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -141,8 +156,13 @@ export function PublicLeaguePlayerPage() {
                   <td className="px-3 py-2 font-medium text-slate-900">
                     <Link
                       to={game.opponentDestination?.href || `/games/${game.gameId}`}
-                      className="underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+                      className="flex items-center gap-2 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
                     >
+                      <img
+                        src={game.opponentLogoUrl || teamPlaceholder}
+                        alt=""
+                        className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      />
                       {game.opponent || game.title}
                     </Link>
                   </td>
