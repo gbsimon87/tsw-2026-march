@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { leaguesApi } from '../api/leaguesApi';
 
 export function LeaguesPage() {
@@ -17,12 +18,10 @@ export function LeaguesPage() {
 
   return (
     <main className="space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">Leagues</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Organize teams, standings, rosters, and league games in one place.
-        </p>
-      </section>
+      <PageHeader
+        title="Leagues"
+        description="Organize teams, standings, rosters, and league games in one place."
+      />
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

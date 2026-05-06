@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { PageHeader } from '../../../components/PageHeader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { TeamCardPost } from '../../feed/components/posts/TeamCardPost';
@@ -370,43 +371,38 @@ export function PublicTeamPage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Public Team Page
-        </p>
-        <div className="mt-3 flex items-start gap-4">
+      <PageHeader
+        eyebrow="Public Team Page"
+        title={data.team.name}
+        media={
           <img
             src={data.team.logo?.url || placeholderLogo}
             alt={`${data.team.name} logo`}
             className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
           />
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-              {data.team.name}
-            </h1>
-            {data.team.colors?.length ? (
-              <div className="mt-3 flex flex-wrap gap-2" aria-label="Team colours">
-                {data.team.colors.map((color) => (
-                  <span
-                    key={color}
-                    className="h-5 w-5 rounded-full border border-slate-300"
-                    style={{ backgroundColor: color }}
-                    title={color}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {formatVenue(data.team.homeVenue) ? (
-              <div className="mt-3 text-sm text-slate-600">
-                <p className="font-medium text-slate-800">
-                  {formatVenue(data.team.homeVenue).arenaName}
-                </p>
-                <p>{formatVenue(data.team.homeVenue).address}</p>
-              </div>
-            ) : null}
+        }
+      >
+        {data.team.colors?.length ? (
+          <div className="flex flex-wrap gap-2" aria-label="Team colours">
+            {data.team.colors.map((color) => (
+              <span
+                key={color}
+                className="h-5 w-5 rounded-full border border-slate-300"
+                style={{ backgroundColor: color }}
+                title={color}
+              />
+            ))}
           </div>
-        </div>
-      </section>
+        ) : null}
+        {formatVenue(data.team.homeVenue) ? (
+          <div className="mt-3 text-sm text-slate-600">
+            <p className="font-medium text-slate-800">
+              {formatVenue(data.team.homeVenue).arenaName}
+            </p>
+            <p>{formatVenue(data.team.homeVenue).address}</p>
+          </div>
+        ) : null}
+      </PageHeader>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

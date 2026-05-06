@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { teamsApi } from '../api/teamsApi';
 
 const POSITION_OPTIONS = ['', 'PG', 'SG', 'SF', 'PF', 'C'];
@@ -248,12 +249,10 @@ export function NewTeamPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Create Team</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Build your team identity, set a home venue, and start your roster in one pass.
-        </p>
-      </section>
+      <PageHeader
+        title="Create Team"
+        description="Build your team identity, set a home venue, and start your roster in one pass."
+      />
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

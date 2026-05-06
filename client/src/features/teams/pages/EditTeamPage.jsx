@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { teamsApi } from '../api/teamsApi';
 
@@ -250,19 +251,12 @@ export function EditTeamPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-8">
-      <section className="rounded-2xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-5 md:p-7">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Team Management
-        </p>
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold leading-tight text-slate-900 md:text-3xl">
-              Edit Team
-            </h1>
-            <p className="mt-1 text-base font-medium text-slate-700">
-              {isLoading ? 'Loading team...' : team?.name || 'Unnamed Team'}
-            </p>
-          </div>
+      <PageHeader
+        eyebrow="Team Management"
+        title="Edit Team"
+        description={isLoading ? 'Loading team...' : team?.name || 'Unnamed Team'}
+      >
+        <div className="flex justify-start">
           <Link
             to="/admin"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
@@ -270,7 +264,7 @@ export function EditTeamPage() {
             Back
           </Link>
         </div>
-      </section>
+      </PageHeader>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

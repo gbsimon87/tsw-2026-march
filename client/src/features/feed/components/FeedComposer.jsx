@@ -81,7 +81,7 @@ export function FeedComposer({
         games: mergeInitialGameOption(result.games || [], initialGameOption),
       }))
     );
-  }, [search.game]);
+  }, [search.game, initialGameOption]);
 
   useEffect(() => {
     feedApi.listShareablePlayers(search.player).then((result) =>
@@ -90,7 +90,7 @@ export function FeedComposer({
         players: mergeInitialPlayerOption(result.players || [], initialPlayerOption),
       }))
     );
-  }, [search.player]);
+  }, [search.player, initialPlayerOption]);
 
   useEffect(() => {
     feedApi.listShareableTeams(search.team).then((result) =>
@@ -99,7 +99,7 @@ export function FeedComposer({
         teams: mergeInitialTeamOption(result.teams || [], initialTeamOption),
       }))
     );
-  }, [search.team]);
+  }, [search.team, initialTeamOption]);
 
   function reset() {
     setActiveTab(initialTab);
@@ -193,11 +193,11 @@ export function FeedComposer({
               value={caption}
               onChange={(event) => setCaption(event.target.value)}
               placeholder="Add a caption..."
-              autoFocus
             />
           </label>
           <div className="flex items-center gap-3">
             <button
+              aria-label="submit"
               type="submit"
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSubmitting}
@@ -224,6 +224,7 @@ export function FeedComposer({
       <div className="flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <button
+            aria-label="set-active-tab"
             key={tab.value}
             type="button"
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${
@@ -263,6 +264,8 @@ export function FeedComposer({
               }
             />
             <select
+              aria-label="game-select"
+              label="game-select"
               className="w-full rounded border px-3 py-2 text-sm"
               value={selectedGameId}
               onChange={(event) => setSelectedGameId(event.target.value)}
@@ -288,6 +291,8 @@ export function FeedComposer({
               }
             />
             <select
+              aria-label="player-name"
+              label="player-name"
               className="w-full rounded border px-3 py-2 text-sm"
               value={selectedPlayer.playerId}
               onChange={(event) => {
@@ -321,6 +326,8 @@ export function FeedComposer({
               }
             />
             <select
+              aria-label="team-name"
+              label="team-name"
               className="w-full rounded border px-3 py-2 text-sm"
               value={selectedTeamId}
               onChange={(event) => setSelectedTeamId(event.target.value)}
@@ -349,6 +356,8 @@ export function FeedComposer({
 
         <div className="flex items-center gap-3">
           <button
+            aria-label="post-submit"
+            label="post-submit"
             type="submit"
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting}

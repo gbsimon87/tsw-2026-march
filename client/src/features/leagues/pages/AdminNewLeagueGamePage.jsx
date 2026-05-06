@@ -4,6 +4,7 @@ import { gamesApi } from '../../games/api/gamesApi';
 import { TEAM_SIDES } from '../../games/constants';
 import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { PageHeader } from '../../../components/PageHeader';
 
 export function AdminNewLeagueGamePage() {
   const { leagueId } = useParams();
@@ -121,12 +122,10 @@ export function AdminNewLeagueGamePage() {
         ]}
       />
 
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">Schedule League Game</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Create a league matchup and jump straight into the existing game tracker.
-        </p>
-      </section>
+      <PageHeader
+        title="Schedule League Game"
+        description="Create a league matchup and jump straight into the existing game tracker."
+      />
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

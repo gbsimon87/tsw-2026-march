@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { gamesApi } from '../api/gamesApi';
 
@@ -101,14 +102,10 @@ export function NewGamePage() {
   if (teams.length === 0) {
     return (
       <main className="space-y-6">
-        <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-          <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-            Create Game
-          </h1>
-          <p className="mt-2 text-base text-slate-700">
-            Set up game details and start tracking your team performance.
-          </p>
-        </section>
+        <PageHeader
+          title="Create Game"
+          description="Set up game details and start tracking your team performance."
+        />
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <p className="text-sm text-slate-600">You need a team before creating a game.</p>
@@ -126,12 +123,10 @@ export function NewGamePage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Create Game</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Prepare game details in seconds and move directly into live tracking.
-        </p>
-      </section>
+      <PageHeader
+        title="Create Game"
+        description="Prepare game details in seconds and move directly into live tracking."
+      />
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

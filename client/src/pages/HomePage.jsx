@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
+import { PageHeader } from '../components/PageHeader';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
@@ -59,16 +60,12 @@ export function HomePage() {
 
   return (
     <main className="space-y-16">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-12">
-        <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">TSW Basketball</p>
-        <h1 className="mt-3 max-w-3xl text-3xl font-bold leading-tight text-slate-900 md:text-5xl">
-          Turn every game into progress your team can see and feel.
-        </h1>
-        <p className="mt-4 max-w-2xl text-base text-slate-700 md:text-lg">
-          TSW helps teams capture game stats quickly, understand what is working, and stay connected
-          to growth all season long.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+      <PageHeader
+        eyebrow="TSW Basketball"
+        title="Turn every game into progress your team can see and feel."
+        description="TSW helps teams capture game stats quickly, understand what is working, and stay connected to growth all season long."
+      >
+        <div className="flex flex-wrap items-center gap-3">
           {user ? (
             <Link
               to="/feed"
@@ -93,11 +90,11 @@ export function HomePage() {
             </>
           )}
         </div>
-      </section>
+      </PageHeader>
 
       <section
         aria-labelledby="active-leagues-heading"
-        className="rounded-2xl border border-slate-200 p-6 md:p-8"
+        className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8"
       >
         <div>
           <h2 id="active-leagues-heading" className="text-2xl font-semibold text-slate-900">
@@ -149,7 +146,7 @@ export function HomePage() {
 
       <section
         aria-labelledby="featured-teams-heading"
-        className="rounded-2xl border border-slate-200 p-6 md:p-8"
+        className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8"
       >
         <div>
           <h2 id="featured-teams-heading" className="text-2xl font-semibold text-slate-900">
@@ -202,7 +199,7 @@ export function HomePage() {
           <section
             key={section.id}
             aria-labelledby={section.headingId}
-            className="grid items-center gap-8 rounded-2xl border border-slate-200 p-6 md:grid-cols-2 md:p-8"
+            className="grid items-center gap-8 rounded-2xl bg-white border border-slate-200 p-6 md:grid-cols-2 md:p-8"
           >
             <div className={imageIsSecond ? 'order-2 md:order-1' : undefined}>
               <h2

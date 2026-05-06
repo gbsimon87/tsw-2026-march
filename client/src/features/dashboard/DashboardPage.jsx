@@ -4,6 +4,7 @@ import { useAuth } from '../../app/store/AuthContext';
 import { teamsApi } from '../teams/api/teamsApi';
 import { gamesApi } from '../games/api/gamesApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
+import { PageHeader } from '../../components/PageHeader';
 
 function parseGameDate(game) {
   const rawDate =
@@ -119,15 +120,12 @@ export function DashboardPage() {
 
   return (
     <main className="space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Dashboard</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Keep your team moving forward with fast actions and clear game context.
-        </p>
-        {user?.name ? (
-          <p className="mt-1 text-sm text-slate-600">Welcome back, {user.name}.</p>
-        ) : null}
-      </section>
+      <PageHeader
+        title="Dashboard"
+        description="Keep your team moving forward with fast actions and clear game context."
+      >
+        {user?.name ? <p className="text-sm text-slate-600">Welcome back, {user.name}.</p> : null}
+      </PageHeader>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

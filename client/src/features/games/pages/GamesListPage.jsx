@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { gamesApi } from '../api/gamesApi';
 
 function formatStatus(status) {
@@ -53,12 +54,10 @@ export function GamesListPage() {
 
   return (
     <main className="space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold leading-tight text-slate-900 md:text-4xl">Games</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Manage your game timeline, continue live tracking, and review results quickly.
-        </p>
-      </section>
+      <PageHeader
+        title="Games"
+        description="Manage your game timeline, continue live tracking, and review results quickly."
+      />
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

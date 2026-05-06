@@ -5,6 +5,7 @@ import playerPlaceholder from '../../../assets/placeholders/player-placeholder.s
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { PageHeader } from '../../../components/PageHeader';
 
 function formatGameDate(game) {
   const rawValue = game.completedAt || game.scheduledAt || game.createdAt || null;
@@ -77,41 +78,37 @@ export function PublicLeaguePlayerPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <div className="flex items-center gap-2">
-          <img
-            src={getLeagueHeaderImage(league)}
-            alt={`${league.name} logo`}
-            className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-          />
-          <Link
-            to={`/league/${league.slug}`}
-            className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 hover:underline"
-          >
-            {league.name}
-          </Link>
-          <span className="text-slate-300">•</span>
-          <img
-            src={team.logo?.url || teamPlaceholder}
-            alt={`${team.name} logo`}
-            className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-          />
-          <Link
-            to={`/league/${league.slug}/teams/${team.slug}`}
-            className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 hover:underline"
-          >
-            {team.name}
-          </Link>
-        </div>
-        <div className="mt-2 flex items-center gap-4">
+      <PageHeader
+        eyebrow={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <img
+              src={getLeagueHeaderImage(league)}
+              alt={`${league.name} logo`}
+              className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+            />
+            <Link to={`/league/${league.slug}`} className="hover:underline">
+              {league.name}
+            </Link>
+            <span className="text-slate-300">•</span>
+            <img
+              src={team.logo?.url || teamPlaceholder}
+              alt={`${team.name} logo`}
+              className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+            />
+            <Link to={`/league/${league.slug}/teams/${team.slug}`} className="hover:underline">
+              {team.name}
+            </Link>
+          </span>
+        }
+        title={playerLabel}
+        media={
           <img
             src={playerPlaceholder}
             alt=""
-            className="h-14 w-14 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+            className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover"
           />
-          <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{playerLabel}</h1>
-        </div>
-      </section>
+        }
+      />
 
       <section className="grid gap-4 md:grid-cols-3">
         <article className="rounded-2xl border border-slate-200 bg-white p-5">

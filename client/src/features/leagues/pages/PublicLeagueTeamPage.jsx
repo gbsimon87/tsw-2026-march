@@ -8,6 +8,7 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { PageHeader } from '../../../components/PageHeader';
 
 export function PublicLeagueTeamPage() {
   const { leagueSlug, teamSlug } = useParams();
@@ -65,31 +66,27 @@ export function PublicLeagueTeamPage() {
   return (
     <main className="space-y-8">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <div className="flex items-center gap-2">
-          <img
-            src={getLeagueHeaderImage(league)}
-            alt={`${league.name} logo`}
-            className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-          />
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {league.name}
-          </p>
-        </div>
-        <div className="mt-2 flex items-center gap-4">
+      <PageHeader
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            <img
+              src={getLeagueHeaderImage(league)}
+              alt={`${league.name} logo`}
+              className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+            />
+            <span>{league.name}</span>
+          </span>
+        }
+        title={team.name}
+        description={`Standings position: ${team.standingsPosition || 'N/A'}`}
+        media={
           <img
             src={team.logo?.url || teamPlaceholder}
             alt={`${team.name} logo`}
-            className="h-16 w-16 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
-            <p className="mt-2 text-base text-slate-700">
-              Standings position: {team.standingsPosition || 'N/A'}
-            </p>
-          </div>
-        </div>
-      </section>
+        }
+      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-semibold text-slate-900">Player Stats</h2>

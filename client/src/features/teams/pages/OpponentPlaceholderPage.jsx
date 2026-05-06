@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { teamsApi } from '../api/teamsApi';
 
 function formatGameDate(game) {
@@ -40,15 +41,11 @@ export function OpponentPlaceholderPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Opponent</p>
-        <h1 className="mt-2 text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
-          {data.opponent.displayName}
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-600">
-          This opponent does not have a public team page on TSW yet.
-        </p>
-      </section>
+      <PageHeader
+        eyebrow="Opponent"
+        title={data.opponent.displayName}
+        description="This opponent does not have a public team page on TSW yet."
+      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">

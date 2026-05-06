@@ -5,6 +5,7 @@ import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
 import { LeagueRosterTable } from '../components/LeagueRosterTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { PageHeader } from '../../../components/PageHeader';
 
 export function AdminLeagueTeamPage() {
   const { leagueId, leagueTeamId } = useParams();
@@ -101,9 +102,12 @@ export function AdminLeagueTeamPage() {
         ]}
       />
 
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <div className="flex items-center gap-5">
-          <label className="group relative shrink-0 cursor-pointer">
+      <PageHeader
+        title={team.name}
+        titleAriaLabel="team-name"
+        description="Team management, roster, join requests, and historical league context."
+        media={
+          <label className="group relative block cursor-pointer">
             <input
               label="team-logo"
               aria-label="team-logo"
@@ -180,17 +184,10 @@ export function AdminLeagueTeamPage() {
               </span>
             )}
           </label>
-          <div>
-            <h1 aria-label="team-name" className="text-3xl font-bold text-slate-900 md:text-4xl">
-              {team.name}
-            </h1>
-            <p className="mt-2 text-base text-slate-700">
-              Team management, roster, join requests, and historical league context.
-            </p>
-            {logoError ? <p className="mt-1 text-xs text-red-600">{logoError}</p> : null}
-          </div>
-        </div>
-      </section>
+        }
+      >
+        {logoError ? <p className="text-xs text-red-600">{logoError}</p> : null}
+      </PageHeader>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

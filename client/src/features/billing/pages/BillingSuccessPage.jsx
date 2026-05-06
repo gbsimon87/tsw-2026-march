@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { teamsApi } from '../../teams/api/teamsApi';
 
 const ACTIVE_BILLING_STATUSES = new Set(['active', 'trialing']);
@@ -129,19 +130,14 @@ export function BillingSuccessPage() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-emerald-50 via-white to-sky-50 p-8 md:p-10">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          {body.eyebrow}
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">{body.title}</h1>
-        <p className="mt-3 text-slate-700">{body.description}</p>
+      <PageHeader eyebrow={body.eyebrow} title={body.title} description={body.description}>
         {status === 'checking' || status === 'pending' ? (
-          <p className="mt-4 text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             Refresh attempts: {attemptCount}
             {teamId ? ` for team ${teamId}` : ''}
           </p>
         ) : null}
-      </section>
+      </PageHeader>
 
       <div className="flex flex-wrap gap-3">
         <Link

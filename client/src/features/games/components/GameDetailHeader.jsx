@@ -84,9 +84,7 @@ export function GameDetailHeader({
   const matchupTitle = getMatchupTitle({ game, team, participants, isDualTeam, recap });
 
   return (
-    <section
-      className={`rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8 ${className}`}
-    >
+    <section className={`rounded-2xl border border-slate-200 bg-white p-5 md:p-6 ${className}`}>
       <h1 className="sr-only">{matchupTitle}</h1>
       <div className="rounded-2xl border border-slate-200 bg-white/80 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">

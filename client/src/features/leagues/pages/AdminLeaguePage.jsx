@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { PageHeader } from '../../../components/PageHeader';
 import { useAuth } from '../../../app/store/AuthContext';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
@@ -153,9 +154,12 @@ export function AdminLeaguePage() {
     <main className="space-y-8">
       <Breadcrumbs crumbs={breadcrumbs} />
 
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <div className="flex items-center gap-5">
-          <label className="group relative shrink-0 cursor-pointer">
+      <PageHeader
+        title={leagueName || 'Unnamed league'}
+        titleAriaLabel="League Name"
+        description={`${league.seasonLabel || 'Season TBD'} • ${league.status}`}
+        media={
+          <label className="group relative block cursor-pointer">
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp"
@@ -227,17 +231,10 @@ export function AdminLeaguePage() {
               </span>
             )}
           </label>
-          <div>
-            <h1 aria-label="League Name" className="text-3xl font-bold text-slate-900 md:text-4xl">
-              {leagueName || 'Unnamed league'}
-            </h1>
-            <p className="mt-2 text-base text-slate-700">
-              {league.seasonLabel || 'Season TBD'} • {league.status}
-            </p>
-            {logoError ? <p className="mt-1 text-xs text-red-600">{logoError}</p> : null}
-          </div>
-        </div>
-      </section>
+        }
+      >
+        {logoError ? <p className="text-xs text-red-600">{logoError}</p> : null}
+      </PageHeader>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

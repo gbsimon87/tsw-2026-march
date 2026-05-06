@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 
 export function BillingCancelPage() {
   const [searchParams] = useSearchParams();
@@ -7,17 +8,11 @@ export function BillingCancelPage() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-10">
-        <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
-          Checkout Canceled
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">
-          Your team is still on Free
-        </h1>
-        <p className="mt-3 text-slate-700">
-          No billing changes were applied. You can return to pricing any time and restart checkout.
-        </p>
-      </section>
+      <PageHeader
+        eyebrow="Checkout Canceled"
+        title="Your team is still on Free"
+        description="No billing changes were applied. You can return to pricing any time and restart checkout."
+      />
 
       <div className="flex flex-wrap gap-3">
         <Link

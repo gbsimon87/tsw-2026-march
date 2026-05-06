@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { PageHeader } from '../../../components/PageHeader';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 
@@ -30,15 +31,12 @@ export function PublicLeagueStandingsPage() {
 
   return (
     <main className="space-y-8">
-      <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Public League Standings
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900 md:text-4xl">{league.name}</h1>
-        <p className="mt-2 text-base text-slate-700">
-          {league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3 text-sm">
+      <PageHeader
+        eyebrow="Public League Standings"
+        title={league.name}
+        description={`${league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.`}
+      >
+        <div className="flex flex-wrap gap-3 text-sm">
           <Link to={`/league/${league.slug}`} className="font-medium text-sky-700 hover:underline">
             League overview
           </Link>
@@ -49,7 +47,7 @@ export function PublicLeagueStandingsPage() {
             League games
           </Link>
         </div>
-      </section>
+      </PageHeader>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold text-slate-900">Standings</h2>

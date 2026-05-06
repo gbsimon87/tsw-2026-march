@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { PageHeader } from '../../../components/PageHeader';
 import { billingApi } from '../api/billingApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { env } from '../../../lib/env';
@@ -151,15 +152,11 @@ export function PricingPage() {
 
   return (
     <main className="space-y-10">
-      <section className="rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-8 md:p-12">
-        <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">Pricing</p>
-        <h1 className="mt-3 max-w-3xl text-3xl font-bold leading-tight text-slate-900 md:text-5xl">
-          Start free, then unlock richer review for each team when it matters.
-        </h1>
-        <p className="mt-4 max-w-2xl text-base text-slate-700 md:text-lg">
-          Billing is per team. Free keeps tracking open. Team Pro adds replay and shot-map review.
-        </p>
-      </section>
+      <PageHeader
+        eyebrow="Pricing"
+        title="Start free, then unlock richer review for each team when it matters."
+        description="Billing is per team. Free keeps tracking open. Team Pro adds replay and shot-map review."
+      />
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
