@@ -60,6 +60,15 @@ export const leaguesApi = {
       `/leagues/${leagueId}/teams/${leagueTeamId}/players/${leaguePlayerId}/unclaim`
     );
   },
+  listLeagueManagers(leagueId) {
+    return apiClient.get(`/leagues/${leagueId}/managers`);
+  },
+  addLeagueManager(leagueId, email) {
+    return apiClient.post(`/leagues/${leagueId}/managers`, { email });
+  },
+  removeLeagueManager(leagueId, managerId) {
+    return apiClient.delete(`/leagues/${leagueId}/managers/${managerId}`);
+  },
   listMembers(leagueId, leagueTeamId) {
     return apiClient.get(`/leagues/${leagueId}/teams/${leagueTeamId}/members`);
   },

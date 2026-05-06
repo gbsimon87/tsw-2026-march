@@ -33,6 +33,12 @@ const {
   findPendingLeagueJoinRequest,
   listLeagueJoinRequests,
   saveLeagueJoinRequest,
+  createLeagueManager,
+  findLeagueManagerById,
+  findActiveLeagueManager,
+  listLeagueManagersByLeague,
+  listLeaguesByManager,
+  saveLeagueManager,
 } = require('./leagues.repository');
 const { findUserByEmail, findUserById } = require('../auth/auth.repository');
 const { listLeagueGamesByLeagueId } = require('../games/games.repository');
@@ -115,6 +121,7 @@ function sanitizeLeague(league, options = {}) {
     ...(options.includeTeams ? { teams: options.includeTeams } : {}),
     ...(options.includeStandings ? { standings: options.includeStandings } : {}),
     ...(options.includeGames ? { games: options.includeGames } : {}),
+    ...(options.includeViewerContext ? { viewerContext: options.includeViewerContext } : {}),
   };
 }
 
@@ -210,6 +217,20 @@ function sanitizeLeagueTeam(team, options = {}) {
   };
 }
 
+function sanitizeLeagueManager(manager, usersById = new Map()) {
+  const user = usersById.get(String(manager.userId));
+
+  return {
+    id: String(manager._id),
+    leagueId: String(manager.leagueId),
+    userId: String(manager.userId),
+    status: manager.status,
+    userName: user?.name || null,
+    userEmail: user?.email || null,
+    createdAt: manager.createdAt,
+  };
+}
+
 async function assertLeagueExists(leagueId) {
   const league = await findLeagueById(leagueId);
   if (!league) {
@@ -226,7 +247,15 @@ async function assertLeagueViewer(userId, leagueId) {
     return league;
   }
 
-  const memberships = await listLeagueMembershipsForUser(userId);
+  const [leagueMgr, memberships] = await Promise.all([
+    findActiveLeagueManager(leagueId, userId),
+    listLeagueMembershipsForUser(userId),
+  ]);
+
+  if (leagueMgr) {
+    return league;
+  }
+
   const hasMembership = memberships.some(
     (membership) => String(membership.leagueId) === String(league._id)
   );
@@ -246,6 +275,20 @@ async function assertLeagueOwner(userId, leagueId) {
   return league;
 }
 
+async function assertLeagueManagerOrOwner(userId, leagueId) {
+  const league = await assertLeagueExists(leagueId);
+  if (String(league.ownerUserId) === String(userId)) {
+    return { league, role: 'owner' };
+  }
+
+  const record = await findActiveLeagueManager(leagueId, userId);
+  if (!record) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  return { league, role: 'league_manager' };
+}
+
 function ensureLeagueEditable(league) {
   if (league.status === 'archived') {
     throw new ApiError(400, 'League is archived');
@@ -263,6 +306,11 @@ async function assertTeamManagerOrOwner(userId, leagueId, leagueTeamId) {
     return { league, role: 'owner' };
   }
 
+  const leagueMgr = await findActiveLeagueManager(leagueId, userId);
+  if (leagueMgr) {
+    return { league, role: 'league_manager' };
+  }
+
   const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
   if (!member || member.role !== 'manager') {
     throw new ApiError(403, 'Forbidden');
@@ -275,6 +323,11 @@ async function getLeagueTeamAccess(userId, leagueId, leagueTeamId) {
   const league = await assertLeagueExists(leagueId);
   if (String(league.ownerUserId) === String(userId)) {
     return { league, role: 'owner', member: null };
+  }
+
+  const leagueMgr = await findActiveLeagueManager(leagueId, userId);
+  if (leagueMgr) {
+    return { league, role: 'league_manager', member: null };
   }
 
   const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
@@ -348,12 +401,16 @@ async function createLeagueForUser(userId, payload) {
 }
 
 async function listLeaguesForUser(userId) {
-  const [ownedLeagues, memberships] = await Promise.all([
+  const [ownedLeagues, memberships, managerships] = await Promise.all([
     listLeaguesByOwner(userId),
     listLeagueMembershipsForUser(userId),
+    listLeaguesByManager(userId),
   ]);
   const memberLeagueIds = memberships.map((membership) => membership.leagueId).filter(Boolean);
-  const memberLeagues = memberLeagueIds.length > 0 ? await listLeaguesByIds(memberLeagueIds) : [];
+  const managedLeagueIds = managerships.map((mgr) => mgr.leagueId).filter(Boolean);
+  const allMemberLeagueIds = [...memberLeagueIds, ...managedLeagueIds];
+  const memberLeagues =
+    allMemberLeagueIds.length > 0 ? await listLeaguesByIds(allMemberLeagueIds) : [];
   const combined = new Map();
 
   for (const league of [...ownedLeagues, ...memberLeagues]) {
@@ -370,19 +427,49 @@ async function listPublicLeagues() {
   return leagues.map((league) => sanitizeLeague(league));
 }
 
+async function buildLeagueViewerContext(userId, league) {
+  if (String(league.ownerUserId) === String(userId)) {
+    return { viewerRole: 'owner', managedTeamIds: [] };
+  }
+
+  const [leagueMgr, memberships] = await Promise.all([
+    findActiveLeagueManager(league._id, userId),
+    listLeagueMembershipsForUser(userId),
+  ]);
+
+  if (leagueMgr) {
+    return { viewerRole: 'league_manager', managedTeamIds: [] };
+  }
+
+  const leagueMemberships = memberships.filter((m) => String(m.leagueId) === String(league._id));
+  const managerMemberships = leagueMemberships.filter((m) => m.role === 'manager');
+
+  if (managerMemberships.length > 0) {
+    return {
+      viewerRole: 'team_manager',
+      managedTeamIds: managerMemberships.map((m) => String(m.leagueTeamId)),
+    };
+  }
+
+  const topRole = leagueMemberships.find((m) => m.role === 'helper') ? 'helper' : 'player';
+  return { viewerRole: topRole, managedTeamIds: [] };
+}
+
 async function getLeagueForUser(userId, leagueId) {
   const league = await assertLeagueViewer(userId, leagueId);
 
-  const [teams, standings, games] = await Promise.all([
+  const [teams, standings, games, viewerContext] = await Promise.all([
     listLeagueTeams(league._id),
     getLeagueStandings(league._id),
     listLeagueGames(league._id),
+    buildLeagueViewerContext(userId, league),
   ]);
 
   return sanitizeLeague(league, {
     includeTeams: teams.map((team) => sanitizeLeagueTeam(team)),
     includeStandings: standings,
     includeGames: games,
+    includeViewerContext: viewerContext,
   });
 }
 
@@ -402,7 +489,7 @@ async function getPublicLeagueBySlug(slug) {
 }
 
 async function updateLeagueForUser(userId, leagueId, payload) {
-  const league = await assertLeagueOwner(userId, leagueId);
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
 
   if (payload.name) {
@@ -442,7 +529,7 @@ async function archiveLeagueForUser(userId, leagueId) {
 }
 
 async function createLeagueTeamForLeague(userId, leagueId, payload) {
-  const league = await assertLeagueOwner(userId, leagueId);
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
 
   const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
@@ -498,10 +585,10 @@ async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
   const [players, members, joinRequests, standings, games] = await Promise.all([
     listLeaguePlayers(team._id),
-    access.role === 'owner' || access.role === 'manager'
+    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager'
       ? listLeagueTeamMembers(team._id)
       : Promise.resolve([]),
-    access.role === 'owner' || access.role === 'manager'
+    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager'
       ? listLeagueJoinRequests(team._id)
       : Promise.resolve([]),
     getLeagueStandings(leagueId),
@@ -533,8 +620,10 @@ async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
     ),
     includeStandingsPosition: standingsPosition,
     includeStats: {
-      canManage: access.role === 'owner' || access.role === 'manager',
-      canReviewRequests: access.role === 'owner' || access.role === 'manager',
+      canManage:
+        access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager',
+      canReviewRequests:
+        access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager',
       viewerRole: access.role,
     },
   });
@@ -726,7 +815,10 @@ async function updateLeagueTeamForLeague(userId, leagueId, leagueTeamId, payload
 }
 
 async function archiveLeagueTeamForLeague(userId, leagueId, leagueTeamId) {
-  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  const { league, role } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  if (role === 'manager') {
+    throw new ApiError(403, 'Only league owners and league managers can archive teams');
+  }
   ensureLeagueEditable(league);
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
   team.status = 'archived';
@@ -786,7 +878,7 @@ async function removeLeagueTeamLogo(userId, leagueId, leagueTeamId) {
 }
 
 async function uploadLeagueLogo(userId, leagueId, file) {
-  const league = await assertLeagueOwner(userId, leagueId);
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
 
   if (!isCloudinaryConfigured()) {
     throw new ApiError(503, 'Image upload is not configured');
@@ -820,7 +912,7 @@ async function uploadLeagueLogo(userId, leagueId, file) {
 }
 
 async function removeLeagueLogo(userId, leagueId) {
-  const league = await assertLeagueOwner(userId, leagueId);
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
   const previousLogo = league.logo;
   league.logo = null;
   await saveLeague(league);
@@ -917,7 +1009,7 @@ async function listLeagueMembersForTeam(userId, leagueId, leagueTeamId) {
 }
 
 async function addManagerByEmail(userId, leagueId, leagueTeamId, email) {
-  const league = await assertLeagueOwner(userId, leagueId);
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
   const leagueTeam = await assertLeagueTeamExists(leagueId, leagueTeamId);
   const targetUser = await findUserByEmail(email);
@@ -945,7 +1037,7 @@ async function addManagerByEmail(userId, leagueId, leagueTeamId, email) {
 }
 
 async function updateLeagueMember(userId, leagueId, leagueTeamId, memberId, payload) {
-  const league = await assertLeagueOwner(userId, leagueId);
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
   const member = await findLeagueTeamMemberById(memberId);
   if (!member || String(member.leagueTeamId) !== String(leagueTeamId)) {
@@ -972,8 +1064,8 @@ async function removeLeagueMember(userId, leagueId, leagueTeamId, memberId) {
     throw new ApiError(404, 'League member not found');
   }
 
-  if (member.role === 'manager' && role !== 'owner') {
-    throw new ApiError(403, 'Only the league owner can remove managers');
+  if (member.role === 'manager' && role !== 'owner' && role !== 'league_manager') {
+    throw new ApiError(403, 'Only the league owner or a league manager can remove team managers');
   }
 
   member.status = 'removed';
@@ -1480,7 +1572,10 @@ async function getLeagueContextForGame(userId, payload, options = {}) {
   const league = await assertLeagueExists(payload.leagueId);
   const isOwner = String(league.ownerUserId) === String(userId);
 
-  if (!isOwner && !options.allowManager) {
+  const leagueMgrRecord = isOwner ? null : await findActiveLeagueManager(payload.leagueId, userId);
+  const isLeagueMgr = Boolean(leagueMgrRecord);
+
+  if (!isOwner && !isLeagueMgr && !options.allowManager) {
     throw new ApiError(403, 'Forbidden');
   }
 
@@ -1502,9 +1597,9 @@ async function getLeagueContextForGame(userId, payload, options = {}) {
     throw new ApiError(400, 'Tracked team must be either the home or away team');
   }
 
-  if (!isOwner) {
-    const isManager = await isTeamManager(userId, trackedTeam._id);
-    if (!isManager) {
+  if (!isOwner && !isLeagueMgr) {
+    const teamMgr = await isTeamManager(userId, trackedTeam._id);
+    if (!teamMgr) {
       throw new ApiError(403, 'Forbidden');
     }
   }
@@ -1542,9 +1637,66 @@ async function getLeagueTeamRosterSnapshotForGame(game) {
   };
 }
 
+async function addLeagueManagerByEmail(userId, leagueId, email) {
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+  const targetUser = await findUserByEmail(email);
+  if (!targetUser) {
+    throw new ApiError(404, 'No account found for that email address');
+  }
+
+  if (String(league.ownerUserId) === String(targetUser._id)) {
+    throw new ApiError(400, 'That user is already the league owner');
+  }
+
+  let record = await findActiveLeagueManager(leagueId, targetUser._id);
+  if (record) {
+    throw new ApiError(409, 'That user is already a league manager');
+  }
+
+  record = await createLeagueManager({
+    leagueId,
+    userId: targetUser._id,
+    createdByUserId: userId,
+  });
+
+  return sanitizeLeagueManager(record, new Map([[String(targetUser._id), targetUser]]));
+}
+
+async function listLeagueManagersForLeague(userId, leagueId) {
+  await assertLeagueManagerOrOwner(userId, leagueId);
+  const managers = await listLeagueManagersByLeague(leagueId);
+  const usersById = await buildUsersMap(managers.map((m) => m.userId));
+  return managers.map((m) => sanitizeLeagueManager(m, usersById));
+}
+
+async function removeLeagueManagerById(userId, leagueId, managerId) {
+  if (!mongoose.Types.ObjectId.isValid(managerId)) {
+    throw new ApiError(404, 'League manager not found');
+  }
+  await assertLeagueOwner(userId, leagueId);
+  const record = await findLeagueManagerById(managerId);
+  if (!record || String(record.leagueId) !== String(leagueId) || record.status !== 'active') {
+    throw new ApiError(404, 'League manager not found');
+  }
+
+  record.status = 'removed';
+  await saveLeagueManager(record);
+  const targetUser = await findUserById(record.userId);
+  return sanitizeLeagueManager(
+    record,
+    new Map(targetUser ? [[String(targetUser._id), targetUser]] : [])
+  );
+}
+
 async function canManageLeagueGame(userId, game) {
   const league = await assertLeagueExists(game.leagueId);
   if (String(league.ownerUserId) === String(userId)) {
+    return true;
+  }
+
+  const leagueMgr = await findActiveLeagueManager(game.leagueId, userId);
+  if (leagueMgr) {
     return true;
   }
 
@@ -1554,6 +1706,16 @@ async function canManageLeagueGame(userId, game) {
   ]);
 
   return managerChecks.some(Boolean);
+}
+
+async function canFinalizeLeagueGame(userId, game) {
+  const league = await assertLeagueExists(game.leagueId);
+  if (String(league.ownerUserId) === String(userId)) {
+    return true;
+  }
+
+  const leagueMgr = await findActiveLeagueManager(game.leagueId, userId);
+  return Boolean(leagueMgr);
 }
 
 module.exports = {
@@ -1594,4 +1756,8 @@ module.exports = {
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
+  canFinalizeLeagueGame,
+  addLeagueManagerByEmail,
+  listLeagueManagersForLeague,
+  removeLeagueManagerById,
 };

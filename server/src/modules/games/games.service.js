@@ -11,6 +11,7 @@ const {
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
+  canFinalizeLeagueGame,
 } = require('../leagues/leagues.service');
 const { findLeagueTeamById } = require('../leagues/leagues.repository');
 
@@ -1224,6 +1225,14 @@ async function finishGameForUser(userId, gameId) {
   if (game.status === 'completed') {
     throw new ApiError(400, 'Game is already completed');
   }
+
+  if (game.gameContext === 'league' && String(game.ownerUserId) !== String(userId)) {
+    const canFinalize = await canFinalizeLeagueGame(userId, game);
+    if (!canFinalize) {
+      throw new ApiError(403, 'Only league owners and league managers can finalize games');
+    }
+  }
+
   game.status = 'completed';
   game.completedAt = new Date();
   await saveGame(game);

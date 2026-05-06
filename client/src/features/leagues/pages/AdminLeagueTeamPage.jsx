@@ -105,6 +105,8 @@ export function AdminLeagueTeamPage() {
         <div className="flex items-center gap-5">
           <label className="group relative shrink-0 cursor-pointer">
             <input
+              label="team-logo"
+              aria-label="team-logo"
               type="file"
               accept="image/png,image/jpeg,image/webp"
               className="sr-only"
@@ -179,7 +181,9 @@ export function AdminLeagueTeamPage() {
             )}
           </label>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
+            <h1 aria-label="team-name" className="text-3xl font-bold text-slate-900 md:text-4xl">
+              {team.name}
+            </h1>
             <p className="mt-2 text-base text-slate-700">
               Team management, roster, join requests, and historical league context.
             </p>
@@ -208,12 +212,14 @@ export function AdminLeagueTeamPage() {
             <div className="mt-4 flex flex-wrap gap-3">
               <input
                 type="text"
+                autoComplete="off"
                 className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
                 placeholder="Player name"
                 value={playerName}
                 onChange={(event) => setPlayerName(event.target.value)}
               />
               <input
+                autoComplete="off"
                 type="number"
                 className="w-24 rounded border border-slate-300 px-3 py-2"
                 placeholder="Jersey #"
@@ -244,6 +250,7 @@ export function AdminLeagueTeamPage() {
             <h2 className="text-xl font-semibold text-slate-900">Assign Manager</h2>
             <div className="mt-4 flex flex-wrap gap-3">
               <input
+                autoComplete="off"
                 type="email"
                 className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
                 placeholder="manager@email.com"

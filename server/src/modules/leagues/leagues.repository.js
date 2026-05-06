@@ -130,6 +130,18 @@ const leagueJoinRequestSchema = new mongoose.Schema(
 
 leagueJoinRequestSchema.index({ leagueTeamId: 1, requesterUserId: 1, status: 1 });
 
+const leagueManagerSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    createdByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    status: { type: String, enum: ['active', 'removed'], default: 'active', index: true },
+  },
+  { timestamps: true }
+);
+
+leagueManagerSchema.index({ leagueId: 1, userId: 1, status: 1 });
+
 const League = mongoose.models.League || mongoose.model('League', leagueSchema);
 const LeagueTeam = mongoose.models.LeagueTeam || mongoose.model('LeagueTeam', leagueTeamSchema);
 const LeaguePlayer =
@@ -138,6 +150,8 @@ const LeagueTeamMember =
   mongoose.models.LeagueTeamMember || mongoose.model('LeagueTeamMember', leagueTeamMemberSchema);
 const LeagueJoinRequest =
   mongoose.models.LeagueJoinRequest || mongoose.model('LeagueJoinRequest', leagueJoinRequestSchema);
+const LeagueManager =
+  mongoose.models.LeagueManager || mongoose.model('LeagueManager', leagueManagerSchema);
 
 function createLeague(input) {
   return League.create(input);
@@ -263,6 +277,30 @@ function saveLeagueJoinRequest(request) {
   return request.save();
 }
 
+function createLeagueManager(input) {
+  return LeagueManager.create(input);
+}
+
+function findLeagueManagerById(managerId) {
+  return LeagueManager.findById(managerId);
+}
+
+function findActiveLeagueManager(leagueId, userId) {
+  return LeagueManager.findOne({ leagueId, userId, status: 'active' });
+}
+
+function listLeagueManagersByLeague(leagueId) {
+  return LeagueManager.find({ leagueId, status: 'active' }).sort({ createdAt: 1 });
+}
+
+function listLeaguesByManager(userId) {
+  return LeagueManager.find({ userId, status: 'active' }).sort({ createdAt: -1 });
+}
+
+function saveLeagueManager(manager) {
+  return manager.save();
+}
+
 module.exports = {
   League,
   LeagueTeam,
@@ -299,4 +337,10 @@ module.exports = {
   findPendingLeagueJoinRequest,
   listLeagueJoinRequests,
   saveLeagueJoinRequest,
+  createLeagueManager,
+  findLeagueManagerById,
+  findActiveLeagueManager,
+  listLeagueManagersByLeague,
+  listLeaguesByManager,
+  saveLeagueManager,
 };

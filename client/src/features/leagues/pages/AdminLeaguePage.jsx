@@ -3,11 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { useAuth } from '../../../app/store/AuthContext';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 export function AdminLeaguePage() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [league, setLeague] = useState(null);
   const [copiedGameId, setCopiedGameId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +19,25 @@ export function AdminLeaguePage() {
   const [isUpdatingLeague, setIsUpdatingLeague] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
+  const [leagueManagers, setLeagueManagers] = useState([]);
+  const [newManagerEmail, setNewManagerEmail] = useState('');
+  const [isSubmittingManager, setIsSubmittingManager] = useState(false);
+  const [managerError, setManagerError] = useState('');
+
+  const isOwner = user && league && String(league.ownerUserId) === String(user.id);
+
+  function canTrackGame(game) {
+    const ctx = league?.viewerContext;
+    if (!ctx) return false;
+    if (ctx.viewerRole === 'owner' || ctx.viewerRole === 'league_manager') return true;
+    if (ctx.viewerRole === 'team_manager') {
+      return (
+        ctx.managedTeamIds.includes(game.homeLeagueTeamId) ||
+        ctx.managedTeamIds.includes(game.awayLeagueTeamId)
+      );
+    }
+    return false;
+  }
 
   useEffect(() => {
     leaguesApi
@@ -25,6 +46,40 @@ export function AdminLeaguePage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load league'))
       .finally(() => setIsLoading(false));
   }, [leagueId]);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    leaguesApi
+      .listLeagueManagers(leagueId)
+      .then((response) => setLeagueManagers(response.managers))
+      .catch(() => {});
+  }, [leagueId, isOwner]);
+
+  async function onAddLeagueManager(event) {
+    event.preventDefault();
+    if (!newManagerEmail.trim()) return;
+    setManagerError('');
+    setIsSubmittingManager(true);
+    try {
+      const response = await leaguesApi.addLeagueManager(leagueId, newManagerEmail.trim());
+      setLeagueManagers((current) => [...current, response.manager]);
+      setNewManagerEmail('');
+    } catch (submitError) {
+      setManagerError(submitError.message || 'Failed to add league manager');
+    } finally {
+      setIsSubmittingManager(false);
+    }
+  }
+
+  async function onRemoveLeagueManager(managerId) {
+    setManagerError('');
+    try {
+      await leaguesApi.removeLeagueManager(leagueId, managerId);
+      setLeagueManagers((current) => current.filter((m) => m.id !== managerId));
+    } catch (submitError) {
+      setManagerError(submitError.message || 'Failed to remove league manager');
+    }
+  }
 
   async function onCreateTeam(event) {
     event.preventDefault();
@@ -90,6 +145,8 @@ export function AdminLeaguePage() {
     return <p className="text-sm text-red-600">{error || 'League not found'}</p>;
   }
 
+  const leagueName = league.name?.trim();
+
   const breadcrumbs = [{ label: 'Admin', href: '/admin' }, { label: league.name }];
 
   return (
@@ -103,6 +160,7 @@ export function AdminLeaguePage() {
               type="file"
               accept="image/png,image/jpeg,image/webp"
               className="sr-only"
+              aria-label="Upload league logo"
               disabled={isUploadingLogo}
               onChange={async (event) => {
                 const file = event.target.files?.[0];
@@ -170,7 +228,9 @@ export function AdminLeaguePage() {
             )}
           </label>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{league.name}</h1>
+            <h1 aria-label="League Name" className="text-3xl font-bold text-slate-900 md:text-4xl">
+              {leagueName || 'Unnamed league'}
+            </h1>
             <p className="mt-2 text-base text-slate-700">
               {league.seasonLabel || 'Season TBD'} • {league.status}
             </p>
@@ -294,7 +354,7 @@ export function AdminLeaguePage() {
                     <button
                       type="button"
                       aria-label={`Track ${game.title}`}
-                      disabled={!canNavigate}
+                      disabled={!canNavigate || !canTrackGame(game)}
                       className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
                         if (gameId) navigate(`/games/${gameId}/track`);
@@ -334,6 +394,7 @@ export function AdminLeaguePage() {
         <h2 className="text-xl font-semibold text-slate-900">Create Team</h2>
         <form onSubmit={onCreateTeam} className="mt-4 flex flex-wrap gap-3">
           <input
+            autoComplete="off"
             type="text"
             className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
             placeholder="Team name"
@@ -341,6 +402,7 @@ export function AdminLeaguePage() {
             onChange={(event) => setNewTeamName(event.target.value)}
           />
           <button
+            aria-label="submit"
             type="submit"
             disabled={isSubmittingTeam}
             className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
@@ -349,6 +411,59 @@ export function AdminLeaguePage() {
           </button>
         </form>
       </section>
+
+      {isOwner ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-xl font-semibold text-slate-900">League Managers</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            League managers can manage all teams and games but cannot delete the league.
+          </p>
+          {managerError ? (
+            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              {managerError}
+            </p>
+          ) : null}
+          {leagueManagers.length > 0 ? (
+            <ul className="mt-4 divide-y divide-slate-100">
+              {leagueManagers.map((manager) => (
+                <li key={manager.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900">{manager.userName || 'Unknown'}</p>
+                    <p className="text-sm text-slate-500">{manager.userEmail}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveLeagueManager(manager.id)}
+                    className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">No league managers yet.</p>
+          )}
+          <form onSubmit={onAddLeagueManager} className="mt-4 flex flex-wrap gap-3">
+            <input
+              autoComplete="off"
+              type="email"
+              className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
+              placeholder="manager@email.com"
+              value={newManagerEmail}
+              onChange={(event) => setNewManagerEmail(event.target.value)}
+            />
+            <button
+              aria-label="manager-submit"
+              type="submit"
+              disabled={isSubmittingManager}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {isSubmittingManager ? 'Adding...' : 'Add Manager'}
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -359,6 +474,7 @@ export function AdminLeaguePage() {
             </p>
           </div>
           <button
+            aria-label="league-update"
             type="button"
             disabled={isUpdatingLeague}
             onClick={onTogglePublicVisibility}

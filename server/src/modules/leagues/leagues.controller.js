@@ -250,6 +250,33 @@ async function removeMember(req, res) {
   res.status(200).json({ member });
 }
 
+async function listLeagueManagers(req, res) {
+  const userId = requireAuthUserId(req);
+  const managers = await leaguesService.listLeagueManagersForLeague(userId, req.params.leagueId);
+  res.status(200).json({ managers });
+}
+
+async function addLeagueManager(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = addManagerSchema.parse(req.body);
+  const manager = await leaguesService.addLeagueManagerByEmail(
+    userId,
+    req.params.leagueId,
+    payload.email
+  );
+  res.status(201).json({ manager });
+}
+
+async function removeLeagueManager(req, res) {
+  const userId = requireAuthUserId(req);
+  const manager = await leaguesService.removeLeagueManagerById(
+    userId,
+    req.params.leagueId,
+    req.params.managerId
+  );
+  res.status(200).json({ manager });
+}
+
 async function createJoin(req, res) {
   const userId = requireAuthUserId(req);
   const payload = createJoinRequestSchema.parse(req.body);
@@ -365,4 +392,7 @@ module.exports = {
   publicStandings,
   games,
   publicGames,
+  listLeagueManagers,
+  addLeagueManager,
+  removeLeagueManager,
 };

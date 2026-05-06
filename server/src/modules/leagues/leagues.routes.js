@@ -39,6 +39,12 @@ leaguesRouter.post(
   asyncHandler(controller.uploadLeagueLogo)
 );
 leaguesRouter.delete('/:leagueId/logo', asyncHandler(controller.removeLeagueLogo));
+leaguesRouter.get('/:leagueId/managers', asyncHandler(controller.listLeagueManagers));
+leaguesRouter.post('/:leagueId/managers', asyncHandler(controller.addLeagueManager));
+leaguesRouter.delete(
+  '/:leagueId/managers/:managerId',
+  asyncHandler(controller.removeLeagueManager)
+);
 leaguesRouter.post('/:leagueId/teams', asyncHandler(controller.createTeam));
 leaguesRouter.get('/:leagueId/teams', asyncHandler(controller.listTeams));
 leaguesRouter.get('/:leagueId/teams/:leagueTeamId', asyncHandler(controller.getTeam));
