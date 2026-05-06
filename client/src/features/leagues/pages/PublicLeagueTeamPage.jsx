@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { LeagueRosterTable } from '../components/LeagueRosterTable';
+import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
@@ -136,38 +137,11 @@ export function PublicLeagueTeamPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-semibold text-slate-900">League Games</h2>
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           {(team.games || []).length === 0 ? (
             <p className="text-sm text-slate-600">No league games yet.</p>
           ) : (
-            (team.games || []).map((game) => (
-              <Link
-                key={game.id}
-                to={`/games/${game.id}`}
-                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
-              >
-                <img
-                  src={game.homeTeamLogoUrl || teamPlaceholder}
-                  alt=""
-                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                />
-                <div className="min-w-0 flex-1 text-center">
-                  <p className="font-semibold text-slate-900">
-                    {game.homeTeamName || 'Unknown Team'} vs {game.awayTeamName || 'Unknown Team'}
-                  </p>
-                  {game.homePoints != null && game.awayPoints != null ? (
-                    <p className="mt-1 text-xs text-slate-500">
-                      {game.homePoints}–{game.awayPoints}
-                    </p>
-                  ) : null}
-                </div>
-                <img
-                  src={game.awayTeamLogoUrl || teamPlaceholder}
-                  alt=""
-                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                />
-              </Link>
-            ))
+            (team.games || []).map((game) => <LeagueGameCard key={game.id} game={game} />)
           )}
         </div>
       </section>

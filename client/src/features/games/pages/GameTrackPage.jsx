@@ -706,20 +706,6 @@ export function GameTrackPage() {
   const recentEvents = [...game.events].slice(-5).reverse();
   const visibleRecentEvents = showAllRecentEvents ? recentEvents : recentEvents.slice(0, 3);
 
-  if (game.status === 'completed') {
-    return (
-      <section className="space-y-3">
-        <p className="text-sm text-slate-700">This game is completed.</p>
-        <button
-          className="rounded border px-3 py-2 text-sm"
-          onClick={() => navigate(`/games/${game.id}`)}
-        >
-          View Box Score
-        </button>
-      </section>
-    );
-  }
-
   const followUpPlayers = pendingFollowUpPrompt
     ? pendingFollowUpPrompt.kind === 'assist'
       ? onCourtPlayers.filter((player) => player.id !== pendingFollowUpPrompt.actorPlayerId)
