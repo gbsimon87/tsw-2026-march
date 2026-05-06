@@ -15,7 +15,6 @@ export function AdminLeagueTeamPage() {
   const [playerName, setPlayerName] = useState('');
   const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
-  const [logoFile, setLogoFile] = useState(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
 
@@ -84,36 +83,6 @@ export function AdminLeagueTeamPage() {
     await refresh();
   }
 
-  async function onUploadLogo() {
-    if (!logoFile) return;
-    setLogoError('');
-    setIsUploadingLogo(true);
-    try {
-      const formData = new FormData();
-      formData.append('logo', logoFile);
-      const response = await leaguesApi.uploadTeamLogo(leagueId, leagueTeamId, formData);
-      setTeam(response.team);
-      setLogoFile(null);
-    } catch (uploadError) {
-      setLogoError(uploadError.message || 'Failed to upload logo');
-    } finally {
-      setIsUploadingLogo(false);
-    }
-  }
-
-  async function onRemoveLogo() {
-    setLogoError('');
-    setIsUploadingLogo(true);
-    try {
-      const response = await leaguesApi.removeTeamLogo(leagueId, leagueTeamId);
-      setTeam(response.team);
-    } catch (uploadError) {
-      setLogoError(uploadError.message || 'Failed to remove logo');
-    } finally {
-      setIsUploadingLogo(false);
-    }
-  }
-
   if (isLoading) {
     return <p className="text-sm">Loading league team...</p>;
   }
@@ -133,10 +102,90 @@ export function AdminLeagueTeamPage() {
       />
 
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
-        <p className="mt-2 text-base text-slate-700">
-          Team management, roster, join requests, and historical league context.
-        </p>
+        <div className="flex items-center gap-5">
+          <label className="group relative shrink-0 cursor-pointer">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="sr-only"
+              disabled={isUploadingLogo}
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setLogoError('');
+                setIsUploadingLogo(true);
+                try {
+                  const formData = new FormData();
+                  formData.append('logo', file);
+                  const response = await leaguesApi.uploadTeamLogo(
+                    leagueId,
+                    leagueTeamId,
+                    formData
+                  );
+                  setTeam((current) => ({ ...current, logo: response.team.logo }));
+                } catch (uploadError) {
+                  setLogoError(uploadError.message || 'Failed to upload logo');
+                } finally {
+                  setIsUploadingLogo(false);
+                }
+                event.target.value = '';
+              }}
+            />
+            {team.logo?.url ? (
+              <>
+                <img
+                  src={team.logo.url}
+                  alt={`${team.name} logo`}
+                  className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
+                />
+                <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5 text-slate-600"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </span>
+              </>
+            ) : (
+              <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-slate-300 bg-white text-slate-400 transition group-hover:border-slate-400 group-hover:text-slate-600">
+                {isUploadingLogo ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6 animate-spin"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
+              </span>
+            )}
+          </label>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{team.name}</h1>
+            <p className="mt-2 text-base text-slate-700">
+              Team management, roster, join requests, and historical league context.
+            </p>
+            {logoError ? <p className="mt-1 text-xs text-red-600">{logoError}</p> : null}
+          </div>
+        </div>
       </section>
 
       {error ? (
@@ -219,50 +268,6 @@ export function AdminLeagueTeamPage() {
             />
           </section>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Team Logo</h2>
-        <p className="mt-1 text-sm text-slate-600">Shown on public team pages and standings.</p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {team.logo?.url ? (
-            <img
-              src={team.logo.url}
-              alt="Team logo"
-              className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover"
-            />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-400">
-              None
-            </div>
-          )}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
-            disabled={isUploadingLogo}
-            onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
-          />
-          <button
-            type="button"
-            disabled={!logoFile || isUploadingLogo}
-            onClick={onUploadLogo}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isUploadingLogo ? 'Saving...' : 'Upload'}
-          </button>
-          {team.logo?.url ? (
-            <button
-              type="button"
-              disabled={isUploadingLogo}
-              onClick={onRemoveLogo}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
-        {logoError ? <p className="mt-3 text-sm text-red-600">{logoError}</p> : null}
       </section>
     </main>
   );

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 export function AdminLeaguePage() {
   const { leagueId } = useParams();
@@ -14,7 +15,6 @@ export function AdminLeaguePage() {
   const [newTeamName, setNewTeamName] = useState('');
   const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
   const [isUpdatingLeague, setIsUpdatingLeague] = useState(false);
-  const [logoFile, setLogoFile] = useState(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
 
@@ -70,36 +70,6 @@ export function AdminLeaguePage() {
     }
   }
 
-  async function onUploadLogo() {
-    if (!logoFile) return;
-    setLogoError('');
-    setIsUploadingLogo(true);
-    try {
-      const formData = new FormData();
-      formData.append('logo', logoFile);
-      const response = await leaguesApi.uploadLogo(leagueId, formData);
-      setLeague(response.league);
-      setLogoFile(null);
-    } catch (uploadError) {
-      setLogoError(uploadError.message || 'Failed to upload logo');
-    } finally {
-      setIsUploadingLogo(false);
-    }
-  }
-
-  async function onRemoveLogo() {
-    setLogoError('');
-    setIsUploadingLogo(true);
-    try {
-      const response = await leaguesApi.removeLogo(leagueId);
-      setLeague(response.league);
-    } catch (uploadError) {
-      setLogoError(uploadError.message || 'Failed to remove logo');
-    } finally {
-      setIsUploadingLogo(false);
-    }
-  }
-
   async function copyShareUrl(gameId) {
     if (!gameId || !navigator?.clipboard?.writeText) {
       return;
@@ -127,10 +97,86 @@ export function AdminLeaguePage() {
       <Breadcrumbs crumbs={breadcrumbs} />
 
       <section className="rounded-3xl bg-gradient-to-r from-sky-50 via-white to-amber-50 p-8 md:p-10">
-        <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{league.name}</h1>
-        <p className="mt-2 text-base text-slate-700">
-          {league.seasonLabel || 'Season TBD'} • {league.status}
-        </p>
+        <div className="flex items-center gap-5">
+          <label className="group relative shrink-0 cursor-pointer">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="sr-only"
+              disabled={isUploadingLogo}
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setLogoError('');
+                setIsUploadingLogo(true);
+                try {
+                  const formData = new FormData();
+                  formData.append('logo', file);
+                  const response = await leaguesApi.uploadLogo(leagueId, formData);
+                  setLeague((current) => ({ ...current, logo: response.league.logo }));
+                } catch (uploadError) {
+                  setLogoError(uploadError.message || 'Failed to upload logo');
+                } finally {
+                  setIsUploadingLogo(false);
+                }
+                event.target.value = '';
+              }}
+            />
+            {league.logo?.url ? (
+              <>
+                <img
+                  src={league.logo.url}
+                  alt={`${league.name} logo`}
+                  className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
+                />
+                <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5 text-slate-600"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </span>
+              </>
+            ) : (
+              <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-slate-300 bg-white text-slate-400 transition group-hover:border-slate-400 group-hover:text-slate-600">
+                {isUploadingLogo ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6 animate-spin"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
+              </span>
+            )}
+          </label>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">{league.name}</h1>
+            <p className="mt-2 text-base text-slate-700">
+              {league.seasonLabel || 'Season TBD'} • {league.status}
+            </p>
+            {logoError ? <p className="mt-1 text-xs text-red-600">{logoError}</p> : null}
+          </div>
+        </div>
       </section>
 
       {error ? (
@@ -158,20 +204,45 @@ export function AdminLeaguePage() {
               const canNavigate = Boolean(gameId);
               const scoreLabel =
                 game.homePoints != null && game.awayPoints != null
-                  ? ` • ${game.homePoints}–${game.awayPoints}`
-                  : '';
+                  ? `${game.homePoints}–${game.awayPoints}`
+                  : null;
 
               return (
                 <article
                   key={gameId || game.title}
                   className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between"
                 >
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900">{game.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {game.homeTeamName} vs {game.awayTeamName} • {game.status}
-                      {scoreLabel}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex shrink-0 items-center">
+                      <img
+                        src={game.homeTeamLogoUrl || teamPlaceholder}
+                        alt=""
+                        className="h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
+                      />
+                      <img
+                        src={game.awayTeamLogoUrl || teamPlaceholder}
+                        alt=""
+                        className="-ml-2 h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">{game.title}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                        <span>
+                          {game.homeTeamName} vs {game.awayTeamName}
+                        </span>
+                        <span>•</span>
+                        <span>{game.status}</span>
+                        {scoreLabel ? (
+                          <>
+                            <span>•</span>
+                            <span className="font-semibold tabular-nums text-slate-800">
+                              {scoreLabel}
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                     <button
@@ -302,52 +373,6 @@ export function AdminLeaguePage() {
           Current visibility:{' '}
           <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
         </p>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">League Logo</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Shown on game detail pages for all league games.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {league.logo?.url ? (
-            <img
-              src={league.logo.url}
-              alt="League logo"
-              className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover"
-            />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-400">
-              None
-            </div>
-          )}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
-            disabled={isUploadingLogo}
-            onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
-          />
-          <button
-            type="button"
-            disabled={!logoFile || isUploadingLogo}
-            onClick={onUploadLogo}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {isUploadingLogo ? 'Saving...' : 'Upload'}
-          </button>
-          {league.logo?.url ? (
-            <button
-              type="button"
-              disabled={isUploadingLogo}
-              onClick={onRemoveLogo}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
-        {logoError ? <p className="mt-3 text-sm text-red-600">{logoError}</p> : null}
       </section>
     </main>
   );

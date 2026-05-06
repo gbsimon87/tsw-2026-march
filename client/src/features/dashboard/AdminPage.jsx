@@ -186,9 +186,7 @@ export function AdminPage() {
         <h2 id="recent-games-heading" className="text-xl font-semibold text-slate-900">
           Recent Games
         </h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Showing all owner games returned by the games API, including league games.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">Includes both one-off and league games.</p>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading games...</p> : null}
         {!isLoading && recentGames.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">No games recorded yet.</p>
