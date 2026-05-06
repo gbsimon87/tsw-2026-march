@@ -13,8 +13,13 @@ const League = mongoose.model('League');
 const LeagueTeam = mongoose.model('LeagueTeam');
 const LeaguePlayer = mongoose.model('LeaguePlayer');
 
-const LEAGUE_ID = '69f8b3b1980e925c0271330d';
-const OWNER_USER_ID = '69f8b36c980e925c02713302';
+const LEAGUE_ID = process.env.SEED_WE_BALL_LEAGUE_ID || '69f8b3b1980e925c0271330d';
+const OWNER_USER_ID = process.env.SEED_WE_BALL_OWNER_USER_ID || '69f8b36c980e925c02713302';
+const LEAGUE_SLUG = process.env.SEED_WE_BALL_LEAGUE_SLUG || 'we-ball-saturday';
+
+function scriptPath(fileName) {
+  return path.resolve(__dirname, fileName);
+}
 
 const TEAM_ROSTERS = {
   'free-agents': {
@@ -94,7 +99,7 @@ const GAME_CONFIGS = [
     awaySlug: 'pinky-and-the-brain',
     scheduledAt: '2026-04-25T09:30:00.000Z',
     videoUrl: 'https://youtu.be/8UfBBSix-2k?si=Ts_p12v3XQYL1sTc',
-    playByPlayPath: path.resolve(process.cwd(), 'server/src/scripts/we-ball-game-1.tsv'),
+    playByPlayPath: scriptPath('we-ball-game-1.tsv'),
   },
   {
     title: 'Blues Clues vs Washed Up Ballers - 2026-04-25 11:30',
@@ -102,7 +107,7 @@ const GAME_CONFIGS = [
     awaySlug: 'washed-up-ballers',
     scheduledAt: '2026-04-25T10:30:00.000Z',
     videoUrl: 'https://youtu.be/2LmCnX--5_I?si=J9XpWDoesm9vZ7e_',
-    playByPlayPath: path.resolve(process.cwd(), 'server/src/scripts/we-ball-game-2.tsv'),
+    playByPlayPath: scriptPath('we-ball-game-2.tsv'),
   },
 ];
 
@@ -337,14 +342,54 @@ async function createGame(gameConfig, teamsBySlug, playersByTeamSlug) {
   });
 }
 
+async function ensureLeagueSetup() {
+  const league = await League.findByIdAndUpdate(
+    LEAGUE_ID,
+    {
+      $setOnInsert: {
+        _id: LEAGUE_ID,
+        ownerUserId: OWNER_USER_ID,
+        name: 'We Ball Saturday',
+        slug: LEAGUE_SLUG,
+        description: 'Seeded We Ball Saturday league fixture.',
+        seasonLabel: 'Spring 2026',
+        status: 'active',
+        isPublic: true,
+        plan: 'pro',
+        subscriptionStatus: 'active',
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        cancelAtPeriodEnd: false,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  for (const [slug, roster] of Object.entries(TEAM_ROSTERS)) {
+    await LeagueTeam.findOneAndUpdate(
+      { leagueId: league._id, slug },
+      {
+        $set: {
+          leagueId: league._id,
+          name: roster.name,
+          slug,
+          status: 'active',
+        },
+        $setOnInsert: {
+          colors: ['#0f172a', '#38bdf8'],
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  }
+
+  return league;
+}
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   await connectDb();
 
-  const league = await League.findById(LEAGUE_ID);
-  if (!league) {
-    throw new Error(`League ${LEAGUE_ID} not found`);
-  }
+  const league = await ensureLeagueSetup();
 
   const teams = await LeagueTeam.find({ leagueId: LEAGUE_ID });
   const teamsBySlug = new Map(teams.map((team) => [team.slug, team]));
