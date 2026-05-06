@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { TeamCardPost } from '../../feed/components/posts/TeamCardPost';
@@ -153,7 +154,7 @@ export function PublicTeamPage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm">Loading team...</p>;
+    return <SportsLoader label="Loading team" fullPage />;
   }
 
   if (!data) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 
@@ -22,7 +23,7 @@ export function PublicLeagueStandingsPage() {
   }, [leagueSlug]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading standings...</p>;
+    return <SportsLoader label="Loading standings" fullPage />;
   }
 
   if (!league) {

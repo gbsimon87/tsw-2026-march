@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { teamsApi } from '../api/teamsApi';
@@ -104,7 +105,7 @@ export function PublicPlayerPage() {
   }, [data]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading player...</p>;
+    return <SportsLoader label="Loading player" fullPage />;
   }
 
   if (!data) {

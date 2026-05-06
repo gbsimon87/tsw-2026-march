@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { useAuth } from '../../../app/store/AuthContext';
 import { Tabs } from '../../../components/Tabs';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { StatsTable } from '../../teams/components/StatsTable';
@@ -168,7 +169,7 @@ export function GameDetailPage() {
   }, [gameId]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading game...</p>;
+    return <SportsLoader label="Loading game" fullPage />;
   }
 
   if (!data) {

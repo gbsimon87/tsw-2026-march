@@ -9,6 +9,7 @@ import playerPlaceholder from '../../../assets/placeholders/player-placeholder.s
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 
 export function PublicLeagueTeamPage() {
   const { leagueSlug, teamSlug } = useParams();
@@ -29,7 +30,7 @@ export function PublicLeagueTeamPage() {
   }, [leagueSlug, teamSlug]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading league team...</p>;
+    return <SportsLoader label="Loading league team" fullPage />;
   }
 
   if (!data?.team) {

@@ -6,6 +6,7 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 
 function formatGameDate(game) {
   const rawValue = game.completedAt || game.scheduledAt || game.createdAt || null;
@@ -55,7 +56,7 @@ export function PublicLeaguePlayerPage() {
   }, [data]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading player...</p>;
+    return <SportsLoader label="Loading player" fullPage />;
   }
 
   if (!data?.player) {

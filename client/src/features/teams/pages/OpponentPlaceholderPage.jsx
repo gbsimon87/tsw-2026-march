@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { teamsApi } from '../api/teamsApi';
 
 function formatGameDate(game) {
@@ -32,7 +33,7 @@ export function OpponentPlaceholderPage() {
   }, [opponentSlug]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading opponent...</p>;
+    return <SportsLoader label="Loading opponent" fullPage />;
   }
 
   if (!data) {

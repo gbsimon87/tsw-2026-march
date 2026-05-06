@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { FloatingActionButton } from '../../../components/ui/FloatingActionButton';
 import { Modal } from '../../../components/ui/Modal';
 import { feedApi } from '../api/feedApi';
@@ -63,7 +64,7 @@ export function FeedPage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm">Loading feed...</p>;
+    return <SportsLoader label="Loading feed" fullPage />;
   }
 
   return (

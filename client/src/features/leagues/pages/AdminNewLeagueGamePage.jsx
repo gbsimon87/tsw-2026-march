@@ -5,6 +5,7 @@ import { TEAM_SIDES } from '../../games/constants';
 import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 
 export function AdminNewLeagueGamePage() {
   const { leagueId } = useParams();
@@ -96,7 +97,7 @@ export function AdminNewLeagueGamePage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm">Loading league teams...</p>;
+    return <SportsLoader label="Loading league teams" fullPage />;
   }
 
   const hasValidMatchup = isTeamManagerRole

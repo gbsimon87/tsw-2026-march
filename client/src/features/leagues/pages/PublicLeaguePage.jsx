@@ -6,6 +6,7 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
@@ -22,7 +23,7 @@ export function PublicLeaguePage() {
   }, [leagueSlug]);
 
   if (isLoading) {
-    return <p className="text-sm">Loading league...</p>;
+    return <SportsLoader label="Loading league" fullPage />;
   }
 
   if (!league) {

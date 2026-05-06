@@ -4,6 +4,7 @@ import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { useAuth } from '../../../app/store/AuthContext';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
@@ -139,7 +140,7 @@ export function AdminLeaguePage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm">Loading league...</p>;
+    return <SportsLoader label="Loading league" fullPage />;
   }
 
   if (!league) {

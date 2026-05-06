@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { gamesApi } from '../api/gamesApi';
 
@@ -96,7 +97,7 @@ export function NewGamePage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm">Loading teams...</p>;
+    return <SportsLoader label="Loading teams" fullPage />;
   }
 
   if (teams.length === 0) {

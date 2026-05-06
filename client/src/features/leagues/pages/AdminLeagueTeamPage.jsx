@@ -6,6 +6,7 @@ import { LeagueRosterTable } from '../components/LeagueRosterTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { SportsLoader } from '../../../components/SportsLoader';
 
 export function AdminLeagueTeamPage() {
   const { leagueId, leagueTeamId } = useParams();
@@ -85,7 +86,7 @@ export function AdminLeagueTeamPage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm">Loading league team...</p>;
+    return <SportsLoader label="Loading league team" fullPage />;
   }
 
   if (!team) {

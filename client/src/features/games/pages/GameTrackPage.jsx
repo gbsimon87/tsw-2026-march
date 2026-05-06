@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { SportsLoader } from '../../../components/SportsLoader';
 import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
@@ -696,7 +697,7 @@ export function GameTrackPage() {
   }
 
   if (!data || !game || !boxScore) {
-    return <p className="text-sm">Loading tracking session...</p>;
+    return <SportsLoader label="Loading tracking session" fullPage />;
   }
 
   const gameSummary = data.gameSummary || {

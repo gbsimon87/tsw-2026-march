@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
+import { SportsLoader } from '../../components/SportsLoader';
 import { AdminPage } from '../../features/dashboard/AdminPage';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
 import { AuthPage } from '../../features/auth/pages/AuthPage';
@@ -33,7 +34,7 @@ function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="p-4 text-sm">Loading session...</div>;
+    return <SportsLoader label="Loading session" fullPage />;
   }
 
   if (!user) {
@@ -47,7 +48,7 @@ function LandingRoute() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="p-4 text-sm">Loading session...</div>;
+    return <SportsLoader label="Loading session" fullPage />;
   }
 
   if (user) {
