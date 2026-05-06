@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
 import { StatsTable } from '../../teams/components/StatsTable';
 import gameConstants from '../constants';
@@ -50,6 +50,43 @@ function emptyLine(player) {
     reb: 0,
     points: 0,
   };
+}
+
+function getPlayerId(player) {
+  return player?.id || player?.playerId || player?._id || player?.sourcePlayerId;
+}
+
+function getPlayerName(player) {
+  return player?.displayName || player?.name || 'Unknown Player';
+}
+
+function buildReplayLines({ players, events }) {
+  const basePlayers = players?.length
+    ? players.map((player) => ({ id: getPlayerId(player), displayName: getPlayerName(player) }))
+    : Array.from(
+        new Map(events.map((event) => [event.playerId, event.playerName || 'Unknown Player']))
+      ).map(([id, displayName]) => ({ id, displayName }));
+
+  const lines = basePlayers.filter((player) => player.id).map(emptyLine);
+  const byId = new Map(lines.map((line) => [line.playerId, line]));
+
+  for (const event of events) {
+    if (!event.playerId) {
+      continue;
+    }
+
+    if (!byId.has(event.playerId)) {
+      const fallback = emptyLine({
+        id: event.playerId,
+        displayName: event.playerName || 'Unknown Player',
+      });
+      lines.push(fallback);
+      byId.set(event.playerId, fallback);
+    }
+    applyEventToLine(byId.get(event.playerId), event.statType);
+  }
+
+  return lines;
 }
 
 function applyEventToLine(line, statType) {
@@ -114,53 +151,61 @@ function applyEventToLine(line, statType) {
   }
 }
 
-export function GameReplayPanel({ events, players }) {
+export function GameReplayPanel({
+  events,
+  players,
+  isDualTeam = false,
+  participants = null,
+  replayFilters = ['all'],
+}) {
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const replayEvents = useMemo(() => {
     const allEvents = events || [];
     return allEvents
       .map((event, index) => ({ ...event, replaySourceIndex: index }))
+      .filter((event) => selectedFilter === 'all' || event.teamSide === selectedFilter)
       .filter(canReplayEvent);
-  }, [events]);
+  }, [events, selectedFilter]);
   const [currentIndex, setCurrentIndex] = useState(replayEvents.length ? 0 : -1);
+
+  useEffect(() => {
+    setCurrentIndex(replayEvents.length ? 0 : -1);
+  }, [replayEvents.length, selectedFilter]);
+
   const currentEvent = currentIndex >= 0 ? replayEvents[currentIndex] : null;
   const currentSourceIndex = currentEvent?.replaySourceIndex ?? -1;
   const visibleEvents = useMemo(
     () => (currentIndex >= 0 ? replayEvents.slice(0, currentIndex + 1) : []),
     [currentIndex, replayEvents]
   );
-  const replayBoxScore = useMemo(() => {
-    const basePlayers = players?.length
-      ? players.map((player) => ({ id: player.id, displayName: player.displayName }))
-      : Array.from(
-          new Map(
-            replayEvents.map((event) => [event.playerId, event.playerName || 'Unknown Player'])
-          )
-        ).map(([id, displayName]) => ({ id, displayName }));
-
-    const lines = basePlayers.map(emptyLine);
-    const byId = new Map(lines.map((line) => [line.playerId, line]));
-
+  const replayBoxScores = useMemo(() => {
     const countableEvents =
       currentSourceIndex >= 0 ? (events || []).slice(0, currentSourceIndex + 1) : [];
 
-    for (const event of countableEvents) {
-      if (!event.playerId) {
-        continue;
-      }
-
-      if (!byId.has(event.playerId)) {
-        const fallback = emptyLine({
-          id: event.playerId,
-          displayName: event.playerName || 'Unknown Player',
-        });
-        lines.push(fallback);
-        byId.set(event.playerId, fallback);
-      }
-      applyEventToLine(byId.get(event.playerId), event.statType);
+    if (!isDualTeam) {
+      return [
+        {
+          id: 'all',
+          label: 'Replay Box Score',
+          rows: buildReplayLines({ players, events: countableEvents }),
+        },
+      ];
     }
 
-    return lines;
-  }, [currentSourceIndex, events, players, replayEvents]);
+    return ['home', 'away']
+      .filter((side) => selectedFilter === 'all' || selectedFilter === side)
+      .map((side) => ({
+        id: side,
+        label: participants?.[side]?.displayName || side,
+        rows: buildReplayLines({
+          players: participants?.[side]?.players || [],
+          events: countableEvents.filter((event) => event.teamSide === side),
+        }),
+      }));
+  }, [currentSourceIndex, events, isDualTeam, participants, players, selectedFilter]);
+
+  const activeTeamName =
+    isDualTeam && currentEvent?.teamSide ? participants?.[currentEvent.teamSide]?.displayName : '';
   const replayColumns = [
     {
       id: 'player',
@@ -207,6 +252,7 @@ export function GameReplayPanel({ events, players }) {
     { id: 'oreb', label: 'OREB', align: 'right', sortKey: 'oreb', render: (row) => row.oreb },
     { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
   ];
+  const availableFilters = isDualTeam ? replayFilters.filter((filter) => filter !== 'all') : [];
 
   return (
     <div className="space-y-3 rounded border bg-white p-3">
@@ -223,6 +269,31 @@ export function GameReplayPanel({ events, players }) {
         <p className="text-sm text-slate-600">No coordinate-based events recorded for replay.</p>
       ) : (
         <>
+          {isDualTeam && availableFilters.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {['all', ...availableFilters].map((filter) => {
+                const label =
+                  filter === 'all' ? 'All' : participants?.[filter]?.displayName || filter;
+                const isSelected = selectedFilter === filter;
+
+                return (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setSelectedFilter(filter)}
+                    className={`rounded border px-3 py-1 text-xs font-semibold transition ${
+                      isSelected
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -246,6 +317,7 @@ export function GameReplayPanel({ events, players }) {
 
           <div className="rounded border bg-slate-50 p-2 text-xs text-slate-700">
             <p className="font-medium">
+              {activeTeamName ? `${activeTeamName}: ` : ''}
               {currentEvent?.playerName || (currentEvent?.playerId ? 'Unknown Player' : 'Opponent')}
               : {STAT_LABELS[currentEvent?.statType] || currentEvent?.statType}
             </p>
@@ -261,13 +333,16 @@ export function GameReplayPanel({ events, players }) {
             {visibleEvents.map((event, index) => {
               const active = index === currentIndex;
               const made = isMade(event.statType);
+              const isAway = isDualTeam && event.teamSide === 'away';
 
               return (
                 <span
                   key={event.id}
                   className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border ${
                     active ? 'h-5 w-5 border-slate-900' : 'h-3.5 w-3.5'
-                  } ${made ? 'border-emerald-900 bg-emerald-500' : 'border-rose-900 bg-rose-500'}`}
+                  } ${made ? 'border-emerald-900 bg-emerald-500' : 'border-rose-900 bg-rose-500'} ${
+                    isAway ? 'ring-2 ring-sky-500' : ''
+                  }`}
                   style={{ left: `${event.x}%`, top: `${event.y}%`, opacity: active ? 1 : 0.75 }}
                   data-testid="replay-marker"
                 />
@@ -275,15 +350,23 @@ export function GameReplayPanel({ events, players }) {
             })}
           </div>
 
-          <div className="overflow-x-auto rounded border" data-testid="replay-box-score">
-            <div className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Replay Box Score
-            </div>
-            <StatsTable
-              columns={replayColumns}
-              rows={replayBoxScore}
-              tableClassName="w-max text-xs"
-            />
+          <div className="space-y-3" data-testid="replay-box-score">
+            {replayBoxScores.map((boxScore) => (
+              <div
+                key={boxScore.id}
+                className="overflow-x-auto rounded border"
+                data-testid={`replay-box-score-${boxScore.id}`}
+              >
+                <div className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  {boxScore.label}
+                </div>
+                <StatsTable
+                  columns={replayColumns}
+                  rows={boxScore.rows}
+                  tableClassName="w-max text-xs"
+                />
+              </div>
+            ))}
           </div>
         </>
       )}

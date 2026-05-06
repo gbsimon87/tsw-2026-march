@@ -352,23 +352,20 @@ export function GameDetailPage() {
     </div>
   );
 
-  const replayContent =
-    canViewReplay && !isDualTeam ? (
-      <GameReplayPanel events={replayEvents} players={team.players || []} />
-    ) : (
-      <LockedFeatureCard
-        title={
-          isDualTeam
-            ? 'Replay is not available for league dual-team games yet'
-            : 'Replay is only available for Pro users'
-        }
-        description={
-          isDualTeam
-            ? 'Replay remains disabled here until side-aware league replay is fully supported.'
-            : 'Upgrade this team to Pro to unlock possession replay for tracked games.'
-        }
-      />
-    );
+  const replayContent = canViewReplay ? (
+    <GameReplayPanel
+      events={replayEvents}
+      players={team.players || []}
+      isDualTeam={isDualTeam}
+      participants={participants}
+      replayFilters={data.replayFilters || ['all']}
+    />
+  ) : (
+    <LockedFeatureCard
+      title="Replay is only available for Pro users"
+      description="Upgrade this team to Pro to unlock possession replay for tracked games."
+    />
+  );
 
   function updateSearchParam(name, value) {
     const nextParams = new URLSearchParams(searchParams);

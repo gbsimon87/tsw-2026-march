@@ -45,6 +45,19 @@ function getScoreboardTeams({ game, team, participants, isDualTeam, recap }) {
   };
 }
 
+function getMatchupTitle({ game, team, participants, isDualTeam, recap }) {
+  if (isDualTeam) {
+    return `${participants?.away?.displayName || 'Away'} at ${
+      participants?.home?.displayName || 'Home'
+    }`;
+  }
+
+  const teamName = recap?.team?.name || team?.name || 'Team';
+  const opponentName = recap?.opponent?.name || game?.opponent;
+
+  return opponentName ? `${teamName} vs ${opponentName}` : game?.title || teamName;
+}
+
 export function GameDetailHeader({
   gameId,
   game,
@@ -68,11 +81,13 @@ export function GameDetailHeader({
   });
   const homePoints = isDualTeam ? gameSummary?.homePoints || 0 : gameSummary?.teamPoints || 0;
   const awayPoints = isDualTeam ? gameSummary?.awayPoints || 0 : gameSummary?.opponentPoints || 0;
+  const matchupTitle = getMatchupTitle({ game, team, participants, isDualTeam, recap });
 
   return (
     <section
       className={`rounded-3xl bg-gradient-to-r from-amber-50 via-white to-sky-50 p-6 md:p-8 ${className}`}
     >
+      <h1 className="sr-only">{matchupTitle}</h1>
       <div className="rounded-2xl border border-slate-200 bg-white/80 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -104,7 +119,7 @@ export function GameDetailHeader({
             <div key={side.name} className="flex items-center gap-3">
               <img
                 src={side.logo}
-                alt=""
+                alt={`${side.name} logo`}
                 className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
               />
               <span

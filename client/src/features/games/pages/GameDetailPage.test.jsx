@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
@@ -316,7 +316,7 @@ describe('GameDetailPage', () => {
     expect(screen.getAllByText(/Top Performer/i).length).toBeGreaterThan(0);
     expect(
       screen.getByRole('link', {
-        name: /Top Performer\s+Alex\s+4 PTS • 0 REB • 0 AST/i,
+        name: /Top Performer\s+Alex\s+4 PTS . 0 REB . 0 AST/i,
       })
     ).toHaveAttribute('href', '/teams/team-1/players/p1');
     expect(screen.queryByTestId('recap-shot-snapshot')).not.toBeInTheDocument();
@@ -329,18 +329,23 @@ describe('GameDetailPage', () => {
     expect(sharePayload.files).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Game' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Game' })).toHaveClass('bg-slate-900');
-    expect(screen.getByRole('combobox')).toHaveValue('game-1');
-    fireEvent.change(screen.getByPlaceholderText('Write a caption (optional)'), {
+    const shareDialog = await screen.findByRole('dialog');
+    expect(shareDialog).toBeInTheDocument();
+    expect(within(shareDialog).getByText('Sharing game recap')).toBeInTheDocument();
+    expect(within(shareDialog).getByText('TSW Team vs Wildcats')).toBeInTheDocument();
+    expect(within(shareDialog).getByText(/4\s+.\s+0/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Game' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Add a caption...'), {
       target: { value: 'What a finish' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Post' }));
-    expect(feedApiMocks.createGameCardPost).toHaveBeenCalledWith({
-      gameId: 'game-1',
-      caption: 'What a finish',
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Post to Feed' }));
+    await waitFor(() =>
+      expect(feedApiMocks.createGameCardPost).toHaveBeenCalledWith({
+        gameId: 'game-1',
+        caption: 'What a finish',
+      })
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
     expect(screen.getByTestId('recap-shot-snapshot')).toBeInTheDocument();
@@ -580,6 +585,143 @@ describe('GameDetailPage', () => {
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
     expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
     expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+  });
+
+  test('replays dual-team games with side filters and side-specific box scores', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'league-game-1',
+        title: 'Away Squad at Home Squad',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [
+          {
+            id: 'home-shot',
+            teamSide: 'home',
+            playerId: 'home-player',
+            statType: 'FG2_MADE',
+            zoneId: 'PAINT',
+            x: 52,
+            y: 74,
+            occurredAt: '2026-03-12T18:03:00.000Z',
+          },
+          {
+            id: 'away-shot',
+            teamSide: 'away',
+            playerId: 'away-player',
+            statType: 'FG3_MADE',
+            zoneId: 'ABOVE_BREAK_THREE',
+            x: 28,
+            y: 35,
+            occurredAt: '2026-03-12T18:04:00.000Z',
+          },
+          {
+            id: 'home-assist',
+            teamSide: 'home',
+            playerId: 'home-player',
+            statType: 'AST',
+            zoneId: null,
+            x: null,
+            y: null,
+            occurredAt: '2026-03-12T18:05:00.000Z',
+          },
+        ],
+      },
+      team: {
+        id: 'home-team',
+        name: 'Home Squad',
+        entitlements: {
+          canViewReplay: true,
+          canViewShotMaps: true,
+        },
+        players: [],
+      },
+      teamEntitlements: {
+        canViewReplay: true,
+        canViewShotMaps: true,
+      },
+      participants: {
+        home: {
+          id: 'home-team',
+          displayName: 'Home Squad',
+          players: [{ id: 'home-player', displayName: 'Alex' }],
+        },
+        away: {
+          id: 'away-team',
+          displayName: 'Away Squad',
+          players: [{ id: 'away-player', displayName: 'Blake' }],
+        },
+      },
+      replayFilters: ['all', 'home', 'away'],
+      recap: {
+        statusLabel: 'Final',
+        home: { name: 'Home Squad', points: 2 },
+        away: { name: 'Away Squad', points: 3 },
+        topPerformers: [],
+        keyMoments: [],
+        shotSnapshot: { made: 2, missed: 0, events: [] },
+      },
+      boxScore: {
+        home: {
+          players: [{ playerId: 'home-player', displayName: 'Alex', points: 2, ast: 1 }],
+          totals: { points: 2, ast: 1 },
+        },
+        away: {
+          players: [{ playerId: 'away-player', displayName: 'Blake', points: 3 }],
+          totals: { points: 3 },
+        },
+      },
+      gameSummary: {
+        homePoints: 2,
+        awayPoints: 3,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/league-game-1']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('tab', { name: 'Replay' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));
+
+    expect(screen.queryByText(/Replay is not available/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Event 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/Home Squad: Alex: 2PT Make/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home Squad' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Away Squad' })).toBeInTheDocument();
+    expect(screen.getByTestId('replay-box-score-home')).toBeInTheDocument();
+    expect(screen.getByTestId('replay-box-score-away')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('replay-box-score-home')).getByText('Alex')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('replay-box-score-away')).getByText('Blake')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Event 2 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/Away Squad: Blake: 3PT Make/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Home Squad' }));
+    expect(screen.getByText('Event 1 of 1')).toBeInTheDocument();
+    expect(screen.getByText(/Home Squad: Alex: 2PT Make/i)).toBeInTheDocument();
+    expect(screen.getByTestId('replay-box-score-home')).toBeInTheDocument();
+    expect(screen.queryByTestId('replay-box-score-away')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Away Squad' }));
+    expect(screen.getByText('Event 1 of 1')).toBeInTheDocument();
+    expect(screen.getByText(/Away Squad: Blake: 3PT Make/i)).toBeInTheDocument();
+    expect(screen.getByTestId('replay-box-score-away')).toBeInTheDocument();
+    expect(screen.queryByTestId('replay-box-score-home')).not.toBeInTheDocument();
   });
 
   test('keeps replay locked for a pro user viewing a free team game', async () => {
