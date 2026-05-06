@@ -146,6 +146,34 @@ function buildPrimaryStatsView(data, isDualTeam) {
   };
 }
 
+function shotPercentage(made, attempted) {
+  const attempts = attempted || 0;
+
+  if (attempts === 0) {
+    return null;
+  }
+
+  return (made || 0) / attempts;
+}
+
+function formatShotPercentage(made, attempted) {
+  const percentage = shotPercentage(made, attempted);
+
+  if (percentage === null) {
+    return '--';
+  }
+
+  return `${Math.round(percentage * 100)}%`;
+}
+
+function getTotalFgMade(row) {
+  return (row.fg2m || 0) + (row.fg3m || 0);
+}
+
+function getTotalFgAttempted(row) {
+  return (row.fg2a || 0) + (row.fg3a || 0);
+}
+
 export function GameDetailPage() {
   const { gameId } = useParams();
   const { user } = useAuth();
@@ -225,20 +253,26 @@ export function GameDetailPage() {
       sortKey: 'points',
       render: (row) => row.points || 0,
     },
-    { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb || 0 },
     {
-      id: 'oreb',
-      label: 'OREB',
+      id: 'fg',
+      label: 'FG',
       align: 'right',
-      sortKey: 'oreb',
-      render: (row) => row.oreb || 0,
+      sortValue: (row) => getTotalFgMade(row),
+      render: (row) => `${getTotalFgMade(row)}/${getTotalFgAttempted(row)}`,
     },
     {
-      id: 'dreb',
-      label: 'DREB',
+      id: 'fgPct',
+      label: 'FG%',
       align: 'right',
-      sortKey: 'dreb',
-      render: (row) => row.dreb || 0,
+      sortValue: (row) => shotPercentage(getTotalFgMade(row), getTotalFgAttempted(row)),
+      render: (row) => formatShotPercentage(getTotalFgMade(row), getTotalFgAttempted(row)),
+    },
+    {
+      id: 'rebounds',
+      label: 'REB O/D/T',
+      align: 'right',
+      sortKey: 'reb',
+      render: (row) => `${row.oreb || 0}/${row.dreb || 0}/${row.reb || 0}`,
     },
     { id: 'ast', label: 'AST', align: 'right', sortKey: 'ast', render: (row) => row.ast || 0 },
     { id: 'stl', label: 'STL', align: 'right', sortKey: 'stl', render: (row) => row.stl || 0 },
@@ -260,11 +294,25 @@ export function GameDetailPage() {
       render: (row) => `${row.fg2m || 0}/${row.fg2a || 0}`,
     },
     {
+      id: 'fg2Pct',
+      label: '2PT%',
+      align: 'right',
+      sortValue: (row) => shotPercentage(row.fg2m, row.fg2a),
+      render: (row) => formatShotPercentage(row.fg2m, row.fg2a),
+    },
+    {
       id: 'fg3',
       label: '3PT',
       align: 'right',
       sortValue: (row) => row.fg3m || 0,
       render: (row) => `${row.fg3m || 0}/${row.fg3a || 0}`,
+    },
+    {
+      id: 'fg3Pct',
+      label: '3PT%',
+      align: 'right',
+      sortValue: (row) => shotPercentage(row.fg3m, row.fg3a),
+      render: (row) => formatShotPercentage(row.fg3m, row.fg3a),
     },
   ];
 

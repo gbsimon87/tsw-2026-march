@@ -366,9 +366,15 @@ describe('GameDetailPage', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
     expect(screen.getByText('AST')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /PTS/i })).toBeInTheDocument();
-    expect(screen.getByText('OREB')).toBeInTheDocument();
-    expect(screen.getByText('DREB')).toBeInTheDocument();
-    expect(screen.getByText('REB')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /REB O\/D\/T/i })).toBeInTheDocument();
+    expect(screen.getAllByText('0/1/1').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /2PT%/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /3PT%/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'FG' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /FG%/i })).toBeInTheDocument();
+    expect(screen.getAllByText('1/2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('100%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('50%').length).toBeGreaterThan(0);
     expect(
       screen
         .getAllByRole('link', { name: 'Alex' })

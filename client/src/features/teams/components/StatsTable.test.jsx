@@ -122,4 +122,31 @@ describe('StatsTable', () => {
     const rows = screen.getAllByRole('row');
     expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
   });
+
+  test('keeps team totals at the bottom when sorting', () => {
+    cleanup();
+    render(
+      <StatsTable
+        columns={[
+          { id: 'display', label: 'Display', align: 'left', render: (row) => row.display },
+          { id: 'points', label: 'PTS', align: 'right', render: (row) => row.points },
+        ]}
+        rows={[
+          { id: 'a', display: 'Alpha', points: 2 },
+          { id: 'total', display: 'Team Total', points: 10, isTeamTotal: true },
+          { id: 'b', display: 'Beta', points: 8 },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
+    let rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('Beta')).toBeInTheDocument();
+    expect(within(rows[3]).getByText('Team Total')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /PTS/i }));
+    rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('Alpha')).toBeInTheDocument();
+    expect(within(rows[3]).getByText('Team Total')).toBeInTheDocument();
+  });
 });
