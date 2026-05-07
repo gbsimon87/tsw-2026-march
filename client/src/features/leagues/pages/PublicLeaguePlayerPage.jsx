@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
@@ -28,6 +28,7 @@ function formatAverage(value) {
 
 export function PublicLeaguePlayerPage() {
   const { leagueSlug, teamSlug, leaguePlayerId } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -137,7 +138,7 @@ export function PublicLeaguePlayerPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-3 py-2 text-left">Opponent</th>
+                <th className="px-3 py-2 text-left">Opp</th>
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-right">PTS</th>
                 <th className="px-3 py-2 text-right">REB</th>
@@ -150,19 +151,19 @@ export function PublicLeaguePlayerPage() {
             </thead>
             <tbody>
               {games.map((game) => (
-                <tr key={game.gameId} className="border-t border-slate-200">
+                <tr
+                  key={game.gameId}
+                  className="cursor-pointer border-t border-slate-200 transition hover:bg-slate-50"
+                  onClick={() =>
+                    navigate(game.opponentDestination?.href || `/games/${game.gameId}`)
+                  }
+                >
                   <td className="px-3 py-2 font-medium text-slate-900">
-                    <Link
-                      to={game.opponentDestination?.href || `/games/${game.gameId}`}
-                      className="flex items-center gap-2 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
-                    >
-                      <img
-                        src={game.opponentLogoUrl || teamPlaceholder}
-                        alt=""
-                        className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                      />
-                      {game.opponent || game.title}
-                    </Link>
+                    <img
+                      src={game.opponentLogoUrl || teamPlaceholder}
+                      alt={game.opponent || game.title || 'Opponent'}
+                      className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                    />
                   </td>
                   <td className="px-3 py-2">{formatGameDate(game)}</td>
                   <td className="px-3 py-2 text-right">{game.stats.points}</td>
