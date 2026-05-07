@@ -943,6 +943,24 @@ export function GameTrackPage() {
 
           <div className={eventPickerGridClass}>
             <div className="flex min-h-0 flex-col space-y-1 overflow-hidden">
+              {isDualTeam && !pendingFollowUpPrompt ? (
+                <div className="mb-2 flex justify-between gap-1.5">
+                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                    <button
+                      key={side}
+                      type="button"
+                      onClick={() => setActiveSide(side)}
+                      className={`flex-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                        activeSide === side
+                          ? 'bg-indigo-600 text-white'
+                          : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {participantsBySide[side]?.displayName || side}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {pendingFollowUpPrompt
                   ? pendingFollowUpPrompt.kind === 'assist'

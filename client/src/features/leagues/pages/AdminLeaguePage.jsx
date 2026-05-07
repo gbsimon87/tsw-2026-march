@@ -515,26 +515,6 @@ export function AdminLeaguePage() {
                     </button>
                     <button
                       type="button"
-                      aria-label={`Open details for ${game.title}`}
-                      disabled={!canNavigate}
-                      className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      onClick={() => {
-                        if (gameId) navigate(`/games/${gameId}/track`);
-                      }}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
                       aria-label={`Track ${game.title}`}
                       disabled={!canNavigate || !canTrackGame(game)}
                       className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
