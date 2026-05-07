@@ -19,8 +19,6 @@ export function AdminLeaguePage() {
   const [error, setError] = useState('');
   const [leagueNameInput, setLeagueNameInput] = useState('');
   const [isEditingLeagueName, setIsEditingLeagueName] = useState(false);
-  const [newTeamName, setNewTeamName] = useState('');
-  const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
   const [isUpdatingLeague, setIsUpdatingLeague] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
@@ -35,6 +33,8 @@ export function AdminLeaguePage() {
     league?.viewerContext?.viewerRole === 'owner' ||
     league?.viewerContext?.viewerRole === 'league_manager' ||
     isOwner;
+
+  const canViewManagers = canEditLeague || league?.viewerContext?.viewerRole === 'team_manager';
 
   function canTrackGame(game) {
     const ctx = league?.viewerContext;
@@ -58,12 +58,12 @@ export function AdminLeaguePage() {
   }, [leagueId]);
 
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canViewManagers) return;
     leaguesApi
       .listLeagueManagers(leagueId)
       .then((response) => setLeagueManagers(response.managers))
       .catch(() => {});
-  }, [leagueId, isOwner]);
+  }, [leagueId, canViewManagers]);
 
   useEffect(() => {
     setLeagueNameInput(league?.name || '');
@@ -112,28 +112,23 @@ export function AdminLeaguePage() {
     }
   }
 
-  async function onCreateTeam(event) {
-    event.preventDefault();
-    if (!newTeamName.trim()) {
-      return;
-    }
-
-    setIsSubmittingTeam(true);
+  async function onRemoveTeamManager(teamId, memberId) {
+    setManagerError('');
     try {
-      const response = await leaguesApi.createTeam(leagueId, { name: newTeamName.trim() });
-      setLeague((current) =>
-        current
-          ? {
-              ...current,
-              teams: [...(current.teams || []), response.team],
-            }
-          : current
-      );
-      setNewTeamName('');
+      await leaguesApi.removeMember(leagueId, teamId, memberId);
+      setLeague((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          teams: (current.teams || []).map((t) =>
+            t.id === teamId
+              ? { ...t, members: (t.members || []).filter((m) => m.id !== memberId) }
+              : t
+          ),
+        };
+      });
     } catch (submitError) {
-      setError(submitError.message || 'Failed to add team');
-    } finally {
-      setIsSubmittingTeam(false);
+      setManagerError(submitError.message || 'Failed to remove team manager');
     }
   }
 
@@ -447,22 +442,22 @@ export function AdminLeaguePage() {
                       />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium text-slate-900">{game.title}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                        <span>
-                          {game.homeTeamName} vs {game.awayTeamName}
-                        </span>
-                        <span>•</span>
-                        <span>{game.status}</span>
+                      <p className="text-slate-900">
                         {scoreLabel ? (
                           <>
-                            <span>•</span>
-                            <span className="font-semibold tabular-nums text-slate-800">
-                              {scoreLabel}
-                            </span>
+                            <span className="font-semibold">{game.homeTeamName}</span>
+                            {` ${game.homePoints} – ${game.awayPoints} `}
+                            <span className="font-semibold">{game.awayTeamName}</span>
                           </>
-                        ) : null}
-                      </div>
+                        ) : (
+                          <>
+                            <span className="font-semibold">{game.homeTeamName}</span>
+                            {' vs '}
+                            <span className="font-semibold">{game.awayTeamName}</span>
+                          </>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-500">{game.status}</p>
                     </div>
                   </div>
                   <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
@@ -544,37 +539,27 @@ export function AdminLeaguePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Manage League Teams</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-slate-900">Manage League Teams</h2>
+          <Link
+            to={`/admin/leagues/${league.id}/teams/new`}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white text-center"
+          >
+            Add Team
+          </Link>
+        </div>
         <LeagueStandingsTable
           standings={league.standings || []}
           getTeamHref={(row) => `/admin/leagues/${league.id}/teams/${row.teamId}`}
+          getTeamLogo={(row) => {
+            const team = (league.teams || []).find((t) => String(t.id) === String(row.teamId));
+            return team?.logo?.url ?? null;
+          }}
           className="mt-4"
         />
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Create Team</h2>
-        <form onSubmit={onCreateTeam} className="mt-4 flex flex-wrap gap-3">
-          <input
-            autoComplete="off"
-            type="text"
-            className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
-            placeholder="Team name"
-            value={newTeamName}
-            onChange={(event) => setNewTeamName(event.target.value)}
-          />
-          <button
-            aria-label="submit"
-            type="submit"
-            disabled={isSubmittingTeam}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-          >
-            {isSubmittingTeam ? 'Adding...' : 'Add Team'}
-          </button>
-        </form>
-      </section>
-
-      {isOwner ? (
+      {canViewManagers ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="text-xl font-semibold text-slate-900">Managers</h2>
           <p className="mt-1 text-sm text-slate-600">
@@ -597,13 +582,15 @@ export function AdminLeaguePage() {
                           <p className="text-sm text-slate-500">{manager.userEmail}</p>
                         ) : null}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveLeagueManager(manager.id)}
-                        className="shrink-0 self-start rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                      >
-                        Remove
-                      </button>
+                      {isOwner ? (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveLeagueManager(manager.id)}
+                          className="shrink-0 self-start rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -635,12 +622,23 @@ export function AdminLeaguePage() {
                         {teamManagers.length > 0 ? (
                           <ul className="space-y-1 text-sm text-slate-600 sm:text-right">
                             {teamManagers.map((manager) => (
-                              <li key={manager.id}>
-                                <span className="font-medium text-slate-800">
-                                  {manager.userName || manager.userEmail || 'Unknown'}
+                              <li key={manager.id} className="flex items-center justify-end gap-2">
+                                <span>
+                                  <span className="font-medium text-slate-800">
+                                    {manager.userName || manager.userEmail || 'Unknown'}
+                                  </span>
+                                  {manager.userEmail ? (
+                                    <span className="text-slate-500"> • {manager.userEmail}</span>
+                                  ) : null}
                                 </span>
-                                {manager.userEmail ? (
-                                  <span className="text-slate-500"> • {manager.userEmail}</span>
+                                {canEditLeague ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRemoveTeamManager(team.id, manager.id)}
+                                    className="shrink-0 rounded-lg border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                                  >
+                                    Remove
+                                  </button>
                                 ) : null}
                               </li>
                             ))}
@@ -662,24 +660,26 @@ export function AdminLeaguePage() {
               {managerError}
             </p>
           ) : null}
-          <form onSubmit={onAddLeagueManager} className="mt-4 flex flex-wrap gap-3">
-            <input
-              autoComplete="off"
-              type="email"
-              className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
-              placeholder="manager@email.com"
-              value={newManagerEmail}
-              onChange={(event) => setNewManagerEmail(event.target.value)}
-            />
-            <button
-              aria-label="manager-submit"
-              type="submit"
-              disabled={isSubmittingManager}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {isSubmittingManager ? 'Adding...' : 'Add Manager'}
-            </button>
-          </form>
+          {isOwner ? (
+            <form onSubmit={onAddLeagueManager} className="mt-4 flex flex-wrap gap-3">
+              <input
+                autoComplete="off"
+                type="email"
+                className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
+                placeholder="manager@email.com"
+                value={newManagerEmail}
+                onChange={(event) => setNewManagerEmail(event.target.value)}
+              />
+              <button
+                aria-label="manager-submit"
+                type="submit"
+                disabled={isSubmittingManager}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {isSubmittingManager ? 'Adding...' : 'Add Manager'}
+              </button>
+            </form>
+          ) : null}
         </section>
       ) : null}
 

@@ -24,6 +24,7 @@ import { AdminNewLeaguePage } from '../../features/leagues/pages/AdminNewLeagueP
 import { AdminLeaguePage } from '../../features/leagues/pages/AdminLeaguePage';
 import { AdminLeagueTeamPage } from '../../features/leagues/pages/AdminLeagueTeamPage';
 import { AdminNewLeagueGamePage } from '../../features/leagues/pages/AdminNewLeagueGamePage';
+import { AdminNewLeagueTeamPage } from '../../features/leagues/pages/AdminNewLeagueTeamPage';
 import { PublicLeaguePage } from '../../features/leagues/pages/PublicLeaguePage';
 import { PublicLeagueStandingsPage } from '../../features/leagues/pages/PublicLeagueStandingsPage';
 import { PublicLeagueGamesPage } from '../../features/leagues/pages/PublicLeagueGamesPage';
@@ -165,6 +166,14 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <AdminNewLeagueGamePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/leagues/:leagueId/teams/new"
+          element={
+            <ProtectedRoute>
+              <AdminNewLeagueTeamPage />
             </ProtectedRoute>
           }
         />

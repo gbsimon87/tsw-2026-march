@@ -120,7 +120,7 @@ export function AdminPage() {
 
       <PageHeader
         title="Admin"
-        description="Keep your team moving forward with fast actions and clear game context."
+        description="Manage your leagues and non-league teams all in one place."
       >
         {user?.name ? <p className="text-sm text-slate-600">Welcome back, {user.name}.</p> : null}
       </PageHeader>

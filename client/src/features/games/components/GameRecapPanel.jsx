@@ -360,10 +360,22 @@ export function GameRecapPanel({
             </>
           );
 
-          return player.playerId && team?.id && !isDualTeam ? (
+          const participant = isDualTeam ? participants?.[player.teamSide] : null;
+          const playerHref = (() => {
+            if (!player.playerId) return null;
+            if (isDualTeam) {
+              if (league?.slug && participant?.slug) {
+                return `/league/${league.slug}/teams/${participant.slug}/players/${player.playerId}`;
+              }
+              return null;
+            }
+            return team?.id ? `/teams/${team.id}/players/${player.playerId}` : null;
+          })();
+
+          return playerHref ? (
             <Link
               key={player.playerId}
-              to={`/teams/${team.id}/players/${player.playerId}`}
+              to={playerHref}
               className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
               {inner}

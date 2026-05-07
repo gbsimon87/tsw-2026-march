@@ -12,8 +12,12 @@ export function AdminLeagueTeamPage() {
   const { leagueId, leagueTeamId } = useParams();
   const [team, setTeam] = useState(null);
   const [leagueName, setLeagueName] = useState('');
+  const [viewerContext, setViewerContext] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [teamNameInput, setTeamNameInput] = useState('');
+  const [isEditingTeamName, setIsEditingTeamName] = useState(false);
+  const [isUpdatingTeamName, setIsUpdatingTeamName] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
   const [managerEmail, setManagerEmail] = useState('');
@@ -25,10 +29,35 @@ export function AdminLeagueTeamPage() {
       .then(([teamResponse, leagueResponse]) => {
         setTeam(teamResponse.team);
         setLeagueName(leagueResponse.league?.name || '');
+        setViewerContext(leagueResponse.league?.viewerContext || null);
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load league team'))
       .finally(() => setIsLoading(false));
   }, [leagueId, leagueTeamId]);
+
+  useEffect(() => {
+    setTeamNameInput(team?.name || '');
+  }, [team?.name]);
+
+  async function onUpdateTeamName() {
+    if (isUpdatingTeamName) return;
+    const nextName = teamNameInput.trim();
+    if (!nextName || nextName === (team?.name || '').trim()) {
+      setTeamNameInput(team?.name || '');
+      setIsEditingTeamName(false);
+      return;
+    }
+    setIsUpdatingTeamName(true);
+    try {
+      const response = await leaguesApi.updateTeam(leagueId, leagueTeamId, { name: nextName });
+      setTeam(response.team);
+      setIsEditingTeamName(false);
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to update team name');
+    } finally {
+      setIsUpdatingTeamName(false);
+    }
+  }
 
   async function refresh() {
     const response = await leaguesApi.getTeam(leagueId, leagueTeamId);
@@ -93,6 +122,17 @@ export function AdminLeagueTeamPage() {
     return <p className="text-sm text-red-600">{error || 'League team not found'}</p>;
   }
 
+  const canEditTeamName =
+    viewerContext?.viewerRole === 'owner' ||
+    viewerContext?.viewerRole === 'league_manager' ||
+    (viewerContext?.viewerRole === 'team_manager' &&
+      viewerContext?.managedTeamIds?.includes(leagueTeamId));
+
+  const canSaveTeamName =
+    !isUpdatingTeamName &&
+    teamNameInput.trim() &&
+    teamNameInput.trim() !== (team.name || '').trim();
+
   return (
     <main className="space-y-8">
       <Breadcrumbs
@@ -104,7 +144,111 @@ export function AdminLeagueTeamPage() {
       />
 
       <PageHeader
-        title={team.name}
+        title={
+          canEditTeamName ? (
+            <span className="inline-flex max-w-full flex-wrap items-center gap-2">
+              {isEditingTeamName ? (
+                <>
+                  <input
+                    autoComplete="off"
+                    type="text"
+                    required
+                    maxLength={120}
+                    aria-label="Team Name"
+                    className="min-w-0 rounded-lg border border-slate-300 px-2 py-1 text-2xl font-bold leading-tight text-slate-900 md:text-3xl"
+                    value={teamNameInput}
+                    disabled={isUpdatingTeamName}
+                    onChange={(event) => setTeamNameInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        onUpdateTeamName();
+                      }
+                      if (event.key === 'Escape') {
+                        setTeamNameInput(team.name || '');
+                        setIsEditingTeamName(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    aria-label="Save team name"
+                    disabled={!canSaveTeamName}
+                    onClick={onUpdateTeamName}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isUpdatingTeamName ? (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4 animate-spin"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                      </svg>
+                    ) : (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M5 13.5 9 17l10-10" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Cancel team name edit"
+                    disabled={isUpdatingTeamName}
+                    onClick={() => {
+                      setTeamNameInput(team.name || '');
+                      setIsEditingTeamName(false);
+                    }}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span>{team.name}</span>
+                  <button
+                    type="button"
+                    aria-label="Edit team name"
+                    onClick={() => setIsEditingTeamName(true)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </span>
+          ) : (
+            team.name
+          )
+        }
         titleAriaLabel="team-name"
         description="Team management, roster, join requests, and historical league context."
         media={

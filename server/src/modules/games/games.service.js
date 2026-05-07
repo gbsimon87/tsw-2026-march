@@ -14,7 +14,7 @@ const {
   canFinalizeLeagueGame,
   canEditCompletedLeagueGame,
 } = require('../leagues/leagues.service');
-const { findLeagueTeamById } = require('../leagues/leagues.repository');
+const { findLeagueTeamById, findLeagueById } = require('../leagues/leagues.repository');
 
 function sanitizeEvent(event) {
   return {
@@ -63,6 +63,7 @@ function sanitizeParticipant(participant) {
     participantType: participant.participantType,
     teamId: participant.teamId ? String(participant.teamId) : null,
     leagueTeamId: participant.leagueTeamId ? String(participant.leagueTeamId) : null,
+    slug: participant.slug || null,
     displayName: participant.displayName,
     logo: sanitizeLogo(participant.logo),
     colors: Array.isArray(participant.colors) ? participant.colors : [],
@@ -609,6 +610,17 @@ function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
 async function resolveDualGameParticipants(game) {
   const home = sanitizeParticipant(game.homeParticipant);
   const away = sanitizeParticipant(game.awayParticipant);
+
+  // Backfill slug for league games whose participants predate slug storage
+  if (!home.slug && home.leagueTeamId) {
+    const homeTeam = await findLeagueTeamById(home.leagueTeamId).catch(() => null);
+    if (homeTeam?.slug) home.slug = homeTeam.slug;
+  }
+  if (!away.slug && away.leagueTeamId) {
+    const awayTeam = await findLeagueTeamById(away.leagueTeamId).catch(() => null);
+    if (awayTeam?.slug) away.slug = awayTeam.slug;
+  }
+
   return {
     home: {
       ...home,
@@ -637,6 +649,13 @@ async function resolveGameTeamContext(userId, game) {
     const primary = participants[viewerSide];
     const secondary =
       participants[viewerSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME];
+    let leagueContext = null;
+    if (game.gameContext === 'league' && game.leagueId) {
+      const leagueDoc = await findLeagueById(game.leagueId).catch(() => null);
+      if (leagueDoc) {
+        leagueContext = { id: String(leagueDoc._id), slug: leagueDoc.slug, name: leagueDoc.name };
+      }
+    }
     return {
       team: {
         id: primary.teamId || primary.leagueTeamId,
@@ -656,7 +675,7 @@ async function resolveGameTeamContext(userId, game) {
       },
       participants,
       teamDoc: primary.teamDoc,
-      league: null,
+      league: leagueContext,
     };
   }
 
@@ -771,6 +790,7 @@ async function createGameForUser(userId, payload) {
         participantType: 'league_team',
         teamId: null,
         leagueTeamId: context.homeTeam._id,
+        slug: context.homeTeam.slug || null,
         displayName: context.homeTeam.name,
         logo: sanitizeLogo(context.homeTeam.logo),
         colors: Array.isArray(context.homeTeam.colors) ? context.homeTeam.colors : [],
@@ -782,6 +802,7 @@ async function createGameForUser(userId, payload) {
         participantType: 'league_team',
         teamId: null,
         leagueTeamId: context.awayTeam._id,
+        slug: context.awayTeam.slug || null,
         displayName: context.awayTeam.name,
         logo: sanitizeLogo(context.awayTeam.logo),
         colors: Array.isArray(context.awayTeam.colors) ? context.awayTeam.colors : [],

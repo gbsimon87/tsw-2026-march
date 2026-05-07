@@ -339,6 +339,23 @@ async function getLeagueTeamAccess(userId, leagueId, leagueTeamId) {
   return { league, role: member.role, member };
 }
 
+async function assertLeagueParticipant(userId, leagueId) {
+  const league = await assertLeagueExists(leagueId);
+  if (String(league.ownerUserId) === String(userId)) {
+    return { league, role: 'owner' };
+  }
+  const leagueMgr = await findActiveLeagueManager(leagueId, userId);
+  if (leagueMgr) {
+    return { league, role: 'league_manager' };
+  }
+  const memberships = await listLeagueMembershipsForUser(userId);
+  const teamMembership = memberships.find((m) => String(m.leagueId) === String(leagueId));
+  if (teamMembership) {
+    return { league, role: 'team_manager' };
+  }
+  throw new ApiError(403, 'Forbidden');
+}
+
 async function assertLeagueVisible(leagueIdOrSlug, options = {}) {
   const league = options.bySlug
     ? await findLeagueBySlug(leagueIdOrSlug)
@@ -465,9 +482,15 @@ async function getLeagueForUser(userId, leagueId) {
     listLeagueGames(league._id),
     buildLeagueViewerContext(userId, league),
   ]);
-  const canViewTeamManagers =
+  const canViewAllTeamManagers =
     viewerContext.viewerRole === 'owner' || viewerContext.viewerRole === 'league_manager';
-  const teamManagers = canViewTeamManagers ? await listLeagueTeamManagersByLeague(league._id) : [];
+  const teamManagers = canViewAllTeamManagers
+    ? await listLeagueTeamManagersByLeague(league._id)
+    : viewerContext.viewerRole === 'team_manager' && viewerContext.managedTeamIds?.length
+      ? await Promise.all(
+          viewerContext.managedTeamIds.map((teamId) => listLeagueTeamMembers(teamId))
+        ).then((results) => results.flat().filter((m) => m.role === 'manager'))
+      : [];
   const usersById = await buildUsersMap(teamManagers.map((member) => member.userId));
   const managersByTeamId = new Map();
 
@@ -1681,7 +1704,7 @@ async function addLeagueManagerByEmail(userId, leagueId, email) {
 }
 
 async function listLeagueManagersForLeague(userId, leagueId) {
-  await assertLeagueManagerOrOwner(userId, leagueId);
+  await assertLeagueParticipant(userId, leagueId);
   const managers = await listLeagueManagersByLeague(leagueId);
   const usersById = await buildUsersMap(managers.map((m) => m.userId));
   return managers.map((m) => sanitizeLeagueManager(m, usersById));
