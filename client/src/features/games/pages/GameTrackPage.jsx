@@ -11,6 +11,7 @@ import {
 } from '../court/courtInference';
 import { DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
 import gameConstants from '../constants';
+import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 const { STAT_LABELS, ZONE_LABELS, TEAM_SIDES } = gameConstants;
 
@@ -25,11 +26,13 @@ function formatEventMeta(event) {
     parts.push(`(${event.x.toFixed(1)}, ${event.y.toFixed(1)})`);
   }
 
-  return parts.length ? ` @ ${parts.join(' ')}` : '';
+  return parts.join(' ');
 }
 
-function formatEventLabel(event, playersById, participantsBySide, isDualTeam) {
+function parseEventParts(event, playersById) {
   const player = event.playerId ? playersById.get(event.playerId) : null;
+  const isSub = event.statType === 'SUB_IN' || event.statType === 'SUB_OUT';
+
   const actor =
     event.statType === 'SUB_IN'
       ? `${player?.displayName || 'Unknown'} subbed in`
@@ -38,15 +41,12 @@ function formatEventLabel(event, playersById, participantsBySide, isDualTeam) {
         : event.playerId
           ? player?.displayName || 'Unknown'
           : 'Opponent';
-  const statLabel = STAT_LABELS[event.statType] || event.statType;
-  const sideLabel =
-    isDualTeam && event.teamSide
-      ? `${participantsBySide[event.teamSide]?.displayName || event.teamSide}: `
-      : '';
 
-  return event.statType === 'SUB_IN' || event.statType === 'SUB_OUT'
-    ? `${sideLabel}${actor}`
-    : `${sideLabel}${actor} - ${statLabel}${formatEventMeta(event)}`;
+  return {
+    actor,
+    statLabel: isSub ? null : STAT_LABELS[event.statType] || event.statType,
+    meta: isSub ? null : formatEventMeta(event) || null,
+  };
 }
 
 function formatThreePointPercentage(made, attempts) {
@@ -89,9 +89,11 @@ export function GameTrackPage() {
   const [isTrackingFullscreen, setIsTrackingFullscreen] = useState(false);
   const [error, setError] = useState('');
   const [lastActionLabel, setLastActionLabel] = useState('');
+  const [lastActionMeta, setLastActionMeta] = useState({ playerId: null });
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
   const [insertBeforeEventId, setInsertBeforeEventId] = useState('');
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
+  const [activePanel, setActivePanel] = useState('court');
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
     [TEAM_SIDES.AWAY]: createEmptySideState(),
@@ -163,35 +165,14 @@ export function GameTrackPage() {
   }, [gameId]);
 
   useEffect(() => {
-    if (!isEventPickerOpen) {
-      return undefined;
-    }
-
-    const originalOverflow = document.body.style.overflow;
-    const originalTouchAction = document.body.style.touchAction;
-    document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none';
-
+    const shouldLock = isEventPickerOpen || isTrackingFullscreen;
+    document.body.style.overflow = shouldLock ? 'hidden' : '';
+    document.body.style.touchAction = shouldLock ? 'none' : '';
     return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.touchAction = originalTouchAction;
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
     };
-  }, [isEventPickerOpen]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return undefined;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    if (isTrackingFullscreen) {
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isTrackingFullscreen]);
+  }, [isEventPickerOpen, isTrackingFullscreen]);
 
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
   const isLeagueGame = data?.game?.gameContext === 'league';
@@ -283,6 +264,11 @@ export function GameTrackPage() {
     if (actionLabel) {
       setLastActionLabel(actionLabel);
     }
+  }
+
+  function updateLastAction(label, playerId = null) {
+    setLastActionLabel(label);
+    setLastActionMeta({ playerId });
   }
 
   function requireLineup() {
@@ -390,15 +376,37 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     try {
-      const response = await gamesApi.appendEvent(
-        gameId,
-        buildEventPayload({
-          playerId: reboundPlayerId,
-          statType,
-        })
-      );
-      updateData(response, STAT_LABELS[statType] || statType);
-      clearEventPicker();
+      const isInsert = Boolean(insertBeforeEventId);
+      const payload = buildEventPayload({ playerId: reboundPlayerId, statType });
+      const response = isInsert
+        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : await gamesApi.appendEvent(gameId, payload);
+      const label = STAT_LABELS[statType] || statType;
+      updateData(response, label);
+      updateLastAction(label, reboundPlayerId);
+      if (isInsert) {
+        setInsertBeforeEventId('');
+        clearEventPicker();
+      } else {
+        setSelectedShot(null);
+        if (statType === 'DREB' && isDualTeam) {
+          setPendingFollowUpPrompt({
+            kind: 'who_missed_shot',
+            statType: 'FG2_MISS',
+            actorPlayerId: reboundPlayerId,
+            playerPool: 'other',
+          });
+        } else if (statType === 'OREB') {
+          setPendingFollowUpPrompt({
+            kind: 'who_missed_shot',
+            statType: 'FG2_MISS',
+            actorPlayerId: reboundPlayerId,
+            playerPool: 'same',
+          });
+        } else {
+          setPendingFollowUpPrompt(null);
+        }
+      }
     } catch (submitError) {
       setError(submitError.message || 'Failed to add rebound event');
     } finally {
@@ -413,7 +421,7 @@ export function GameTrackPage() {
     }
 
     if (option === 'NO_ASSIST') {
-      clearEventPicker('Assist skipped');
+      clearEventPicker();
       setError('');
       return;
     }
@@ -434,6 +442,31 @@ export function GameTrackPage() {
         const statType = isOffensive ? 'OREB' : 'DREB';
         payload = { playerId: option, statType, teamSide: rebounderSide };
         label = STAT_LABELS[statType] || statType;
+      } else if (pendingFollowUpPrompt.kind === 'who_missed_shot') {
+        const playerSide = isDualTeam ? playerSideMap.get(option) || activeSide : undefined;
+        payload = {
+          playerId: option,
+          statType: 'FG2_MISS',
+          zoneId: 'PAINT',
+          x: 50,
+          y: 20,
+          ...(playerSide ? { teamSide: playerSide } : {}),
+        };
+        label = STAT_LABELS['FG2_MISS'] || 'FG2 Miss';
+      } else if (
+        pendingFollowUpPrompt.kind === 'who_turned_over' ||
+        pendingFollowUpPrompt.kind === 'who_got_steal'
+      ) {
+        const playerSide = isDualTeam ? playerSideMap.get(option) || activeSide : undefined;
+        payload = {
+          playerId: option,
+          statType: pendingFollowUpPrompt.statType,
+          ...(playerSide ? { teamSide: playerSide } : {}),
+        };
+        label = STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType;
+      } else if (pendingFollowUpPrompt.kind === 'who_was_fouled') {
+        clearEventPicker();
+        return;
       } else {
         payload = buildEventPayload({
           playerId: option,
@@ -479,9 +512,19 @@ export function GameTrackPage() {
         y: Number(selectedShot.y.toFixed(2)),
       });
 
-      const response = await gamesApi.appendEvent(gameId, payload);
-      updateData(response, STAT_LABELS[payload.statType] || payload.statType);
-      if (outcome === 'miss') {
+      const isInsert = Boolean(insertBeforeEventId);
+      const response = isInsert
+        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : await gamesApi.appendEvent(gameId, payload);
+
+      const shotLabel = STAT_LABELS[payload.statType] || payload.statType;
+      updateData(response, shotLabel);
+      updateLastAction(shotLabel, currentSideState.selectedPlayerId);
+
+      if (isInsert) {
+        setInsertBeforeEventId('');
+        clearEventPicker();
+      } else if (outcome === 'miss') {
         setPendingFollowUpPrompt({
           kind: 'rebound',
           statType: 'OREB',
@@ -525,9 +568,19 @@ export function GameTrackPage() {
         y: inferred.y,
       });
 
-      const response = await gamesApi.appendEvent(gameId, payload);
-      updateData(response, STAT_LABELS[payload.statType] || payload.statType);
-      if (outcome === 'miss' && !isDualTeam) {
+      const isInsert = Boolean(insertBeforeEventId);
+      const response = isInsert
+        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : await gamesApi.appendEvent(gameId, payload);
+
+      const ftLabel = STAT_LABELS[payload.statType] || payload.statType;
+      updateData(response, ftLabel);
+      updateLastAction(ftLabel, currentSideState.selectedPlayerId);
+
+      if (isInsert) {
+        setInsertBeforeEventId('');
+        clearEventPicker();
+      } else if (outcome === 'miss') {
         setPendingFollowUpPrompt({
           kind: 'rebound',
           statType: 'OREB',
@@ -569,44 +622,57 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     try {
-      const response = await gamesApi.appendEvent(
-        gameId,
-        buildEventPayload({
-          playerId: currentSideState.selectedPlayerId,
-          statType,
-        })
-      );
-      updateData(response, STAT_LABELS[statType] || statType);
-      clearEventPicker();
+      const isInsert = Boolean(insertBeforeEventId);
+      const payload = buildEventPayload({
+        playerId: currentSideState.selectedPlayerId,
+        statType,
+      });
+      const response = isInsert
+        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : await gamesApi.appendEvent(gameId, payload);
+      const quickLabel = STAT_LABELS[statType] || statType;
+      updateData(response, quickLabel);
+      updateLastAction(quickLabel, currentSideState.selectedPlayerId);
+      if (isInsert) {
+        setInsertBeforeEventId('');
+        clearEventPicker();
+      } else if (statType === 'STL' && isDualTeam) {
+        setSelectedShot(null);
+        setPendingFollowUpPrompt({
+          kind: 'who_turned_over',
+          statType: 'TOV',
+          actorPlayerId: currentSideState.selectedPlayerId,
+          playerPool: 'other',
+        });
+      } else if (statType === 'BLK' && isDualTeam) {
+        setSelectedShot(null);
+        setPendingFollowUpPrompt({
+          kind: 'who_missed_shot',
+          statType: 'FG2_MISS',
+          actorPlayerId: currentSideState.selectedPlayerId,
+          playerPool: 'other',
+        });
+      } else if (statType === 'TOV' && isDualTeam) {
+        setSelectedShot(null);
+        setPendingFollowUpPrompt({
+          kind: 'who_got_steal',
+          statType: 'STL',
+          actorPlayerId: currentSideState.selectedPlayerId,
+          playerPool: 'other',
+        });
+      } else if (statType === 'FOUL' && isDualTeam) {
+        setSelectedShot(null);
+        setPendingFollowUpPrompt({
+          kind: 'who_was_fouled',
+          statType: null,
+          actorPlayerId: currentSideState.selectedPlayerId,
+          playerPool: 'other',
+        });
+      } else {
+        clearEventPicker();
+      }
     } catch (submitError) {
       setError(submitError.message || 'Failed to add event');
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function insertQuickStatEvent(statType, beforeEventId) {
-    if (!beforeEventId || !requirePlayerSelection()) {
-      return;
-    }
-
-    setError('');
-    setIsSaving(true);
-
-    try {
-      const response = await gamesApi.insertEventBefore(
-        gameId,
-        beforeEventId,
-        buildEventPayload({
-          playerId: currentSideState.selectedPlayerId,
-          statType,
-        })
-      );
-      updateData(response, `Inserted ${STAT_LABELS[statType] || statType}`);
-      setInsertBeforeEventId('');
-      clearEventPicker();
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to insert event');
     } finally {
       setIsSaving(false);
     }
@@ -751,13 +817,17 @@ export function GameTrackPage() {
   };
   const recentEvents = [...game.events].reverse();
   const visibleRecentEvents = showAllRecentEvents ? recentEvents : recentEvents.slice(0, 3);
-  const insertStatTypes = ['AST', 'OREB', 'DREB', 'STL', 'BLK', 'TOV', 'FOUL'];
 
-  const followUpPlayers = pendingFollowUpPrompt
-    ? pendingFollowUpPrompt.kind === 'assist'
-      ? onCourtPlayers.filter((player) => player.id !== pendingFollowUpPrompt.actorPlayerId)
-      : onCourtPlayers
-    : onCourtPlayers;
+  const followUpPlayers = (() => {
+    if (!pendingFollowUpPrompt) return onCourtPlayers;
+    if (pendingFollowUpPrompt.kind === 'assist') {
+      return onCourtPlayers.filter((p) => p.id !== pendingFollowUpPrompt.actorPlayerId);
+    }
+    if (pendingFollowUpPrompt.playerPool === 'other') {
+      return isDualTeam ? otherTeamOnCourtPlayers : [];
+    }
+    return onCourtPlayers;
+  })();
   const eventPickerShellClass =
     'fixed inset-0 z-[60] flex items-stretch justify-center bg-slate-950/35 p-2 backdrop-blur-[1px] sm:p-3';
   const eventPickerPanelClass =
@@ -813,12 +883,19 @@ export function GameTrackPage() {
         <div className={eventPickerBodyClass}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">Add Event</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {insertBeforeEventId ? 'Insert Event Before' : 'Add Event'}
+              </p>
               <p className="text-xs text-slate-600">
                 {pendingFollowUpPrompt
-                  ? pendingFollowUpPrompt.kind === 'assist'
-                    ? 'Who assisted?'
-                    : 'Who got the rebound?'
+                  ? {
+                      assist: 'Who assisted?',
+                      rebound: 'Who got the rebound?',
+                      who_missed_shot: 'Who missed the shot?',
+                      who_turned_over: 'Who turned over the ball?',
+                      who_got_steal: 'Who got the steal?',
+                      who_was_fouled: 'Who was fouled?',
+                    }[pendingFollowUpPrompt.kind] || 'Follow up'
                   : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
               </p>
             </div>
@@ -847,7 +924,9 @@ export function GameTrackPage() {
                 {pendingFollowUpPrompt
                   ? pendingFollowUpPrompt.kind === 'assist'
                     ? 'Pick Assister'
-                    : 'Pick Rebounder'
+                    : pendingFollowUpPrompt.kind === 'rebound'
+                      ? 'Pick Rebounder'
+                      : 'Pick Player'
                   : 'Pick Player'}
               </p>
               <div className="min-h-0 overflow-y-auto pr-1">
@@ -937,7 +1016,7 @@ export function GameTrackPage() {
                         >
                           No Assist
                         </button>
-                      ) : !isDualTeam ? (
+                      ) : pendingFollowUpPrompt.kind === 'rebound' && !isDualTeam ? (
                         <button
                           type="button"
                           className={actionButtonClass('opponent')}
@@ -1118,29 +1197,54 @@ export function GameTrackPage() {
   return (
     <main className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{game.title}</p>
+        {!isDualTeam && (
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {game.title}
+          </p>
+        )}
         {isDualTeam ? (
           <div className="mt-2 flex items-center justify-between gap-2">
-            <div className="text-center">
-              <p className="text-xs font-medium text-slate-500">
-                {participantsBySide.home?.displayName || 'Home'}
-              </p>
-              <p className="text-3xl font-bold text-slate-900">{gameSummary.homePoints || 0}</p>
+            <div className="flex items-center gap-2">
+              <img
+                src={participantsBySide.home?.logo?.url || teamPlaceholder}
+                alt={participantsBySide.home?.displayName || 'Home'}
+                className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+              />
+              <div>
+                <p className="text-xs font-medium text-slate-500">
+                  {participantsBySide.home?.displayName || 'Home'}
+                </p>
+                <p className="text-3xl font-bold text-slate-900">{gameSummary.homePoints || 0}</p>
+              </div>
             </div>
             <span className="text-xl font-bold text-slate-300">—</span>
-            <div className="text-center">
-              <p className="text-xs font-medium text-slate-500">
-                {participantsBySide.away?.displayName || 'Away'}
-              </p>
-              <p className="text-3xl font-bold text-slate-900">{gameSummary.awayPoints || 0}</p>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-xs font-medium text-slate-500">
+                  {participantsBySide.away?.displayName || 'Away'}
+                </p>
+                <p className="text-3xl font-bold text-slate-900">{gameSummary.awayPoints || 0}</p>
+              </div>
+              <img
+                src={participantsBySide.away?.logo?.url || teamPlaceholder}
+                alt={participantsBySide.away?.displayName || 'Away'}
+                className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+              />
             </div>
           </div>
         ) : (
           <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
             <div className="flex items-end gap-4">
-              <div>
-                <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
-                <p className="text-3xl font-bold text-slate-900">{gameSummary.teamPoints || 0}</p>
+              <div className="flex items-center gap-2">
+                <img
+                  src={team?.logo?.url || teamPlaceholder}
+                  alt={team?.name || 'Team'}
+                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                />
+                <div>
+                  <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
+                  <p className="text-3xl font-bold text-slate-900">{gameSummary.teamPoints || 0}</p>
+                </div>
               </div>
               <span className="mb-1 text-xl font-bold text-slate-300">—</span>
               <div>
@@ -1180,399 +1284,511 @@ export function GameTrackPage() {
         </p>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2 justify-between">
-                {isDualTeam
-                  ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {isDualTeam ? (
+          <div className="flex items-center justify-center gap-2 border-b border-slate-100 px-4 py-2 sm:justify-start">
+            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+              <button
+                key={side}
+                type="button"
+                onClick={() => changeActiveSide(side)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                  activeSide === side
+                    ? 'bg-indigo-600 text-white'
+                    : 'border border-slate-300 bg-white text-slate-800'
+                }`}
+              >
+                {participantsBySide[side]?.displayName || side}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex items-center justify-center gap-2 border-b border-slate-200 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setActivePanel('court')}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+              activePanel === 'court'
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <rect x="2" y="2" width="12" height="12" rx="1.5" />
+              <path d="M8 2v12M2 8h12" />
+            </svg>
+            Court
+          </button>
+          <button
+            type="button"
+            onClick={() => setActivePanel('substitutions')}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+              activePanel === 'substitutions'
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M3 5h10M11 3l2 2-2 2" />
+              <path d="M13 11H3M5 9l-2 2 2 2" />
+            </svg>
+            Subs
+          </button>
+          <button
+            type="button"
+            onClick={() => setActivePanel('events')}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+              activePanel === 'events'
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M3 4h10M3 8h7M3 12h5" />
+            </svg>
+            Events
+          </button>
+        </div>
+
+        <div className="p-4">
+          {activePanel === 'court' ? (
+            <div className="space-y-4">
+              {insertBeforeEventId ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+                  <p className="text-xs font-medium text-sky-800">
+                    Tap the court to insert a shot before the selected event.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInsertBeforeEventId('');
+                      setActivePanel('events');
+                    }}
+                    className="shrink-0 text-xs font-semibold text-sky-700 hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              <div>
+                <div className="relative">
+                  <InteractiveCourtImage
+                    onSelect={onCourtSelect}
+                    containerClassName="min-h-[26rem]"
+                    courtClassName="min-h-[22rem]"
+                  />
+                  {eventPicker}
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  {lastActionLabel ? (
+                    (() => {
+                      const lastPlayer = lastActionMeta.playerId
+                        ? playersById.get(lastActionMeta.playerId)
+                        : null;
+                      const lastLogoUrl = lastActionMeta.playerId
+                        ? isDualTeam
+                          ? participantsBySide[playerSideMap.get(lastActionMeta.playerId)]?.logo
+                              ?.url || teamPlaceholder
+                          : team?.logo?.url || teamPlaceholder
+                        : null;
+                      return (
+                        <div className="flex min-w-0 items-center gap-2">
+                          {lastLogoUrl ? (
+                            <img
+                              src={lastLogoUrl}
+                              alt=""
+                              className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                            />
+                          ) : null}
+                          {lastPlayer?.jerseyNumber != null ? (
+                            <span className="shrink-0 text-xs font-bold text-slate-500">
+                              #{lastPlayer.jerseyNumber}
+                            </span>
+                          ) : null}
+                          <span className="truncate text-sm font-medium text-emerald-700">
+                            {lastActionLabel}
+                          </span>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div />
+                  )}
+                  <button
+                    type="button"
+                    onClick={openTrackingOverlay}
+                    aria-label="Open fullscreen tracking"
+                    className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {!isLeagueGame && lineupIds.length > 0 ? (
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold text-slate-900">Player Selection</h2>
+                    {currentSideState.selectedPlayerId ? (
+                      <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
+                        {players.find((p) => p.id === currentSideState.selectedPlayerId)
+                          ?.displayName || 'Selected'}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {onCourtPlayers.map((player) => (
                       <button
-                        key={side}
+                        key={player.id}
                         type="button"
-                        onClick={() => changeActiveSide(side)}
-                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-                          activeSide === side
+                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                          currentSideState.selectedPlayerId === player.id
                             ? 'bg-slate-900 text-white'
-                            : 'border border-slate-300 bg-white text-slate-800'
+                            : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
                         }`}
+                        onClick={() => updateSideState(activeKey, { selectedPlayerId: player.id })}
                       >
-                        {participantsBySide[side]?.displayName || side}
+                        {player.jerseyNumber != null ? (
+                          <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                            {player.jerseyNumber}
+                          </span>
+                        ) : null}
+                        <span className="font-medium">{player.displayName}</span>
                       </button>
-                    ))
-                  : null}
+                    ))}
+                    {benchPlayers.filter((p) => p.isActive !== false).length > 0 ? (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                          Bench ({benchPlayers.filter((p) => p.isActive !== false).length})
+                        </summary>
+                        <div className="mt-1.5 space-y-1.5">
+                          {benchPlayers
+                            .filter((p) => p.isActive !== false)
+                            .map((player) => (
+                              <button
+                                key={player.id}
+                                type="button"
+                                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                                  currentSideState.selectedPlayerId === player.id
+                                    ? 'bg-slate-900 text-white'
+                                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                                }`}
+                                onClick={() =>
+                                  updateSideState(activeKey, { selectedPlayerId: player.id })
+                                }
+                              >
+                                {player.jerseyNumber != null ? (
+                                  <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                                    {player.jerseyNumber}
+                                  </span>
+                                ) : null}
+                                <span className="font-medium">{player.displayName}</span>
+                              </button>
+                            ))}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {lineupIds.length < 5 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">Starting Lineup</h2>
+                      <p className="text-sm text-slate-500">
+                        {isDualTeam
+                          ? `${participantsBySide[activeSide]?.displayName || activeSide} — `
+                          : ''}
+                        {currentSideState.lineupDraft.length} / 5 selected
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isDualTeam
+                        ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                            <button
+                              key={`lineup-${side}`}
+                              type="button"
+                              onClick={() => changeActiveSide(side)}
+                              className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSide === side ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-800'}`}
+                            >
+                              {participantsBySide[side]?.displayName || side}
+                            </button>
+                          ))
+                        : null}
+                      <button
+                        type="button"
+                        onClick={saveLineup}
+                        disabled={isSaving || currentSideState.lineupDraft.length !== 5}
+                        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        {isSaving ? 'Saving...' : 'Save Lineup'}
+                      </button>
+                    </div>
+                  </div>
+                  {players.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      <p className="font-semibold">No players found on this roster.</p>
+                      {teamId ? (
+                        <Link to={`/teams/${teamId}/edit`} className="mt-1 inline-block underline">
+                          Add players to this team
+                        </Link>
+                      ) : (
+                        <p className="mt-1">Go to Teams to add players before tracking.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {players.map((player) => {
+                        const checked = currentSideState.lineupDraft.includes(player.id);
+                        const isInactive = player.isActive === false;
+                        return (
+                          <label
+                            key={player.id}
+                            className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
+                              checked
+                                ? 'border-slate-900 bg-slate-900 text-white'
+                                : isInactive
+                                  ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50'
+                                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="shrink-0 accent-white"
+                              checked={checked}
+                              disabled={isInactive}
+                              onChange={(event) => {
+                                if (isInactive) return;
+                                const nextDraft = event.target.checked
+                                  ? [...currentSideState.lineupDraft, player.id]
+                                  : currentSideState.lineupDraft.filter((id) => id !== player.id);
+                                updateSideState(activeKey, { lineupDraft: nextDraft });
+                              }}
+                            />
+                            <span className="text-sm font-medium">
+                              {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
+                              {player.displayName}
+                              {isInactive ? ' (inactive)' : ''}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activePanel === 'substitutions' ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-700">Player Out</span>
+                  <select
+                    className="w-full rounded border border-slate-300 px-3 py-2"
+                    value={currentSideState.substitutionState.playerOutId}
+                    onChange={(event) =>
+                      updateSideState(activeKey, {
+                        substitutionState: {
+                          ...currentSideState.substitutionState,
+                          playerOutId: event.target.value,
+                        },
+                      })
+                    }
+                  >
+                    <option value="">Select on-court player</option>
+                    {onCourtPlayers.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
+                        {player.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-slate-700">Player In</span>
+                  <select
+                    className="w-full rounded border border-slate-300 px-3 py-2"
+                    value={currentSideState.substitutionState.playerInId}
+                    onChange={(event) =>
+                      updateSideState(activeKey, {
+                        substitutionState: {
+                          ...currentSideState.substitutionState,
+                          playerInId: event.target.value,
+                        },
+                      })
+                    }
+                  >
+                    <option value="">Select bench player</option>
+                    {benchPlayers.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
+                        {player.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={openTrackingOverlay}
-                  aria-label="Open fullscreen tracking"
-                  className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
+                  onClick={saveSubstitution}
+                  disabled={isSaving}
+                  className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
                 >
                   <svg
                     viewBox="0 0 20 20"
-                    className="h-5 w-5"
+                    className="h-4 w-4"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.8"
                   >
-                    <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+                    <path d="M4 7h12M13 4l3 3-3 3" />
+                    <path d="M16 13H4M7 10l-3 3 3 3" />
                   </svg>
+                  Record Sub
                 </button>
               </div>
             </div>
-            <div className="relative mt-4">
-              <InteractiveCourtImage
-                onSelect={onCourtSelect}
-                containerClassName="min-h-[26rem]"
-                courtClassName="min-h-[22rem]"
-              />
-              {eventPicker}
-            </div>
+          ) : null}
 
-            {lastActionLabel ? (
-              <div className="relative mt-4">
-                <p className="text-sm font-medium text-emerald-700">{lastActionLabel}</p>
-              </div>
-            ) : null}
-          </div>
-
-          {lineupIds.length < 5 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Starting Lineup</h2>
-                  <p className="text-sm text-slate-500">
-                    {isDualTeam
-                      ? `${participantsBySide[activeSide]?.displayName || activeSide} — `
-                      : ''}
-                    {currentSideState.lineupDraft.length} / 5 selected
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {isDualTeam
-                    ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                        <button
-                          key={`lineup-${side}`}
-                          type="button"
-                          onClick={() => changeActiveSide(side)}
-                          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSide === side ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-800'}`}
-                        >
-                          {participantsBySide[side]?.displayName || side}
-                        </button>
-                      ))
-                    : null}
+          {activePanel === 'events' ? (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold text-slate-900">Recent Events</h2>
+                <div className="flex items-center gap-2">
+                  {recentEvents.length > 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllRecentEvents((value) => !value)}
+                      className="text-sm font-medium text-sky-700 hover:underline"
+                    >
+                      {showAllRecentEvents ? 'Show less' : 'Show all'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={saveLineup}
-                    disabled={isSaving || currentSideState.lineupDraft.length !== 5}
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                    onClick={undoLastEvent}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
                   >
-                    {isSaving ? 'Saving...' : 'Save Lineup'}
+                    Undo Last
                   </button>
                 </div>
               </div>
-
-              {players.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  <p className="font-semibold">No players found on this roster.</p>
-                  {teamId ? (
-                    <Link to={`/teams/${teamId}/edit`} className="mt-1 inline-block underline">
-                      Add players to this team
-                    </Link>
-                  ) : (
-                    <p className="mt-1">Go to Teams to add players before tracking.</p>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {players.map((player) => {
-                    const checked = currentSideState.lineupDraft.includes(player.id);
-                    const isInactive = player.isActive === false;
-                    return (
-                      <label
-                        key={player.id}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
-                          checked
-                            ? 'border-slate-900 bg-slate-900 text-white'
-                            : isInactive
-                              ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50'
-                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="shrink-0 accent-white"
-                          checked={checked}
-                          disabled={isInactive}
-                          onChange={(event) => {
-                            if (isInactive) return;
-                            const nextDraft = event.target.checked
-                              ? [...currentSideState.lineupDraft, player.id]
-                              : currentSideState.lineupDraft.filter((id) => id !== player.id);
-                            updateSideState(activeKey, { lineupDraft: nextDraft });
-                          }}
-                        />
-                        <span className="text-sm font-medium">
-                          {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
-                          {player.displayName}
-                          {isInactive ? ' (inactive)' : ''}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">Substitution</h2>
-              {isDualTeam ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                    <button
-                      key={`sub-${side}`}
-                      type="button"
-                      onClick={() => changeActiveSide(side)}
-                      className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${activeSide === side ? 'bg-slate-900 text-white' : 'border border-slate-300 bg-white text-slate-800'}`}
-                    >
-                      {participantsBySide[side]?.displayName || side}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <label className="block">
-                <span className="mb-1 block text-sm text-slate-700">Player Out</span>
-                <select
-                  className="w-full rounded border border-slate-300 px-3 py-2"
-                  value={currentSideState.substitutionState.playerOutId}
-                  onChange={(event) =>
-                    updateSideState(activeKey, {
-                      substitutionState: {
-                        ...currentSideState.substitutionState,
-                        playerOutId: event.target.value,
-                      },
-                    })
-                  }
-                >
-                  <option value="">Select on-court player</option>
-                  {onCourtPlayers.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
-                      {player.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-sm text-slate-700">Player In</span>
-                <select
-                  className="w-full rounded border border-slate-300 px-3 py-2"
-                  value={currentSideState.substitutionState.playerInId}
-                  onChange={(event) =>
-                    updateSideState(activeKey, {
-                      substitutionState: {
-                        ...currentSideState.substitutionState,
-                        playerInId: event.target.value,
-                      },
-                    })
-                  }
-                >
-                  <option value="">Select bench player</option>
-                  {benchPlayers.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
-                      {player.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={saveSubstitution}
-                disabled={isSaving}
-                className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-              >
+              <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
                 <svg
-                  viewBox="0 0 20 20"
-                  className="h-4 w-4"
+                  viewBox="0 0 16 16"
+                  className="h-3.5 w-3.5 shrink-0"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
                 >
-                  <path d="M4 7h12M13 4l3 3-3 3" />
-                  <path d="M16 13H4M7 10l-3 3 3 3" />
+                  <path d="M8 3v8M5 8l3 3 3-3" />
+                  <path d="M3 13h10" />
                 </svg>
-                Record Sub
-              </button>
-            </div>
-          </div>
-
-          {!isLeagueGame ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold text-slate-900">Player Selection</h2>
-                {currentSideState.selectedPlayerId ? (
-                  <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
-                    {players.find((p) => p.id === currentSideState.selectedPlayerId)?.displayName ||
-                      'Selected'}
-                  </span>
-                ) : null}
-              </div>
-              {lineupIds.length === 0 ? (
-                <p className="mt-3 text-sm text-slate-500">Set and save a starting lineup first.</p>
-              ) : (
-                <div className="mt-3 space-y-1.5">
-                  {onCourtPlayers.map((player) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
-                        currentSideState.selectedPlayerId === player.id
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                      }`}
-                      onClick={() => updateSideState(activeKey, { selectedPlayerId: player.id })}
-                    >
-                      {player.jerseyNumber != null ? (
-                        <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
-                          {player.jerseyNumber}
-                        </span>
-                      ) : null}
-                      <span className="font-medium">{player.displayName}</span>
-                    </button>
-                  ))}
-                  {benchPlayers.filter((p) => p.isActive !== false).length > 0 ? (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
-                        Bench ({benchPlayers.filter((p) => p.isActive !== false).length})
-                      </summary>
-                      <div className="mt-1.5 space-y-1.5">
-                        {benchPlayers
-                          .filter((p) => p.isActive !== false)
-                          .map((player) => (
-                            <button
-                              key={player.id}
-                              type="button"
-                              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
-                                currentSideState.selectedPlayerId === player.id
-                                  ? 'bg-slate-900 text-white'
-                                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                              }`}
-                              onClick={() =>
-                                updateSideState(activeKey, { selectedPlayerId: player.id })
-                              }
+                Tap to go to the court and insert a stat before that event.
+              </p>
+              <div className="mt-4 space-y-2">
+                {visibleRecentEvents.map((event) => {
+                  const eventLogoUrl = isDualTeam
+                    ? participantsBySide[event.teamSide]?.logo?.url || teamPlaceholder
+                    : event.playerId
+                      ? team?.logo?.url || teamPlaceholder
+                      : null;
+                  const { actor, statLabel, meta } = parseEventParts(event, playersById);
+                  return (
+                    <div key={event.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2">
+                          {eventLogoUrl ? (
+                            <img
+                              src={eventLogoUrl}
+                              alt=""
+                              className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                            />
+                          ) : null}
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{actor}</p>
+                            {statLabel ? (
+                              <p className="text-xs text-slate-600">{statLabel}</p>
+                            ) : null}
+                            {meta ? <p className="text-xs text-slate-400">{meta}</p> : null}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label="Insert stat before this event"
+                            onClick={() => {
+                              setInsertBeforeEventId(event.id);
+                              setActivePanel('court');
+                            }}
+                            className="rounded-md p-1.5 text-sky-600 transition hover:bg-sky-50"
+                          >
+                            <svg
+                              viewBox="0 0 16 16"
+                              className="h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
                             >
-                              {player.jerseyNumber != null ? (
-                                <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
-                                  {player.jerseyNumber}
-                                </span>
-                              ) : null}
-                              <span className="font-medium">{player.displayName}</span>
-                            </button>
-                          ))}
+                              <path d="M8 3v8M5 8l3 3 3-3" />
+                              <path d="M3 13h10" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Remove this event"
+                            onClick={() => removeEvent(event.id)}
+                            className="rounded-md p-1.5 text-rose-600 transition hover:bg-rose-50"
+                          >
+                            <svg
+                              viewBox="0 0 16 16"
+                              className="h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
-                    </details>
-                  ) : null}
-                </div>
-              )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
-        </div>
-      </section>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Recent Events</h2>
-          <div className="mt-2 flex items-center gap-2">
-            {recentEvents.length > 3 ? (
-              <button
-                type="button"
-                onClick={() => setShowAllRecentEvents((value) => !value)}
-                className="text-sm font-medium text-sky-700 hover:underline"
-              >
-                {showAllRecentEvents ? 'Show less' : 'Show all'}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={undoLastEvent}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
-            >
-              Undo Last
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Use Insert Before on an event to add a missed stat at that point in the timeline.
-          </p>
-        </div>
-        <div className="mt-4 space-y-2">
-          {visibleRecentEvents.map((event) => (
-            <div key={event.id} className="rounded-lg border border-slate-200 px-3 py-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm text-slate-800">
-                  {formatEventLabel(event, playersById, participantsBySide, isDualTeam)}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setInsertBeforeEventId((current) => (current === event.id ? '' : event.id))
-                    }
-                    className="text-xs font-semibold text-sky-700"
-                  >
-                    Insert Before
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeEvent(event.id)}
-                    className="text-xs font-semibold text-rose-700"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-              {insertBeforeEventId === event.id ? (
-                <div className="mt-3 rounded-lg bg-slate-50 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-slate-600">
-                      Insert for{' '}
-                      <span className="font-semibold text-slate-800">
-                        {playersById.get(currentSideState.selectedPlayerId)?.displayName ||
-                          'selected player'}
-                      </span>
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setInsertBeforeEventId('')}
-                      className="text-xs font-semibold text-slate-500"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-7">
-                    {insertStatTypes.map((statType) => (
-                      <button
-                        key={statType}
-                        type="button"
-                        disabled={isSaving}
-                        onClick={() => insertQuickStatEvent(statType, event.id)}
-                        className="rounded-lg bg-slate-900 px-2 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                      >
-                        {STAT_LABELS[statType] || statType}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ))}
         </div>
       </div>
 
@@ -1603,7 +1819,7 @@ export function GameTrackPage() {
                       onClick={() => changeActiveSide(side)}
                       className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
                         activeSide === side
-                          ? 'bg-slate-900 text-white'
+                          ? 'bg-indigo-600 text-white'
                           : 'border border-slate-300 bg-white text-slate-800'
                       }`}
                     >
