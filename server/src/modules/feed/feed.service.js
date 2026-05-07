@@ -62,7 +62,12 @@ async function resolveImagePayload(post) {
 }
 
 async function resolveGameCardPayload(post) {
-  const payload = await getPublicGame(String(post.gameCard.gameId));
+  let payload;
+  try {
+    payload = await getPublicGame(String(post.gameCard.gameId));
+  } catch {
+    return { image: null, gameCard: null, playerCard: null, teamCard: null };
+  }
   const isDualTeam = payload.game.trackingMode === 'dual_team';
 
   return {

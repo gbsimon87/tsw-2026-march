@@ -18,6 +18,7 @@ gamesRouter.post(
 );
 gamesRouter.delete('/:gameId/events/:eventId', asyncHandler(controller.removeEvent));
 gamesRouter.post('/:gameId/finish', asyncHandler(controller.finish));
+gamesRouter.delete('/:gameId', asyncHandler(controller.deleteGame));
 
 module.exports = {
   gamesRouter,

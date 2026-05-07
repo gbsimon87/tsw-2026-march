@@ -89,6 +89,12 @@ async function finish(req, res) {
   res.status(200).json(result);
 }
 
+async function deleteGame(req, res) {
+  const userId = requireAuthUserId(req);
+  await gamesService.deleteGameForUser(userId, req.params.gameId);
+  res.status(204).send();
+}
+
 module.exports = {
   create,
   list,
@@ -99,5 +105,6 @@ module.exports = {
   insertEventBefore,
   setLineup,
   removeEvent,
+  deleteGame,
   finish,
 };

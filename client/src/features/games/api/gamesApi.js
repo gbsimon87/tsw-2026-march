@@ -37,4 +37,7 @@ export const gamesApi = {
   finish(gameId) {
     return apiClient.post(`/games/${gameId}/finish`);
   },
+  deleteGame(gameId) {
+    return apiClient.delete(`/games/${gameId}`);
+  },
 };

@@ -1735,6 +1735,27 @@ async function canFinalizeLeagueGame(userId, game) {
   return Boolean(leagueMgr);
 }
 
+async function canEditCompletedLeagueGame(userId, game) {
+  if (!userId || game.gameContext !== 'league' || !game.leagueId) return false;
+  const league = await findLeagueById(game.leagueId);
+  if (!league || league.status !== 'active') return false;
+
+  if (String(league.ownerUserId) === String(userId)) return true;
+
+  const leagueMgr = await findActiveLeagueManager(game.leagueId, userId);
+  if (leagueMgr) return true;
+
+  const managerChecks = await Promise.all([
+    game.homeLeagueTeamId ? isTeamManager(userId, game.homeLeagueTeamId) : Promise.resolve(false),
+    game.awayLeagueTeamId ? isTeamManager(userId, game.awayLeagueTeamId) : Promise.resolve(false),
+    game.trackedLeagueTeamId
+      ? isTeamManager(userId, game.trackedLeagueTeamId)
+      : Promise.resolve(false),
+  ]);
+
+  return managerChecks.some(Boolean);
+}
+
 module.exports = {
   createLeagueForUser,
   listLeaguesForUser,
@@ -1774,6 +1795,7 @@ module.exports = {
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
   canFinalizeLeagueGame,
+  canEditCompletedLeagueGame,
   addLeagueManagerByEmail,
   listLeagueManagersForLeague,
   removeLeagueManagerById,

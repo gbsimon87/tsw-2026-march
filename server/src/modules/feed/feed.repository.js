@@ -89,6 +89,10 @@ async function deletePostById(postId) {
   return Post.deleteOne({ _id: postId });
 }
 
+async function deletePostsByGameId(gameId) {
+  return Post.deleteMany({ type: 'game_card', 'gameCard.gameId': gameId });
+}
+
 module.exports = {
   Post,
   createPost,
@@ -96,4 +100,5 @@ module.exports = {
   listPosts,
   findPostById,
   deletePostById,
+  deletePostsByGameId,
 };

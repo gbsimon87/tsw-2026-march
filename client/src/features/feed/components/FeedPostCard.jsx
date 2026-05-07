@@ -21,7 +21,23 @@ export function FeedPostCard({ post, onDelete }) {
     content = (
       <div className="space-y-3">
         {post.caption ? <p className="text-sm text-slate-700">{post.caption}</p> : null}
-        <GameCardPost gameCard={post.gameCard} />
+        {post.gameCard ? (
+          <GameCardPost gameCard={post.gameCard} />
+        ) : (
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5 shrink-0 text-slate-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4M12 16h.01" />
+            </svg>
+            <p className="text-sm text-slate-500">This game is no longer available.</p>
+          </div>
+        )}
       </div>
     );
   } else if (post.type === 'player_card') {

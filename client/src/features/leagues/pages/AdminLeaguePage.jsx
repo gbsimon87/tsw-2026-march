@@ -6,6 +6,7 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { useAuth } from '../../../app/store/AuthContext';
+import { gamesApi } from '../../games/api/gamesApi';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 export function AdminLeaguePage() {
@@ -27,6 +28,7 @@ export function AdminLeaguePage() {
   const [newManagerEmail, setNewManagerEmail] = useState('');
   const [isSubmittingManager, setIsSubmittingManager] = useState(false);
   const [managerError, setManagerError] = useState('');
+  const [deletingGameId, setDeletingGameId] = useState('');
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -80,6 +82,23 @@ export function AdminLeaguePage() {
       setManagerError(submitError.message || 'Failed to add league manager');
     } finally {
       setIsSubmittingManager(false);
+    }
+  }
+
+  async function onDeleteGame(gameId) {
+    if (!window.confirm('Remove this game? This cannot be undone.')) return;
+    setDeletingGameId(gameId);
+    try {
+      await gamesApi.deleteGame(gameId);
+      setLeague((current) =>
+        current
+          ? { ...current, games: (current.games || []).filter((g) => g.id !== gameId) }
+          : current
+      );
+    } catch (deleteError) {
+      setError(deleteError.message || 'Failed to remove game');
+    } finally {
+      setDeletingGameId('');
     }
   }
 
@@ -447,6 +466,27 @@ export function AdminLeaguePage() {
                     </div>
                   </div>
                   <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+                    {canTrackGame(game) ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${game.title}`}
+                        disabled={!canNavigate || deletingGameId === gameId}
+                        className="rounded-md border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => {
+                          if (gameId) onDeleteGame(gameId);
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                        </svg>
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       aria-label={`Copy share link for ${game.title}`}
@@ -479,7 +519,7 @@ export function AdminLeaguePage() {
                       disabled={!canNavigate}
                       className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
-                        if (gameId) navigate(`/games/${gameId}`);
+                        if (gameId) navigate(`/games/${gameId}/track`);
                       }}
                     >
                       <svg

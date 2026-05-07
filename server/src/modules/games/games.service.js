@@ -12,6 +12,7 @@ const {
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
   canFinalizeLeagueGame,
+  canEditCompletedLeagueGame,
 } = require('../leagues/leagues.service');
 const { findLeagueTeamById } = require('../leagues/leagues.repository');
 
@@ -934,6 +935,8 @@ async function getGameForUser(userId, gameId) {
       ? computeBoxScore(game, null, { participants })
       : computeBoxScore(game, teamDoc);
   const gameSummary = buildGameSummary(game);
+  const canEditCompleted =
+    game.status === 'completed' ? await canEditCompletedLeagueGame(userId, game) : false;
 
   // Fetch fresh logos for dual-team games so uploads after game creation are reflected
   let freshLogoByLeagueTeamId = new Map();
@@ -1002,6 +1005,7 @@ async function getGameForUser(userId, gameId) {
       boxScore
     ),
     gameSummary,
+    canEditCompletedGame: canEditCompleted,
   };
 }
 
@@ -1047,7 +1051,9 @@ function requireBothLineups(game) {
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
   if (game.status !== 'in_progress') {
-    throw new ApiError(400, 'Cannot track events on a completed game');
+    if (!(await canEditCompletedLeagueGame(userId, game))) {
+      throw new ApiError(400, 'Cannot track events on a completed game');
+    }
   }
 
   const context = await resolveGameTeamContext(userId, game);
@@ -1246,6 +1252,11 @@ async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
 
 async function removeEventForUser(userId, gameId, eventId) {
   const game = await assertGameAccess(userId, gameId);
+  if (game.status !== 'in_progress') {
+    if (!(await canEditCompletedLeagueGame(userId, game))) {
+      throw new ApiError(400, 'Cannot remove events from a completed game');
+    }
+  }
   const event = game.events.id(eventId);
   if (!event) {
     throw new ApiError(404, 'Event not found');
@@ -1254,6 +1265,19 @@ async function removeEventForUser(userId, gameId, eventId) {
   recalculateCurrentLineup(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
+}
+
+async function deleteGameForUser(userId, gameId) {
+  const game = await assertGameAccess(userId, gameId);
+
+  if (game.gameContext === 'league' && String(game.ownerUserId) !== String(userId)) {
+    const canManage = await canManageLeagueGame(userId, game);
+    if (!canManage) {
+      throw new ApiError(403, 'Only league owners, managers, and team managers can remove games');
+    }
+  }
+
+  await game.deleteOne();
 }
 
 async function finishGameForUser(userId, gameId) {
@@ -1284,6 +1308,7 @@ module.exports = {
   appendEventForUser,
   setGameLineup,
   removeEventForUser,
+  deleteGameForUser,
   finishGameForUser,
   computeBoxScore,
   buildGameSummary,

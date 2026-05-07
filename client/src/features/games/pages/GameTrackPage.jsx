@@ -226,6 +226,8 @@ export function GameTrackPage() {
   }, [isDualTeam, data, otherSide, playersById]);
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
+  const isCompleted = game?.status === 'completed';
+  const canEditCompletedGame = data?.canEditCompletedGame || false;
 
   function updateSideState(key, updates) {
     setSideState((current) => ({
@@ -811,6 +813,27 @@ export function GameTrackPage() {
     return <SportsLoader label="Loading tracking session" fullPage />;
   }
 
+  if (isCompleted && !canEditCompletedGame) {
+    return (
+      <main className="space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-base font-semibold text-slate-900">Game Finalized</p>
+          <p className="mt-1 text-sm text-slate-500">
+            This game has been completed. Only league owners, managers, and team managers can edit
+            stats on a finalized game while the league is active.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/games/${gameId}`)}
+            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+          >
+            View Game
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   const gameSummary = data.gameSummary || {
     teamPoints: boxScore.teamTotals?.points || 0,
     opponentPoints: boxScore.opponentTotals?.points || 0,
@@ -1196,6 +1219,12 @@ export function GameTrackPage() {
 
   return (
     <main className="space-y-4">
+      {isCompleted ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="font-semibold">Editing completed game.</span> Changes are saved
+          immediately and will update the game record.
+        </div>
+      ) : null}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         {!isDualTeam && (
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -1793,14 +1822,25 @@ export function GameTrackPage() {
       </div>
 
       <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={finishGame}
-          disabled={isSaving}
-          className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
-        >
-          Finish Game
-        </button>
+        {isCompleted ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/games/${gameId}`)}
+            disabled={isSaving}
+            className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          >
+            Done Editing
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={finishGame}
+            disabled={isSaving}
+            className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          >
+            Finish Game
+          </button>
+        )}
       </div>
 
       {isTrackingFullscreen ? (
