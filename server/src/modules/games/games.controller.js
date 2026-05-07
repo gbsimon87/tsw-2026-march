@@ -57,6 +57,15 @@ async function appendEvent(req, res) {
   res.status(200).json(result);
 }
 
+async function insertEventBefore(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = appendEventSchema.parse(req.body);
+  const result = await gamesService.appendEventForUser(userId, req.params.gameId, payload, {
+    insertBeforeEventId: req.params.eventId,
+  });
+  res.status(200).json(result);
+}
+
 async function setLineup(req, res) {
   const userId = requireAuthUserId(req);
   const payload = setLineupSchema.parse(req.body);
@@ -87,6 +96,7 @@ module.exports = {
   getById,
   getPublicById,
   appendEvent,
+  insertEventBefore,
   setLineup,
   removeEvent,
   finish,

@@ -245,6 +245,12 @@ function listLeagueTeamMembers(leagueTeamId) {
   return LeagueTeamMember.find({ leagueTeamId, status: 'active' }).sort({ createdAt: 1 });
 }
 
+function listLeagueTeamManagersByLeague(leagueId) {
+  return LeagueTeamMember.find({ leagueId, role: 'manager', status: 'active' }).sort({
+    createdAt: 1,
+  });
+}
+
 function listLeagueMembershipsForUser(userId) {
   return LeagueTeamMember.find({ userId, status: 'active' }).sort({ createdAt: -1 });
 }
@@ -330,6 +336,7 @@ module.exports = {
   findActiveLeagueTeamMember,
   findLeagueTeamMemberById,
   listLeagueTeamMembers,
+  listLeagueTeamManagersByLeague,
   listLeagueMembershipsForUser,
   saveLeagueTeamMember,
   createLeagueJoinRequest,

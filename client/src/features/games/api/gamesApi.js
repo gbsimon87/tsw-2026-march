@@ -25,6 +25,9 @@ export const gamesApi = {
   appendEvent(gameId, payload) {
     return apiClient.post(`/games/${gameId}/events`, payload);
   },
+  insertEventBefore(gameId, eventId, payload) {
+    return apiClient.post(`/games/${gameId}/events/${eventId}/insert-before`, payload);
+  },
   setLineup(gameId, payload) {
     return apiClient.post(`/games/${gameId}/lineup`, payload);
   },

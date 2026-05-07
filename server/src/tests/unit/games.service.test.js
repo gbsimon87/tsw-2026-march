@@ -34,6 +34,10 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   canManageLeagueGame: jest.fn(() => false),
 }));
 
+jest.mock('../../modules/leagues/leagues.repository', () => ({
+  findLeagueTeamById: jest.fn(() => Promise.resolve(null)),
+}));
+
 jest.mock('mongoose', () => ({
   Types: {
     ObjectId: {

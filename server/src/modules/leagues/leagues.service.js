@@ -26,6 +26,7 @@ const {
   findActiveLeagueTeamMember,
   findLeagueTeamMemberById,
   listLeagueTeamMembers,
+  listLeagueTeamManagersByLeague,
   listLeagueMembershipsForUser,
   saveLeagueTeamMember,
   createLeagueJoinRequest,
@@ -464,9 +465,25 @@ async function getLeagueForUser(userId, leagueId) {
     listLeagueGames(league._id),
     buildLeagueViewerContext(userId, league),
   ]);
+  const canViewTeamManagers =
+    viewerContext.viewerRole === 'owner' || viewerContext.viewerRole === 'league_manager';
+  const teamManagers = canViewTeamManagers ? await listLeagueTeamManagersByLeague(league._id) : [];
+  const usersById = await buildUsersMap(teamManagers.map((member) => member.userId));
+  const managersByTeamId = new Map();
+
+  teamManagers.forEach((member) => {
+    const teamId = String(member.leagueTeamId);
+    const current = managersByTeamId.get(teamId) || [];
+    current.push(sanitizeLeagueMember(member, usersById));
+    managersByTeamId.set(teamId, current);
+  });
 
   return sanitizeLeague(league, {
-    includeTeams: teams.map((team) => sanitizeLeagueTeam(team)),
+    includeTeams: teams.map((team) =>
+      sanitizeLeagueTeam(team, {
+        includeMembers: managersByTeamId.get(String(team._id)) || [],
+      })
+    ),
     includeStandings: standings,
     includeGames: games,
     includeViewerContext: viewerContext,

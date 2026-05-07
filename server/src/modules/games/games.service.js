@@ -1016,6 +1016,22 @@ function getTeamDocForSide(game, participants, side, fallbackTeamDoc) {
   return side === TEAM_SIDES.HOME ? participants.home.teamDoc : participants.away.teamDoc;
 }
 
+function insertEvent(game, eventPayload, insertBeforeEventId) {
+  if (!insertBeforeEventId) {
+    game.events.push(eventPayload);
+    return;
+  }
+
+  const insertIndex = (game.events || []).findIndex(
+    (event) => String(event._id) === String(insertBeforeEventId)
+  );
+  if (insertIndex < 0) {
+    throw new ApiError(404, 'Insert point not found');
+  }
+
+  game.events.splice(insertIndex, 0, eventPayload);
+}
+
 function requireBothLineups(game) {
   if (game.trackingMode !== 'dual_team') {
     return;
@@ -1028,13 +1044,21 @@ function requireBothLineups(game) {
   }
 }
 
-async function appendEventForUser(userId, gameId, payload) {
+async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
   if (game.status !== 'in_progress') {
     throw new ApiError(400, 'Cannot track events on a completed game');
   }
 
   const context = await resolveGameTeamContext(userId, game);
+  const insertBeforeEventId = options.insertBeforeEventId || null;
+
+  if (
+    insertBeforeEventId &&
+    (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN)
+  ) {
+    throw new ApiError(400, 'Substitution events cannot be inserted');
+  }
 
   if (game.trackingMode === 'dual_team') {
     if (!payload.teamSide) {
@@ -1044,7 +1068,7 @@ async function appendEventForUser(userId, gameId, payload) {
       throw new ApiError(400, 'Opponent aggregate events are not allowed for dual-team games');
     }
 
-    if (payload.statType !== STAT_TYPES.SUB_IN) {
+    if (!insertBeforeEventId && payload.statType !== STAT_TYPES.SUB_IN) {
       requireBothLineups(game);
     }
 
@@ -1060,6 +1084,7 @@ async function appendEventForUser(userId, gameId, payload) {
     const lineupIds = (game[currentField] || []).map(String);
 
     if (
+      !insertBeforeEventId &&
       [
         STAT_TYPES.AST,
         STAT_TYPES.OREB,
@@ -1102,17 +1127,22 @@ async function appendEventForUser(userId, gameId, payload) {
       }
     }
 
-    game.events.push({
-      ...(payload.playerId ? { playerId: payload.playerId } : {}),
-      ...(payload.relatedPlayerId ? { relatedPlayerId: payload.relatedPlayerId } : {}),
-      ...(payload.teamSide ? { teamSide: payload.teamSide } : {}),
-      ...(payload.relatedTeamSide ? { relatedTeamSide: payload.relatedTeamSide } : {}),
-      statType: payload.statType,
-      zoneId: payload.zoneId,
-      x: payload.x,
-      y: payload.y,
-      occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
-    });
+    insertEvent(
+      game,
+      {
+        ...(payload.playerId ? { playerId: payload.playerId } : {}),
+        ...(payload.relatedPlayerId ? { relatedPlayerId: payload.relatedPlayerId } : {}),
+        ...(payload.teamSide ? { teamSide: payload.teamSide } : {}),
+        ...(payload.relatedTeamSide ? { relatedTeamSide: payload.relatedTeamSide } : {}),
+        statType: payload.statType,
+        zoneId: payload.zoneId,
+        x: payload.x,
+        y: payload.y,
+        occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
+      },
+      insertBeforeEventId
+    );
+    recalculateCurrentLineup(game);
     await saveGame(game);
     return getGameForUser(userId, gameId);
   }
@@ -1126,6 +1156,7 @@ async function appendEventForUser(userId, gameId, payload) {
   }
 
   if (
+    !insertBeforeEventId &&
     [
       STAT_TYPES.AST,
       STAT_TYPES.OREB,
@@ -1164,16 +1195,21 @@ async function appendEventForUser(userId, gameId, payload) {
     }
   }
 
-  game.events.push({
-    ...(payload.playerId ? { playerId: payload.playerId } : {}),
-    ...(payload.relatedPlayerId ? { relatedPlayerId: payload.relatedPlayerId } : {}),
-    statType: payload.statType,
-    zoneId: payload.zoneId,
-    x: payload.x,
-    y: payload.y,
-    occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
-  });
+  insertEvent(
+    game,
+    {
+      ...(payload.playerId ? { playerId: payload.playerId } : {}),
+      ...(payload.relatedPlayerId ? { relatedPlayerId: payload.relatedPlayerId } : {}),
+      statType: payload.statType,
+      zoneId: payload.zoneId,
+      x: payload.x,
+      y: payload.y,
+      occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
+    },
+    insertBeforeEventId
+  );
 
+  recalculateCurrentLineup(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
 }

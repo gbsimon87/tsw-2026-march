@@ -90,6 +90,7 @@ export function GameTrackPage() {
   const [error, setError] = useState('');
   const [lastActionLabel, setLastActionLabel] = useState('');
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
+  const [insertBeforeEventId, setInsertBeforeEventId] = useState('');
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
@@ -584,6 +585,33 @@ export function GameTrackPage() {
     }
   }
 
+  async function insertQuickStatEvent(statType, beforeEventId) {
+    if (!beforeEventId || !requirePlayerSelection()) {
+      return;
+    }
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const response = await gamesApi.insertEventBefore(
+        gameId,
+        beforeEventId,
+        buildEventPayload({
+          playerId: currentSideState.selectedPlayerId,
+          statType,
+        })
+      );
+      updateData(response, `Inserted ${STAT_LABELS[statType] || statType}`);
+      setInsertBeforeEventId('');
+      clearEventPicker();
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to insert event');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function addOpponentScore(statType) {
     if (isSaving) {
       return;
@@ -721,8 +749,9 @@ export function GameTrackPage() {
     teamPoints: boxScore.teamTotals?.points || 0,
     opponentPoints: boxScore.opponentTotals?.points || 0,
   };
-  const recentEvents = [...game.events].slice(-5).reverse();
+  const recentEvents = [...game.events].reverse();
   const visibleRecentEvents = showAllRecentEvents ? recentEvents : recentEvents.slice(0, 3);
+  const insertStatTypes = ['AST', 'OREB', 'DREB', 'STL', 'BLK', 'TOV', 'FOUL'];
 
   const followUpPlayers = pendingFollowUpPrompt
     ? pendingFollowUpPrompt.kind === 'assist'
@@ -1479,23 +1508,69 @@ export function GameTrackPage() {
               Undo Last
             </button>
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Use Insert Before on an event to add a missed stat at that point in the timeline.
+          </p>
         </div>
         <div className="mt-4 space-y-2">
           {visibleRecentEvents.map((event) => (
-            <div
-              key={event.id}
-              className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
-            >
-              <div className="text-sm text-slate-800">
-                {formatEventLabel(event, playersById, participantsBySide, isDualTeam)}
+            <div key={event.id} className="rounded-lg border border-slate-200 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm text-slate-800">
+                  {formatEventLabel(event, playersById, participantsBySide, isDualTeam)}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInsertBeforeEventId((current) => (current === event.id ? '' : event.id))
+                    }
+                    className="text-xs font-semibold text-sky-700"
+                  >
+                    Insert Before
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeEvent(event.id)}
+                    className="text-xs font-semibold text-rose-700"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => removeEvent(event.id)}
-                className="text-xs font-semibold text-rose-700"
-              >
-                Remove
-              </button>
+              {insertBeforeEventId === event.id ? (
+                <div className="mt-3 rounded-lg bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-slate-600">
+                      Insert for{' '}
+                      <span className="font-semibold text-slate-800">
+                        {playersById.get(currentSideState.selectedPlayerId)?.displayName ||
+                          'selected player'}
+                      </span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setInsertBeforeEventId('')}
+                      className="text-xs font-semibold text-slate-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-7">
+                    {insertStatTypes.map((statType) => (
+                      <button
+                        key={statType}
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => insertQuickStatEvent(statType, event.id)}
+                        className="rounded-lg bg-slate-900 px-2 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        {STAT_LABELS[statType] || statType}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
