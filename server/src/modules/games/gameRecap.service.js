@@ -52,6 +52,7 @@ function buildTopPerformers(boxScore) {
     .slice(0, 3)
     .map((row) => ({
       playerId: row.playerId,
+      leaguePlayerId: row.leaguePlayerId || null,
       displayName: row.displayName,
       points: row.points,
       reb: row.reb,

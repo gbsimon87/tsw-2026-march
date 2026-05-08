@@ -368,7 +368,11 @@ describe('games service roster snapshot repair', () => {
       expect.objectContaining({ id: 'away-snap-1', displayName: 'Away One' }),
     ]);
     expect(result.boxScore.home.players).toEqual([
-      expect.objectContaining({ playerId: 'home-snap-1', displayName: 'Home One' }),
+      expect.objectContaining({
+        playerId: 'home-snap-1',
+        leaguePlayerId: 'home-snap-1-league',
+        displayName: 'Home One',
+      }),
     ]);
     expect(saveGame).toHaveBeenCalledWith(game);
   });

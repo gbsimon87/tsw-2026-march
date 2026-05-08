@@ -331,9 +331,16 @@ export function GameRecapPanel({
               if (!player.playerId) return null;
               if (isDualTeam) {
                 if (league?.slug && participant?.slug) {
-                  return `/league/${league.slug}/teams/${participant.slug}/players/${player.playerId}`;
+                  return `/league/${league.slug}/teams/${participant.slug}/players/${
+                    player.leaguePlayerId || player.playerId
+                  }`;
                 }
                 return null;
+              }
+              if (league?.slug && team?.slug) {
+                return `/league/${league.slug}/teams/${team.slug}/players/${
+                  player.leaguePlayerId || player.playerId
+                }`;
               }
               return team?.id ? `/teams/${team.id}/players/${player.playerId}` : null;
             })();

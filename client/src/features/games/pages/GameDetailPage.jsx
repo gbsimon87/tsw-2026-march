@@ -106,43 +106,72 @@ function getParticipantName(participants, side) {
   return participants?.[side]?.displayName || side;
 }
 
-function buildPrimaryStatsView(data, isDualTeam) {
-  if (!isDualTeam) {
-    return {
-      label: data.team?.name || 'Team',
-      rows: [
-        ...(data.boxScore?.players || []),
-        {
-          playerId: 'team-total',
-          displayName: 'Team Total',
-          ...(data.boxScore?.teamTotals || {}),
-          isTeamTotal: true,
-        },
-      ],
-    };
+function getLeaguePlayerHref({ league, teamSlug, row }) {
+  if (!league?.slug || !teamSlug || row.isTeamTotal || !row.playerId) {
+    return null;
   }
 
-  return {
-    label: getParticipantName(data.participants, 'home'),
-    rows: [
-      ...(data.boxScore?.home?.players || []),
+  return `/league/${league.slug}/teams/${teamSlug}/players/${row.leaguePlayerId || row.playerId}`;
+}
+
+function withLeaguePlayerHref(rows, { league, teamSlug }) {
+  return rows.map((row) => ({
+    ...row,
+    playerHref: getLeaguePlayerHref({ league, teamSlug, row }),
+  }));
+}
+
+function buildPrimaryStatsView(data, isDualTeam) {
+  if (!isDualTeam) {
+    const rows = [
+      ...(data.boxScore?.players || []),
       {
         playerId: 'team-total',
         displayName: 'Team Total',
-        ...(data.boxScore?.home?.totals || {}),
+        ...(data.boxScore?.teamTotals || {}),
         isTeamTotal: true,
       },
-    ],
+    ];
+
+    return {
+      label: data.team?.name || 'Team',
+      rows: withLeaguePlayerHref(rows, {
+        league: data.league,
+        teamSlug: data.team?.slug,
+      }),
+    };
+  }
+
+  const homeRows = [
+    ...(data.boxScore?.home?.players || []),
+    {
+      playerId: 'team-total',
+      displayName: 'Team Total',
+      ...(data.boxScore?.home?.totals || {}),
+      isTeamTotal: true,
+    },
+  ];
+  const awayRows = [
+    ...(data.boxScore?.away?.players || []),
+    {
+      playerId: 'team-total-away',
+      displayName: 'Team Total',
+      ...(data.boxScore?.away?.totals || {}),
+      isTeamTotal: true,
+    },
+  ];
+
+  return {
+    label: getParticipantName(data.participants, 'home'),
+    rows: withLeaguePlayerHref(homeRows, {
+      league: data.league,
+      teamSlug: data.participants?.home?.slug,
+    }),
     secondaryLabel: getParticipantName(data.participants, 'away'),
-    secondaryRows: [
-      ...(data.boxScore?.away?.players || []),
-      {
-        playerId: 'team-total-away',
-        displayName: 'Team Total',
-        ...(data.boxScore?.away?.totals || {}),
-        isTeamTotal: true,
-      },
-    ],
+    secondaryRows: withLeaguePlayerHref(awayRows, {
+      league: data.league,
+      teamSlug: data.participants?.away?.slug,
+    }),
   };
 }
 
@@ -236,7 +265,14 @@ export function GameDetailPage() {
       align: 'left',
       sortKey: 'displayName',
       render: (row) =>
-        row.isTeamTotal || isDualTeam ? (
+        row.playerHref ? (
+          <Link
+            to={row.playerHref}
+            className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+          >
+            {row.displayName}
+          </Link>
+        ) : row.isTeamTotal || isDualTeam ? (
           row.displayName
         ) : (
           <Link

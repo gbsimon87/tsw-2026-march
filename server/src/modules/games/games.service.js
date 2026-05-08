@@ -53,8 +53,11 @@ function sanitizeLogo(logo) {
 }
 
 function sanitizePlayer(player) {
+  const id = player._id || player.id || player.sourcePlayerId || player.leaguePlayerId;
+
   return {
-    id: String(player._id || player.id || player.sourcePlayerId),
+    id: String(id),
+    leaguePlayerId: player.leaguePlayerId ? String(player.leaguePlayerId) : null,
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
     position: player.position ?? null,
@@ -164,9 +167,10 @@ function findTeamPlayerById(team, playerId) {
   );
 }
 
-function emptyStats(playerId, displayName) {
+function emptyStats(playerId, displayName, options = {}) {
   return {
     playerId,
+    leaguePlayerId: options.leaguePlayerId ? String(options.leaguePlayerId) : null,
     displayName,
     ftm: 0,
     fta: 0,
@@ -354,7 +358,9 @@ function buildBoxScoreForSide(game, team, side) {
   const map = new Map(
     basePlayers.map((player) => [
       String(player._id || player.id || player.sourcePlayerId),
-      emptyStats(String(player._id || player.id || player.sourcePlayerId), player.displayName),
+      emptyStats(String(player._id || player.id || player.sourcePlayerId), player.displayName, {
+        leaguePlayerId: player.leaguePlayerId,
+      }),
     ])
   );
 
@@ -408,7 +414,9 @@ function computeBoxScore(game, team, options = {}) {
   const map = new Map(
     basePlayers.map((player) => [
       String(player._id || player.id),
-      emptyStats(String(player._id || player.id), player.displayName),
+      emptyStats(String(player._id || player.id), player.displayName, {
+        leaguePlayerId: player.leaguePlayerId,
+      }),
     ])
   );
 
@@ -626,6 +634,7 @@ function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
     players: (rosterSnapshot || []).map((player) => ({
       _id: player._id || player.sourcePlayerId || player.leaguePlayerId,
       id: player._id || player.sourcePlayerId || player.leaguePlayerId,
+      leaguePlayerId: player.leaguePlayerId || player._id || player.sourcePlayerId,
       sourcePlayerId: player.sourcePlayerId || player.leaguePlayerId,
       displayName: player.displayName,
       jerseyNumber: player.jerseyNumber ?? null,
@@ -712,6 +721,7 @@ async function resolveGameTeamContext(userId, game) {
     return {
       team: {
         id: String(trackedTeam._id),
+        slug: trackedTeam.slug,
         name: trackedTeam.name,
         logo: sanitizeLogo(trackedTeam.logo),
         billing: {

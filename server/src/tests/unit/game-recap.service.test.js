@@ -34,7 +34,14 @@ describe('game recap service', () => {
     };
     const boxScore = {
       players: [
-        { playerId: 'p1', displayName: 'Alex', points: 3, reb: 0, ast: 0 },
+        {
+          playerId: 'p1',
+          leaguePlayerId: 'league-p1',
+          displayName: 'Alex',
+          points: 3,
+          reb: 0,
+          ast: 0,
+        },
         { playerId: 'p2', displayName: 'Jordan', points: 0, reb: 0, ast: 1 },
       ],
       teamTotals: {
@@ -50,6 +57,7 @@ describe('game recap service', () => {
     expect(recap.team.points).toBe(3);
     expect(recap.opponent.name).toBe('Wildcats');
     expect(recap.topPerformers[0].displayName).toBe('Alex');
+    expect(recap.topPerformers[0].leaguePlayerId).toBe('league-p1');
     expect(recap.teamStats.fg3.made).toBe(1);
     expect(recap.keyMoments[0].statType).toBe('FG3_MADE');
     expect(recap.shotSnapshot.events).toHaveLength(1);
