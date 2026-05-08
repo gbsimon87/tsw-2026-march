@@ -10,6 +10,61 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
+import { StatsTable } from '../../teams/components/StatsTable';
+
+const PLAYER_STATS_COLUMNS = [
+  {
+    id: 'player',
+    label: 'Player',
+    align: 'left',
+    sortable: false,
+    render: (row) => (
+      <span className="flex items-center gap-2">
+        <img
+          src={playerPlaceholder}
+          alt=""
+          className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+        />
+        <Link
+          to={row.playerHref}
+          className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+        >
+          {row.displayName}
+        </Link>
+      </span>
+    ),
+  },
+  {
+    id: 'points',
+    label: 'PTS',
+    align: 'right',
+    render: (row) => row.points,
+  },
+  {
+    id: 'reb',
+    label: 'REB',
+    align: 'right',
+    render: (row) => row.reb,
+  },
+  {
+    id: 'ast',
+    label: 'AST',
+    align: 'right',
+    render: (row) => row.ast,
+  },
+  {
+    id: 'stl',
+    label: 'STL',
+    align: 'right',
+    render: (row) => row.stl,
+  },
+  {
+    id: 'tov',
+    label: 'TOV',
+    align: 'right',
+    render: (row) => row.tov,
+  },
+];
 
 export function PublicLeagueTeamPage() {
   const { leagueSlug, teamSlug } = useParams();
@@ -41,6 +96,11 @@ export function PublicLeagueTeamPage() {
   const joinablePlayers = (team.roster || []).filter(
     (player) => !player.isClaimed && player.isActive
   );
+  const playerStatsRows = (team.stats || []).map((row) => ({
+    ...row,
+    id: row.playerId,
+    playerHref: `/league/${league.slug}/teams/${team.slug}/players/${row.playerId}`,
+  }));
 
   async function submitJoinRequest(event) {
     event.preventDefault();
@@ -79,7 +139,7 @@ export function PublicLeagueTeamPage() {
           </span>
         }
         title={team.name}
-        description={`Standings position: ${team.standingsPosition || 'N/A'}`}
+        description={`Rank: ${team.standingsPosition || 'N/A'}`}
         media={
           <img
             src={team.logo?.url || teamPlaceholder}
@@ -92,44 +152,11 @@ export function PublicLeagueTeamPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-semibold text-slate-900">Player Stats</h2>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Player</th>
-                <th className="px-3 py-2 text-right">PTS</th>
-                <th className="px-3 py-2 text-right">REB</th>
-                <th className="px-3 py-2 text-right">AST</th>
-                <th className="px-3 py-2 text-right">STL</th>
-                <th className="px-3 py-2 text-right">TOV</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(team.stats || []).map((row) => (
-                <tr key={row.playerId} className="border-t border-slate-200">
-                  <td className="px-3 py-2 font-medium text-slate-900">
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={playerPlaceholder}
-                        alt=""
-                        className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                      />
-                      <Link
-                        to={`/league/${league.slug}/teams/${team.slug}/players/${row.playerId}`}
-                        className="underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
-                      >
-                        {row.displayName}
-                      </Link>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right">{row.points}</td>
-                  <td className="px-3 py-2 text-right">{row.reb}</td>
-                  <td className="px-3 py-2 text-right">{row.ast}</td>
-                  <td className="px-3 py-2 text-right">{row.stl}</td>
-                  <td className="px-3 py-2 text-right">{row.tov}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <StatsTable
+            columns={PLAYER_STATS_COLUMNS}
+            rows={playerStatsRows}
+            tableClassName="w-full text-sm"
+          />
         </div>
       </section>
 

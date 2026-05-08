@@ -62,37 +62,47 @@ function sortRows(rows, columns, sortConfig) {
 
   const directionMultiplier = sortConfig.direction === 'asc' ? 1 : -1;
 
-  return [...rows].sort((rowA, rowB) => {
-    const valueA = normalizeSortValue(sortAccessor(rowA));
-    const valueB = normalizeSortValue(sortAccessor(rowB));
+  const bodyRows = rows.filter((row) => !row.isTeamTotal);
+  const teamTotalRows = rows.filter((row) => row.isTeamTotal);
 
-    if (valueA.kind === 'empty' && valueB.kind === 'empty') {
+  return [
+    ...bodyRows.sort((rowA, rowB) => {
+      const valueA = normalizeSortValue(sortAccessor(rowA));
+      const valueB = normalizeSortValue(sortAccessor(rowB));
+
+      if (valueA.kind === 'empty' && valueB.kind === 'empty') {
+        return 0;
+      }
+      if (valueA.kind === 'empty') {
+        return 1;
+      }
+      if (valueB.kind === 'empty') {
+        return -1;
+      }
+
+      if (valueA.kind === 'string' || valueB.kind === 'string') {
+        return String(valueA.value).localeCompare(String(valueB.value)) * directionMultiplier;
+      }
+
+      if (valueA.value < valueB.value) {
+        return -1 * directionMultiplier;
+      }
+      if (valueA.value > valueB.value) {
+        return 1 * directionMultiplier;
+      }
       return 0;
-    }
-    if (valueA.kind === 'empty') {
-      return 1;
-    }
-    if (valueB.kind === 'empty') {
-      return -1;
-    }
-
-    if (valueA.kind === 'string' || valueB.kind === 'string') {
-      return String(valueA.value).localeCompare(String(valueB.value)) * directionMultiplier;
-    }
-
-    if (valueA.value < valueB.value) {
-      return -1 * directionMultiplier;
-    }
-    if (valueA.value > valueB.value) {
-      return 1 * directionMultiplier;
-    }
-    return 0;
-  });
+    }),
+    ...teamTotalRows,
+  ];
 }
 
 export function StatsTable({ columns, rows, tableClassName = 'w-max text-sm' }) {
   const [sortConfig, setSortConfig] = useState(null);
-  const sortedRows = sortRows(rows, columns, sortConfig);
+  const rowsWithKeys = rows.map((row, index) => ({
+    ...row,
+    __statsTableKey: row.rowKey || row.tableRowId || `${row.playerId || row.id || 'row'}-${index}`,
+  }));
+  const sortedRows = sortRows(rowsWithKeys, columns, sortConfig);
 
   function toggleSort(columnId) {
     setSortConfig((current) => {
@@ -143,8 +153,8 @@ export function StatsTable({ columns, rows, tableClassName = 'w-max text-sm' }) 
         </tr>
       </thead>
       <tbody>
-        {sortedRows.map((row) => (
-          <tr key={row.playerId || row.id} className="border-t border-slate-200">
+        {sortedRows.map((row, rowIndex) => (
+          <tr key={row.__statsTableKey} className="border-t border-slate-200">
             {columns.map((column, index) => (
               <td
                 key={column.id}
@@ -152,7 +162,7 @@ export function StatsTable({ columns, rows, tableClassName = 'w-max text-sm' }) 
                   column.emphasis ? 'font-semibold text-slate-900' : 'text-slate-700'
                 } ${getCellAlignment(column.align)} ${getStickyColumnClasses(index, 'cell')}`}
               >
-                {column.render(row)}
+                {column.render(row, rowIndex)}
               </td>
             ))}
           </tr>

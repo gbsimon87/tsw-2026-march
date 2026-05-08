@@ -33,6 +33,12 @@ async function list(req, res) {
   res.status(200).json({ leagues });
 }
 
+async function getMyProfiles(req, res) {
+  const userId = requireAuthUserId(req);
+  const result = await leaguesService.getMyLeagueProfiles(userId);
+  res.status(200).json(result);
+}
+
 async function listPublic(req, res) {
   const leagues = await leaguesService.listPublicLeagues();
   res.status(200).json({ leagues });
@@ -356,9 +362,15 @@ async function publicGames(req, res) {
   res.status(200).json({ games: league.games });
 }
 
+async function getPublicLeaders(req, res) {
+  const result = await leaguesService.getPublicLeagueLeaders(req.params.leagueSlug);
+  res.status(200).json(result);
+}
+
 module.exports = {
   create,
   list,
+  getMyProfiles,
   listPublic,
   getById,
   getPublicBySlug,
@@ -392,6 +404,7 @@ module.exports = {
   publicStandings,
   games,
   publicGames,
+  getPublicLeaders,
   listLeagueManagers,
   addLeagueManager,
   removeLeagueManager,

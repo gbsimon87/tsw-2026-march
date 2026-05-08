@@ -9,7 +9,7 @@ export function PageHeader({
 }) {
   return (
     <section className={`rounded-2xl border border-slate-200 bg-white p-5 md:p-6 ${className}`}>
-      <div className={media ? 'flex flex-col gap-4 sm:flex-row sm:items-center' : ''}>
+      <div className={media ? 'flex flex-row items-center gap-4' : ''}>
         {media ? <div className="shrink-0">{media}</div> : null}
         <div className="min-w-0">
           {eyebrow ? (

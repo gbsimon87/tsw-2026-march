@@ -21,6 +21,8 @@ const {
   findLeaguePlayerById,
   findLeaguePlayerByIdAndTeam,
   listLeaguePlayers,
+  listLeaguePlayersByClaimedUser,
+  listLeagueTeamsByIds,
   saveLeaguePlayer,
   createLeagueTeamMember,
   findActiveLeagueTeamMember,
@@ -442,7 +444,14 @@ async function listLeaguesForUser(userId) {
 
 async function listPublicLeagues() {
   const leagues = await listPublicLeaguesRepo();
-  return leagues.map((league) => sanitizeLeague(league));
+  const teamsPerLeague = await Promise.all(leagues.map((league) => listLeagueTeams(league._id)));
+  return leagues.map((league, i) =>
+    sanitizeLeague(league, {
+      includeTeams: teamsPerLeague[i]
+        .filter((team) => team.status === 'active')
+        .map((team) => sanitizeLeagueTeam(team)),
+    })
+  );
 }
 
 async function buildLeagueViewerContext(userId, league) {
@@ -800,6 +809,49 @@ function buildLeaguePlayerSummary(gameRows) {
     turnoversPerGame: gamesCount > 0 ? totals.tov / gamesCount : 0,
     foulsPerGame: gamesCount > 0 ? totals.foul / gamesCount : 0,
   };
+}
+
+async function getMyLeagueProfiles(userId) {
+  const players = await listLeaguePlayersByClaimedUser(userId);
+  if (players.length === 0) {
+    return { profiles: [] };
+  }
+
+  const leagueIds = [...new Set(players.map((p) => String(p.leagueId)))];
+  const teamIds = [...new Set(players.map((p) => String(p.leagueTeamId)))];
+
+  const [leagues, teams] = await Promise.all([
+    listLeaguesByIds(leagueIds),
+    listLeagueTeamsByIds(teamIds),
+  ]);
+
+  const leaguesById = new Map(leagues.map((l) => [String(l._id), l]));
+  const teamsById = new Map(teams.map((t) => [String(t._id), t]));
+
+  const profiles = players.map((player) => {
+    const team = teamsById.get(String(player.leagueTeamId));
+    const league = leaguesById.get(String(player.leagueId));
+    const playerLabel =
+      typeof player.jerseyNumber === 'number'
+        ? `#${player.jerseyNumber} ${player.displayName}`
+        : player.displayName;
+
+    return {
+      id: String(player._id),
+      displayName: player.displayName,
+      playerLabel,
+      jerseyNumber: player.jerseyNumber ?? null,
+      position: normalizePosition(player.position),
+      team: team ? sanitizeLeagueTeam(team) : null,
+      league: league ? sanitizeLeague(league) : null,
+      profileHref:
+        team && league
+          ? `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`
+          : null,
+    };
+  });
+
+  return { profiles };
 }
 
 async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId) {
@@ -1779,6 +1831,81 @@ async function canEditCompletedLeagueGame(userId, game) {
   return managerChecks.some(Boolean);
 }
 
+async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+  const [teams, games] = await Promise.all([
+    listLeagueTeams(league._id),
+    listLeagueGamesByLeagueId(league._id),
+  ]);
+
+  const teamsById = new Map(teams.map((t) => [String(t._id), t]));
+  const playerMap = new Map();
+
+  for (const team of teams) {
+    const teamId = String(team._id);
+
+    for (const game of games) {
+      const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
+      if (!rosterSnapshot.length) continue;
+
+      for (const snapshotPlayer of rosterSnapshot) {
+        const key = String(snapshotPlayer.leaguePlayerId || snapshotPlayer._id);
+        if (!playerMap.has(key)) {
+          playerMap.set(key, {
+            leaguePlayerId: key,
+            displayName: snapshotPlayer.displayName,
+            teamId,
+            gamesCount: 0,
+            stats: emptyStats(key, snapshotPlayer.displayName),
+          });
+        }
+        playerMap.get(key).gamesCount += 1;
+      }
+
+      for (const event of game.events || []) {
+        if (!event.playerId || !eventFilter(event)) continue;
+        const snapshotPlayer = rosterSnapshot.find((p) => String(p._id) === String(event.playerId));
+        if (!snapshotPlayer) continue;
+        const key = String(snapshotPlayer.leaguePlayerId || event.playerId);
+        if (playerMap.has(key)) {
+          applyEventToLine(playerMap.get(key).stats, event.statType);
+        }
+      }
+    }
+  }
+
+  const leaders = Array.from(playerMap.values())
+    .filter((entry) => entry.gamesCount > 0)
+    .map((entry) => {
+      const { stats, gamesCount } = entry;
+      const ppg = stats.points / gamesCount;
+      const rpg = stats.reb / gamesCount;
+      const apg = stats.ast / gamesCount;
+      const spg = stats.stl / gamesCount;
+      const bpg = (stats.blk || 0) / gamesCount;
+      const topg = stats.tov / gamesCount;
+      const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 3 + bpg * 3 + topg * -1;
+      const team = teamsById.get(entry.teamId);
+      return {
+        leaguePlayerId: entry.leaguePlayerId,
+        displayName: entry.displayName,
+        teamName: team?.name || null,
+        teamSlug: team?.slug || null,
+        teamLogoUrl: team?.logo?.url || null,
+        gamesCount,
+        ppg,
+        rpg,
+        apg,
+        spg,
+        fantasyScore,
+      };
+    })
+    .sort((a, b) => b.fantasyScore - a.fantasyScore)
+    .slice(0, limit);
+
+  return { leaders };
+}
+
 module.exports = {
   createLeagueForUser,
   listLeaguesForUser,
@@ -1822,4 +1949,6 @@ module.exports = {
   addLeagueManagerByEmail,
   listLeagueManagersForLeague,
   removeLeagueManagerById,
+  getPublicLeagueLeaders,
+  getMyLeagueProfiles,
 };

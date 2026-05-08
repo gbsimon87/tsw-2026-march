@@ -4,6 +4,9 @@ export const leaguesApi = {
   list() {
     return apiClient.get('/leagues');
   },
+  getMyProfiles() {
+    return apiClient.get('/leagues/my-profiles');
+  },
   listPublic() {
     return apiClient.get('/public/leagues');
   },
@@ -121,5 +124,8 @@ export const leaguesApi = {
     return apiClient.get(
       `/public/leagues/${leagueSlug}/teams/${teamSlug}/players/${leaguePlayerId}`
     );
+  },
+  getPublicLeagueLeaders(leagueSlug) {
+    return apiClient.get(`/public/leagues/${leagueSlug}/leaders`);
   },
 };

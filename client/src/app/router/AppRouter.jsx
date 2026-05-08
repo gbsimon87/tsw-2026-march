@@ -30,6 +30,7 @@ import { PublicLeagueStandingsPage } from '../../features/leagues/pages/PublicLe
 import { PublicLeagueGamesPage } from '../../features/leagues/pages/PublicLeagueGamesPage';
 import { PublicLeagueTeamPage } from '../../features/leagues/pages/PublicLeagueTeamPage';
 import { PublicLeaguePlayerPage } from '../../features/leagues/pages/PublicLeaguePlayerPage';
+import { MySportyPage } from '../../features/leagues/pages/MySportyPage';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -202,6 +203,14 @@ export function AppRouter() {
           }
         />
         <Route path="/games/:gameId" element={<GameDetailPage />} />
+        <Route
+          path="/my-sporty"
+          element={
+            <ProtectedRoute>
+              <MySportyPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin"
           element={

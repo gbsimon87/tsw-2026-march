@@ -23,7 +23,7 @@ export function AppLayout() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
           <Link to={brandHref} className="text-lg font-semibold">
-            {import.meta.env.VITE_APP_NAME || 'TSW'}
+            {import.meta.env.VITE_APP_NAME}
           </Link>
 
           <nav className="ml-auto hidden items-center gap-4 md:flex">
@@ -33,6 +33,11 @@ export function AppLayout() {
             <NavLink to="/feed" className={desktopNavLinkClass}>
               Feed
             </NavLink>
+            {user ? (
+              <NavLink to="/my-sporty" className={desktopNavLinkClass}>
+                My Sporty
+              </NavLink>
+            ) : null}
             {user ? (
               <NavLink to="/admin" className={desktopNavLinkClass}>
                 Admin
@@ -127,6 +132,15 @@ export function AppLayout() {
             >
               Feed
             </NavLink>
+            {user ? (
+              <NavLink
+                to="/my-sporty"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                My Sporty
+              </NavLink>
+            ) : null}
             {user ? (
               <NavLink
                 to="/admin"

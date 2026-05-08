@@ -18,6 +18,7 @@ const upload = multer({
 publicLeaguesRouter.get('/', asyncHandler(controller.listPublic));
 publicLeaguesRouter.get('/:leagueSlug/standings', asyncHandler(controller.publicStandings));
 publicLeaguesRouter.get('/:leagueSlug/games', asyncHandler(controller.publicGames));
+publicLeaguesRouter.get('/:leagueSlug/leaders', asyncHandler(controller.getPublicLeaders));
 publicLeaguesRouter.get(
   '/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId',
   asyncHandler(controller.getPublicPlayer)
@@ -28,6 +29,7 @@ publicLeaguesRouter.get('/:leagueSlug', asyncHandler(controller.getPublicBySlug)
 leaguesRouter.use(authMiddleware);
 leaguesRouter.post('/', asyncHandler(controller.create));
 leaguesRouter.get('/', asyncHandler(controller.list));
+leaguesRouter.get('/my-profiles', asyncHandler(controller.getMyProfiles));
 leaguesRouter.get('/:leagueId', asyncHandler(controller.getById));
 leaguesRouter.patch('/:leagueId', asyncHandler(controller.update));
 leaguesRouter.post('/:leagueId/archive', asyncHandler(controller.archive));

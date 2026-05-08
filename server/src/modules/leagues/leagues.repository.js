@@ -225,6 +225,14 @@ function listLeaguePlayers(leagueTeamId) {
   return LeaguePlayer.find({ leagueTeamId }).sort({ createdAt: 1 });
 }
 
+function listLeaguePlayersByClaimedUser(userId) {
+  return LeaguePlayer.find({ claimedByUserId: userId }).sort({ createdAt: -1 });
+}
+
+function listLeagueTeamsByIds(ids) {
+  return LeagueTeam.find({ _id: { $in: ids } });
+}
+
 function saveLeaguePlayer(leaguePlayer) {
   return leaguePlayer.save();
 }
@@ -331,6 +339,8 @@ module.exports = {
   findLeaguePlayerById,
   findLeaguePlayerByIdAndTeam,
   listLeaguePlayers,
+  listLeaguePlayersByClaimedUser,
+  listLeagueTeamsByIds,
   saveLeaguePlayer,
   createLeagueTeamMember,
   findActiveLeagueTeamMember,

@@ -49,23 +49,35 @@ export function HomePage() {
       teamsApi.listPublic().catch(() => ({ teams: [] })),
       leaguesApi.listPublic().catch(() => ({ leagues: [] })),
     ]).then(([teamsResult, leaguesResult]) => {
-      setPublicTeams(teamsResult.teams || []);
-      setPublicLeagues(
-        (leaguesResult.leagues || []).filter(
-          (league) => league.isPublic && league.status === 'active'
-        )
+      const activeLeagues = (leaguesResult.leagues || []).filter(
+        (league) => league.isPublic && league.status === 'active'
       );
+      setPublicLeagues(activeLeagues);
+
+      const leagueTeams = activeLeagues.flatMap((league) =>
+        (league.teams || []).map((team) => ({
+          ...team,
+          _kind: 'league',
+          leagueSlug: league.slug,
+          leagueName: league.name,
+        }))
+      );
+      const standaloneTeams = (teamsResult.teams || []).map((team) => ({
+        ...team,
+        _kind: 'standalone',
+      }));
+      setPublicTeams([...leagueTeams, ...standaloneTeams]);
     });
   }, []);
 
   return (
-    <main className="space-y-16">
+    <main className="space-y-6">
       <PageHeader
         eyebrow="TSW Basketball"
         title="Turn every game into progress your team can see and feel."
         description="TSW helps teams capture game stats quickly, understand what is working, and stay connected to growth all season long."
       >
-        <div className="flex flex-wrap items-center gap-3">
+        <nav aria-label="Get started" className="flex flex-wrap items-center gap-3">
           {user ? (
             <Link
               to="/feed"
@@ -89,58 +101,60 @@ export function HomePage() {
               </Link>
             </>
           )}
-        </div>
+        </nav>
       </PageHeader>
 
       <section
         aria-labelledby="active-leagues-heading"
         className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8"
       >
-        <div>
+        <header>
           <h2 id="active-leagues-heading" className="text-2xl font-semibold text-slate-900">
             Active Leagues
           </h2>
           <p className="mt-2 max-w-2xl text-slate-700">
             Browse public leagues, standings, and games from teams currently competing.
           </p>
-        </div>
+        </header>
 
         {publicLeagues.length === 0 ? (
-          <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
+          <p
+            role="status"
+            className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
+          >
             No public leagues yet.
           </p>
         ) : (
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3 list-none p-0">
             {publicLeagues.map((league) => (
-              <article
-                key={league.id}
-                className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={getLeagueHeaderImage(league)}
-                    alt={`${league.name} logo`}
-                    className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                  />
-                  <h3 aria-label={league.name} className="text-lg font-semibold text-slate-900">
-                    {league.name}
-                  </h3>
-                </div>
-                <p className="mt-2 text-sm text-slate-600">{league.seasonLabel || 'Season TBD'}</p>
-                <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold">
-                  <Link to={`/league/${league.slug}`} className="text-sky-700 hover:underline">
-                    Overview
-                  </Link>
-                  <Link
-                    to={`/league/${league.slug}/games`}
-                    className="text-sky-700 hover:underline"
-                  >
-                    Games
-                  </Link>
-                </div>
-              </article>
+              <li key={league.id}>
+                <article className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={getLeagueHeaderImage(league)}
+                      alt={`${league.name} logo`}
+                      className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                    />
+                    <h3 className="text-lg font-semibold text-slate-900">{league.name}</h3>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {league.seasonLabel || 'Season TBD'}
+                  </p>
+                  <footer className="mt-4 flex flex-wrap gap-3 text-sm font-semibold">
+                    <Link to={`/league/${league.slug}`} className="text-sky-700 hover:underline">
+                      Overview
+                    </Link>
+                    <Link
+                      to={`/league/${league.slug}/games`}
+                      className="text-sky-700 hover:underline"
+                    >
+                      Games
+                    </Link>
+                  </footer>
+                </article>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
@@ -148,47 +162,61 @@ export function HomePage() {
         aria-labelledby="featured-teams-heading"
         className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8"
       >
-        <div>
+        <header>
           <h2 id="featured-teams-heading" className="text-2xl font-semibold text-slate-900">
-            Featured Public Teams
+            Featured Teams
           </h2>
           <p className="mt-2 max-w-2xl text-slate-700">
             Open public team pages to review rosters, players, and recent games.
           </p>
-        </div>
+          <p className="mt-2 max-w-2xl text-slate-700">Includes league and non-league teams.</p>
+        </header>
 
         {publicTeams.length === 0 ? (
-          <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
+          <p
+            role="status"
+            className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
+          >
             No public teams yet.
           </p>
         ) : (
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {publicTeams.map((team) => (
-              <Link
-                key={team.id}
-                to={`/teams/${team.id}`}
-                className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-slate-300"
-              >
-                <div className="flex items-center gap-3">
-                  {team.logo?.url ? (
-                    <img
-                      src={team.logo.url}
-                      alt={`${team.name} logo`}
-                      className="h-12 w-12 rounded-full border border-slate-200 object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-500">
-                      TSW
+          <ul className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3 list-none p-0">
+            {publicTeams.map((team) => {
+              const href =
+                team._kind === 'league'
+                  ? `/league/${team.leagueSlug}/teams/${team.slug}`
+                  : `/teams/${team.id}`;
+              const subtitle = team._kind === 'league' ? team.leagueName : 'Open public team page';
+
+              return (
+                <li key={team._kind === 'league' ? `league-team-${team.id}` : `team-${team.id}`}>
+                  <Link
+                    to={href}
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-slate-300"
+                  >
+                    {team.logo?.url ? (
+                      <img
+                        src={team.logo.url}
+                        alt={`${team.name} logo`}
+                        className="h-12 w-12 shrink-0 rounded-full border border-slate-200 object-cover"
+                      />
+                    ) : (
+                      <div
+                        aria-hidden="true"
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-500"
+                      >
+                        TSW
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{team.name}</h3>
+                      <p className="text-sm text-slate-600">{subtitle}</p>
                     </div>
-                  )}
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">{team.name}</h3>
-                    <p className="text-sm text-slate-600">Open public team page</p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 
@@ -199,14 +227,10 @@ export function HomePage() {
           <section
             key={section.id}
             aria-labelledby={section.headingId}
-            className="grid items-center gap-8 rounded-2xl bg-white border border-slate-200 p-6 md:grid-cols-2 md:p-8"
+            className="grid items-center gap-6 rounded-2xl bg-white border border-slate-200 p-6 md:grid-cols-2 md:p-8"
           >
             <div className={imageIsSecond ? 'order-2 md:order-1' : undefined}>
-              <h2
-                id={section.headingId}
-                aria-label={section.title}
-                className="text-2xl font-semibold text-slate-900"
-              >
+              <h2 id={section.headingId} className="text-2xl font-semibold text-slate-900">
                 {section.title}
               </h2>
               <p className="mt-3 text-slate-700">{section.body}</p>

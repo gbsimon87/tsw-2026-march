@@ -7,17 +7,113 @@ import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
+import { StatsTable } from '../../teams/components/StatsTable';
+import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+
+const LEADERS_COLUMNS = [
+  {
+    id: 'rank',
+    label: '#',
+    align: 'left',
+    sortable: false,
+    render: (row) => row.rank,
+  },
+  {
+    id: 'player',
+    label: 'Player',
+    align: 'left',
+    sortable: false,
+    render: (row) => (
+      <span className="flex items-center gap-2">
+        <img
+          src={playerPlaceholder}
+          alt=""
+          className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+        />
+        {row.teamSlug && row.leaguePlayerId ? (
+          <Link
+            to={`/league/${row.leagueSlug}/teams/${row.teamSlug}/players/${row.leaguePlayerId}`}
+            className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+          >
+            {row.displayName}
+          </Link>
+        ) : (
+          <span className="font-medium text-slate-900">{row.displayName}</span>
+        )}
+      </span>
+    ),
+  },
+  {
+    id: 'team',
+    label: 'Team',
+    align: 'left',
+    sortable: false,
+    render: (row) => (
+      <span className="flex items-center gap-1.5">
+        <img
+          src={row.teamLogoUrl || teamPlaceholder}
+          alt=""
+          className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+        />
+        <span className="text-slate-600">{row.teamName || '—'}</span>
+      </span>
+    ),
+  },
+  {
+    id: 'gp',
+    label: 'GP',
+    align: 'right',
+    sortKey: 'gamesCount',
+    render: (row) => row.gamesCount,
+  },
+  {
+    id: 'ppg',
+    label: 'PPG',
+    align: 'right',
+    sortKey: 'ppg',
+    render: (row) => row.ppg.toFixed(1),
+  },
+  {
+    id: 'apg',
+    label: 'APG',
+    align: 'right',
+    sortKey: 'apg',
+    render: (row) => row.apg.toFixed(1),
+  },
+  {
+    id: 'spg',
+    label: 'SPG',
+    align: 'right',
+    sortKey: 'spg',
+    render: (row) => row.spg.toFixed(1),
+  },
+  {
+    id: 'fp',
+    label: 'FP',
+    align: 'right',
+    sortKey: 'fantasyScore',
+    emphasis: true,
+    render: (row) => row.fantasyScore.toFixed(1),
+  },
+];
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
   const [league, setLeague] = useState(null);
+  const [leaders, setLeaders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    leaguesApi
-      .getPublicBySlug(leagueSlug)
-      .then((response) => setLeague(response.league))
+    Promise.all([
+      leaguesApi.getPublicBySlug(leagueSlug),
+      leaguesApi.getPublicLeagueLeaders(leagueSlug),
+    ])
+      .then(([leagueResponse, leadersResponse]) => {
+        setLeague(leagueResponse.league);
+        setLeaders(leadersResponse.leaders || []);
+      })
       .catch((loadError) => setError(loadError.message || 'Failed to load league'))
       .finally(() => setIsLoading(false));
   }, [leagueSlug]);
@@ -69,6 +165,26 @@ export function PublicLeaguePage() {
           }}
           className="mt-4"
         />
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-slate-900">Season Leaders</h2>
+        {leaders.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
+        ) : (
+          <>
+            <div className="mt-4 overflow-x-auto">
+              <StatsTable
+                columns={LEADERS_COLUMNS}
+                rows={leaders.map((row, i) => ({ ...row, leagueSlug: league.slug, rank: i + 1 }))}
+                tableClassName="w-full text-sm"
+              />
+            </div>
+            <p className="mt-3 text-xs text-slate-400">
+              FP = (PPG × 1) + (RPG × 1.2) + (APG × 1.5) + (SPG × 3) + (BPG × 3) + (TOV × −1)
+            </p>
+          </>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
