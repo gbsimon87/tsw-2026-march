@@ -107,6 +107,17 @@ const rosterSnapshotPlayerSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const aiSummarySchema = new mongoose.Schema(
+  {
+    text: { type: String, trim: true, default: null },
+    source: { type: String, enum: ['ai', 'fallback'], default: 'fallback' },
+    provider: { type: String, trim: true, default: null },
+    model: { type: String, trim: true, default: null },
+    generatedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const gameSchema = new mongoose.Schema(
   {
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -172,6 +183,9 @@ const gameSchema = new mongoose.Schema(
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     awayRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     events: { type: [shotEventSchema], default: [] },
+    aiSummary: { type: aiSummarySchema, default: null },
+    aiSummaryGenerationLockId: { type: String, default: null, index: true },
+    aiSummaryGenerationLockedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -252,6 +266,43 @@ async function saveGame(game) {
   return game.save();
 }
 
+async function claimGameSummaryGeneration(gameId, lockId) {
+  return Game.findOneAndUpdate(
+    {
+      _id: gameId,
+      gameContext: 'league',
+      aiSummaryGenerationLockId: null,
+      $or: [{ aiSummary: null }, { 'aiSummary.text': null }, { 'aiSummary.text': '' }],
+    },
+    {
+      $set: {
+        aiSummaryGenerationLockId: lockId,
+        aiSummaryGenerationLockedAt: new Date(),
+      },
+    },
+    { new: true }
+  );
+}
+
+async function saveGameSummary(gameId, lockId, summary) {
+  return Game.findOneAndUpdate(
+    {
+      _id: gameId,
+      aiSummaryGenerationLockId: lockId,
+    },
+    {
+      $set: {
+        aiSummary: summary,
+      },
+      $unset: {
+        aiSummaryGenerationLockId: '',
+        aiSummaryGenerationLockedAt: '',
+      },
+    },
+    { new: true }
+  );
+}
+
 module.exports = {
   createGame,
   listGamesByOwner,
@@ -264,4 +315,6 @@ module.exports = {
   listLeagueGamesByLeagueId,
   findGameByLeagueIdAndId,
   saveGame,
+  claimGameSummaryGeneration,
+  saveGameSummary,
 };

@@ -207,6 +207,7 @@ export function GameDetailPage() {
   const { game, team, boxScore, participants } = data;
   const isDualTeam = game.trackingMode === 'dual_team';
   const recap = data.recap;
+  const aiSummary = data.aiSummary || game.aiSummary || null;
   const playersById = buildPlayersById(data, isDualTeam);
   const gameSummary = data.gameSummary || {
     teamPoints: boxScore?.teamTotals?.points || 0,
@@ -579,6 +580,7 @@ export function GameDetailPage() {
                   isDualTeam={isDualTeam}
                   gameId={game.id}
                   recap={recap}
+                  aiSummary={aiSummary}
                   onShareToFeed={openFeedComposer}
                 />
               ),

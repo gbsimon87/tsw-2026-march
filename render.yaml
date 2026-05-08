@@ -51,6 +51,12 @@ services:
         sync: false
       - key: POSTHOG_HOST
         value: https://app.posthog.com
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_GAME_SUMMARY_MODEL
+        value: gpt-5.4-mini
+      - key: OPENAI_GAME_SUMMARY_TIMEOUT_MS
+        value: 8000
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
@@ -155,6 +161,12 @@ services:
         sync: false
       - key: POSTHOG_HOST
         value: https://app.posthog.com
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_GAME_SUMMARY_MODEL
+        value: gpt-5.4-mini
+      - key: OPENAI_GAME_SUMMARY_TIMEOUT_MS
+        value: 8000
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

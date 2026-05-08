@@ -42,6 +42,9 @@ const expected = {
     'PASSWORD_RESET_TTL_MINUTES',
     'POSTHOG_KEY',
     'POSTHOG_HOST',
+    'OPENAI_API_KEY',
+    'OPENAI_GAME_SUMMARY_MODEL',
+    'OPENAI_GAME_SUMMARY_TIMEOUT_MS',
   ],
   'env/server/.env.production': [
     'NODE_ENV',
@@ -65,6 +68,9 @@ const expected = {
     'PASSWORD_RESET_TTL_MINUTES',
     'POSTHOG_KEY',
     'POSTHOG_HOST',
+    'OPENAI_API_KEY',
+    'OPENAI_GAME_SUMMARY_MODEL',
+    'OPENAI_GAME_SUMMARY_TIMEOUT_MS',
   ],
 };
 

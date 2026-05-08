@@ -87,6 +87,7 @@ export function GameRecapPanel({
   participants,
   isDualTeam = false,
   recap,
+  aiSummary = null,
   onShareToFeed,
 }) {
   const [imageState, setImageState] = useState('');
@@ -163,6 +164,15 @@ export function GameRecapPanel({
 
   return (
     <div className="space-y-5">
+      {aiSummary?.text ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Game Summary
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{aiSummary.text}</p>
+        </section>
+      ) : null}
+
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-xl font-semibold text-slate-900">Game Stats</h3>

@@ -8,6 +8,8 @@ jest.mock('../../modules/games/games.repository', () => ({
   findGameById: jest.fn(),
   findGameByIdAndOwner: jest.fn(),
   saveGame: jest.fn(),
+  claimGameSummaryGeneration: jest.fn(),
+  saveGameSummary: jest.fn(),
 }));
 
 jest.mock('../../modules/billing/billing.service', () => ({
@@ -27,15 +29,22 @@ jest.mock('../../modules/games/gameRecap.service', () => ({
   buildGameRecap: jest.fn(() => ({ summary: [] })),
 }));
 
+jest.mock('../../modules/games/gameSummaryAi.service', () => ({
+  buildPersistedGameSummary: jest.fn(),
+}));
+
 jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueContextForGame: jest.fn(),
   getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
+  canFinalizeLeagueGame: jest.fn(() => false),
+  canEditCompletedLeagueGame: jest.fn(() => false),
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeagueTeamById: jest.fn(() => Promise.resolve(null)),
+  findLeagueById: jest.fn(() => Promise.resolve(null)),
 }));
 
 jest.mock('mongoose', () => ({
@@ -47,14 +56,25 @@ jest.mock('mongoose', () => ({
 }));
 
 const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
-const { createGame, findGameById, saveGame } = require('../../modules/games/games.repository');
+const {
+  createGame,
+  findGameById,
+  saveGame,
+  claimGameSummaryGeneration,
+  saveGameSummary,
+} = require('../../modules/games/games.repository');
+const { buildGameRecap } = require('../../modules/games/gameRecap.service');
+const { buildPersistedGameSummary } = require('../../modules/games/gameSummaryAi.service');
 const {
   getLeagueContextForGame,
   getLeagueRosterSnapshotForTeam,
+  canEditCompletedLeagueGame,
 } = require('../../modules/leagues/leagues.service');
 const {
   computeBoxScore,
   createGameForUser,
+  appendEventForUser,
+  finishGameForUser,
   getGameForUser,
   setGameLineup,
 } = require('../../modules/games/games.service');
@@ -395,6 +415,176 @@ describe('games service roster snapshot repair', () => {
     expect(game.homeStartingLineupPlayerIds).toEqual(playerIds);
     expect(game.homeCurrentLineupPlayerIds).toEqual(playerIds);
     expect(result.lineups.home.currentPlayerIds).toEqual(playerIds);
+  });
+});
+
+describe('games service finish summaries', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    buildPersistedGameSummary.mockReset();
+    claimGameSummaryGeneration.mockReset();
+    saveGameSummary.mockReset();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+    buildGameRecap.mockReturnValue({
+      home: { name: 'Home Squad', points: 72 },
+      away: { name: 'Away Squad', points: 68 },
+      topPerformers: [],
+      keyMoments: [],
+    });
+  });
+
+  test('generates and saves a league game summary when finishing a game without one', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [
+        buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+        buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      ],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+    const summary = {
+      text: 'Home Squad edged Away Squad behind a balanced closing push.',
+      source: 'ai',
+      provider: 'openai',
+      model: 'gpt-5.4-mini',
+      generatedAt: new Date('2026-03-12T19:30:00.000Z'),
+    };
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    claimGameSummaryGeneration.mockResolvedValue(game);
+    saveGameSummary.mockImplementation(async (gameId, lockId, savedSummary) => {
+      game.aiSummary = savedSummary;
+      return game;
+    });
+    buildPersistedGameSummary.mockResolvedValue(summary);
+
+    const result = await finishGameForUser('user-1', 'game-1');
+
+    expect(game.status).toBe('completed');
+    expect(game.aiSummary).toEqual(summary);
+    expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
+    expect(buildPersistedGameSummary).toHaveBeenCalledTimes(1);
+    expect(saveGameSummary).toHaveBeenCalledTimes(1);
+    expect(saveGame).toHaveBeenCalledTimes(1);
+    expect(result.aiSummary).toEqual(expect.objectContaining({ text: summary.text, source: 'ai' }));
+  });
+
+  test('does not regenerate an existing league game summary', async () => {
+    const existingSummary = {
+      text: 'A saved recap already exists.',
+      source: 'fallback',
+      generatedAt: new Date('2026-03-12T19:30:00.000Z'),
+    };
+    const game = buildDualLeagueGame({
+      aiSummary: existingSummary,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await finishGameForUser('user-1', 'game-1');
+
+    expect(buildPersistedGameSummary).not.toHaveBeenCalled();
+    expect(claimGameSummaryGeneration).not.toHaveBeenCalled();
+    expect(saveGame).toHaveBeenCalledTimes(1);
+    expect(result.aiSummary).toEqual(expect.objectContaining({ text: existingSummary.text }));
+  });
+
+  test('does not generate a duplicate summary when another request has claimed generation', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    claimGameSummaryGeneration.mockResolvedValue(null);
+
+    await finishGameForUser('user-1', 'game-1');
+
+    expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
+    expect(buildPersistedGameSummary).not.toHaveBeenCalled();
+    expect(saveGameSummary).not.toHaveBeenCalled();
+  });
+
+  test('does not generate summaries for standalone games', async () => {
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      title: 'Standalone',
+      status: 'in_progress',
+      events: [],
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      scheduledAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', name: 'Team', players: [] });
+    saveGame.mockResolvedValue(game);
+
+    await finishGameForUser('user-1', 'game-1');
+
+    expect(buildPersistedGameSummary).not.toHaveBeenCalled();
+    expect(claimGameSummaryGeneration).not.toHaveBeenCalled();
+    expect(game.aiSummary).toBeUndefined();
+  });
+
+  test('clears saved league summary when completed game stats are edited', async () => {
+    const players = [
+      buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+      buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      buildLeagueSnapshotPlayer('home-snap-3', 'Home Three'),
+      buildLeagueSnapshotPlayer('home-snap-4', 'Home Four'),
+      buildLeagueSnapshotPlayer('home-snap-5', 'Home Five'),
+    ];
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      aiSummary: {
+        text: 'Old recap.',
+        source: 'fallback',
+        generatedAt: new Date('2026-03-12T19:30:00.000Z'),
+      },
+      homeRosterSnapshot: players,
+      awayRosterSnapshot: [
+        buildLeagueSnapshotPlayer('away-snap-1', 'Away One'),
+        buildLeagueSnapshotPlayer('away-snap-2', 'Away Two'),
+        buildLeagueSnapshotPlayer('away-snap-3', 'Away Three'),
+        buildLeagueSnapshotPlayer('away-snap-4', 'Away Four'),
+        buildLeagueSnapshotPlayer('away-snap-5', 'Away Five'),
+      ],
+      homeCurrentLineupPlayerIds: players.map((player) => player._id),
+      awayCurrentLineupPlayerIds: [
+        'away-snap-1',
+        'away-snap-2',
+        'away-snap-3',
+        'away-snap-4',
+        'away-snap-5',
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    canEditCompletedLeagueGame.mockResolvedValue(true);
+
+    await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    expect(game.aiSummary).toBeNull();
   });
 });
 

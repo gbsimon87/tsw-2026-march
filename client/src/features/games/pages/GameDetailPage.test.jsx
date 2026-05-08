@@ -339,7 +339,7 @@ describe('GameDetailPage', () => {
     fireEvent.change(screen.getByPlaceholderText('Add a caption...'), {
       target: { value: 'What a finish' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Post to Feed' }));
+    fireEvent.click(within(shareDialog).getByRole('button', { name: 'submit' }));
     await waitFor(() =>
       expect(feedApiMocks.createGameCardPost).toHaveBeenCalledWith({
         gameId: 'game-1',
@@ -819,6 +819,169 @@ describe('GameDetailPage', () => {
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
     expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
     expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+  });
+
+  test('renders a saved AI summary in the recap panel while keeping the game video visible', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-summary-video',
+        title: 'League Final',
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'Home Squad',
+        billing: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlements: { canViewReplay: true, canViewShotMaps: true },
+        players: [],
+      },
+      teamEntitlements: { canViewReplay: true, canViewShotMaps: true },
+      recap: {
+        statusLabel: 'Final',
+        team: { id: 'team-1', name: 'Home Squad', points: 72 },
+        opponent: { name: 'Away Squad', points: 68 },
+        playedAt: '2026-03-12T19:20:00.000Z',
+        topPerformers: [],
+        teamStats: {},
+        keyMoments: [],
+        shotSnapshot: { made: 0, missed: 0, events: [] },
+      },
+      boxScore: {
+        players: [],
+        teamTotals: { points: 72 },
+        opponentTotals: { points: 68 },
+      },
+      aiSummary: {
+        text: 'Home Squad held off Away Squad, 72-68, behind a composed closing stretch.',
+        source: 'ai',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-summary-video']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Game Video')).toBeInTheDocument();
+    const summaryHeading = screen.getByText('Game Summary');
+    const gameStatsHeading = screen.getByText('Game Stats');
+    expect(screen.getByText(/Home Squad held off Away Squad/i)).toBeInTheDocument();
+    expect(
+      summaryHeading.compareDocumentPosition(gameStatsHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  test('renders a saved AI summary above game stats when no video exists', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-summary-no-video',
+        title: 'League Final',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'Home Squad',
+        billing: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlements: { canViewReplay: true, canViewShotMaps: true },
+        players: [],
+      },
+      teamEntitlements: { canViewReplay: true, canViewShotMaps: true },
+      recap: {
+        statusLabel: 'Final',
+        team: { id: 'team-1', name: 'Home Squad', points: 72 },
+        opponent: { name: 'Away Squad', points: 68 },
+        playedAt: '2026-03-12T19:20:00.000Z',
+        topPerformers: [],
+        teamStats: {},
+        keyMoments: [],
+        shotSnapshot: { made: 0, missed: 0, events: [] },
+      },
+      boxScore: {
+        players: [],
+        teamTotals: { points: 72 },
+        opponentTotals: { points: 68 },
+      },
+      aiSummary: {
+        text: 'Home Squad held off Away Squad, 72-68, behind a composed closing stretch.',
+        source: 'fallback',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-summary-no-video']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const summaryHeading = await screen.findByText('Game Summary');
+    const gameStatsHeading = screen.getByText('Game Stats');
+    expect(screen.queryByText('Game Video')).not.toBeInTheDocument();
+    expect(screen.getByText(/Home Squad held off Away Squad/i)).toBeInTheDocument();
+    expect(
+      summaryHeading.compareDocumentPosition(gameStatsHeading) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  test('does not render the AI summary panel without saved summary text', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-no-summary',
+        title: 'League Final',
+        status: 'completed',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        createdAt: '2026-03-12T17:45:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'Home Squad',
+        billing: { plan: 'pro', subscriptionStatus: 'active' },
+        entitlements: { canViewReplay: true, canViewShotMaps: true },
+        players: [],
+      },
+      teamEntitlements: { canViewReplay: true, canViewShotMaps: true },
+      recap: {
+        statusLabel: 'Final',
+        team: { id: 'team-1', name: 'Home Squad', points: 72 },
+        opponent: { name: 'Away Squad', points: 68 },
+        playedAt: '2026-03-12T19:20:00.000Z',
+        topPerformers: [],
+        teamStats: {},
+        keyMoments: [],
+        shotSnapshot: { made: 0, missed: 0, events: [] },
+      },
+      boxScore: {
+        players: [],
+        teamTotals: { points: 72 },
+        opponentTotals: { points: 68 },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/games/game-no-summary']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('tab', { name: 'Recap' })).toBeInTheDocument();
+    expect(screen.queryByText('Game Summary')).not.toBeInTheDocument();
   });
 
   test('renders a simplified print mode layout', async () => {

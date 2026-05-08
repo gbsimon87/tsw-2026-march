@@ -1,11 +1,20 @@
 const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 const { ApiError } = require('../../utils/apiError');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
-const { createGame, listGamesByOwner, findGameById, saveGame } = require('./games.repository');
+const {
+  createGame,
+  listGamesByOwner,
+  findGameById,
+  saveGame,
+  claimGameSummaryGeneration,
+  saveGameSummary,
+} = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
 const { getTeamEntitlements, getBillingSummary } = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
+const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
 const {
   getLeagueContextForGame,
   getLeagueRosterSnapshotForTeam,
@@ -72,6 +81,24 @@ function sanitizeParticipant(participant) {
   };
 }
 
+function sanitizeAiSummary(summary) {
+  if (!summary?.text) {
+    return null;
+  }
+
+  return {
+    text: summary.text,
+    source: summary.source || 'fallback',
+    generatedAt: summary.generatedAt || null,
+  };
+}
+
+function clearAiSummaryAfterCompletedLeagueEdit(game) {
+  if (game.gameContext === 'league' && game.status === 'completed' && game.aiSummary?.text) {
+    game.aiSummary = null;
+  }
+}
+
 function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
@@ -116,6 +143,7 @@ function sanitizeGame(game, options = {}) {
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
     events: (game.events || []).map(sanitizeEvent),
+    aiSummary: sanitizeAiSummary(game.aiSummary),
   };
 }
 
@@ -977,6 +1005,8 @@ async function getGameForUser(userId, gameId) {
     return participant.logo || null;
   }
 
+  const aiSummary = sanitizeAiSummary(game.aiSummary);
+
   return {
     game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
@@ -1026,6 +1056,7 @@ async function getGameForUser(userId, gameId) {
       boxScore
     ),
     gameSummary,
+    aiSummary,
     canEditCompletedGame: canEditCompleted,
   };
 }
@@ -1170,6 +1201,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
       insertBeforeEventId
     );
     recalculateCurrentLineup(game);
+    clearAiSummaryAfterCompletedLeagueEdit(game);
     await saveGame(game);
     return getGameForUser(userId, gameId);
   }
@@ -1237,6 +1269,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   );
 
   recalculateCurrentLineup(game);
+  clearAiSummaryAfterCompletedLeagueEdit(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
 }
@@ -1284,6 +1317,7 @@ async function removeEventForUser(userId, gameId, eventId) {
   }
   event.deleteOne();
   recalculateCurrentLineup(game);
+  clearAiSummaryAfterCompletedLeagueEdit(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
 }
@@ -1317,6 +1351,28 @@ async function finishGameForUser(userId, gameId) {
   game.status = 'completed';
   game.completedAt = new Date();
   await saveGame(game);
+
+  if (game.gameContext === 'league' && !game.aiSummary?.text) {
+    const summaryLockId = randomUUID();
+    const claimedGame = await claimGameSummaryGeneration(game._id, summaryLockId);
+    if (!claimedGame) {
+      return getGameForUser(userId, gameId);
+    }
+
+    const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
+    const boxScore =
+      game.trackingMode === 'dual_team'
+        ? computeBoxScore(game, null, { participants })
+        : computeBoxScore(game, teamDoc);
+    const recap = buildGameRecap(
+      game,
+      game.trackingMode === 'dual_team' ? participants : teamDoc,
+      boxScore
+    );
+    const summary = await buildPersistedGameSummary(game, { recap, boxScore });
+    await saveGameSummary(game._id, summaryLockId, summary);
+  }
+
   return getGameForUser(userId, gameId);
 }
 
