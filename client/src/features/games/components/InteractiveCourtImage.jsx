@@ -44,6 +44,9 @@ export function InteractiveCourtImage({
   const shouldRotate90 = rotate90 || isMobileLandscape;
 
   function onSelectPoint(event) {
+    if (event.pointerType === 'touch') {
+      event.preventDefault();
+    }
     const point = normalizeFromPointer(event, event.currentTarget, shouldRotate90);
     onSelect(point);
   }
@@ -148,7 +151,6 @@ export function InteractiveCourtImage({
                 aria-label="Basketball court image"
                 data-testid="interactive-court-image"
                 onPointerDown={onSelectPoint}
-                onClick={onSelectPoint}
               >
                 <img
                   src={courtImage}

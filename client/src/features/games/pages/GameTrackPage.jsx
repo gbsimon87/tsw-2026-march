@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { gamesApi } from '../api/gamesApi';
@@ -100,6 +100,7 @@ export function GameTrackPage() {
     oneSided: createEmptySideState(),
   });
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
+  const ghostClickGuardRef = useRef(null);
 
   useEffect(() => {
     async function loadGame() {
@@ -323,6 +324,7 @@ export function GameTrackPage() {
     setPendingFollowUpPrompt(null);
     setLastTappedHoop(inferred.nearestHoop);
     setError('');
+    ghostClickGuardRef.current = Date.now();
   }
 
   function openTrackingOverlay() {
@@ -897,6 +899,13 @@ export function GameTrackPage() {
       role="dialog"
       onClick={clearEventPicker}
       onPointerDown={(event) => event.stopPropagation()}
+      onClickCapture={(event) => {
+        if (ghostClickGuardRef.current !== null && Date.now() - ghostClickGuardRef.current < 350) {
+          event.stopPropagation();
+          event.preventDefault();
+          ghostClickGuardRef.current = null;
+        }
+      }}
     >
       <div
         className={eventPickerPanelClass}
