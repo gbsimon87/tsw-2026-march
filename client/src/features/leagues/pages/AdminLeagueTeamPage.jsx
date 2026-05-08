@@ -132,6 +132,18 @@ export function AdminLeagueTeamPage() {
     !isUpdatingTeamName &&
     teamNameInput.trim() &&
     teamNameInput.trim() !== (team.name || '').trim();
+  const rosterById = new Map((team.roster || []).map((player) => [String(player.id), player]));
+  const joinRequests = (team.joinRequests || []).map((request) => {
+    const requestedPlayer = request.requestedLeaguePlayerId
+      ? rosterById.get(String(request.requestedLeaguePlayerId))
+      : null;
+
+    return {
+      ...request,
+      requestedPlayerName: requestedPlayer?.displayName || null,
+      requestedPlayerJerseyNumber: requestedPlayer?.jerseyNumber ?? null,
+    };
+  });
 
   return (
     <main className="space-y-8">
@@ -410,7 +422,7 @@ export function AdminLeagueTeamPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-xl font-semibold text-slate-900">Join Requests</h2>
             <JoinRequestsPanel
-              requests={team.joinRequests || []}
+              requests={joinRequests}
               canReview
               onApprove={approveJoin}
               onReject={rejectJoin}

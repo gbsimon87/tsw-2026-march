@@ -249,12 +249,6 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             >
               TSW Blue
             </p>
-            <p
-              class="mt-4 text-sm text-slate-300"
-              style="display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;"
-            >
-              Live tracking spotlight built from public player averages.
-            </p>
           </div>
         </div>
         <div

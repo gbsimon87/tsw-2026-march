@@ -138,15 +138,18 @@ export function AdminPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 id="leagues-heading" className="text-xl font-semibold text-slate-900">
-              Your Leagues
+              Leagues You Manage
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               Manage league teams, standings, fixtures, and games from one place.
             </p>
           </div>
-          <span className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400">
+          <Link
+            to="/about#contact"
+            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+          >
             New League
-          </span>
+          </Link>
         </div>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading leagues...</p> : null}
         {!isLoading && leagues.length === 0 ? (
@@ -182,7 +185,7 @@ export function AdminPage() {
         className="rounded-2xl border border-slate-200 bg-white p-5"
       >
         <h2 id="recent-games-heading" className="text-xl font-semibold text-slate-900">
-          Recent Games
+          Recent Games You Manage
         </h2>
         <p className="mt-1 text-sm text-slate-600">Includes both one-off and league games.</p>
         {isLoading ? <p className="mt-2 text-sm text-slate-600">Loading games...</p> : null}
@@ -314,7 +317,7 @@ export function AdminPage() {
           Use these for standalone teams and games outside league management.
         </p>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <QuickActionLink to="/games/new" label="New Game" primary>
+          <QuickActionLink to="/games/new" label="New Game">
             <svg
               viewBox="0 0 24 24"
               className="h-5 w-5"

@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { authRouter } = require('../modules/auth/auth.routes');
+const { contactRouter } = require('../modules/contact/contact.routes');
 const { analyticsRouter } = require('../modules/analytics/analytics.routes');
 const { billingRouter } = require('../modules/billing/billing.routes');
 const { feedRouter } = require('../modules/feed/feed.routes');
@@ -15,6 +16,7 @@ const { leaguesRouter, publicLeaguesRouter } = require('../modules/leagues/leagu
 const apiRouter = Router();
 
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/contact', contactRouter);
 apiRouter.use('/analytics', analyticsRouter);
 apiRouter.use('/billing', billingRouter);
 apiRouter.use('/feed', feedRouter);

@@ -110,7 +110,7 @@ export function HomePage() {
       >
         <header>
           <h2 id="active-leagues-heading" className="text-2xl font-semibold text-slate-900">
-            Active Leagues
+            Featured Leagues
           </h2>
           <p className="mt-2 max-w-2xl text-slate-700">
             Browse public leagues, standings, and games from teams currently competing.

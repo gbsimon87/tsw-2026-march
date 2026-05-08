@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import {
-  ShareCardClamp,
   ShareCardHeader,
   ShareCardMetaStrip,
   ShareCardShell,
@@ -69,9 +68,6 @@ function PlayerCardContent({ imageSrc, playerCard, onImageError }) {
               {fallbackState.helper}
             </p>
           ) : null}
-          <ShareCardClamp lines={2} className="mt-4 text-sm text-slate-300">
-            Live tracking spotlight built from public player averages.
-          </ShareCardClamp>
         </div>
       </div>
 

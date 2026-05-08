@@ -75,6 +75,7 @@ export function PublicLeagueTeamPage() {
   const [requestRole, setRequestRole] = useState('helper');
   const [requestedLeaguePlayerId, setRequestedLeaguePlayerId] = useState('');
   const [requestStatus, setRequestStatus] = useState('');
+  const [requestStatusTone, setRequestStatusTone] = useState('success');
 
   useEffect(() => {
     leaguesApi
@@ -106,6 +107,7 @@ export function PublicLeagueTeamPage() {
     event.preventDefault();
     setError('');
     setRequestStatus('');
+    setRequestStatusTone('success');
 
     try {
       await leaguesApi.createJoinRequest(league.id, team.id, {
@@ -113,7 +115,14 @@ export function PublicLeagueTeamPage() {
         ...(requestRole === 'player' ? { requestedLeaguePlayerId } : {}),
       });
       setRequestStatus('Join request submitted.');
+      setRequestStatusTone('success');
     } catch (submitError) {
+      if (/pending join request already exists/i.test(submitError.message || '')) {
+        setRequestStatus('You already have a pending request to join this team.');
+        setRequestStatusTone('warning');
+        return;
+      }
+
       setError(submitError.message || 'Failed to submit join request');
     }
   }
@@ -225,7 +234,15 @@ export function PublicLeagueTeamPage() {
             >
               Submit Join Request
             </button>
-            {requestStatus ? <p className="text-sm text-emerald-700">{requestStatus}</p> : null}
+            {requestStatus ? (
+              <p
+                className={`text-sm ${
+                  requestStatusTone === 'warning' ? 'text-amber-700' : 'text-emerald-700'
+                }`}
+              >
+                {requestStatus}
+              </p>
+            ) : null}
           </form>
         </section>
       ) : null}

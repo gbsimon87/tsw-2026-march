@@ -27,22 +27,25 @@ export function AppLayout() {
           </Link>
 
           <nav className="ml-auto hidden items-center gap-4 md:flex">
-            <NavLink to={homeHref} end className={desktopNavLinkClass}>
-              Home
-            </NavLink>
             <NavLink to="/feed" className={desktopNavLinkClass}>
-              Feed
+              The Pulse
             </NavLink>
             {user ? (
               <NavLink to="/my-sporty" className={desktopNavLinkClass}>
                 My Sporty
               </NavLink>
             ) : null}
+            <NavLink to={homeHref} end className={desktopNavLinkClass}>
+              Discover
+            </NavLink>
             {user ? (
               <NavLink to="/admin" className={desktopNavLinkClass}>
                 Admin
               </NavLink>
             ) : null}
+            <NavLink to="/about" className={desktopNavLinkClass}>
+              About
+            </NavLink>
             {!user ? (
               <NavLink to="/login" className={desktopNavLinkClass}>
                 Sign in
@@ -118,19 +121,11 @@ export function AppLayout() {
 
           <div className="flex flex-col gap-4">
             <NavLink
-              to={homeHref}
-              end
-              className={mobileNavLinkClass}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Home
-            </NavLink>
-            <NavLink
               to="/feed"
               className={mobileNavLinkClass}
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              Feed
+              The Pulse
             </NavLink>
             {user ? (
               <NavLink
@@ -150,6 +145,21 @@ export function AppLayout() {
                 Admin
               </NavLink>
             ) : null}
+            <NavLink
+              to={homeHref}
+              end
+              className={mobileNavLinkClass}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Home
+            </NavLink>
+            <NavLink
+              to="/about"
+              className={mobileNavLinkClass}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              About
+            </NavLink>
             {!user ? (
               <NavLink
                 to="/login"
