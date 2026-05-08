@@ -342,7 +342,7 @@ export function AdminLeagueTeamPage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-4">
-          <section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-xl font-semibold text-slate-900">Roster</h2>
             <LeagueRosterTable roster={team.roster || []} />
           </section>
@@ -381,7 +381,7 @@ export function AdminLeagueTeamPage() {
         </div>
 
         <div className="space-y-4">
-          <section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-xl font-semibold text-slate-900">Members</h2>
             <LeagueMembersPanel members={team.members || []} onRemove={removeMember} />
           </section>
@@ -407,7 +407,7 @@ export function AdminLeagueTeamPage() {
               </button>
             </div>
           </form>
-          <section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-xl font-semibold text-slate-900">Join Requests</h2>
             <JoinRequestsPanel
               requests={team.joinRequests || []}
