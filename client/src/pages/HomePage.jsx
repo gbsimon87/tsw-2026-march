@@ -83,7 +83,7 @@ export function HomePage() {
               to="/feed"
               className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
             >
-              Go to Feed
+              Check out The Pulse
             </Link>
           ) : (
             <>
