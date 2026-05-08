@@ -110,7 +110,7 @@ const leagueJoinRequestSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    requestedRole: { type: String, enum: ['player', 'helper'], required: true },
+    requestedRole: { type: String, enum: ['player', 'helper', 'team_manager'], required: true },
     requestedLeaguePlayerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'LeaguePlayer',
@@ -275,11 +275,12 @@ function findLeagueJoinRequestById(requestId) {
   return LeagueJoinRequest.findById(requestId);
 }
 
-function findPendingLeagueJoinRequest(leagueTeamId, requesterUserId) {
+function findPendingLeagueJoinRequest(leagueTeamId, requesterUserId, requestedRole) {
   return LeagueJoinRequest.findOne({
     leagueTeamId,
     requesterUserId,
     status: 'pending',
+    ...(requestedRole ? { requestedRole } : {}),
   });
 }
 

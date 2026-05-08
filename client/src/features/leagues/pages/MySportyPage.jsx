@@ -18,7 +18,14 @@ function ProfileCard({ profile }) {
           className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 bg-white object-cover"
         />
         <div className="min-w-0">
-          <p className="truncate font-semibold text-slate-900">{profile.displayName}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-semibold text-slate-900">{profile.displayName}</p>
+            {profile.memberRoleLabel && (
+              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                {profile.memberRoleLabel}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-slate-500">
             {[profile.jerseyNumber != null ? `#${profile.jerseyNumber}` : null, profile.position]
               .filter(Boolean)

@@ -79,7 +79,8 @@ export function PublicLeagueTeamPage() {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [requestRole, setRequestRole] = useState('helper');
+  const [rolePlayer, setRolePlayer] = useState(false);
+  const [roleTeamManager, setRoleTeamManager] = useState(false);
   const [requestedLeaguePlayerId, setRequestedLeaguePlayerId] = useState('');
   const [requestStatus, setRequestStatus] = useState('');
   const [requestStatusTone, setRequestStatusTone] = useState('success');
@@ -116,21 +117,43 @@ export function PublicLeagueTeamPage() {
     setRequestStatus('');
     setRequestStatusTone('success');
 
-    try {
-      await leaguesApi.createJoinRequest(league.id, team.id, {
-        requestedRole: requestRole,
-        ...(requestRole === 'player' ? { requestedLeaguePlayerId } : {}),
-      });
+    if (!rolePlayer && !roleTeamManager) {
+      setError('Select at least one role.');
+      return;
+    }
+
+    const roles = [...(rolePlayer ? ['player'] : []), ...(roleTeamManager ? ['team_manager'] : [])];
+
+    const results = [];
+    for (const role of roles) {
+      try {
+        await leaguesApi.createJoinRequest(league.id, team.id, {
+          requestedRole: role,
+          ...(role === 'player' ? { requestedLeaguePlayerId } : {}),
+        });
+        results.push({ role, ok: true });
+      } catch (submitError) {
+        results.push({ role, ok: false, message: submitError.message || 'Failed to submit' });
+      }
+    }
+
+    const allOk = results.every((r) => r.ok);
+    const anyPending = results.some((r) =>
+      /pending join request already exists/i.test(r.message || '')
+    );
+    const anyOk = results.some((r) => r.ok);
+
+    if (allOk) {
       setRequestStatus('Join request submitted.');
       setRequestStatusTone('success');
-    } catch (submitError) {
-      if (/pending join request already exists/i.test(submitError.message || '')) {
-        setRequestStatus('You already have a pending request to join this team.');
-        setRequestStatusTone('warning');
-        return;
-      }
-
-      setError(submitError.message || 'Failed to submit join request');
+    } else if (anyPending && !anyOk) {
+      setRequestStatus('You already have a pending request for the selected role(s).');
+      setRequestStatusTone('warning');
+    } else if (anyOk) {
+      setRequestStatus('Some requests were submitted; others may already be pending.');
+      setRequestStatusTone('warning');
+    } else {
+      setError(results.map((r) => r.message).join(' '));
     }
   }
 
@@ -200,29 +223,51 @@ export function PublicLeagueTeamPage() {
 
       {user ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h2 className="text-xl font-semibold text-slate-900">Request to Join</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Request to Join Team</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Join as a helper or claim an existing roster slot. Requests are reviewed manually by the
-            league owner or this team’s managers.
+            Select the role(s) you&apos;re requesting. Requests are reviewed manually by the league
+            owner or this team&apos;s managers.
           </p>
           <form onSubmit={submitJoinRequest} className="mt-4 space-y-4">
-            <label className="block">
-              <span className="mb-1 block text-sm text-slate-700">Role</span>
-              <select
-                className="w-full rounded border border-slate-300 px-3 py-2"
-                value={requestRole}
-                onChange={(event) => setRequestRole(event.target.value)}
-              >
-                <option value="helper">Helper</option>
-                <option value="player">Player</option>
-              </select>
-            </label>
-            {requestRole === 'player' ? (
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-slate-700">Role</legend>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-slate-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                  checked={rolePlayer}
+                  onChange={(e) => setRolePlayer(e.target.checked)}
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">Player</p>
+                  <p className="text-xs text-slate-500">
+                    Claim an existing roster slot on this team
+                  </p>
+                </div>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-slate-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                  checked={roleTeamManager}
+                  onChange={(e) => setRoleTeamManager(e.target.checked)}
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">Team Manager</p>
+                  <p className="text-xs text-slate-500">
+                    Help manage this team&apos;s roster and games
+                  </p>
+                </div>
+              </label>
+            </fieldset>
+            {rolePlayer ? (
               <label className="block">
-                <span className="mb-1 block text-sm text-slate-700">Claim roster slot</span>
+                <span className="mb-1 block text-sm font-medium text-slate-700">
+                  Claim roster slot
+                </span>
                 <select
                   required
-                  className="w-full rounded border border-slate-300 px-3 py-2"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
                   value={requestedLeaguePlayerId}
                   onChange={(event) => setRequestedLeaguePlayerId(event.target.value)}
                 >
@@ -237,15 +282,13 @@ export function PublicLeagueTeamPage() {
             ) : null}
             <button
               type="submit"
-              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
+              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
             >
               Submit Join Request
             </button>
             {requestStatus ? (
               <p
-                className={`text-sm ${
-                  requestStatusTone === 'warning' ? 'text-amber-700' : 'text-emerald-700'
-                }`}
+                className={`text-sm ${requestStatusTone === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`}
               >
                 {requestStatus}
               </p>

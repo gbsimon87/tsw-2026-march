@@ -136,6 +136,14 @@ export function AppLayout() {
                 My Sporty
               </NavLink>
             ) : null}
+            <NavLink
+              to={homeHref}
+              end
+              className={mobileNavLinkClass}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Discover
+            </NavLink>
             {user ? (
               <NavLink
                 to="/admin"
@@ -145,14 +153,6 @@ export function AppLayout() {
                 Admin
               </NavLink>
             ) : null}
-            <NavLink
-              to={homeHref}
-              end
-              className={mobileNavLinkClass}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Home
-            </NavLink>
             <NavLink
               to="/about"
               className={mobileNavLinkClass}

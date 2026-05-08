@@ -827,13 +827,21 @@ async function getMyLeagueProfiles(userId) {
   const leagueIds = [...new Set(players.map((p) => String(p.leagueId)))];
   const teamIds = [...new Set(players.map((p) => String(p.leagueTeamId)))];
 
-  const [leagues, teams] = await Promise.all([
+  const [leagues, teams, memberships] = await Promise.all([
     listLeaguesByIds(leagueIds),
     listLeagueTeamsByIds(teamIds),
+    listLeagueMembershipsForUser(userId),
   ]);
 
   const leaguesById = new Map(leagues.map((l) => [String(l._id), l]));
   const teamsById = new Map(teams.map((t) => [String(t._id), t]));
+  const memberRoleByTeamId = new Map(memberships.map((m) => [String(m.leagueTeamId), m.role]));
+
+  const MEMBER_ROLE_LABELS = {
+    player: 'Player',
+    manager: 'Team Manager',
+    helper: 'Helper',
+  };
 
   const profiles = players.map((player) => {
     const team = teamsById.get(String(player.leagueTeamId));
@@ -842,6 +850,7 @@ async function getMyLeagueProfiles(userId) {
       typeof player.jerseyNumber === 'number'
         ? `#${player.jerseyNumber} ${player.displayName}`
         : player.displayName;
+    const memberRole = memberRoleByTeamId.get(String(player.leagueTeamId)) ?? null;
 
     return {
       id: String(player._id),
@@ -849,6 +858,8 @@ async function getMyLeagueProfiles(userId) {
       playerLabel,
       jerseyNumber: player.jerseyNumber ?? null,
       position: normalizePosition(player.position),
+      memberRole,
+      memberRoleLabel: memberRole ? (MEMBER_ROLE_LABELS[memberRole] ?? memberRole) : null,
       team: team ? sanitizeLeagueTeam(team) : null,
       league: league ? sanitizeLeague(league) : null,
       profileHref:
@@ -1180,7 +1191,7 @@ async function createJoinRequest(userId, leagueId, leagueTeamId, payload) {
   const league = await assertLeagueExists(leagueId);
   ensureLeagueEditable(league);
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
-  const pending = await findPendingLeagueJoinRequest(team._id, userId);
+  const pending = await findPendingLeagueJoinRequest(team._id, userId, payload.requestedRole);
   if (pending) {
     throw new ApiError(409, 'A pending join request already exists');
   }
@@ -1233,7 +1244,22 @@ async function approveJoinRequest(userId, leagueId, leagueTeamId, requestId) {
   }
 
   let member = await findActiveLeagueTeamMember(leagueTeamId, request.requesterUserId);
-  if (request.requestedRole === 'helper') {
+  if (request.requestedRole === 'team_manager') {
+    if (member) {
+      member.role = 'manager';
+      member.leaguePlayerId = null;
+      await saveLeagueTeamMember(member);
+    } else {
+      member = await createLeagueTeamMember({
+        leagueId,
+        leagueTeamId,
+        userId: request.requesterUserId,
+        role: 'manager',
+        leaguePlayerId: null,
+        createdByUserId: userId,
+      });
+    }
+  } else if (request.requestedRole === 'helper') {
     if (member) {
       member.role = 'helper';
       member.leaguePlayerId = null;

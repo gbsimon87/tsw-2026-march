@@ -65,7 +65,7 @@ const updateMemberSchema = z.object({
 
 const createJoinRequestSchema = z
   .object({
-    requestedRole: z.enum(['player', 'helper']),
+    requestedRole: z.enum(['player', 'team_manager']),
     requestedLeaguePlayerId: z.string().min(1).nullable().optional(),
   })
   .superRefine((value, ctx) => {
@@ -77,10 +77,10 @@ const createJoinRequestSchema = z
       });
     }
 
-    if (value.requestedRole === 'helper' && value.requestedLeaguePlayerId) {
+    if (value.requestedRole === 'team_manager' && value.requestedLeaguePlayerId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'requestedLeaguePlayerId is not allowed for helper join requests',
+        message: 'requestedLeaguePlayerId is not allowed for team manager join requests',
         path: ['requestedLeaguePlayerId'],
       });
     }
