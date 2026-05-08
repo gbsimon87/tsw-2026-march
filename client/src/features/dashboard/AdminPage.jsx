@@ -45,6 +45,15 @@ function getGameContextLabel(game) {
   return game?.gameContext === 'league' ? 'League game' : 'One-off game';
 }
 
+function getLeagueRoleLabel(viewerRole) {
+  if (viewerRole === 'owner') return 'League Owner';
+  if (viewerRole === 'league_manager') return 'League Admin';
+  if (viewerRole === 'team_manager') return 'Team Manager';
+  if (viewerRole === 'player') return 'Player';
+  if (viewerRole === 'helper') return 'Helper';
+  return 'Member';
+}
+
 function QuickActionLink({ to, label, primary = false, children }) {
   return (
     <Link
@@ -170,9 +179,14 @@ export function AdminPage() {
                 />
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-900">{league.name}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {league.seasonLabel || 'Season TBD'} • {league.status}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>{league.seasonLabel || 'Season TBD'}</span>
+                    <span>•</span>
+                    <span>{league.status}</span>
+                    <span className="rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-700">
+                      {getLeagueRoleLabel(league.viewerContext?.viewerRole)}
+                    </span>
+                  </div>
                 </div>
               </Link>
             ))}

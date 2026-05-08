@@ -85,6 +85,26 @@ export function AdminLeagueTeamPage() {
     }
   }
 
+  async function updatePlayer(leaguePlayerId, payload) {
+    try {
+      const response = await leaguesApi.updatePlayer(
+        leagueId,
+        leagueTeamId,
+        leaguePlayerId,
+        payload
+      );
+      setTeam((current) => ({
+        ...current,
+        roster: (current.roster || []).map((player) =>
+          player.id === leaguePlayerId ? response.player : player
+        ),
+      }));
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to update player');
+      throw submitError;
+    }
+  }
+
   async function addManager(event) {
     event.preventDefault();
     if (!managerEmail.trim()) {
@@ -127,6 +147,7 @@ export function AdminLeagueTeamPage() {
     viewerContext?.viewerRole === 'league_manager' ||
     (viewerContext?.viewerRole === 'team_manager' &&
       viewerContext?.managedTeamIds?.includes(leagueTeamId));
+  const canEditRoster = canEditTeamName;
 
   const canSaveTeamName =
     !isUpdatingTeamName &&
@@ -356,7 +377,11 @@ export function AdminLeagueTeamPage() {
         <div className="space-y-4">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-xl font-semibold text-slate-900">Roster</h2>
-            <LeagueRosterTable roster={team.roster || []} />
+            <LeagueRosterTable
+              roster={team.roster || []}
+              canEdit={canEditRoster}
+              onSavePlayer={updatePlayer}
+            />
           </section>
           <form
             onSubmit={addPlayer}

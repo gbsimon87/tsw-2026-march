@@ -437,9 +437,16 @@ async function listLeaguesForUser(userId) {
     combined.set(String(league._id), league);
   }
 
-  return Array.from(combined.values())
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .map((league) => sanitizeLeague(league));
+  const sortedLeagues = Array.from(combined.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const viewerContexts = await Promise.all(
+    sortedLeagues.map((league) => buildLeagueViewerContext(userId, league))
+  );
+
+  return sortedLeagues.map((league, index) =>
+    sanitizeLeague(league, { includeViewerContext: viewerContexts[index] })
+  );
 }
 
 async function listPublicLeagues() {
@@ -701,7 +708,7 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
       String(game.homeLeagueTeamId) === String(team._id) ||
       String(game.awayLeagueTeamId) === String(team._id)
   );
-  const playerStats = buildLeagueTeamPlayerStats(rawTeamGames, team._id);
+  const playerStats = buildLeagueTeamPlayerStats(rawTeamGames, team._id, players);
   const standingsRow = standings.find((row) => row.teamId === String(team._id)) || null;
 
   return {
@@ -1519,8 +1526,18 @@ function createLeagueGameRow(game, teamsById) {
   };
 }
 
-function buildLeagueTeamPlayerStats(games, leagueTeamId) {
+function buildLeagueTeamPlayerStats(games, leagueTeamId, currentPlayers = []) {
   const snapshotMap = new Map();
+  const currentPlayersById = new Map(
+    currentPlayers.map((player) => [
+      String(player.leaguePlayerId || player._id),
+      {
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+      },
+    ])
+  );
 
   for (const game of games) {
     const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, leagueTeamId);
@@ -1550,9 +1567,21 @@ function buildLeagueTeamPlayerStats(games, leagueTeamId) {
     }
   }
 
-  return Array.from(snapshotMap.values()).sort((a, b) =>
-    a.displayName.localeCompare(b.displayName)
-  );
+  return Array.from(snapshotMap.values())
+    .map((line) => {
+      const currentPlayer = currentPlayersById.get(String(line.playerId));
+      if (!currentPlayer) {
+        return line;
+      }
+
+      return {
+        ...line,
+        displayName: currentPlayer.displayName,
+        jerseyNumber: currentPlayer.jerseyNumber,
+        position: currentPlayer.position,
+      };
+    })
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
 async function listLeagueGames(leagueId) {
@@ -1837,6 +1866,18 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
     listLeagueTeams(league._id),
     listLeagueGamesByLeagueId(league._id),
   ]);
+  const currentPlayersById = new Map(
+    (await Promise.all(teams.map((team) => listLeaguePlayers(team._id).catch(() => []))))
+      .flat()
+      .map((player) => [
+        String(player.leaguePlayerId || player._id),
+        {
+          displayName: player.displayName,
+          jerseyNumber: player.jerseyNumber ?? null,
+          position: player.position ?? null,
+        },
+      ])
+  );
 
   const teamsById = new Map(teams.map((t) => [String(t._id), t]));
   const playerMap = new Map();
@@ -1884,11 +1925,16 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
       const spg = stats.stl / gamesCount;
       const bpg = (stats.blk || 0) / gamesCount;
       const topg = stats.tov / gamesCount;
+      const fgMade = (stats.fg2m || 0) + (stats.fg3m || 0);
+      const fgAttempted = (stats.fg2a || 0) + (stats.fg3a || 0);
       const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 3 + bpg * 3 + topg * -1;
       const team = teamsById.get(entry.teamId);
+      const currentPlayer = currentPlayersById.get(entry.leaguePlayerId);
       return {
         leaguePlayerId: entry.leaguePlayerId,
-        displayName: entry.displayName,
+        displayName: currentPlayer?.displayName || entry.displayName,
+        jerseyNumber: currentPlayer?.jerseyNumber ?? null,
+        position: currentPlayer?.position ?? null,
         teamName: team?.name || null,
         teamSlug: team?.slug || null,
         teamLogoUrl: team?.logo?.url || null,
@@ -1897,6 +1943,11 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
         rpg,
         apg,
         spg,
+        bpg,
+        topg,
+        fgMade,
+        fgAttempted,
+        fgPercentage: fgAttempted > 0 ? fgMade / fgAttempted : null,
         fantasyScore,
       };
     })

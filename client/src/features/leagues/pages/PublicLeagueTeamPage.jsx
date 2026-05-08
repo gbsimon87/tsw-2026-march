@@ -31,6 +31,13 @@ const PLAYER_STATS_COLUMNS = [
         >
           {row.displayName}
         </Link>
+        {row.jerseyNumber != null || row.position ? (
+          <span className="text-xs text-slate-500">
+            {[row.jerseyNumber != null ? `#${row.jerseyNumber}` : null, row.position]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        ) : null}
       </span>
     ),
   },

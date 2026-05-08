@@ -9,6 +9,15 @@ import { useAuth } from '../../../app/store/AuthContext';
 import { gamesApi } from '../../games/api/gamesApi';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
+function getLeagueRoleLabel(viewerRole) {
+  if (viewerRole === 'owner') return 'League Owner';
+  if (viewerRole === 'league_manager') return 'League Admin';
+  if (viewerRole === 'team_manager') return 'Team Manager';
+  if (viewerRole === 'player') return 'Player';
+  if (viewerRole === 'helper') return 'Helper';
+  return 'Member';
+}
+
 export function AdminLeaguePage() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
@@ -202,6 +211,7 @@ export function AdminLeaguePage() {
     !isUpdatingLeague &&
     leagueNameInput.trim() &&
     leagueNameInput.trim() !== (league.name || '').trim();
+  const viewerRoleLabel = getLeagueRoleLabel(league.viewerContext?.viewerRole);
 
   const breadcrumbs = [{ label: 'Admin', href: '/admin' }, { label: league.name }];
 
@@ -316,7 +326,16 @@ export function AdminLeaguePage() {
           )
         }
         titleAriaLabel="League Name"
-        description={`${league.seasonLabel || 'Season TBD'} • ${league.status}`}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span>{league.seasonLabel || 'Season TBD'}</span>
+            <span className="text-slate-300">•</span>
+            <span>{league.status}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+              {viewerRoleLabel}
+            </span>
+          </span>
+        }
         media={
           <label className="group relative block cursor-pointer">
             <input

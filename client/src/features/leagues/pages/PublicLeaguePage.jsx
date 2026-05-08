@@ -11,6 +11,10 @@ import { StatsTable } from '../../teams/components/StatsTable';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 
+function formatPercentage(value) {
+  return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '--';
+}
+
 const LEADERS_COLUMNS = [
   {
     id: 'rank',
@@ -41,6 +45,13 @@ const LEADERS_COLUMNS = [
         ) : (
           <span className="font-medium text-slate-900">{row.displayName}</span>
         )}
+        {row.jerseyNumber != null || row.position ? (
+          <span className="text-xs text-slate-500">
+            {[row.jerseyNumber != null ? `#${row.jerseyNumber}` : null, row.position]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        ) : null}
       </span>
     ),
   },
@@ -75,11 +86,39 @@ const LEADERS_COLUMNS = [
     render: (row) => row.ppg.toFixed(1),
   },
   {
+    id: 'rpg',
+    label: 'RPG',
+    align: 'right',
+    sortKey: 'rpg',
+    render: (row) => row.rpg.toFixed(1),
+  },
+  {
     id: 'apg',
     label: 'APG',
     align: 'right',
     sortKey: 'apg',
     render: (row) => row.apg.toFixed(1),
+  },
+  {
+    id: 'bpg',
+    label: 'BPG',
+    align: 'right',
+    sortKey: 'bpg',
+    render: (row) => row.bpg.toFixed(1),
+  },
+  {
+    id: 'topg',
+    label: 'TOV',
+    align: 'right',
+    sortKey: 'topg',
+    render: (row) => row.topg.toFixed(1),
+  },
+  {
+    id: 'fgPct',
+    label: 'FG%',
+    align: 'right',
+    sortKey: 'fgPercentage',
+    render: (row) => formatPercentage(row.fgPercentage),
   },
   {
     id: 'spg',
@@ -168,7 +207,7 @@ export function PublicLeaguePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Season Leaders</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Race to MVP</h2>
         {leaders.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
         ) : (
