@@ -1688,78 +1688,150 @@ export function GameTrackPage() {
               </div>
             ) : null}
 
-            {activePanel === 'substitutions' ? (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-sm text-slate-700">Player Out</span>
-                    <select
-                      className="w-full rounded border border-slate-300 px-3 py-2"
-                      value={currentSideState.substitutionState.playerOutId}
-                      onChange={(event) =>
-                        updateSideState(activeKey, {
-                          substitutionState: {
-                            ...currentSideState.substitutionState,
-                            playerOutId: event.target.value,
-                          },
-                        })
-                      }
-                    >
-                      <option value="">Select on-court player</option>
-                      {onCourtPlayers.map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
+            {activePanel === 'substitutions'
+              ? (() => {
+                  const { playerOutId, playerInId } = currentSideState.substitutionState;
+                  const playerOut = playerOutId ? playersById.get(playerOutId) : null;
+                  const playerIn = playerInId ? playersById.get(playerInId) : null;
+                  const bothSelected = Boolean(playerOutId && playerInId);
+
+                  function SubPlayerCard({ player, isSelected, tone, onToggle }) {
+                    const baseRing = tone === 'out' ? 'ring-rose-500' : 'ring-emerald-500';
+                    const selectedBg = tone === 'out' ? 'bg-rose-50' : 'bg-emerald-50';
+                    const avatarBg =
+                      tone === 'out'
+                        ? 'bg-rose-100 text-rose-700'
+                        : 'bg-emerald-100 text-emerald-700';
+                    const defaultAvatarBg = 'bg-slate-100 text-slate-600';
+                    return (
+                      <button
+                        type="button"
+                        onClick={onToggle}
+                        className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition ${
+                          isSelected
+                            ? `${selectedBg} border-transparent ring-2 ${baseRing}`
+                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span
+                          className={`flex h-11 w-11 items-center justify-center rounded-full text-lg font-black tabular-nums ${
+                            isSelected ? avatarBg : defaultAvatarBg
+                          }`}
+                        >
+                          {player.jerseyNumber ?? '?'}
+                        </span>
+                        <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-slate-700">
                           {player.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-sm text-slate-700">Player In</span>
-                    <select
-                      className="w-full rounded border border-slate-300 px-3 py-2"
-                      value={currentSideState.substitutionState.playerInId}
-                      onChange={(event) =>
-                        updateSideState(activeKey, {
-                          substitutionState: {
-                            ...currentSideState.substitutionState,
-                            playerInId: event.target.value,
-                          },
-                        })
-                      }
-                    >
-                      <option value="">Select bench player</option>
-                      {benchPlayers.map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
-                          {player.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={saveSubstitution}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    <svg
-                      viewBox="0 0 20 20"
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path d="M4 7h12M13 4l3 3-3 3" />
-                      <path d="M16 13H4M7 10l-3 3 3 3" />
-                    </svg>
-                    Record Sub
-                  </button>
-                </div>
-              </div>
-            ) : null}
+                        </span>
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <div className="relative">
+                      <div className={`space-y-5 transition-all ${bothSelected ? 'pb-20' : ''}`}>
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            On Court — tap to sub out
+                          </p>
+                          {onCourtPlayers.length === 0 ? (
+                            <p className="text-sm text-slate-400">No players on court yet.</p>
+                          ) : (
+                            <div className="grid grid-cols-5 gap-2">
+                              {onCourtPlayers.map((player) => (
+                                <SubPlayerCard
+                                  key={player.id}
+                                  player={player}
+                                  tone="out"
+                                  isSelected={playerOutId === player.id}
+                                  onToggle={() =>
+                                    updateSideState(activeKey, {
+                                      substitutionState: {
+                                        ...currentSideState.substitutionState,
+                                        playerOutId: playerOutId === player.id ? '' : player.id,
+                                      },
+                                    })
+                                  }
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            On Bench — tap to sub in
+                          </p>
+                          {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
+                            <p className="text-sm text-slate-400">No bench players available.</p>
+                          ) : (
+                            <div className="grid grid-cols-5 gap-2">
+                              {benchPlayers
+                                .filter((p) => p.isActive !== false)
+                                .map((player) => (
+                                  <SubPlayerCard
+                                    key={player.id}
+                                    player={player}
+                                    tone="in"
+                                    isSelected={playerInId === player.id}
+                                    onToggle={() =>
+                                      updateSideState(activeKey, {
+                                        substitutionState: {
+                                          ...currentSideState.substitutionState,
+                                          playerInId: playerInId === player.id ? '' : player.id,
+                                        },
+                                      })
+                                    }
+                                  />
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {bothSelected ? (
+                        <div className="absolute inset-x-0 bottom-0 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                          <div className="mb-3 flex items-center justify-center gap-3">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
+                                {playerOut?.jerseyNumber ?? '?'}
+                              </span>
+                              <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
+                                {playerOut?.displayName}
+                              </span>
+                            </div>
+                            <svg
+                              viewBox="0 0 20 20"
+                              className="h-5 w-5 shrink-0 text-slate-400"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <path d="M4 7h12M13 4l3 3-3 3M16 13H4M7 10l-3 3 3 3" />
+                            </svg>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">
+                                {playerIn?.jerseyNumber ?? '?'}
+                              </span>
+                              <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
+                                {playerIn?.displayName}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={saveSubstitution}
+                            disabled={isSaving}
+                            className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                          >
+                            {isSaving ? 'Saving…' : 'Record Sub'}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()
+              : null}
 
             {activePanel === 'events' ? (
               <div>
