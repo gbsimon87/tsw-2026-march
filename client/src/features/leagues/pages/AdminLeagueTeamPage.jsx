@@ -1,5 +1,57 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+
+const TEAM_TABS = [
+  {
+    id: 'roster',
+    label: 'Roster',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <path d="M2 4h12M2 8h8M2 12h5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'members',
+    label: 'Members',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <circle cx="6" cy="5" r="2.5" />
+        <path d="M1 13c0-2.2 2.2-4 5-4s5 1.8 5 4" />
+        <path d="M11 7c1.4 0 3 .9 3 3" />
+        <circle cx="13" cy="4.5" r="1.8" />
+      </svg>
+    ),
+  },
+  {
+    id: 'requests',
+    label: 'Requests',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <circle cx="8" cy="6" r="3" />
+        <path d="M8 9v4M6 11h4" />
+      </svg>
+    ),
+  },
+];
 import { LeagueMembersPanel } from '../components/LeagueMembersPanel';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
 import { LeagueRosterTable } from '../components/LeagueRosterTable';
@@ -15,12 +67,12 @@ export function AdminLeagueTeamPage() {
   const [viewerContext, setViewerContext] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('roster');
   const [teamNameInput, setTeamNameInput] = useState('');
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const [isUpdatingTeamName, setIsUpdatingTeamName] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
-  const [managerEmail, setManagerEmail] = useState('');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
 
@@ -105,20 +157,6 @@ export function AdminLeagueTeamPage() {
     }
   }
 
-  async function addManager(event) {
-    event.preventDefault();
-    if (!managerEmail.trim()) {
-      return;
-    }
-    try {
-      await leaguesApi.addManager(leagueId, leagueTeamId, managerEmail.trim());
-      setManagerEmail('');
-      await refresh();
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to add manager');
-    }
-  }
-
   async function approveJoin(requestId) {
     await leaguesApi.approveJoinRequest(leagueId, leagueTeamId, requestId);
     await refresh();
@@ -167,7 +205,7 @@ export function AdminLeagueTeamPage() {
   });
 
   return (
-    <main className="space-y-8">
+    <main className="space-y-6">
       <Breadcrumbs
         crumbs={[
           { label: 'Admin', href: '/admin' },
@@ -373,88 +411,98 @@ export function AdminLeagueTeamPage() {
         </p>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-4">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-xl font-semibold text-slate-900">Roster</h2>
-            <LeagueRosterTable
-              roster={team.roster || []}
-              canEdit={canEditRoster}
-              onSavePlayer={updatePlayer}
-            />
-          </section>
-          <form
-            onSubmit={addPlayer}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 className="text-xl font-semibold text-slate-900">Add Player</h2>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <input
-                type="text"
-                autoComplete="off"
-                className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
-                placeholder="Player name"
-                value={playerName}
-                onChange={(event) => setPlayerName(event.target.value)}
-              />
-              <input
-                autoComplete="off"
-                type="number"
-                className="w-24 rounded border border-slate-300 px-3 py-2"
-                placeholder="Jersey #"
-                min="0"
-                max="999"
-                value={playerJerseyNumber}
-                onChange={(event) => setPlayerJerseyNumber(event.target.value)}
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Add Player
-              </button>
-            </div>
-          </form>
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div
+          className="grid border-b border-slate-200"
+          style={{ gridTemplateColumns: `repeat(${TEAM_TABS.length}, minmax(0, 1fr))` }}
+        >
+          {TEAM_TABS.map((tab, index) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
+                index < TEAM_TABS.length - 1 ? 'border-r border-slate-200' : ''
+              } ${
+                activeTab === tab.id
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-4">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-xl font-semibold text-slate-900">Members</h2>
-            <LeagueMembersPanel members={team.members || []} onRemove={removeMember} />
-          </section>
-          <form
-            onSubmit={addManager}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 className="text-xl font-semibold text-slate-900">Assign Manager</h2>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <input
-                autoComplete="off"
-                type="email"
-                className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2"
-                placeholder="manager@email.com"
-                value={managerEmail}
-                onChange={(event) => setManagerEmail(event.target.value)}
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Add Manager
-              </button>
+        <div className="p-5">
+          {activeTab === 'roster' ? (
+            <div className="space-y-5">
+              <div>
+                <h2 className="mb-3 text-lg font-semibold text-slate-900">Roster</h2>
+                <LeagueRosterTable
+                  roster={team.roster || []}
+                  canEdit={canEditRoster}
+                  onSavePlayer={updatePlayer}
+                />
+              </div>
+              {canEditRoster ? (
+                <form
+                  onSubmit={addPlayer}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <h3 className="text-sm font-semibold text-slate-700">Add Player</h3>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      className="min-w-[14rem] flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
+                      placeholder="Player name"
+                      value={playerName}
+                      onChange={(event) => setPlayerName(event.target.value)}
+                    />
+                    <input
+                      autoComplete="off"
+                      type="number"
+                      className="w-24 rounded border border-slate-300 px-3 py-2 text-sm"
+                      placeholder="Jersey #"
+                      min="0"
+                      max="999"
+                      value={playerJerseyNumber}
+                      onChange={(event) => setPlayerJerseyNumber(event.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Add Player
+                    </button>
+                  </div>
+                </form>
+              ) : null}
             </div>
-          </form>
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-xl font-semibold text-slate-900">Join Requests</h2>
-            <JoinRequestsPanel
-              requests={joinRequests}
-              canReview
-              onApprove={approveJoin}
-              onReject={rejectJoin}
-            />
-          </section>
+          ) : null}
+
+          {activeTab === 'members' ? (
+            <div>
+              <h2 className="mb-3 text-lg font-semibold text-slate-900">Members</h2>
+              <LeagueMembersPanel members={team.members || []} onRemove={removeMember} />
+            </div>
+          ) : null}
+
+          {activeTab === 'requests' ? (
+            <div>
+              <h2 className="mb-3 text-lg font-semibold text-slate-900">Join Requests</h2>
+              <JoinRequestsPanel
+                requests={joinRequests}
+                canReview
+                onApprove={approveJoin}
+                onReject={rejectJoin}
+              />
+            </div>
+          ) : null}
         </div>
-      </section>
+      </div>
     </main>
   );
 }
