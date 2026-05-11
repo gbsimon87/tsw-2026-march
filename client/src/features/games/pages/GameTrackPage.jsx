@@ -954,21 +954,41 @@ export function GameTrackPage() {
           <div className={eventPickerGridClass}>
             <div className="flex min-h-0 flex-col space-y-1 overflow-hidden">
               {isDualTeam && !pendingFollowUpPrompt ? (
-                <div className="mb-2 flex justify-between gap-1.5">
-                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                    <button
-                      key={side}
-                      type="button"
-                      onClick={() => setActiveSide(side)}
-                      className={`flex-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                        activeSide === side
-                          ? 'bg-indigo-600 text-white'
-                          : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      {participantsBySide[side]?.displayName || side}
-                    </button>
-                  ))}
+                <div className="mb-3 flex gap-2">
+                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
+                    const isActive = activeSide === side;
+                    const logoUrl = participantsBySide[side]?.logo?.url;
+                    const name = participantsBySide[side]?.displayName || side;
+                    return (
+                      <button
+                        key={side}
+                        type="button"
+                        onClick={() => setActiveSide(side)}
+                        className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2 transition ${
+                          isActive
+                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {logoUrl ? (
+                          <img
+                            src={logoUrl}
+                            alt=""
+                            className={`h-6 w-6 shrink-0 rounded-full object-cover ${isActive ? 'ring-2 ring-white/50' : 'border border-slate-200'}`}
+                          />
+                        ) : (
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                              isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            {name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="truncate text-xs font-semibold">{name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1246,7 +1266,7 @@ export function GameTrackPage() {
   ) : null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="fixed inset-0 flex flex-col bg-slate-50">
       {isCompleted ? (
         <div className="px-4 pt-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1362,15 +1382,15 @@ export function GameTrackPage() {
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
         {error ? (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
             {error}
           </p>
         ) : null}
 
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="grid grid-cols-4 border-b border-slate-200">
+        <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
+          <div className="shrink-0 grid grid-cols-4 border-b border-slate-200">
             {[
               {
                 id: 'court',
@@ -1455,7 +1475,7 @@ export function GameTrackPage() {
             ))}
           </div>
 
-          <div className="p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {activePanel === 'court' ? (
               <div className="space-y-4">
                 {insertBeforeEventId ? (
@@ -1720,7 +1740,7 @@ export function GameTrackPage() {
                         >
                           {player.jerseyNumber ?? '?'}
                         </span>
-                        <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-slate-700">
+                        <span className="w-full overflow-hidden text-center text-[11px] font-semibold leading-tight text-slate-700">
                           {player.displayName}
                         </span>
                       </button>
@@ -1737,7 +1757,7 @@ export function GameTrackPage() {
                           {onCourtPlayers.length === 0 ? (
                             <p className="text-sm text-slate-400">No players on court yet.</p>
                           ) : (
-                            <div className="grid grid-cols-5 gap-2">
+                            <div className="grid grid-cols-5 gap-1">
                               {onCourtPlayers.map((player) => (
                                 <SubPlayerCard
                                   key={player.id}
@@ -1765,7 +1785,7 @@ export function GameTrackPage() {
                           {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
                             <p className="text-sm text-slate-400">No bench players available.</p>
                           ) : (
-                            <div className="grid grid-cols-5 gap-2">
+                            <div className="grid grid-cols-5 gap-1">
                               {benchPlayers
                                 .filter((p) => p.isActive !== false)
                                 .map((player) => (
