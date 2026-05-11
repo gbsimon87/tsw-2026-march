@@ -102,6 +102,7 @@ export function GameTrackPage() {
   });
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
+  const inflightRef = useRef(Promise.resolve());
 
   useEffect(() => {
     async function loadGame() {
@@ -380,43 +381,53 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
 
-    try {
-      const isInsert = Boolean(insertBeforeEventId);
-      const payload = buildEventPayload({ playerId: reboundPlayerId, statType });
-      const response = isInsert
-        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : await gamesApi.appendEvent(gameId, payload);
-      const label = STAT_LABELS[statType] || statType;
-      updateData(response, label);
-      updateLastAction(label, reboundPlayerId);
-      if (isInsert) {
-        setInsertBeforeEventId('');
-        clearEventPicker();
+    const isInsert = Boolean(insertBeforeEventId);
+    const payload = buildEventPayload({ playerId: reboundPlayerId, statType });
+    const label = STAT_LABELS[statType] || statType;
+
+    // Transition UI immediately.
+    if (isInsert) {
+      // Keep picker open until confirmed.
+    } else {
+      setSelectedShot(null);
+      if (statType === 'DREB' && isDualTeam) {
+        setPendingFollowUpPrompt({
+          kind: 'who_missed_shot',
+          statType: 'FG2_MISS',
+          actorPlayerId: reboundPlayerId,
+          playerPool: 'other',
+        });
+      } else if (statType === 'OREB') {
+        setPendingFollowUpPrompt({
+          kind: 'who_missed_shot',
+          statType: 'FG2_MISS',
+          actorPlayerId: reboundPlayerId,
+          playerPool: 'same',
+        });
       } else {
-        setSelectedShot(null);
-        if (statType === 'DREB' && isDualTeam) {
-          setPendingFollowUpPrompt({
-            kind: 'who_missed_shot',
-            statType: 'FG2_MISS',
-            actorPlayerId: reboundPlayerId,
-            playerPool: 'other',
-          });
-        } else if (statType === 'OREB') {
-          setPendingFollowUpPrompt({
-            kind: 'who_missed_shot',
-            statType: 'FG2_MISS',
-            actorPlayerId: reboundPlayerId,
-            playerPool: 'same',
-          });
-        } else {
-          setPendingFollowUpPrompt(null);
-        }
+        setPendingFollowUpPrompt(null);
       }
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to add rebound event');
-    } finally {
-      setIsSaving(false);
     }
+
+    inflightRef.current = (
+      isInsert
+        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : gamesApi.appendEvent(gameId, payload)
+    )
+      .then((response) => {
+        updateData(response, label);
+        updateLastAction(label, reboundPlayerId);
+        if (isInsert) {
+          setInsertBeforeEventId('');
+          clearEventPicker();
+        }
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to add rebound event');
+        clearEventPicker();
+        throw err;
+      })
+      .finally(() => setIsSaving(false));
   }
 
   async function handleFollowUpSelection(option) {
@@ -433,6 +444,16 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+
+    // Chain onto the primary event. inflightRef always holds a Promise, so
+    // this await is always real. If the primary failed (re-threw), we bail here
+    // — the primary's catch already reset the UI so nothing more to do.
+    try {
+      await inflightRef.current;
+    } catch {
+      setIsSaving(false);
+      return;
+    }
 
     try {
       let payload;
@@ -480,18 +501,27 @@ export function GameTrackPage() {
         label = STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType;
       }
 
-      const response = await gamesApi.appendEvent(gameId, payload);
-      updateData(response, label);
-      clearEventPicker();
-    } catch (submitError) {
-      setError(
-        submitError.message ||
-          (pendingFollowUpPrompt.kind === 'assist'
-            ? 'Basket recorded, but failed to add assist'
-            : 'Miss recorded, but failed to add rebound')
-      );
-    } finally {
-      setIsSaving(false);
+      const followUpKind = pendingFollowUpPrompt.kind;
+      inflightRef.current = gamesApi
+        .appendEvent(gameId, payload)
+        .then((response) => {
+          updateData(response, label);
+          clearEventPicker();
+        })
+        .catch((submitError) => {
+          setError(
+            submitError.message ||
+              (followUpKind === 'assist'
+                ? 'Basket recorded, but failed to add assist'
+                : 'Miss recorded, but failed to add rebound')
+          );
+          throw submitError;
+        })
+        .finally(() => setIsSaving(false));
+
+      await inflightRef.current;
+    } catch {
+      // Error already handled and displayed by the promise chain above.
     }
   }
 
@@ -508,47 +538,49 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
 
-    try {
-      const payload = buildEventPayload({
-        playerId: currentSideState.selectedPlayerId,
-        statType: buildShotStatType(selectedShot.shotFamily, outcome),
-        zoneId: selectedShot.zoneId,
-        x: Number(selectedShot.x.toFixed(2)),
-        y: Number(selectedShot.y.toFixed(2)),
-      });
+    const payload = buildEventPayload({
+      playerId: currentSideState.selectedPlayerId,
+      statType: buildShotStatType(selectedShot.shotFamily, outcome),
+      zoneId: selectedShot.zoneId,
+      x: Number(selectedShot.x.toFixed(2)),
+      y: Number(selectedShot.y.toFixed(2)),
+    });
+    const shotLabel = STAT_LABELS[payload.statType] || payload.statType;
+    const actorPlayerId = currentSideState.selectedPlayerId;
+    const isInsert = Boolean(insertBeforeEventId);
 
-      const isInsert = Boolean(insertBeforeEventId);
-      const response = isInsert
-        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : await gamesApi.appendEvent(gameId, payload);
-
-      const shotLabel = STAT_LABELS[payload.statType] || payload.statType;
-      updateData(response, shotLabel);
-      updateLastAction(shotLabel, currentSideState.selectedPlayerId);
-
-      if (isInsert) {
-        setInsertBeforeEventId('');
-        clearEventPicker();
-      } else if (outcome === 'miss') {
-        setPendingFollowUpPrompt({
-          kind: 'rebound',
-          statType: 'OREB',
-          actorPlayerId: currentSideState.selectedPlayerId,
-        });
-      } else if (payload.statType === 'FG2_MADE' || payload.statType === 'FG3_MADE') {
-        setPendingFollowUpPrompt({
-          kind: 'assist',
-          statType: 'AST',
-          actorPlayerId: currentSideState.selectedPlayerId,
-        });
-      } else {
-        clearEventPicker();
-      }
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to add shot event');
-    } finally {
-      setIsSaving(false);
+    // Transition UI immediately — don't wait for the API.
+    if (isInsert) {
+      // Insert mode: keep picker open until confirmed.
+    } else if (outcome === 'miss') {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({ kind: 'rebound', statType: 'OREB', actorPlayerId });
+    } else if (payload.statType === 'FG2_MADE' || payload.statType === 'FG3_MADE') {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({ kind: 'assist', statType: 'AST', actorPlayerId });
+    } else {
+      clearEventPicker();
     }
+
+    inflightRef.current = (
+      isInsert
+        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : gamesApi.appendEvent(gameId, payload)
+    )
+      .then((response) => {
+        updateData(response, shotLabel);
+        updateLastAction(shotLabel, actorPlayerId);
+        if (isInsert) {
+          setInsertBeforeEventId('');
+          clearEventPicker();
+        }
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to add shot event');
+        clearEventPicker();
+        throw err;
+      })
+      .finally(() => setIsSaving(false));
   }
 
   async function addFreeThrowEvent(outcome) {
@@ -559,46 +591,51 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
 
-    try {
-      const inferred = buildFreeThrowPayload(
-        selectedShot?.nearestHoop || lastTappedHoop,
-        outcome,
-        DEFAULT_COURT_IMAGE_CALIBRATION
-      );
-      const payload = buildEventPayload({
-        playerId: currentSideState.selectedPlayerId,
-        statType: inferred.statType,
-        zoneId: inferred.zoneId,
-        x: inferred.x,
-        y: inferred.y,
-      });
+    const inferred = buildFreeThrowPayload(
+      selectedShot?.nearestHoop || lastTappedHoop,
+      outcome,
+      DEFAULT_COURT_IMAGE_CALIBRATION
+    );
+    const payload = buildEventPayload({
+      playerId: currentSideState.selectedPlayerId,
+      statType: inferred.statType,
+      zoneId: inferred.zoneId,
+      x: inferred.x,
+      y: inferred.y,
+    });
+    const ftLabel = STAT_LABELS[payload.statType] || payload.statType;
+    const actorPlayerId = currentSideState.selectedPlayerId;
+    const isInsert = Boolean(insertBeforeEventId);
 
-      const isInsert = Boolean(insertBeforeEventId);
-      const response = isInsert
-        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : await gamesApi.appendEvent(gameId, payload);
-
-      const ftLabel = STAT_LABELS[payload.statType] || payload.statType;
-      updateData(response, ftLabel);
-      updateLastAction(ftLabel, currentSideState.selectedPlayerId);
-
-      if (isInsert) {
-        setInsertBeforeEventId('');
-        clearEventPicker();
-      } else if (outcome === 'miss') {
-        setPendingFollowUpPrompt({
-          kind: 'rebound',
-          statType: 'OREB',
-          actorPlayerId: currentSideState.selectedPlayerId,
-        });
-      } else {
-        clearEventPicker();
-      }
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to add free throw event');
-    } finally {
-      setIsSaving(false);
+    // Transition UI immediately.
+    if (isInsert) {
+      // Keep picker open until confirmed.
+    } else if (outcome === 'miss') {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({ kind: 'rebound', statType: 'OREB', actorPlayerId });
+    } else {
+      clearEventPicker();
     }
+
+    inflightRef.current = (
+      isInsert
+        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : gamesApi.appendEvent(gameId, payload)
+    )
+      .then((response) => {
+        updateData(response, ftLabel);
+        updateLastAction(ftLabel, actorPlayerId);
+        if (isInsert) {
+          setInsertBeforeEventId('');
+          clearEventPicker();
+        }
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to add free throw event');
+        clearEventPicker();
+        throw err;
+      })
+      .finally(() => setIsSaving(false));
   }
 
   async function removeEvent(eventId) {
@@ -626,61 +663,72 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
 
-    try {
-      const isInsert = Boolean(insertBeforeEventId);
-      const payload = buildEventPayload({
-        playerId: currentSideState.selectedPlayerId,
-        statType,
+    const isInsert = Boolean(insertBeforeEventId);
+    const payload = buildEventPayload({
+      playerId: currentSideState.selectedPlayerId,
+      statType,
+    });
+    const quickLabel = STAT_LABELS[statType] || statType;
+    const actorPlayerId = currentSideState.selectedPlayerId;
+
+    // Transition UI immediately.
+    if (isInsert) {
+      // Keep picker open until confirmed.
+    } else if (statType === 'STL' && isDualTeam) {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({
+        kind: 'who_turned_over',
+        statType: 'TOV',
+        actorPlayerId,
+        playerPool: 'other',
       });
-      const response = isInsert
-        ? await gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : await gamesApi.appendEvent(gameId, payload);
-      const quickLabel = STAT_LABELS[statType] || statType;
-      updateData(response, quickLabel);
-      updateLastAction(quickLabel, currentSideState.selectedPlayerId);
-      if (isInsert) {
-        setInsertBeforeEventId('');
-        clearEventPicker();
-      } else if (statType === 'STL' && isDualTeam) {
-        setSelectedShot(null);
-        setPendingFollowUpPrompt({
-          kind: 'who_turned_over',
-          statType: 'TOV',
-          actorPlayerId: currentSideState.selectedPlayerId,
-          playerPool: 'other',
-        });
-      } else if (statType === 'BLK' && isDualTeam) {
-        setSelectedShot(null);
-        setPendingFollowUpPrompt({
-          kind: 'who_missed_shot',
-          statType: 'FG2_MISS',
-          actorPlayerId: currentSideState.selectedPlayerId,
-          playerPool: 'other',
-        });
-      } else if (statType === 'TOV' && isDualTeam) {
-        setSelectedShot(null);
-        setPendingFollowUpPrompt({
-          kind: 'who_got_steal',
-          statType: 'STL',
-          actorPlayerId: currentSideState.selectedPlayerId,
-          playerPool: 'other',
-        });
-      } else if (statType === 'FOUL' && isDualTeam) {
-        setSelectedShot(null);
-        setPendingFollowUpPrompt({
-          kind: 'who_was_fouled',
-          statType: null,
-          actorPlayerId: currentSideState.selectedPlayerId,
-          playerPool: 'other',
-        });
-      } else {
-        clearEventPicker();
-      }
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to add event');
-    } finally {
-      setIsSaving(false);
+    } else if (statType === 'BLK' && isDualTeam) {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({
+        kind: 'who_missed_shot',
+        statType: 'FG2_MISS',
+        actorPlayerId,
+        playerPool: 'other',
+      });
+    } else if (statType === 'TOV' && isDualTeam) {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({
+        kind: 'who_got_steal',
+        statType: 'STL',
+        actorPlayerId,
+        playerPool: 'other',
+      });
+    } else if (statType === 'FOUL' && isDualTeam) {
+      setSelectedShot(null);
+      setPendingFollowUpPrompt({
+        kind: 'who_was_fouled',
+        statType: null,
+        actorPlayerId,
+        playerPool: 'other',
+      });
+    } else {
+      clearEventPicker();
     }
+
+    inflightRef.current = (
+      isInsert
+        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
+        : gamesApi.appendEvent(gameId, payload)
+    )
+      .then((response) => {
+        updateData(response, quickLabel);
+        updateLastAction(quickLabel, actorPlayerId);
+        if (isInsert) {
+          setInsertBeforeEventId('');
+          clearEventPicker();
+        }
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to add event');
+        clearEventPicker();
+        throw err;
+      })
+      .finally(() => setIsSaving(false));
   }
 
   async function addOpponentScore(statType) {
