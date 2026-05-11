@@ -21,7 +21,7 @@ const PLAYER_STATS_COLUMNS = [
     render: (row) => (
       <span className="flex items-center gap-2">
         <img
-          src={playerPlaceholder}
+          src={row.avatarUrl || playerPlaceholder}
           alt=""
           className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />

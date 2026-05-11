@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
+import { authApi } from '../../auth/api/authApi';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -8,12 +9,12 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 
-function ProfileCard({ profile }) {
+function ProfileCard({ profile, avatarUrl }) {
   const inner = (
     <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-sm">
       <div className="flex items-center gap-3">
         <img
-          src={playerPlaceholder}
+          src={avatarUrl || playerPlaceholder}
           alt=""
           className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 bg-white object-cover"
         />
@@ -76,10 +77,13 @@ function ProfileCard({ profile }) {
 }
 
 export function MySportyPage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [profiles, setProfiles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     leaguesApi
@@ -88,6 +92,27 @@ export function MySportyPage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load profiles'))
       .finally(() => setIsLoading(false));
   }, []);
+
+  async function handleAvatarChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setAvatarError('');
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const result = await authApi.uploadAvatar(formData);
+      updateUser(result.user);
+    } catch (uploadError) {
+      setAvatarError(uploadError.message || 'Failed to upload avatar');
+    } finally {
+      setAvatarUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }
 
   if (isLoading) {
     return <SportsLoader label="Loading profiles" fullPage />;
@@ -102,6 +127,75 @@ export function MySportyPage() {
       />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="group relative block cursor-pointer">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              aria-label="Upload profile picture"
+              disabled={avatarUploading}
+              onChange={handleAvatarChange}
+            />
+            {user?.avatarUrl ? (
+              <>
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
+                />
+                <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5 text-slate-600"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </span>
+              </>
+            ) : (
+              <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-slate-300 bg-white text-slate-400 transition group-hover:border-slate-400 group-hover:text-slate-600">
+                {avatarUploading ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6 animate-spin"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
+              </span>
+            )}
+          </label>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Profile Picture</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Your photo appears on all your league profiles.
+            </p>
+            {avatarError ? <p className="mt-1 text-xs text-red-600">{avatarError}</p> : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-semibold text-slate-900">League Profiles</h2>
 
         {error ? (
@@ -114,7 +208,7 @@ export function MySportyPage() {
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {profiles.map((profile) => (
-              <ProfileCard key={profile.id} profile={profile} />
+              <ProfileCard key={profile.id} profile={profile} avatarUrl={user?.avatarUrl} />
             ))}
           </div>
         )}

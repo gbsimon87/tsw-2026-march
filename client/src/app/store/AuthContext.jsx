@@ -53,6 +53,9 @@ export function AuthProvider({ children }) {
         authRevisionRef.current += 1;
         setUser(null);
       },
+      updateUser(updatedUser) {
+        setUser(updatedUser);
+      },
     }),
     [isLoading, user]
   );

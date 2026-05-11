@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema(
     leagueStripeSubscriptionId: { type: String, default: null },
     leagueStripePriceId: { type: String, default: null },
     roles: { type: [String], default: ['user'] },
+    avatar: {
+      url: { type: String, default: null },
+      publicId: { type: String, default: null },
+    },
   },
   {
     timestamps: true,
@@ -185,6 +189,10 @@ async function updateUserPlan(userId, plan) {
   return User.findByIdAndUpdate(userId, { $set: { plan } }, { new: true });
 }
 
+async function updateUserAvatar(userId, avatarData) {
+  return User.findByIdAndUpdate(userId, { $set: { avatar: avatarData } }, { new: true });
+}
+
 module.exports = {
   createUser,
   findUserByEmail,
@@ -201,4 +209,5 @@ module.exports = {
   markEmailVerified,
   updateUserPassword,
   updateUserPlan,
+  updateUserAvatar,
 };

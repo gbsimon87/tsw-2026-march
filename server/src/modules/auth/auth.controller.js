@@ -133,6 +133,19 @@ async function googleExchange(req, res) {
   res.status(200).json({ user: result.user });
 }
 
+async function uploadAvatar(req, res) {
+  if (!req.auth?.userId) {
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  if (!req.file) {
+    throw new ApiError(400, 'No image file provided');
+  }
+
+  const user = await authService.uploadUserAvatar(req.auth.userId, req.file);
+  res.status(200).json({ user });
+}
+
 module.exports = {
   register,
   login,
@@ -145,4 +158,5 @@ module.exports = {
   resetPassword,
   googleCallback,
   googleExchange,
+  uploadAvatar,
 };

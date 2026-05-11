@@ -15,7 +15,13 @@ const {
   markAuthTokenUsed,
   markEmailVerified,
   updateUserPassword,
+  updateUserAvatar,
 } = require('./auth.repository');
+const {
+  uploadImageBuffer,
+  destroyImage,
+  isCloudinaryConfigured,
+} = require('../feed/cloudinary.client');
 const { ApiError } = require('../../utils/apiError');
 const { env } = require('../../config/env');
 const {
@@ -42,6 +48,7 @@ function sanitizeUser(user) {
     roles: user.roles,
     emailVerified: Boolean(user.emailVerified),
     authProvider: user.authProvider,
+    avatarUrl: user.avatar?.url || null,
   };
 }
 
@@ -309,6 +316,34 @@ async function prepareGoogleExchange(googleProfile) {
   return exchangeToken;
 }
 
+const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+async function uploadUserAvatar(userId, file) {
+  if (!isCloudinaryConfigured()) {
+    throw new ApiError(503, 'Image uploads are not configured');
+  }
+
+  if (!AVATAR_MIME_TYPES.has(file.mimetype)) {
+    throw new ApiError(400, 'Avatar must be a JPEG, PNG, or WebP image');
+  }
+
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const oldPublicId = user.avatar?.publicId || null;
+  const result = await uploadImageBuffer(file);
+  await updateUserAvatar(userId, { url: result.secure_url, publicId: result.public_id });
+
+  if (oldPublicId) {
+    await destroyImage(oldPublicId).catch(() => null);
+  }
+
+  const updated = await findUserById(userId);
+  return sanitizeUser(updated);
+}
+
 async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
   let payload;
   try {
@@ -344,4 +379,5 @@ module.exports = {
   exchangeGoogleOAuthToken,
   getUserLeagueBillingSummary,
   getUserLeagueEntitlements,
+  uploadUserAvatar,
 };

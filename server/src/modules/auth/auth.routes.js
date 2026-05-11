@@ -1,11 +1,17 @@
 const { Router } = require('express');
 const passport = require('passport');
+const multer = require('multer');
 const { asyncHandler } = require('../../utils/asyncHandler');
 const controller = require('./auth.controller');
 const { authMiddleware } = require('../../middleware/auth.middleware');
 const { authRecoveryLimiter } = require('../../middleware/rateLimit.middleware');
 const { env } = require('../../config/env');
 const { isGoogleOAuthConfigured } = require('./oauth.google');
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: env.TEAM_LOGO_MAX_BYTES, files: 1 },
+});
 
 const authRouter = Router();
 const primaryClientOrigin = env.CLIENT_ORIGIN.split(',')[0].trim();
@@ -16,6 +22,12 @@ authRouter.post('/login', asyncHandler(controller.login));
 authRouter.post('/refresh', asyncHandler(controller.refresh));
 authRouter.post('/logout', asyncHandler(controller.logout));
 authRouter.get('/me', authMiddleware, asyncHandler(controller.me));
+authRouter.post(
+  '/avatar',
+  authMiddleware,
+  avatarUpload.single('avatar'),
+  asyncHandler(controller.uploadAvatar)
+);
 authRouter.post(
   '/request-verification',
   authRecoveryLimiter,

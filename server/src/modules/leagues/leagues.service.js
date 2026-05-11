@@ -141,6 +141,7 @@ function sanitizeLeaguePlayer(player, usersById = new Map(), options = {}) {
     isActive: Boolean(player.isActive),
     isClaimed: Boolean(player.claimedByUserId),
     claimedBadgeLabel: player.claimedByUserId ? 'Claimed profile' : null,
+    avatarUrl: claimedUser?.avatar?.url || null,
     ...(options.includePrivateClaim
       ? {
           claimedBy: player.claimedByUserId
@@ -698,6 +699,7 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
     listLeagueGamesByLeagueId(league._id),
     getLeagueStandings(league._id),
   ]);
+  const usersById = await buildUsersMap(players.map((p) => p.claimedByUserId));
   const teamGames = games.filter(
     (game) =>
       String(game.homeLeagueTeamId) === String(team._id) ||
@@ -709,14 +711,26 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
       String(game.awayLeagueTeamId) === String(team._id)
   );
   const playerStats = buildLeagueTeamPlayerStats(rawTeamGames, team._id, players);
+  const avatarByPlayerId = new Map(
+    players
+      .filter((p) => p.claimedByUserId)
+      .map((p) => {
+        const user = usersById.get(String(p.claimedByUserId));
+        return [String(p._id), user?.avatar?.url || null];
+      })
+  );
+  const playerStatsWithAvatars = playerStats.map((row) => ({
+    ...row,
+    avatarUrl: avatarByPlayerId.get(String(row.playerId)) || null,
+  }));
   const standingsRow = standings.find((row) => row.teamId === String(team._id)) || null;
 
   return {
     league: sanitizeLeague(league),
     team: sanitizeLeagueTeam(team, {
-      includeRoster: players.map((player) => sanitizeLeaguePlayer(player)),
+      includeRoster: players.map((player) => sanitizeLeaguePlayer(player, usersById)),
       includeGames: teamGames,
-      includeStats: playerStats,
+      includeStats: playerStatsWithAvatars,
       includeStandingsPosition: standingsRow
         ? standings.findIndex((row) => row.teamId === String(team._id)) + 1
         : null,
@@ -884,9 +898,10 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
     throw new ApiError(404, 'League player not found');
   }
 
-  const [games, allTeams] = await Promise.all([
+  const [games, allTeams, usersById] = await Promise.all([
     listLeagueGamesByLeagueId(league._id),
     listLeagueTeams(league._id),
+    buildUsersMap([player.claimedByUserId]),
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
@@ -894,7 +909,7 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
   return {
     league: sanitizeLeague(league),
     team: sanitizeLeagueTeam(team),
-    player: sanitizeLeaguePlayer(player),
+    player: sanitizeLeaguePlayer(player, usersById),
     summary: buildLeaguePlayerSummary(gameRows),
     games: gameRows,
   };
@@ -1892,17 +1907,22 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
     listLeagueTeams(league._id),
     listLeagueGamesByLeagueId(league._id),
   ]);
+  const allPlayers = (
+    await Promise.all(teams.map((team) => listLeaguePlayers(team._id).catch(() => [])))
+  ).flat();
+  const usersById = await buildUsersMap(allPlayers.map((p) => p.claimedByUserId));
   const currentPlayersById = new Map(
-    (await Promise.all(teams.map((team) => listLeaguePlayers(team._id).catch(() => []))))
-      .flat()
-      .map((player) => [
-        String(player.leaguePlayerId || player._id),
-        {
-          displayName: player.displayName,
-          jerseyNumber: player.jerseyNumber ?? null,
-          position: player.position ?? null,
-        },
-      ])
+    allPlayers.map((player) => [
+      String(player.leaguePlayerId || player._id),
+      {
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        avatarUrl: player.claimedByUserId
+          ? usersById.get(String(player.claimedByUserId))?.avatar?.url || null
+          : null,
+      },
+    ])
   );
 
   const teamsById = new Map(teams.map((t) => [String(t._id), t]));
@@ -1961,6 +1981,7 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
         displayName: currentPlayer?.displayName || entry.displayName,
         jerseyNumber: currentPlayer?.jerseyNumber ?? null,
         position: currentPlayer?.position ?? null,
+        avatarUrl: currentPlayer?.avatarUrl || null,
         teamName: team?.name || null,
         teamSlug: team?.slug || null,
         teamLogoUrl: team?.logo?.url || null,

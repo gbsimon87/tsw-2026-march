@@ -146,7 +146,7 @@ export function PublicLeaguePlayerPage() {
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-start">
             <img
-              src={playerPlaceholder}
+              src={player.avatarUrl || playerPlaceholder}
               alt=""
               className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover shadow-sm"
             />

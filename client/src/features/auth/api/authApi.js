@@ -31,4 +31,7 @@ export const authApi = {
   googleExchange(token) {
     return apiClient.post('/auth/google/exchange', { token });
   },
+  uploadAvatar(formData) {
+    return apiClient.postFormData('/auth/avatar', formData);
+  },
 };
