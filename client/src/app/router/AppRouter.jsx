@@ -196,14 +196,6 @@ export function AppRouter() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/games/:gameId/track"
-          element={
-            <ProtectedRoute>
-              <GameTrackPage />
-            </ProtectedRoute>
-          }
-        />
         <Route path="/games/:gameId" element={<GameDetailPage />} />
         <Route
           path="/my-sporty"
@@ -230,6 +222,14 @@ export function AppRouter() {
           }
         />
       </Route>
+      <Route
+        path="/games/:gameId/track"
+        element={
+          <ProtectedRoute>
+            <GameTrackPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
