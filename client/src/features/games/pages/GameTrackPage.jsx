@@ -93,6 +93,7 @@ export function GameTrackPage() {
   const [lastActionMeta, setLastActionMeta] = useState({ playerId: null });
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
   const [insertBeforeEventId, setInsertBeforeEventId] = useState('');
+  const [editingEvent, setEditingEvent] = useState(null);
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
   const [activePanel, setActivePanel] = useState('court');
   const [sideState, setSideState] = useState({
@@ -230,7 +231,6 @@ export function GameTrackPage() {
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
   const isCompleted = game?.status === 'completed';
-  const canEditCompletedGame = data?.canEditCompletedGame || false;
 
   function updateSideState(key, updates) {
     setSideState((current) => ({
@@ -316,6 +316,15 @@ export function GameTrackPage() {
     return isDualTeam ? { ...payload, teamSide: activeSide } : payload;
   }
 
+  function buildCourtFields(shot) {
+    if (!shot) return {};
+    return {
+      zoneId: shot.zoneId,
+      x: Number(shot.x.toFixed(2)),
+      y: Number(shot.y.toFixed(2)),
+    };
+  }
+
   function onCourtSelect(point) {
     if (isSaving || !requireLineup()) {
       return;
@@ -382,7 +391,8 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     const isInsert = Boolean(insertBeforeEventId);
-    const payload = buildEventPayload({ playerId: reboundPlayerId, statType });
+    const courtFields = buildCourtFields(selectedShot);
+    const payload = buildEventPayload({ playerId: reboundPlayerId, statType, ...courtFields });
     const label = STAT_LABELS[statType] || statType;
 
     // Transition UI immediately.
@@ -396,6 +406,7 @@ export function GameTrackPage() {
           statType: 'FG2_MISS',
           actorPlayerId: reboundPlayerId,
           playerPool: 'other',
+          courtLocation: courtFields,
         });
       } else if (statType === 'OREB') {
         setPendingFollowUpPrompt({
@@ -403,6 +414,7 @@ export function GameTrackPage() {
           statType: 'FG2_MISS',
           actorPlayerId: reboundPlayerId,
           playerPool: 'same',
+          courtLocation: courtFields,
         });
       } else {
         setPendingFollowUpPrompt(null);
@@ -459,23 +471,23 @@ export function GameTrackPage() {
       let payload;
       let label;
 
+      const followUpCourt = pendingFollowUpPrompt.courtLocation || {};
+
       if (option === 'OPP_REB') {
-        payload = { statType: 'OPP_REB' };
+        payload = { statType: 'OPP_REB', ...followUpCourt };
         label = 'Opponent Rebound';
       } else if (isDualTeam && pendingFollowUpPrompt.kind === 'rebound') {
         const rebounderSide = playerSideMap.get(option) || activeSide;
         const isOffensive = rebounderSide === activeSide;
         const statType = isOffensive ? 'OREB' : 'DREB';
-        payload = { playerId: option, statType, teamSide: rebounderSide };
+        payload = { playerId: option, statType, teamSide: rebounderSide, ...followUpCourt };
         label = STAT_LABELS[statType] || statType;
       } else if (pendingFollowUpPrompt.kind === 'who_missed_shot') {
         const playerSide = isDualTeam ? playerSideMap.get(option) || activeSide : undefined;
         payload = {
           playerId: option,
           statType: 'FG2_MISS',
-          zoneId: 'PAINT',
-          x: 50,
-          y: 20,
+          ...followUpCourt,
           ...(playerSide ? { teamSide: playerSide } : {}),
         };
         label = STAT_LABELS['FG2_MISS'] || 'FG2 Miss';
@@ -487,6 +499,7 @@ export function GameTrackPage() {
         payload = {
           playerId: option,
           statType: pendingFollowUpPrompt.statType,
+          ...followUpCourt,
           ...(playerSide ? { teamSide: playerSide } : {}),
         };
         label = STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType;
@@ -497,6 +510,7 @@ export function GameTrackPage() {
         payload = buildEventPayload({
           playerId: option,
           statType: pendingFollowUpPrompt.statType,
+          ...followUpCourt,
         });
         label = STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType;
       }
@@ -549,15 +563,31 @@ export function GameTrackPage() {
     const actorPlayerId = currentSideState.selectedPlayerId;
     const isInsert = Boolean(insertBeforeEventId);
 
+    const shotCourtFields = {
+      zoneId: selectedShot.zoneId,
+      x: Number(selectedShot.x.toFixed(2)),
+      y: Number(selectedShot.y.toFixed(2)),
+    };
+
     // Transition UI immediately — don't wait for the API.
     if (isInsert) {
       // Insert mode: keep picker open until confirmed.
     } else if (outcome === 'miss') {
       setSelectedShot(null);
-      setPendingFollowUpPrompt({ kind: 'rebound', statType: 'OREB', actorPlayerId });
+      setPendingFollowUpPrompt({
+        kind: 'rebound',
+        statType: 'OREB',
+        actorPlayerId,
+        courtLocation: shotCourtFields,
+      });
     } else if (payload.statType === 'FG2_MADE' || payload.statType === 'FG3_MADE') {
       setSelectedShot(null);
-      setPendingFollowUpPrompt({ kind: 'assist', statType: 'AST', actorPlayerId });
+      setPendingFollowUpPrompt({
+        kind: 'assist',
+        statType: 'AST',
+        actorPlayerId,
+        courtLocation: shotCourtFields,
+      });
     } else {
       clearEventPicker();
     }
@@ -612,7 +642,12 @@ export function GameTrackPage() {
       // Keep picker open until confirmed.
     } else if (outcome === 'miss') {
       setSelectedShot(null);
-      setPendingFollowUpPrompt({ kind: 'rebound', statType: 'OREB', actorPlayerId });
+      setPendingFollowUpPrompt({
+        kind: 'rebound',
+        statType: 'OREB',
+        actorPlayerId,
+        courtLocation: { zoneId: inferred.zoneId, x: inferred.x, y: inferred.y },
+      });
     } else {
       clearEventPicker();
     }
@@ -664,9 +699,11 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     const isInsert = Boolean(insertBeforeEventId);
+    const courtFields = buildCourtFields(selectedShot);
     const payload = buildEventPayload({
       playerId: currentSideState.selectedPlayerId,
       statType,
+      ...courtFields,
     });
     const quickLabel = STAT_LABELS[statType] || statType;
     const actorPlayerId = currentSideState.selectedPlayerId;
@@ -681,6 +718,7 @@ export function GameTrackPage() {
         statType: 'TOV',
         actorPlayerId,
         playerPool: 'other',
+        courtLocation: courtFields,
       });
     } else if (statType === 'BLK' && isDualTeam) {
       setSelectedShot(null);
@@ -689,6 +727,7 @@ export function GameTrackPage() {
         statType: 'FG2_MISS',
         actorPlayerId,
         playerPool: 'other',
+        courtLocation: courtFields,
       });
     } else if (statType === 'TOV' && isDualTeam) {
       setSelectedShot(null);
@@ -697,6 +736,7 @@ export function GameTrackPage() {
         statType: 'STL',
         actorPlayerId,
         playerPool: 'other',
+        courtLocation: courtFields,
       });
     } else if (statType === 'FOUL' && isDualTeam) {
       setSelectedShot(null);
@@ -705,6 +745,7 @@ export function GameTrackPage() {
         statType: null,
         actorPlayerId,
         playerPool: 'other',
+        courtLocation: courtFields,
       });
     } else {
       clearEventPicker();
@@ -740,11 +781,48 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     try {
-      const response = await gamesApi.appendEvent(gameId, { statType });
+      const response = await gamesApi.appendEvent(gameId, {
+        statType,
+        ...buildCourtFields(selectedShot),
+      });
       updateData(response, STAT_LABELS[statType] || statType);
       clearEventPicker();
     } catch (submitError) {
       setError(submitError.message || 'Failed to add opponent score');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function openEditEvent(event) {
+    setEditingEvent({
+      id: event.id,
+      playerId: event.playerId || '',
+      teamSide: event.teamSide || activeSide,
+      statType: event.statType || '',
+      zoneId: event.zoneId || '',
+      x: event.x ?? '',
+      y: event.y ?? '',
+    });
+  }
+
+  async function saveEventEdit() {
+    if (!editingEvent || isSaving) return;
+    setIsSaving(true);
+    setError('');
+    const patch = {};
+    if (editingEvent.playerId) patch.playerId = editingEvent.playerId;
+    if (isDualTeam && editingEvent.teamSide) patch.teamSide = editingEvent.teamSide;
+    if (editingEvent.statType) patch.statType = editingEvent.statType;
+    if (editingEvent.zoneId) patch.zoneId = editingEvent.zoneId;
+    if (editingEvent.x !== '') patch.x = Number(editingEvent.x);
+    if (editingEvent.y !== '') patch.y = Number(editingEvent.y);
+    try {
+      const response = await gamesApi.updateEvent(gameId, editingEvent.id, patch);
+      updateData(response, 'Event updated');
+      setEditingEvent(null);
+    } catch (err) {
+      setError(err.message || 'Failed to update event');
     } finally {
       setIsSaving(false);
     }
@@ -862,27 +940,6 @@ export function GameTrackPage() {
 
   if (!data || !game || !boxScore) {
     return <SportsLoader label="Loading tracking session" fullPage />;
-  }
-
-  if (isCompleted && !canEditCompletedGame) {
-    return (
-      <main className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-base font-semibold text-slate-900">Game Finalized</p>
-          <p className="mt-1 text-sm text-slate-500">
-            This game has been completed. Only league owners, managers, and team managers can edit
-            stats on a finalized game while the league is active.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate(`/games/${gameId}`)}
-            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
-            View Game
-          </button>
-        </div>
-      </main>
-    );
   }
 
   const gameSummary = data.gameSummary || {
@@ -1924,19 +1981,45 @@ export function GameTrackPage() {
                     </button>
                   </div>
                 </div>
-                <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-3.5 w-3.5 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M8 3v8M5 8l3 3 3-3" />
-                    <path d="M3 13h10" />
-                  </svg>
-                  Tap to go to the court and insert a stat before that event.
-                </p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="h-3.5 w-3.5 shrink-0 text-slate-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
+                    </svg>
+                    Edit event
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="h-3.5 w-3.5 shrink-0 text-sky-500"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M8 3v8M5 8l3 3 3-3" />
+                      <path d="M3 13h10" />
+                    </svg>
+                    Insert stat before
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="h-3.5 w-3.5 shrink-0 text-rose-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
+                    </svg>
+                    Delete event
+                  </span>
+                </div>
                 <div className="mt-4 space-y-2">
                   {visibleRecentEvents.map((event) => {
                     const eventLogoUrl = isDualTeam
@@ -1965,6 +2048,22 @@ export function GameTrackPage() {
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label="Edit this event"
+                              onClick={() => openEditEvent(event)}
+                              className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50"
+                            >
+                              <svg
+                                viewBox="0 0 16 16"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                              >
+                                <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
+                              </svg>
+                            </button>
                             <button
                               type="button"
                               aria-label="Insert stat before this event"
@@ -2079,9 +2178,7 @@ export function GameTrackPage() {
                     </span>
                     <div>
                       <p className="text-sm font-semibold text-emerald-900">Finish Game</p>
-                      <p className="text-xs text-emerald-700">
-                        Mark the game as complete and lock stats.
-                      </p>
+                      <p className="text-xs text-emerald-700">Mark the game as complete.</p>
                     </div>
                   </button>
                 )}
@@ -2089,6 +2186,187 @@ export function GameTrackPage() {
             ) : null}
           </div>
         </div>
+
+        {editingEvent
+          ? (() => {
+              const allStatTypes = Object.keys(STAT_LABELS);
+              return (
+                <div
+                  className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
+                  onClick={() => setEditingEvent(null)}
+                >
+                  <div
+                    className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <p className="text-base font-semibold text-slate-900">Edit Event</p>
+                      <button
+                        type="button"
+                        aria-label="Close"
+                        onClick={() => setEditingEvent(null)}
+                        className="rounded-md border border-slate-300 p-1 text-slate-500 hover:bg-slate-50"
+                      >
+                        <svg
+                          viewBox="0 0 20 20"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                        >
+                          <path d="m5 5 10 10M15 5 5 15" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Player
+                        </p>
+                        <select
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          value={editingEvent.playerId}
+                          onChange={(e) =>
+                            setEditingEvent((ev) => ({ ...ev, playerId: e.target.value }))
+                          }
+                        >
+                          <option value="">— No player (opponent) —</option>
+                          {isDualTeam
+                            ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                                <optgroup
+                                  key={side}
+                                  label={participantsBySide[side]?.displayName || side}
+                                >
+                                  {(participantsBySide[side]?.players || []).map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
+                                      {p.displayName}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ))
+                            : players.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
+                                  {p.displayName}
+                                </option>
+                              ))}
+                        </select>
+                      </div>
+
+                      {isDualTeam && editingEvent.playerId ? (
+                        <div>
+                          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Team Side
+                          </p>
+                          <div className="flex gap-2">
+                            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                              <button
+                                key={side}
+                                type="button"
+                                onClick={() => setEditingEvent((ev) => ({ ...ev, teamSide: side }))}
+                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${editingEvent.teamSide === side ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                              >
+                                {participantsBySide[side]?.displayName || side}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Stat
+                        </p>
+                        <select
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          value={editingEvent.statType}
+                          onChange={(e) =>
+                            setEditingEvent((ev) => ({ ...ev, statType: e.target.value }))
+                          }
+                        >
+                          {allStatTypes.map((st) => (
+                            <option key={st} value={st}>
+                              {STAT_LABELS[st]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Zone
+                        </p>
+                        <select
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          value={editingEvent.zoneId}
+                          onChange={(e) =>
+                            setEditingEvent((ev) => ({ ...ev, zoneId: e.target.value }))
+                          }
+                        >
+                          <option value="">— No zone —</option>
+                          {Object.entries(ZONE_LABELS).map(([id, label]) => (
+                            <option key={id} value={id}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="mt-2 flex gap-2">
+                          <div className="flex-1">
+                            <p className="mb-1 text-xs text-slate-500">X (0–100)</p>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                              value={editingEvent.x}
+                              onChange={(e) =>
+                                setEditingEvent((ev) => ({ ...ev, x: e.target.value }))
+                              }
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <p className="mb-1 text-xs text-slate-500">Y (0–100)</p>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                              value={editingEvent.y}
+                              onChange={(e) =>
+                                setEditingEvent((ev) => ({ ...ev, y: e.target.value }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditingEvent(null)}
+                        className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={saveEventEdit}
+                        className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                      >
+                        {isSaving ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          : null}
 
         {showFinishConfirm ? (
           <div

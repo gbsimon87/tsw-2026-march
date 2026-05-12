@@ -5,6 +5,7 @@ const {
   updateGameSchema,
   appendEventSchema,
   setLineupSchema,
+  updateEventSchema,
 } = require('./games.validation');
 
 function requireAuthUserId(req) {
@@ -73,6 +74,18 @@ async function setLineup(req, res) {
   res.status(200).json(result);
 }
 
+async function updateEvent(req, res) {
+  const userId = requireAuthUserId(req);
+  const patch = updateEventSchema.parse(req.body);
+  const result = await gamesService.updateEventForUser(
+    userId,
+    req.params.gameId,
+    req.params.eventId,
+    patch
+  );
+  res.status(200).json(result);
+}
+
 async function removeEvent(req, res) {
   const userId = requireAuthUserId(req);
   const result = await gamesService.removeEventForUser(
@@ -103,6 +116,7 @@ module.exports = {
   getPublicById,
   appendEvent,
   insertEventBefore,
+  updateEvent,
   setLineup,
   removeEvent,
   deleteGame,

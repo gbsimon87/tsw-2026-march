@@ -16,6 +16,7 @@ gamesRouter.post(
   '/:gameId/events/:eventId/insert-before',
   asyncHandler(controller.insertEventBefore)
 );
+gamesRouter.patch('/:gameId/events/:eventId', asyncHandler(controller.updateEvent));
 gamesRouter.delete('/:gameId/events/:eventId', asyncHandler(controller.removeEvent));
 gamesRouter.post('/:gameId/finish', asyncHandler(controller.finish));
 gamesRouter.delete('/:gameId', asyncHandler(controller.deleteGame));

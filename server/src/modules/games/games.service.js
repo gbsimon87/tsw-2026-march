@@ -21,7 +21,6 @@ const {
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
   canFinalizeLeagueGame,
-  canEditCompletedLeagueGame,
 } = require('../leagues/leagues.service');
 const { findLeagueTeamById, findLeagueById } = require('../leagues/leagues.repository');
 
@@ -994,8 +993,7 @@ async function getGameForUser(userId, gameId) {
       ? computeBoxScore(game, null, { participants })
       : computeBoxScore(game, teamDoc);
   const gameSummary = buildGameSummary(game);
-  const canEditCompleted =
-    game.status === 'completed' ? await canEditCompletedLeagueGame(userId, game) : false;
+  const canEditCompleted = game.status === 'completed' ? Boolean(userId) : false;
 
   // Fetch fresh logos for dual-team games so uploads after game creation are reflected
   let freshLogoByLeagueTeamId = new Map();
@@ -1112,11 +1110,6 @@ function requireBothLineups(game) {
 
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
-  if (game.status !== 'in_progress') {
-    if (!(await canEditCompletedLeagueGame(userId, game))) {
-      throw new ApiError(400, 'Cannot track events on a completed game');
-    }
-  }
 
   const context = await resolveGameTeamContext(userId, game);
   const insertBeforeEventId = options.insertBeforeEventId || null;
@@ -1316,16 +1309,29 @@ async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
 
 async function removeEventForUser(userId, gameId, eventId) {
   const game = await assertGameAccess(userId, gameId);
-  if (game.status !== 'in_progress') {
-    if (!(await canEditCompletedLeagueGame(userId, game))) {
-      throw new ApiError(400, 'Cannot remove events from a completed game');
-    }
-  }
   const event = game.events.id(eventId);
   if (!event) {
     throw new ApiError(404, 'Event not found');
   }
   event.deleteOne();
+  recalculateCurrentLineup(game);
+  clearAiSummaryAfterCompletedLeagueEdit(game);
+  await saveGame(game);
+  return getGameForUser(userId, gameId);
+}
+
+async function updateEventForUser(userId, gameId, eventId, patch) {
+  const game = await assertGameAccess(userId, gameId);
+  const event = game.events.id(eventId);
+  if (!event) {
+    throw new ApiError(404, 'Event not found');
+  }
+  if (patch.playerId !== undefined) event.playerId = patch.playerId;
+  if (patch.teamSide !== undefined) event.teamSide = patch.teamSide;
+  if (patch.statType !== undefined) event.statType = patch.statType;
+  if (patch.zoneId !== undefined) event.zoneId = patch.zoneId;
+  if (patch.x !== undefined) event.x = patch.x;
+  if (patch.y !== undefined) event.y = patch.y;
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
   await saveGame(game);
@@ -1393,6 +1399,7 @@ module.exports = {
   getGameForUser,
   getPublicGame,
   appendEventForUser,
+  updateEventForUser,
   setGameLineup,
   removeEventForUser,
   deleteGameForUser,
