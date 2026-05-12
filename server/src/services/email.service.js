@@ -87,6 +87,7 @@ async function sendPasswordResetEmail({ to, name, resetUrl }) {
 }
 
 module.exports = {
+  sendTemplateEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,
   hasSmtpConfiguration,
