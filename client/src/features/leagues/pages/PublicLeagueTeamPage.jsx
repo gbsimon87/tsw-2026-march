@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { leaguesApi } from '../api/leaguesApi';
@@ -129,6 +129,7 @@ const PLAYER_STATS_COLUMNS = [
 export function PublicLeagueTeamPage() {
   const { leagueSlug, teamSlug } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -138,6 +139,8 @@ export function PublicLeagueTeamPage() {
   const [requestStatus, setRequestStatus] = useState('');
   const [requestStatusTone, setRequestStatusTone] = useState('success');
   const [activeTab, setActiveTab] = useState('stats');
+  const pendingHandled = useRef(false);
+  const pendingKey = `join_pending_${leagueSlug}_${teamSlug}`;
 
   useEffect(() => {
     leaguesApi
@@ -146,6 +149,20 @@ export function PublicLeagueTeamPage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load team'))
       .finally(() => setIsLoading(false));
   }, [leagueSlug, teamSlug]);
+
+  useEffect(() => {
+    if (!data?.team || !user || pendingHandled.current) return;
+    const raw = sessionStorage.getItem(pendingKey);
+    if (!raw) return;
+    pendingHandled.current = true;
+    sessionStorage.removeItem(pendingKey);
+    const { rolePlayer: rp, roleTeamManager: rtm, requestedLeaguePlayerId: rpid } = JSON.parse(raw);
+    setRolePlayer(rp);
+    setRoleTeamManager(rtm);
+    setRequestedLeaguePlayerId(rpid || '');
+    setActiveTab('join');
+    submitRoles(data.league, data.team, rp, rtm, rpid || '');
+  }, [data, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
     return <SportsLoader label="Loading league team" fullPage />;
@@ -159,9 +176,6 @@ export function PublicLeagueTeamPage() {
   const joinablePlayers = (team.roster || []).filter(
     (player) => !player.isClaimed && player.isActive
   );
-  const hasClaimedProfile = user
-    ? (team.roster || []).some((p) => p.claimedBy && String(p.claimedBy.id) === String(user.id))
-    : false;
   const rosterById = new Map((team.roster || []).map((p) => [String(p.id), p]));
   const playerStatsRows = (team.stats || []).map((row) => {
     const rosterPlayer = rosterById.get(String(row.playerId));
@@ -173,25 +187,18 @@ export function PublicLeagueTeamPage() {
     };
   });
 
-  async function submitJoinRequest(event) {
-    event.preventDefault();
+  async function submitRoles(lg, tm, rp, rtm, rpid) {
     setError('');
     setRequestStatus('');
     setRequestStatusTone('success');
 
-    if (!rolePlayer && !roleTeamManager) {
-      setError('Select at least one role.');
-      return;
-    }
-
-    const roles = [...(rolePlayer ? ['player'] : []), ...(roleTeamManager ? ['team_manager'] : [])];
-
+    const roles = [...(rp ? ['player'] : []), ...(rtm ? ['team_manager'] : [])];
     const results = [];
     for (const role of roles) {
       try {
-        await leaguesApi.createJoinRequest(league.id, team.id, {
+        await leaguesApi.createJoinRequest(lg.id, tm.id, {
           requestedRole: role,
-          ...(role === 'player' ? { requestedLeaguePlayerId } : {}),
+          ...(role === 'player' ? { requestedLeaguePlayerId: rpid } : {}),
         });
         results.push({ role, ok: true });
       } catch (submitError) {
@@ -206,7 +213,7 @@ export function PublicLeagueTeamPage() {
     const anyOk = results.some((r) => r.ok);
 
     if (allOk) {
-      setRequestStatus('Join request submitted.');
+      setRequestStatus("Join request submitted. Please wait for the team manager's approval.");
       setRequestStatusTone('success');
     } else if (anyPending && !anyOk) {
       setRequestStatus('You already have a pending request for the selected role(s).');
@@ -219,13 +226,33 @@ export function PublicLeagueTeamPage() {
     }
   }
 
+  async function submitJoinRequest(event) {
+    event.preventDefault();
+
+    if (!user) {
+      sessionStorage.setItem(
+        pendingKey,
+        JSON.stringify({ rolePlayer, roleTeamManager, requestedLeaguePlayerId })
+      );
+      navigate(`/login?redirectTo=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
+    if (!rolePlayer && !roleTeamManager) {
+      setError('Select at least one role.');
+      return;
+    }
+
+    await submitRoles(league, team, rolePlayer, roleTeamManager, requestedLeaguePlayerId);
+  }
+
   const breadcrumbs = [
     { label: 'Leagues' },
     { label: league.name, href: `/league/${league.slug}` },
     { label: team.name },
   ];
 
-  const visibleTabs = user && !hasClaimedProfile ? TABS : TABS.filter((t) => t.id !== 'join');
+  const visibleTabs = TABS;
 
   return (
     <main className="space-y-6">
