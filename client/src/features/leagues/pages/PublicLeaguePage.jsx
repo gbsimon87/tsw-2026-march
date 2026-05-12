@@ -137,10 +137,23 @@ const LEADERS_COLUMNS = [
   },
 ];
 
+const DPOY_COLUMNS = [
+  ...LEADERS_COLUMNS.filter((col) => col.id !== 'fp'),
+  {
+    id: 'dp',
+    label: 'DP',
+    align: 'right',
+    sortKey: 'defensiveScore',
+    emphasis: true,
+    render: (row) => row.defensiveScore.toFixed(1),
+  },
+];
+
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
   const [league, setLeague] = useState(null);
   const [leaders, setLeaders] = useState([]);
+  const [dpoyLeaders, setDpoyLeaders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -152,6 +165,7 @@ export function PublicLeaguePage() {
       .then(([leagueResponse, leadersResponse]) => {
         setLeague(leagueResponse.league);
         setLeaders(leadersResponse.leaders || []);
+        setDpoyLeaders(leadersResponse.dpoyLeaders || []);
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load league'))
       .finally(() => setIsLoading(false));
@@ -220,7 +234,33 @@ export function PublicLeaguePage() {
               />
             </div>
             <p className="mt-3 text-xs text-slate-400">
-              FP = (PPG × 1) + (RPG × 1.2) + (APG × 1.5) + (SPG × 3) + (BPG × 3) + (TOV × −1)
+              FP = (PPG x 1) + (RPG x 1.2) + (APG x 1.5) + (SPG x 2) + (BPG x 2) - (TOV x 1)
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-semibold text-slate-900">
+          Race to Defensive Player of the Year
+        </h2>
+        {dpoyLeaders.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
+        ) : (
+          <>
+            <div className="mt-4 overflow-x-auto">
+              <StatsTable
+                columns={DPOY_COLUMNS}
+                rows={dpoyLeaders.map((row, i) => ({
+                  ...row,
+                  leagueSlug: league.slug,
+                  rank: i + 1,
+                }))}
+                tableClassName="w-full text-sm"
+              />
+            </div>
+            <p className="mt-3 text-xs text-slate-400">
+              DP = (RPG x 1.2) + (SPG x 3) + (BPG x 3) - (TOV x 1)
             </p>
           </>
         )}
