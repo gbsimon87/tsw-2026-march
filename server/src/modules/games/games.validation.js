@@ -170,19 +170,28 @@ const appendTrackedShotEventSchema = baseEventSchema.extend({
   y: z.number().min(0).max(100),
 });
 
+const courtFieldsSchema = {
+  zoneId: zoneIdSchema.optional(),
+  x: z.number().min(0).max(100).optional(),
+  y: z.number().min(0).max(100).optional(),
+};
+
 const appendNonShotEventSchema = baseEventSchema.extend({
   statType: nonShotStatTypeSchema,
+  ...courtFieldsSchema,
 });
 
 const appendSubstitutionEventSchema = baseEventSchema.extend({
   statType: substitutionStatTypeSchema,
   relatedPlayerId: z.string().min(1).optional(),
   relatedTeamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  ...courtFieldsSchema,
 });
 
 const appendOpponentEventSchema = z.object({
   statType: opponentStatTypeSchema,
   occurredAt: z.string().datetime().optional(),
+  ...courtFieldsSchema,
 });
 
 const appendEventSchema = z.union([
@@ -197,10 +206,20 @@ const setLineupSchema = z.object({
   teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 
+const updateEventSchema = z.object({
+  playerId: z.string().min(1).optional(),
+  teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  statType: statTypeSchema.optional(),
+  zoneId: zoneIdSchema.optional(),
+  x: z.number().min(0).max(100).optional(),
+  y: z.number().min(0).max(100).optional(),
+});
+
 module.exports = {
   createGameSchema,
   updateGameSchema,
   appendEventSchema,
   setLineupSchema,
   statTypeSchema,
+  updateEventSchema,
 };
