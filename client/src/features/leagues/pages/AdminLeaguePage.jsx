@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
+import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -59,6 +60,23 @@ const TABS = [
     ),
   },
   {
+    id: 'requests',
+    label: 'Requests',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <circle cx="8" cy="5" r="2.5" />
+        <path d="M3 13c0-2.2 2.2-4 5-4s5 1.8 5 4" />
+        <path d="M11 8h4M13 6v4" />
+      </svg>
+    ),
+  },
+  {
     id: 'settings',
     label: 'Settings',
     icon: (
@@ -104,8 +122,11 @@ export function AdminLeaguePage() {
   const [isSubmittingManager, setIsSubmittingManager] = useState(false);
   const [managerError, setManagerError] = useState('');
   const [deletingGameId, setDeletingGameId] = useState('');
+  const [confirmDeleteGameId, setConfirmDeleteGameId] = useState('');
   const [teamManagerEmails, setTeamManagerEmails] = useState({});
   const [submittingTeamManagerId, setSubmittingTeamManagerId] = useState('');
+  const [teamRequests, setTeamRequests] = useState({});
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -148,6 +169,73 @@ export function AdminLeaguePage() {
     setLeagueNameInput(league?.name || '');
   }, [league?.name]);
 
+  useEffect(() => {
+    if (activeTab !== 'requests' || !league?.teams?.length) return;
+    setIsLoadingRequests(true);
+    Promise.all(
+      (league.teams || []).map((team) =>
+        leaguesApi
+          .getTeam(leagueId, team.id)
+          .then((res) => ({ teamId: team.id, teamName: team.name, data: res.team }))
+      )
+    )
+      .then((results) => {
+        const map = {};
+        for (const { teamId, teamName, data } of results) {
+          const rosterById = new Map((data.roster || []).map((p) => [String(p.id), p]));
+          map[teamId] = {
+            teamName,
+            requests: (data.joinRequests || []).map((req) => {
+              const requestedPlayer = req.requestedLeaguePlayerId
+                ? rosterById.get(String(req.requestedLeaguePlayerId))
+                : null;
+              return {
+                ...req,
+                requestedPlayerName: requestedPlayer?.displayName || null,
+                requestedPlayerJerseyNumber: requestedPlayer?.jerseyNumber ?? null,
+              };
+            }),
+          };
+        }
+        setTeamRequests(map);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingRequests(false));
+  }, [activeTab, leagueId, league?.teams]);
+
+  async function onApproveJoin(teamId, requestId) {
+    await leaguesApi.approveJoinRequest(leagueId, teamId, requestId);
+    const res = await leaguesApi.getTeam(leagueId, teamId);
+    const rosterById = new Map((res.team.roster || []).map((p) => [String(p.id), p]));
+    setTeamRequests((current) => ({
+      ...current,
+      [teamId]: {
+        ...current[teamId],
+        requests: (res.team.joinRequests || []).map((req) => {
+          const requestedPlayer = req.requestedLeaguePlayerId
+            ? rosterById.get(String(req.requestedLeaguePlayerId))
+            : null;
+          return {
+            ...req,
+            requestedPlayerName: requestedPlayer?.displayName || null,
+            requestedPlayerJerseyNumber: requestedPlayer?.jerseyNumber ?? null,
+          };
+        }),
+      },
+    }));
+  }
+
+  async function onRejectJoin(teamId, requestId) {
+    await leaguesApi.rejectJoinRequest(leagueId, teamId, requestId);
+    setTeamRequests((current) => ({
+      ...current,
+      [teamId]: {
+        ...current[teamId],
+        requests: (current[teamId]?.requests || []).filter((r) => r.id !== requestId),
+      },
+    }));
+  }
+
   async function onAddLeagueManager(event) {
     event.preventDefault();
     if (!newManagerEmail.trim()) return;
@@ -165,7 +253,7 @@ export function AdminLeaguePage() {
   }
 
   async function onDeleteGame(gameId) {
-    if (!window.confirm('Remove this game? This cannot be undone.')) return;
+    setConfirmDeleteGameId('');
     setDeletingGameId(gameId);
     try {
       await gamesApi.deleteGame(gameId);
@@ -593,7 +681,7 @@ export function AdminLeaguePage() {
                             <p className="mt-0.5 text-sm text-slate-500">{game.status}</p>
                           </div>
                         </div>
-                        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+                        <div className="flex w-full items-center gap-2 sm:w-auto">
                           {canTrackGame(game) ? (
                             <button
                               type="button"
@@ -601,7 +689,7 @@ export function AdminLeaguePage() {
                               disabled={!canNavigate || deletingGameId === gameId}
                               className="rounded-md border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                               onClick={() => {
-                                if (gameId) onDeleteGame(gameId);
+                                if (gameId) setConfirmDeleteGameId(gameId);
                               }}
                             >
                               <svg
@@ -615,54 +703,56 @@ export function AdminLeaguePage() {
                               </svg>
                             </button>
                           ) : null}
-                          <button
-                            type="button"
-                            aria-label={`Copy share link for ${game.title}`}
-                            disabled={!canNavigate}
-                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            onClick={() => {
-                              if (gameId) copyShareUrl(gameId);
-                            }}
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
+                          <div className="ml-auto flex items-center gap-2">
+                            <button
+                              type="button"
+                              aria-label={`Copy share link for ${game.title}`}
+                              disabled={!canNavigate}
+                              className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() => {
+                                if (gameId) copyShareUrl(gameId);
+                              }}
                             >
-                              {copiedGameId === gameId ? (
-                                <path d="M5 13.5 9 17l10-10" />
-                              ) : (
-                                <>
-                                  <rect x="9" y="9" width="10" height="10" rx="2" />
-                                  <path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-                                </>
-                              )}
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Track ${game.title}`}
-                            disabled={!canNavigate || !canTrackGame(game)}
-                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            onClick={() => {
-                              if (gameId) navigate(`/games/${gameId}/track`);
-                            }}
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                {copiedGameId === gameId ? (
+                                  <path d="M5 13.5 9 17l10-10" />
+                                ) : (
+                                  <>
+                                    <rect x="9" y="9" width="10" height="10" rx="2" />
+                                    <path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+                                  </>
+                                )}
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Track ${game.title}`}
+                              disabled={!canNavigate || !canTrackGame(game)}
+                              className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() => {
+                                if (gameId) navigate(`/games/${gameId}/track`);
+                              }}
                             >
-                              <path d="M4 19h16" />
-                              <path d="M7 16V8" />
-                              <path d="M12 16V5" />
-                              <path d="M17 16v-4" />
-                            </svg>
-                          </button>
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <path d="M4 19h16" />
+                                <path d="M7 16V8" />
+                                <path d="M12 16V5" />
+                                <path d="M17 16v-4" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </article>
                     );
@@ -855,6 +945,43 @@ export function AdminLeaguePage() {
             )
           ) : null}
 
+          {activeTab === 'requests' ? (
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Join Requests</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Pending requests from players and team managers across all league teams.
+              </p>
+              {isLoadingRequests ? (
+                <p className="mt-4 text-sm text-slate-500">Loading requests…</p>
+              ) : Object.keys(teamRequests).length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">No pending requests.</p>
+              ) : (
+                <div className="mt-4 space-y-5">
+                  {Object.entries(teamRequests).map(([teamId, { teamName, requests }]) =>
+                    requests.length === 0 ? null : (
+                      <div
+                        key={teamId}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                          {teamName}
+                        </h3>
+                        <JoinRequestsPanel
+                          requests={requests}
+                          onApprove={(requestId) => onApproveJoin(teamId, requestId)}
+                          onReject={(requestId) => onRejectJoin(teamId, requestId)}
+                        />
+                      </div>
+                    )
+                  )}
+                  {Object.values(teamRequests).every((t) => t.requests.length === 0) ? (
+                    <p className="text-sm text-slate-500">No pending requests.</p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           {activeTab === 'settings' ? (
             <div>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -888,6 +1015,40 @@ export function AdminLeaguePage() {
           ) : null}
         </div>
       </div>
+      {confirmDeleteGameId ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
+          onClick={() => setConfirmDeleteGameId('')}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold text-slate-900">Remove this game?</p>
+            <p className="mt-1 text-sm text-slate-500">
+              This will permanently delete the game and all its recorded stats. This cannot be
+              undone.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteGameId('')}
+                className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingGameId === confirmDeleteGameId}
+                onClick={() => onDeleteGame(confirmDeleteGameId)}
+                className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
+              >
+                {deletingGameId === confirmDeleteGameId ? 'Removing…' : 'Yes, remove game'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

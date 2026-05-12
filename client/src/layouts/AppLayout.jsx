@@ -46,6 +46,9 @@ export function AppLayout() {
             <NavLink to="/about" className={desktopNavLinkClass}>
               About
             </NavLink>
+            <NavLink to="/contact" className={desktopNavLinkClass}>
+              Contact
+            </NavLink>
             {!user ? (
               <NavLink to="/login" className={desktopNavLinkClass}>
                 Sign in
@@ -159,6 +162,13 @@ export function AppLayout() {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               About
+            </NavLink>
+            <NavLink
+              to="/contact"
+              className={mobileNavLinkClass}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Contact
             </NavLink>
             {!user ? (
               <NavLink

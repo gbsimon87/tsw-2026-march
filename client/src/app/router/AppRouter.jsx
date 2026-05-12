@@ -32,6 +32,7 @@ import { PublicLeagueTeamPage } from '../../features/leagues/pages/PublicLeagueT
 import { PublicLeaguePlayerPage } from '../../features/leagues/pages/PublicLeaguePlayerPage';
 import { MySportyPage } from '../../features/leagues/pages/MySportyPage';
 import { AboutPage } from '../../pages/AboutPage';
+import { ContactPage } from '../../pages/ContactPage';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -77,6 +78,7 @@ export function AppRouter() {
         <Route path="/" element={<LandingRoute />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/feed" element={<FeedPage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />

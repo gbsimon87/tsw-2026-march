@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
-import { LeagueRosterTable } from '../components/LeagueRosterTable';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
@@ -12,6 +11,57 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 
+const TABS = [
+  {
+    id: 'stats',
+    label: 'Stats',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <path d="M2 12h12M5 12V6M8 12V3M11 12V8" />
+      </svg>
+    ),
+  },
+  {
+    id: 'games',
+    label: 'Games',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <rect x="1" y="3" width="14" height="10" rx="1.5" />
+        <path d="M5 8h2M6 7v2M10 8h.01M12 8h.01" />
+      </svg>
+    ),
+  },
+  {
+    id: 'join',
+    label: 'Join',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <circle cx="7" cy="5" r="2.5" />
+        <path d="M2 13c0-2.2 2.2-4 5-4" />
+        <path d="M12 9v4M10 11h4" />
+      </svg>
+    ),
+  },
+];
+
 const PLAYER_STATS_COLUMNS = [
   {
     id: 'player',
@@ -19,24 +69,27 @@ const PLAYER_STATS_COLUMNS = [
     align: 'left',
     sortable: false,
     render: (row) => (
-      <span className="flex items-center gap-2">
+      <span className="flex items-center gap-1.5">
         <img
           src={row.avatarUrl || playerPlaceholder}
           alt=""
-          className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+          className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
         <Link
           to={row.playerHref}
-          className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+          className="truncate font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
         >
           {row.displayName}
         </Link>
-        {row.jerseyNumber != null || row.position ? (
-          <span className="text-xs text-slate-500">
-            {[row.jerseyNumber != null ? `#${row.jerseyNumber}` : null, row.position]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
+        {row.isClaimed ? (
+          <svg
+            viewBox="0 0 12 12"
+            className="h-3 w-3 shrink-0 text-emerald-600"
+            fill="currentColor"
+            aria-label="Profile claimed"
+          >
+            <path d="M6 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 6c2.76 0 5 1.12 5 2.5V10H1v-.5C1 8.12 3.24 7 6 7Z" />
+          </svg>
         ) : null}
       </span>
     ),
@@ -84,6 +137,7 @@ export function PublicLeagueTeamPage() {
   const [requestedLeaguePlayerId, setRequestedLeaguePlayerId] = useState('');
   const [requestStatus, setRequestStatus] = useState('');
   const [requestStatusTone, setRequestStatusTone] = useState('success');
+  const [activeTab, setActiveTab] = useState('stats');
 
   useEffect(() => {
     leaguesApi
@@ -105,11 +159,19 @@ export function PublicLeagueTeamPage() {
   const joinablePlayers = (team.roster || []).filter(
     (player) => !player.isClaimed && player.isActive
   );
-  const playerStatsRows = (team.stats || []).map((row) => ({
-    ...row,
-    id: row.playerId,
-    playerHref: `/league/${league.slug}/teams/${team.slug}/players/${row.playerId}`,
-  }));
+  const hasClaimedProfile = user
+    ? (team.roster || []).some((p) => p.claimedBy && String(p.claimedBy.id) === String(user.id))
+    : false;
+  const rosterById = new Map((team.roster || []).map((p) => [String(p.id), p]));
+  const playerStatsRows = (team.stats || []).map((row) => {
+    const rosterPlayer = rosterById.get(String(row.playerId));
+    return {
+      ...row,
+      id: row.playerId,
+      playerHref: `/league/${league.slug}/teams/${team.slug}/players/${row.playerId}`,
+      isClaimed: rosterPlayer?.isClaimed ?? false,
+    };
+  });
 
   async function submitJoinRequest(event) {
     event.preventDefault();
@@ -163,8 +225,10 @@ export function PublicLeagueTeamPage() {
     { label: team.name },
   ];
 
+  const visibleTabs = user && !hasClaimedProfile ? TABS : TABS.filter((t) => t.id !== 'join');
+
   return (
-    <main className="space-y-8">
+    <main className="space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
       <PageHeader
         eyebrow={
@@ -188,114 +252,148 @@ export function PublicLeagueTeamPage() {
         }
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Player Stats</h2>
-        <div className="mt-4 overflow-x-auto">
-          <StatsTable
-            columns={PLAYER_STATS_COLUMNS}
-            rows={playerStatsRows}
-            tableClassName="w-full text-sm"
-          />
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">League Games</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {(team.games || []).length === 0 ? (
-            <p className="text-sm text-slate-600">No league games yet.</p>
-          ) : (
-            (team.games || []).map((game) => <LeagueGameCard key={game.id} game={game} />)
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Roster</h2>
-        <LeagueRosterTable
-          bare
-          roster={team.roster || []}
-          getPlayerHref={(player) =>
-            `/league/${league.slug}/teams/${team.slug}/players/${player.id}`
-          }
-        />
-      </section>
-
-      {user ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h2 className="text-xl font-semibold text-slate-900">Request to Join Team</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Select the role(s) you&apos;re requesting. Requests are reviewed manually by the league
-            owner or this team&apos;s managers.
-          </p>
-          <form onSubmit={submitJoinRequest} className="mt-4 space-y-4">
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium text-slate-700">Role</legend>
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-slate-300">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
-                  checked={rolePlayer}
-                  onChange={(e) => setRolePlayer(e.target.checked)}
-                />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">Player</p>
-                  <p className="text-xs text-slate-500">
-                    Claim an existing roster slot on this team
-                  </p>
-                </div>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-slate-300">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
-                  checked={roleTeamManager}
-                  onChange={(e) => setRoleTeamManager(e.target.checked)}
-                />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">Team Manager</p>
-                  <p className="text-xs text-slate-500">
-                    Help manage this team&apos;s roster and games
-                  </p>
-                </div>
-              </label>
-            </fieldset>
-            {rolePlayer ? (
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Claim roster slot
-                </span>
-                <select
-                  required
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
-                  value={requestedLeaguePlayerId}
-                  onChange={(event) => setRequestedLeaguePlayerId(event.target.value)}
-                >
-                  <option value="">Select open player slot</option>
-                  {joinablePlayers.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div
+          className="grid border-b border-slate-200"
+          style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
+        >
+          {visibleTabs.map((tab, index) => (
             <button
-              type="submit"
-              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
+                index < visibleTabs.length - 1 ? 'border-r border-slate-200' : ''
+              } ${
+                activeTab === tab.id
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
             >
-              Submit Join Request
+              {tab.icon}
+              {tab.label}
             </button>
-            {requestStatus ? (
-              <p
-                className={`text-sm ${requestStatusTone === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`}
-              >
-                {requestStatus}
+          ))}
+        </div>
+
+        <div className="p-5">
+          {activeTab === 'stats' ? (
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Player Stats</h2>
+              <div className="mt-4 overflow-x-auto">
+                <StatsTable
+                  columns={PLAYER_STATS_COLUMNS}
+                  rows={playerStatsRows}
+                  tableClassName="w-full text-sm"
+                />
+              </div>
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                <svg
+                  viewBox="0 0 12 12"
+                  className="h-3 w-3 shrink-0 text-emerald-600"
+                  fill="currentColor"
+                >
+                  <path d="M6 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 6c2.76 0 5 1.12 5 2.5V10H1v-.5C1 8.12 3.24 7 6 7Z" />
+                </svg>
+                Profile claimed — this player has linked their account.
               </p>
-            ) : null}
-          </form>
-        </section>
-      ) : null}
+            </div>
+          ) : null}
+
+          {activeTab === 'games' ? (
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">League Games</h2>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {(team.games || []).length === 0 ? (
+                  <p className="text-sm text-slate-600">No league games yet.</p>
+                ) : (
+                  (team.games || []).map((game) => <LeagueGameCard key={game.id} game={game} />)
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'join' ? (
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Are you on this team?</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Claim your player profile to unlock your personal{' '}
+                <span className="font-medium text-slate-900">My Sporty</span> — your stats, game
+                history, and highlights all in one place.
+              </p>
+              <form onSubmit={submitJoinRequest} className="mt-5 space-y-4">
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium text-slate-700">I want to join as</legend>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                      checked={rolePlayer}
+                      onChange={(e) => setRolePlayer(e.target.checked)}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        Player — claim my profile
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Link your account to a roster slot and start building your My Sporty profile
+                      </p>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                      checked={roleTeamManager}
+                      onChange={(e) => setRoleTeamManager(e.target.checked)}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Team Manager</p>
+                      <p className="text-xs text-slate-500">
+                        Help manage this team&apos;s roster and games
+                      </p>
+                    </div>
+                  </label>
+                </fieldset>
+                {rolePlayer ? (
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">
+                      Which roster slot is yours?
+                    </span>
+                    <select
+                      required
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                      value={requestedLeaguePlayerId}
+                      onChange={(event) => setRequestedLeaguePlayerId(event.target.value)}
+                    >
+                      <option value="">Select your name</option>
+                      {joinablePlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                {requestStatus ? (
+                  <p
+                    className={`text-sm ${requestStatusTone === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`}
+                  >
+                    {requestStatus}
+                  </p>
+                ) : null}
+                <button
+                  type="submit"
+                  className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                >
+                  Submit Request
+                </button>
+              </form>
+            </div>
+          ) : null}
+        </div>
+      </div>
     </main>
   );
 }
