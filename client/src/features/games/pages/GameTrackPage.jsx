@@ -2220,6 +2220,36 @@ export function GameTrackPage() {
                     </div>
 
                     <div className="space-y-4">
+                      {isDualTeam ? (
+                        <div>
+                          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Team
+                          </p>
+                          <div className="flex gap-2">
+                            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                              <button
+                                key={side}
+                                type="button"
+                                onClick={() => {
+                                  const sidePlayers = participantsBySide[side]?.players || [];
+                                  const playerStillValid = sidePlayers.some(
+                                    (p) => p.id === editingEvent.playerId
+                                  );
+                                  setEditingEvent((ev) => ({
+                                    ...ev,
+                                    teamSide: side,
+                                    playerId: playerStillValid ? ev.playerId : '',
+                                  }));
+                                }}
+                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${editingEvent.teamSide === side ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                              >
+                                {participantsBySide[side]?.displayName || side}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
                       <div>
                         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
                           Player
@@ -2232,48 +2262,17 @@ export function GameTrackPage() {
                           }
                         >
                           <option value="">— No player (opponent) —</option>
-                          {isDualTeam
-                            ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                                <optgroup
-                                  key={side}
-                                  label={participantsBySide[side]?.displayName || side}
-                                >
-                                  {(participantsBySide[side]?.players || []).map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
-                                      {p.displayName}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              ))
-                            : players.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
-                                  {p.displayName}
-                                </option>
-                              ))}
+                          {(isDualTeam
+                            ? participantsBySide[editingEvent.teamSide]?.players || []
+                            : players
+                          ).map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
+                              {p.displayName}
+                            </option>
+                          ))}
                         </select>
                       </div>
-
-                      {isDualTeam && editingEvent.playerId ? (
-                        <div>
-                          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Team Side
-                          </p>
-                          <div className="flex gap-2">
-                            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                              <button
-                                key={side}
-                                type="button"
-                                onClick={() => setEditingEvent((ev) => ({ ...ev, teamSide: side }))}
-                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${editingEvent.teamSide === side ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
-                              >
-                                {participantsBySide[side]?.displayName || side}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
 
                       <div>
                         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
