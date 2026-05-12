@@ -1961,7 +1961,7 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
     }
   }
 
-  const leaders = Array.from(playerMap.values())
+  const allLeaders = Array.from(playerMap.values())
     .filter((entry) => entry.gamesCount > 0)
     .map((entry) => {
       const { stats, gamesCount } = entry;
@@ -1973,7 +1973,8 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
       const topg = stats.tov / gamesCount;
       const fgMade = (stats.fg2m || 0) + (stats.fg3m || 0);
       const fgAttempted = (stats.fg2a || 0) + (stats.fg3a || 0);
-      const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 3 + bpg * 3 + topg * -1;
+      const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 2 + bpg * 2 + topg * -1;
+      const defensiveScore = rpg * 1.2 + spg * 3 + bpg * 3 + topg * -1;
       const team = teamsById.get(entry.teamId);
       const currentPlayer = currentPlayersById.get(entry.leaguePlayerId);
       return {
@@ -1996,12 +1997,16 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
         fgAttempted,
         fgPercentage: fgAttempted > 0 ? fgMade / fgAttempted : null,
         fantasyScore,
+        defensiveScore,
       };
-    })
-    .sort((a, b) => b.fantasyScore - a.fantasyScore)
+    });
+
+  const leaders = allLeaders.sort((a, b) => b.fantasyScore - a.fantasyScore).slice(0, limit);
+  const dpoyLeaders = [...allLeaders]
+    .sort((a, b) => b.defensiveScore - a.defensiveScore)
     .slice(0, limit);
 
-  return { leaders };
+  return { leaders, dpoyLeaders };
 }
 
 module.exports = {
