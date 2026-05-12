@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../../app/store/AuthContext';
 import { leaguesApi } from '../api/leaguesApi';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
@@ -28,9 +29,16 @@ function formatAverage(value) {
 
 export function PublicLeaguePlayerPage() {
   const { leagueSlug, teamSlug, leaguePlayerId } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [claimStatus, setClaimStatus] = useState('');
+  const [claimError, setClaimError] = useState('');
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const pendingHandled = useRef(false);
+  const pendingKey = `claim_pending_${leagueSlug}_${teamSlug}_${leaguePlayerId}`;
 
   useEffect(() => {
     leaguesApi
@@ -39,6 +47,46 @@ export function PublicLeaguePlayerPage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load player'))
       .finally(() => setIsLoading(false));
   }, [leagueSlug, teamSlug, leaguePlayerId]);
+
+  useEffect(() => {
+    if (!data?.player || !user || pendingHandled.current) return;
+    const raw = sessionStorage.getItem(pendingKey);
+    if (!raw) return;
+    pendingHandled.current = true;
+    sessionStorage.removeItem(pendingKey);
+    submitClaim(data.league, data.team);
+  }, [data, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function submitClaim(lg, tm) {
+    setClaimError('');
+    setClaimStatus('');
+    setIsSubmittingClaim(true);
+    try {
+      await leaguesApi.createJoinRequest(lg.id, tm.id, {
+        requestedRole: 'player',
+        requestedLeaguePlayerId: leaguePlayerId,
+      });
+      setClaimStatus("Request submitted. Please wait for the team manager's approval.");
+    } catch (submitError) {
+      const msg = submitError.message || '';
+      if (/pending join request already exists/i.test(msg)) {
+        setClaimStatus('You already have a pending claim request for this profile.');
+      } else {
+        setClaimError(msg || 'Failed to submit claim request.');
+      }
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  }
+
+  async function onClaim() {
+    if (!user) {
+      sessionStorage.setItem(pendingKey, '1');
+      navigate(`/login?redirectTo=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    await submitClaim(data.league, data.team);
+  }
 
   const totals = useMemo(() => {
     return (data?.games || []).reduce(
@@ -172,7 +220,7 @@ export function PublicLeaguePlayerPage() {
               >
                 {playerLabel}
               </h1>
-              {player.isClaimed && (
+              {player.isClaimed ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
                   <svg
                     viewBox="0 0 24 24"
@@ -187,8 +235,34 @@ export function PublicLeaguePlayerPage() {
                   </svg>
                   {player.claimedBadgeLabel}
                 </span>
+              ) : claimStatus ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  {claimStatus}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isSubmittingClaim}
+                  onClick={onClaim}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-3.5 w-3.5"
+                    aria-hidden="true"
+                  >
+                    <circle cx="7" cy="5" r="2.5" />
+                    <path d="M2 13c0-2.2 2.2-4 5-4" />
+                    <path d="M12 9v4M10 11h4" />
+                  </svg>
+                  {isSubmittingClaim ? 'Submitting…' : 'Claim this profile'}
+                </button>
               )}
             </div>
+            {claimError ? <p className="mt-2 text-xs text-red-600">{claimError}</p> : null}
             <nav aria-label="Player affiliations" className="mt-3">
               <ul className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
                 <li>

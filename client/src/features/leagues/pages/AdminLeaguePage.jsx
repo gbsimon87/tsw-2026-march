@@ -231,7 +231,9 @@ export function AdminLeaguePage() {
       ...current,
       [teamId]: {
         ...current[teamId],
-        requests: (current[teamId]?.requests || []).filter((r) => r.id !== requestId),
+        requests: (current[teamId]?.requests || []).map((r) =>
+          r.id === requestId ? { ...r, status: 'rejected' } : r
+        ),
       },
     }));
   }
@@ -968,6 +970,7 @@ export function AdminLeaguePage() {
                         </h3>
                         <JoinRequestsPanel
                           requests={requests}
+                          canReview
                           onApprove={(requestId) => onApproveJoin(teamId, requestId)}
                           onReject={(requestId) => onRejectJoin(teamId, requestId)}
                         />
