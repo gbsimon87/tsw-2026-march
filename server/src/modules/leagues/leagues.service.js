@@ -1928,10 +1928,12 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
   const teamsById = new Map(teams.map((t) => [String(t._id), t]));
   const playerMap = new Map();
 
+  const completedGames = games.filter((g) => g.status === 'completed');
+
   for (const team of teams) {
     const teamId = String(team._id);
 
-    for (const game of games) {
+    for (const game of completedGames) {
       const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
       if (!rosterSnapshot.length) continue;
 

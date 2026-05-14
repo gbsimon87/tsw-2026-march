@@ -75,7 +75,7 @@ export function Modal({
 
           <div className="max-h-[90vh] overflow-y-auto p-5 sm:p-6">
             {title ? (
-              <div className="mb-5 pr-12">
+              <div className="mb-7 pr-12">
                 <h2 id={titleId} className="text-xl font-semibold text-slate-900">
                   {title}
                 </h2>
