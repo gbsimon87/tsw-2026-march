@@ -221,7 +221,7 @@ export function PublicLeaguePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Race to MVP</h2>
+        <h2 className="text-xl font-semibold text-slate-900">MVP Standings</h2>
         {leaders.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
         ) : (
@@ -241,9 +241,7 @@ export function PublicLeaguePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">
-          Race to Defensive Player of the Year
-        </h2>
+        <h2 className="text-xl font-semibold text-slate-900">Defensive Player of the Season</h2>
         {dpoyLeaders.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
         ) : (
