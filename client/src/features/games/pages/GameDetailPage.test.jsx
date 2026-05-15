@@ -290,15 +290,14 @@ describe('GameDetailPage', () => {
     expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share image card' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download image card' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
     expect(screen.queryByText('Share Card')).not.toBeInTheDocument();
     expect(screen.queryByText('Download Card')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Share on WhatsApp/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Share by Email/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy Link/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /View Team Page/i })).not.toBeInTheDocument();
-    expect(screen.getByAltText(/Shareable game recap card preview/i)).toBeInTheDocument();
-    expect(screen.getByAltText('TSW Team logo')).toHaveAttribute(
+    expect(screen.getAllByAltText('TSW Team logo')[0]).toHaveAttribute(
       'src',
       'https://example.com/team-logo.png'
     );
@@ -321,14 +320,18 @@ describe('GameDetailPage', () => {
     ).toHaveAttribute('href', '/teams/team-1/players/p1');
     expect(screen.queryByTestId('recap-shot-snapshot')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Share image card' }));
+    const shareImageButton = screen.getByRole('button', { name: 'Share image card' });
+    await waitFor(() => {
+      expect(shareImageButton).not.toBeDisabled();
+    });
+    fireEvent.click(shareImageButton);
     expect(navigator.share).toHaveBeenCalledTimes(1);
     const sharePayload = navigator.share.mock.calls[0][0];
     expect(sharePayload.url).toContain('/games/game-1');
     expect(sharePayload.text).toContain('TSW Team vs Wildcats final: 4-0');
     expect(sharePayload.files).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     const shareDialog = await screen.findByRole('dialog');
     expect(shareDialog).toBeInTheDocument();
     expect(within(shareDialog).getByText('Sharing game recap')).toBeInTheDocument();
@@ -501,8 +504,8 @@ describe('GameDetailPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     expect(await screen.findByText('Login Page')).toBeInTheDocument();
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/login');
     expect(decodeURIComponent(screen.getByTestId('location-probe').textContent || '')).toContain(

@@ -246,7 +246,7 @@ describe('PublicTeamPage', () => {
       'https://example.com/logo.png'
     );
     expect(screen.getByText('Shareable Team Card')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Post to Feed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Post to The Pulse' })).toBeInTheDocument();
     expect(screen.getByText('Main Gym')).toBeInTheDocument();
     expect(screen.getByLabelText('Team colours').children).toHaveLength(2);
     expect(screen.getByRole('link', { name: 'Alex Carter' })).toHaveAttribute(
@@ -294,6 +294,7 @@ describe('PublicTeamPage', () => {
       'AST',
       'SPG',
       'STL',
+      'BLK',
       'RPG',
       'REB',
       'OREB',
@@ -434,14 +435,14 @@ describe('PublicTeamPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: 'Post to Feed' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Post to Feed' }));
+    expect(await screen.findByRole('button', { name: 'Post to The Pulse' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Post to The Pulse' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Team' })).toHaveClass('bg-slate-900');
     expect(screen.getByRole('combobox')).toHaveValue('team-1');
   });
 
-  test('redirects logged-out users to login when posting to feed', async () => {
+  test('redirects logged-out users to login when posting to The Pulse', async () => {
     teamsApi.getPublicById.mockResolvedValue({
       team: {
         id: 'team-1',
@@ -471,8 +472,8 @@ describe('PublicTeamPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('button', { name: 'Post to Feed' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Post to Feed' }));
+    expect(await screen.findByRole('button', { name: 'Post to The Pulse' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Post to The Pulse' }));
     expect(await screen.findByText('Login Page')).toBeInTheDocument();
   });
 });

@@ -152,7 +152,7 @@ describe('PublicPlayerPage', () => {
       'https://example.com/logo.png'
     );
     expect(screen.queryByText('Shareable Player Card')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
     expect(screen.getByText('PG')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'TSW Varsity' })).toHaveAttribute(
       'href',
@@ -270,14 +270,14 @@ describe('PublicPlayerPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Player' })).toHaveClass('bg-slate-900');
     expect(screen.getByRole('combobox')).toHaveValue('p1');
   });
 
-  test('redirects logged-out users to login when posting to feed', async () => {
+  test('redirects logged-out users to login when posting to The Pulse', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
       team: { id: 'team-1', name: 'TSW Varsity', logo: null, colors: [] },
       player: {
@@ -308,8 +308,8 @@ describe('PublicPlayerPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('button', { name: 'Share to feed' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Share to feed' }));
+    expect(await screen.findByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     expect(await screen.findByText('Login Page')).toBeInTheDocument();
   });
 });

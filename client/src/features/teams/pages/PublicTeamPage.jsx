@@ -415,7 +415,7 @@ export function PublicTeamPage() {
             onClick={openFeedComposer}
             className="inline-flex rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
-            Post to Feed
+            Post to The Pulse
           </button>
         </div>
         <div className="mt-5">
@@ -498,10 +498,10 @@ export function PublicTeamPage() {
       </section>
 
       {feedPostState === 'posted' ? (
-        <p className="text-sm font-medium text-emerald-700">Posted to feed</p>
+        <p className="text-sm font-medium text-emerald-700">Posted to The Pulse</p>
       ) : null}
 
-      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to Feed">
+      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to The Pulse">
         <FeedComposer
           initialTab="team"
           initialSelectedTeamId={data.team.id}
