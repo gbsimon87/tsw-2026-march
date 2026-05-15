@@ -351,9 +351,9 @@ describe('GameDetailPage', () => {
     fireEvent.click(shareImageButton);
     await waitFor(() => expect(navigator.share).toHaveBeenCalledTimes(1));
     const sharePayload = navigator.share.mock.calls[0][0];
-    expect(sharePayload.url).toContain('/games/game-1');
+    expect(sharePayload.url).toBeUndefined();
     expect(sharePayload.text).toContain('TSW Team vs Wildcats final: 4-0');
-    expect(sharePayload.text).toContain('/games/game-1');
+    expect(sharePayload.text).toContain('View game: http://localhost:3000/games/game-1');
     expect(sharePayload.files).toHaveLength(1);
     expect(sharePayload.files[0].name).toMatch(/game-header\.png$/);
     expect(sharePayload.files[0].type).toBe('image/png');

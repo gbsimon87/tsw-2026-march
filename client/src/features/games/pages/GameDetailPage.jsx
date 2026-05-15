@@ -683,9 +683,10 @@ export function GameDetailPage() {
     : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'}`;
   const cardFilename = `${matchupName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-game-header.svg`;
   const shareImageFilename = cardFilename.replace(/\.svg$/i, '.png');
-  const shareText = isDualTeam
-    ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.\n${shareUrl}`
-    : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.\n${shareUrl}`;
+  const shareSummary = isDualTeam
+    ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.`
+    : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.`;
+  const shareText = `${shareSummary}\nView game: ${shareUrl}`;
 
   function downloadHeaderCard() {
     if (!headerCardDataUrl) {
@@ -725,7 +726,6 @@ export function GameDetailPage() {
           const payload = {
             title: `${matchupName} Game Card`,
             text: shareText,
-            url: shareUrl,
             files: [file],
           };
 
