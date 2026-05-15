@@ -358,6 +358,15 @@ describe('GameDetailPage', () => {
     expect(sharePayload.files[0].name).toMatch(/game-header\.png$/);
     expect(sharePayload.files[0].type).toBe('image/png');
 
+    navigator.share.mockClear();
+    navigator.canShare.mockReturnValue(false);
+    fireEvent.click(shareImageButton);
+    await waitFor(() => expect(navigator.share).toHaveBeenCalledTimes(1));
+    const linkOnlyPayload = navigator.share.mock.calls[0][0];
+    expect(linkOnlyPayload.files).toBeUndefined();
+    expect(linkOnlyPayload.url).toBe('http://localhost:3000/games/game-1');
+    expect(linkOnlyPayload.text).toContain('View game: http://localhost:3000/games/game-1');
+
     fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     const shareDialog = await screen.findByRole('dialog');
     expect(shareDialog).toBeInTheDocument();

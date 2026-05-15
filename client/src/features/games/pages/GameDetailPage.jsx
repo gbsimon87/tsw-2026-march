@@ -705,6 +705,38 @@ export function GameDetailPage() {
     }, 1500);
   }
 
+  async function shareGameLinkFallback() {
+    if (navigator?.share) {
+      try {
+        await navigator.share({
+          title: `${matchupName} Game Card`,
+          text: shareText,
+          url: shareUrl,
+        });
+        return true;
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') {
+          return true;
+        }
+      }
+    }
+
+    if (navigator?.clipboard?.writeText && shareUrl) {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        setImageState('copied');
+        window.setTimeout(() => {
+          setImageState((current) => (current === 'copied' ? '' : current));
+        }, 1500);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   async function shareHeaderCard() {
     if (isSharingHeaderCardRef.current) {
       return;
@@ -730,13 +762,22 @@ export function GameDetailPage() {
           };
 
           if (navigator.canShare(payload)) {
-            await navigator.share(payload);
-            return;
+            try {
+              await navigator.share(payload);
+              return;
+            } catch (shareError) {
+              if (shareError?.name === 'AbortError') {
+                return;
+              }
+            }
           }
         }
       }
 
-      downloadHeaderCard();
+      const didShareLink = await shareGameLinkFallback();
+      if (!didShareLink) {
+        downloadHeaderCard();
+      }
     } finally {
       isSharingHeaderCardRef.current = false;
       setIsSharingHeaderCard(false);
