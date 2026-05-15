@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -330,6 +330,8 @@ export function GameDetailPage() {
   const [feedPostState, setFeedPostState] = useState('');
   const [imageState, setImageState] = useState('');
   const [headerCardDataUrl, setHeaderCardDataUrl] = useState('');
+  const [isSharingHeaderCard, setIsSharingHeaderCard] = useState(false);
+  const isSharingHeaderCardRef = useRef(false);
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
@@ -682,8 +684,8 @@ export function GameDetailPage() {
   const cardFilename = `${matchupName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-game-header.svg`;
   const shareImageFilename = cardFilename.replace(/\.svg$/i, '.png');
   const shareText = isDualTeam
-    ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.`
-    : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.`;
+    ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.\n${shareUrl}`
+    : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.\n${shareUrl}`;
 
   function downloadHeaderCard() {
     if (!headerCardDataUrl) {
@@ -703,26 +705,42 @@ export function GameDetailPage() {
   }
 
   async function shareHeaderCard() {
-    if (headerCardDataUrl && navigator?.share && navigator?.canShare) {
-      try {
-        const file = await createPngFileFromSvgDataUrl(headerCardDataUrl, shareImageFilename);
-        const payload = {
-          title: `${matchupName} Game Card`,
-          text: shareText,
-          url: shareUrl,
-          files: [file],
-        };
-
-        if (navigator.canShare(payload)) {
-          await navigator.share(payload);
-          return;
-        }
-      } catch {
-        // Fall through to the SVG download fallback when PNG export is unavailable.
-      }
+    if (isSharingHeaderCardRef.current) {
+      return;
     }
 
-    downloadHeaderCard();
+    isSharingHeaderCardRef.current = true;
+    setIsSharingHeaderCard(true);
+
+    try {
+      if (headerCardDataUrl && navigator?.share && navigator?.canShare) {
+        let file = null;
+        try {
+          file = await createPngFileFromSvgDataUrl(headerCardDataUrl, shareImageFilename);
+        } catch {
+          file = null;
+        }
+
+        if (file) {
+          const payload = {
+            title: `${matchupName} Game Card`,
+            text: shareText,
+            url: shareUrl,
+            files: [file],
+          };
+
+          if (navigator.canShare(payload)) {
+            await navigator.share(payload);
+            return;
+          }
+        }
+      }
+
+      downloadHeaderCard();
+    } finally {
+      isSharingHeaderCardRef.current = false;
+      setIsSharingHeaderCard(false);
+    }
   }
 
   const printContent = (
@@ -824,9 +842,9 @@ export function GameDetailPage() {
                 type="button"
                 onClick={shareHeaderCard}
                 aria-label="Share image card"
-                title="Share image card"
+                title={isSharingHeaderCard ? 'Preparing image card' : 'Share image card'}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!headerCardDataUrl}
+                disabled={!headerCardDataUrl || isSharingHeaderCard}
               >
                 <ShareIcon />
               </button>
