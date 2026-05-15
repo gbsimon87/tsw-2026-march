@@ -63,6 +63,29 @@ describe('GameDetailPage', () => {
         this.type = options.type;
       }
     };
+    global.Image = class MockImage {
+      constructor() {
+        this.width = 1080;
+        this.height = 420;
+        this.naturalWidth = 1080;
+        this.naturalHeight = 420;
+      }
+
+      set src(value) {
+        this._src = value;
+        setTimeout(() => this.onload?.(), 0);
+      }
+
+      get src() {
+        return this._src;
+      }
+    };
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+      drawImage: vi.fn(),
+    }));
+    HTMLCanvasElement.prototype.toBlob = vi.fn((callback) => {
+      callback(new Blob(['png'], { type: 'image/png' }));
+    });
 
     Object.assign(navigator, {
       clipboard: {
@@ -325,11 +348,13 @@ describe('GameDetailPage', () => {
       expect(shareImageButton).not.toBeDisabled();
     });
     fireEvent.click(shareImageButton);
-    expect(navigator.share).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(navigator.share).toHaveBeenCalledTimes(1));
     const sharePayload = navigator.share.mock.calls[0][0];
     expect(sharePayload.url).toContain('/games/game-1');
     expect(sharePayload.text).toContain('TSW Team vs Wildcats final: 4-0');
     expect(sharePayload.files).toHaveLength(1);
+    expect(sharePayload.files[0].name).toMatch(/game-header\.png$/);
+    expect(sharePayload.files[0].type).toBe('image/png');
 
     fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     const shareDialog = await screen.findByRole('dialog');

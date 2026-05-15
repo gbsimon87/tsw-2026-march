@@ -154,6 +154,35 @@ function FeedIcon() {
   );
 }
 
+function createPngFileFromSvgDataUrl(dataUrl, filename) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width || 1080;
+      canvas.height = image.naturalHeight || image.height || 420;
+      const context = canvas.getContext('2d');
+
+      if (!context || !canvas.toBlob) {
+        reject(new Error('Canvas export is unavailable'));
+        return;
+      }
+
+      context.drawImage(image, 0, 0);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Image export failed'));
+          return;
+        }
+
+        resolve(new File([blob], filename, { type: 'image/png' }));
+      }, 'image/png');
+    };
+    image.onerror = () => reject(new Error('Image load failed'));
+    image.src = dataUrl;
+  });
+}
+
 function canAccessReplay(team, entitlements) {
   if (entitlements?.canViewReplay === true) {
     return true;
@@ -651,17 +680,10 @@ export function GameDetailPage() {
     ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')}`
     : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'}`;
   const cardFilename = `${matchupName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-game-header.svg`;
+  const shareImageFilename = cardFilename.replace(/\.svg$/i, '.png');
   const shareText = isDualTeam
     ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.`
     : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.`;
-
-  function getHeaderSvgMarkup() {
-    if (!headerCardDataUrl) {
-      return '';
-    }
-
-    return decodeURIComponent(headerCardDataUrl.split(',')[1] || '');
-  }
 
   function downloadHeaderCard() {
     if (!headerCardDataUrl) {
@@ -681,18 +703,22 @@ export function GameDetailPage() {
   }
 
   async function shareHeaderCard() {
-    const svgMarkup = getHeaderSvgMarkup();
-
-    if (svgMarkup && navigator?.share && navigator?.canShare) {
-      const file = new File([svgMarkup], cardFilename, { type: 'image/svg+xml' });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
+    if (headerCardDataUrl && navigator?.share && navigator?.canShare) {
+      try {
+        const file = await createPngFileFromSvgDataUrl(headerCardDataUrl, shareImageFilename);
+        const payload = {
           title: `${matchupName} Game Card`,
           text: shareText,
           url: shareUrl,
           files: [file],
-        });
-        return;
+        };
+
+        if (navigator.canShare(payload)) {
+          await navigator.share(payload);
+          return;
+        }
+      } catch {
+        // Fall through to the SVG download fallback when PNG export is unavailable.
       }
     }
 
