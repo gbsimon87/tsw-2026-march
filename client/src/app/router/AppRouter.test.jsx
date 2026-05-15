@@ -77,7 +77,7 @@ describe('AppRouter', () => {
     });
   });
 
-  test('redirects logged-in users from root to feed', async () => {
+  test('redirects logged-in users from root to The Pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
 
     render(

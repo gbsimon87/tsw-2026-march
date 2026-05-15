@@ -4,6 +4,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
+import { getLeagueHeaderImage } from '../../feed/cardImage';
 
 export function PublicLeagueStandingsPage() {
   const { leagueSlug } = useParams();
@@ -36,6 +37,13 @@ export function PublicLeagueStandingsPage() {
         eyebrow="Public League Standings"
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.`}
+        media={
+          <img
+            src={getLeagueHeaderImage(league)}
+            alt={`${league.name} logo`}
+            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
+          />
+        }
       >
         <div className="flex flex-wrap gap-3 text-sm">
           <Link to={`/league/${league.slug}`} className="font-medium text-sky-700 hover:underline">

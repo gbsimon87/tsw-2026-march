@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { leaguesApi } from '../api/leaguesApi';
+import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 
 export function PublicLeagueGamesPage() {
@@ -36,6 +37,13 @@ export function PublicLeagueGamesPage() {
         eyebrow="Public League Games"
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} schedule and completed results.`}
+        media={
+          <img
+            src={getLeagueHeaderImage(league)}
+            alt={`${league.name} logo`}
+            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
+          />
+        }
       >
         <div className="flex flex-wrap gap-3 text-sm">
           <Link to={`/league/${league.slug}`} className="font-medium text-sky-700 hover:underline">

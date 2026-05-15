@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -6,13 +6,14 @@ import { Tabs } from '../../../components/Tabs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
+import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameRecapPanel } from '../components/GameRecapPanel';
-import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
+import { createRecapCardDataUrl } from '../recapCardImage';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import gameConstants from '../constants';
@@ -65,6 +66,120 @@ function formatGameDate(value) {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+  });
+}
+
+function formatHeaderDateTime(value) {
+  if (!value) {
+    return 'Date unavailable';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Date unavailable';
+  }
+
+  return parsed.toLocaleString();
+}
+
+function getHeaderStatusLabel(game, recap) {
+  if (recap?.statusLabel) {
+    return recap.statusLabel;
+  }
+
+  if (game?.status === 'completed' || game?.status === 'finished') {
+    return 'Final';
+  }
+
+  if (game?.status === 'in_progress' || game?.status === 'live') {
+    return 'Live';
+  }
+
+  return game?.status || 'Game Detail';
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M12.5 4.5h3v3M8 12l7.5-7.5M15.5 10.5v4a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DownloadIcon({ downloaded = false }) {
+  if (downloaded) {
+    return (
+      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+        <path
+          d="m5 10 3.2 3.2L15 6.5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13.5v1a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FeedIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M4 14.5V5.5a1 1 0 0 1 1-1h7.2a1 1 0 0 1 .6.2l2.2 1.7a1 1 0 0 1 .4.8v7.3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1ZM7 8h5.5M7 11h5.5M7 14h3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function createPngFileFromSvgDataUrl(dataUrl, filename) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width || 1080;
+      canvas.height = image.naturalHeight || image.height || 420;
+      const context = canvas.getContext('2d');
+
+      if (!context || !canvas.toBlob) {
+        reject(new Error('Canvas export is unavailable'));
+        return;
+      }
+
+      context.drawImage(image, 0, 0);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Image export failed'));
+          return;
+        }
+
+        resolve(new File([blob], filename, { type: 'image/png' }));
+      }, 'image/png');
+    };
+    image.onerror = () => reject(new Error('Image load failed'));
+    image.src = dataUrl;
   });
 }
 
@@ -213,6 +328,10 @@ export function GameDetailPage() {
   const [error, setError] = useState('');
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [feedPostState, setFeedPostState] = useState('');
+  const [imageState, setImageState] = useState('');
+  const [headerCardDataUrl, setHeaderCardDataUrl] = useState('');
+  const [isSharingHeaderCard, setIsSharingHeaderCard] = useState(false);
+  const isSharingHeaderCardRef = useRef(false);
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
@@ -224,6 +343,68 @@ export function GameDetailPage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load game'))
       .finally(() => setIsLoading(false));
   }, [gameId]);
+
+  useEffect(() => {
+    if (!data) {
+      setHeaderCardDataUrl('');
+      return undefined;
+    }
+
+    let cancelled = false;
+    const { game, team, boxScore, participants } = data;
+    const isDualTeam = game.trackingMode === 'dual_team';
+    const recap = data.recap;
+    const gameSummary = data.gameSummary || {
+      teamPoints: boxScore?.teamTotals?.points || 0,
+      opponentPoints: boxScore?.opponentTotals?.points || 0,
+    };
+    const playedAt = recap?.playedAt || game?.scheduledAt || game?.createdAt;
+    const homeLogoUrl = isDualTeam
+      ? participants?.home?.logo?.url || null
+      : game?.gameContext === 'league'
+        ? getLeagueHeaderImage(data.league)
+        : getGameHeaderImage(team);
+    const awayLogoUrl = isDualTeam ? participants?.away?.logo?.url || null : teamPlaceholder;
+    const cardRecap = isDualTeam
+      ? {
+          statusLabel: getHeaderStatusLabel(game, recap),
+          playedAt,
+          dateLabel: formatHeaderDateTime(playedAt),
+          home: {
+            name: participants?.home?.displayName || 'Home',
+            points: gameSummary?.homePoints || 0,
+          },
+          away: {
+            name: participants?.away?.displayName || 'Away',
+            points: gameSummary?.awayPoints || 0,
+          },
+        }
+      : {
+          statusLabel: getHeaderStatusLabel(game, recap),
+          playedAt,
+          dateLabel: formatHeaderDateTime(playedAt),
+          team: {
+            name: recap?.team?.name || team?.name || 'Team',
+            points: gameSummary?.teamPoints || 0,
+          },
+          opponent: {
+            name: recap?.opponent?.name || game?.opponent || 'Opponent',
+            points: gameSummary?.opponentPoints || 0,
+          },
+        };
+
+    createRecapCardDataUrl(cardRecap, {
+      homeLogoUrl,
+      awayLogoUrl,
+      teamColors: team?.colors || [],
+    }).then((url) => {
+      if (!cancelled) setHeaderCardDataUrl(url);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
 
   if (isLoading) {
     return <SportsLoader label="Loading game" fullPage />;
@@ -496,6 +677,71 @@ export function GameDetailPage() {
           : `${gameSummary.teamPoints ?? 0} – ${gameSummary.opponentPoints ?? 0}`,
       }
     : null;
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
+  const matchupName = isDualTeam
+    ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')}`
+    : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'}`;
+  const cardFilename = `${matchupName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-game-header.svg`;
+  const shareImageFilename = cardFilename.replace(/\.svg$/i, '.png');
+  const shareSummary = isDualTeam
+    ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.`
+    : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.`;
+  const shareText = `${shareSummary}\nView game: ${shareUrl}`;
+
+  function downloadHeaderCard() {
+    if (!headerCardDataUrl) {
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = headerCardDataUrl;
+    link.download = cardFilename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setImageState('downloaded');
+    window.setTimeout(() => {
+      setImageState((current) => (current === 'downloaded' ? '' : current));
+    }, 1500);
+  }
+
+  async function shareHeaderCard() {
+    if (isSharingHeaderCardRef.current) {
+      return;
+    }
+
+    isSharingHeaderCardRef.current = true;
+    setIsSharingHeaderCard(true);
+
+    try {
+      if (headerCardDataUrl && navigator?.share && navigator?.canShare) {
+        let file = null;
+        try {
+          file = await createPngFileFromSvgDataUrl(headerCardDataUrl, shareImageFilename);
+        } catch {
+          file = null;
+        }
+
+        if (file) {
+          const payload = {
+            title: `${matchupName} Game Card`,
+            text: shareText,
+            files: [file],
+          };
+
+          if (navigator.canShare(payload)) {
+            await navigator.share(payload);
+            return;
+          }
+        }
+      }
+
+      downloadHeaderCard();
+    } finally {
+      isSharingHeaderCardRef.current = false;
+      setIsSharingHeaderCard(false);
+    }
+  }
 
   const printContent = (
     <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 text-slate-900">
@@ -584,22 +830,49 @@ export function GameDetailPage() {
           gameSummary={gameSummary}
           canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
           actions={
-            <button
-              type="button"
-              onClick={() => updateSearchParam('print', '1')}
-              className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-            >
-              Print Box Score
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => updateSearchParam('print', '1')}
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+              >
+                Print Box Score
+              </button>
+              <button
+                type="button"
+                onClick={shareHeaderCard}
+                aria-label="Share image card"
+                title={isSharingHeaderCard ? 'Preparing image card' : 'Share image card'}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!headerCardDataUrl || isSharingHeaderCard}
+              >
+                <ShareIcon />
+              </button>
+              <button
+                type="button"
+                onClick={downloadHeaderCard}
+                aria-label="Download image card"
+                title={imageState === 'downloaded' ? 'Downloaded' : 'Download image card'}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!headerCardDataUrl}
+              >
+                <DownloadIcon downloaded={imageState === 'downloaded'} />
+              </button>
+              <button
+                type="button"
+                onClick={openFeedComposer}
+                aria-label="Share to The Pulse"
+                title="Share to The Pulse"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              >
+                <FeedIcon />
+              </button>
+            </>
           }
         />
       ) : null}
 
       {isPrintMode ? printContent : null}
-
-      {!isPrintMode && game.videoUrl ? (
-        <GameVideoEmbed videoUrl={game.videoUrl} title={game.title} />
-      ) : null}
 
       {!isPrintMode ? (
         <Tabs
@@ -617,7 +890,8 @@ export function GameDetailPage() {
                   gameId={game.id}
                   recap={recap}
                   aiSummary={aiSummary}
-                  onShareToFeed={openFeedComposer}
+                  videoUrl={game.videoUrl}
+                  videoTitle={game.title}
                 />
               ),
             },
@@ -628,14 +902,14 @@ export function GameDetailPage() {
       ) : null}
 
       {!isPrintMode && feedPostState === 'posted' ? (
-        <p className="text-sm font-medium text-emerald-700">Posted to feed</p>
+        <p className="text-sm font-medium text-emerald-700">Posted to The Pulse</p>
       ) : null}
       {!isPrintMode && error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <Modal
         open={!isPrintMode && isFeedComposerOpen}
         onClose={closeFeedComposer}
-        title="Share to Feed"
+        title="Share to The Pulse"
       >
         <FeedComposer
           initialTab="game"

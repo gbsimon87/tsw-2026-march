@@ -298,8 +298,8 @@ export function PublicPlayerPage() {
             type="button"
             onClick={openFeedComposer}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            aria-label="Share to feed"
-            title="Share to feed"
+            aria-label="Share to The Pulse"
+            title="Share to The Pulse"
           >
             <FeedIcon />
           </button>
@@ -361,10 +361,10 @@ export function PublicPlayerPage() {
       </section>
 
       {feedPostState === 'posted' ? (
-        <p className="text-sm font-medium text-emerald-700">Posted to feed</p>
+        <p className="text-sm font-medium text-emerald-700">Posted to The Pulse</p>
       ) : null}
 
-      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to Feed">
+      <Modal open={isFeedComposerOpen} onClose={closeFeedComposer} title="Share to The Pulse">
         <FeedComposer
           initialTab="player"
           initialSelectedPlayer={{ teamId: data.team.id, playerId: data.player.id }}

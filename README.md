@@ -32,7 +32,7 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 - Public player pages with per-game logs plus PPG/RPG/APG and expanded stat columns
 - Homepage explore feed with recent public games across teams
 - Public social feed with image posts and shareable game/player/team cards
-- Floating create-post action with login redirect back to feed compose flow
+- Floating create-post action with login redirect back to The Pulse compose flow
 - Team-scoped billing for Pro replay and public shot-map access
 
 ## Current V1 Features

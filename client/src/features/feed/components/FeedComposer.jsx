@@ -202,7 +202,7 @@ export function FeedComposer({
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Posting...' : 'Post to Feed'}
+              {isSubmitting ? 'Posting...' : 'Post to The Pulse'}
             </button>
             {onCancel ? (
               <button
@@ -224,7 +224,6 @@ export function FeedComposer({
       <div className="flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <button
-            aria-label="set-active-tab"
             key={tab.value}
             type="button"
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${

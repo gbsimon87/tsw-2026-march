@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { createRecapCardDataUrl, createRecapCardSvg } from '../recapCardImage';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { GameVideoEmbed } from './GameVideoEmbed';
 
 function formatPercentage(value) {
   return value == null ? '--' : `${value.toFixed(0)}%`;
@@ -24,146 +23,20 @@ function formatMomentTime(value) {
   });
 }
 
-function ShareIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
-      <path
-        d="M12.5 4.5h3v3M8 12l7.5-7.5M15.5 10.5v4a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h4"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function DownloadIcon({ downloaded = false }) {
-  if (downloaded) {
-    return (
-      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
-        <path
-          d="m5 10 3.2 3.2L15 6.5"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
-      <path
-        d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13.5v1a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function FeedIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
-      <path
-        d="M4 14.5V5.5a1 1 0 0 1 1-1h7.2a1 1 0 0 1 .6.2l2.2 1.7a1 1 0 0 1 .4.8v7.3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1ZM7 8h5.5M7 11h5.5M7 14h3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function GameRecapPanel({
-  gameId,
   team,
   league = null,
   participants,
   isDualTeam = false,
   recap,
   aiSummary = null,
-  onShareToFeed,
+  videoUrl = null,
+  videoTitle = null,
 }) {
-  const [imageState, setImageState] = useState('');
-  const [recapCardDataUrl, setRecapCardDataUrl] = useState('');
-  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/games/${gameId}` : '';
-
-  useEffect(() => {
-    let cancelled = false;
-    const homeLogoUrl = isDualTeam
-      ? participants?.home?.logo?.url || null
-      : team?.logo?.url || null;
-    const awayLogoUrl = isDualTeam ? participants?.away?.logo?.url || null : null;
-    const leagueLogoUrl = league?.logo?.url || null;
-    createRecapCardDataUrl(recap, {
-      homeLogoUrl,
-      awayLogoUrl,
-      leagueLogoUrl,
-      teamColors: team?.colors || [],
-    }).then((url) => {
-      if (!cancelled) setRecapCardDataUrl(url);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [recap, isDualTeam, participants, team, league]);
-
-  const cardFilename = `${(recap?.team?.name || recap?.home?.name || 'team')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')}-game-recap.svg`;
-  const shareText = isDualTeam
-    ? `${participants?.away?.displayName || 'Away'} at ${participants?.home?.displayName || 'Home'} final: ${recap?.home?.points || 0}-${recap?.away?.points || 0}.`
-    : `${recap?.team?.name || 'Team'}${
-        recap?.opponent?.name ? ` vs ${recap.opponent.name}` : ''
-      } final: ${recap?.team?.points || 0}-${recap?.opponent?.points || 0}.`;
-
-  function downloadCard() {
-    if (!shareUrl) {
-      return;
-    }
-
-    const link = document.createElement('a');
-    link.href = recapCardDataUrl;
-    link.download = cardFilename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setImageState('downloaded');
-    window.setTimeout(() => {
-      setImageState((current) => (current === 'downloaded' ? '' : current));
-    }, 1500);
-  }
-
-  async function shareImageCard() {
-    const svgMarkup = createRecapCardSvg(recap, {
-      teamLogoUrl: team?.logo?.url || null,
-      teamColors: team?.colors || [],
-    });
-
-    if (navigator?.share && navigator?.canShare) {
-      const file = new File([svgMarkup], cardFilename, { type: 'image/svg+xml' });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: recap?.team?.name ? `${recap.team.name} Game Recap Card` : 'Game Recap Card',
-          text: shareText,
-          url: shareUrl,
-          files: [file],
-        });
-        return;
-      }
-    }
-
-    downloadCard();
-  }
-
   return (
     <div className="space-y-5">
+      {videoUrl ? <GameVideoEmbed videoUrl={videoUrl} title={videoTitle} /> : null}
+
       {aiSummary?.text ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -399,51 +272,6 @@ export function GameRecapPanel({
             ))}
           </ul>
         )}
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h3 className="text-xl font-semibold text-slate-900">Shareable Image Card</h3>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={shareImageCard}
-              aria-label="Share image card"
-              title="Share image card"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            >
-              <ShareIcon />
-            </button>
-            <button
-              type="button"
-              onClick={downloadCard}
-              aria-label="Download image card"
-              title={imageState === 'downloaded' ? 'Downloaded' : 'Download image card'}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            >
-              <DownloadIcon downloaded={imageState === 'downloaded'} />
-            </button>
-            <button
-              type="button"
-              onClick={onShareToFeed}
-              aria-label="Share to feed"
-              title="Share to feed"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            >
-              <FeedIcon />
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 p-3">
-          <img
-            src={recapCardDataUrl}
-            alt="Shareable game recap card preview"
-            className="mx-auto block w-full max-w-[320px] rounded-xl bg-slate-950 shadow-sm"
-          />
-        </div>
       </section>
     </div>
   );
