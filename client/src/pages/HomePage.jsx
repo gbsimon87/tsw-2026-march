@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../app/store/AuthContext';
-import { PageHeader } from '../components/PageHeader';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
@@ -40,7 +38,6 @@ const homeAudienceSections = [
 ];
 
 export function HomePage() {
-  const { user } = useAuth();
   const [publicLeagues, setPublicLeagues] = useState([]);
   const [publicTeams, setPublicTeams] = useState([]);
 
@@ -72,38 +69,6 @@ export function HomePage() {
 
   return (
     <main className="space-y-6">
-      <PageHeader
-        eyebrow="TSW Basketball"
-        title="Turn every game into progress your team can see and feel."
-        description="TSW helps teams capture game stats quickly, understand what is working, and stay connected to growth all season long."
-      >
-        <nav aria-label="Get started" className="flex flex-wrap items-center gap-3">
-          {user ? (
-            <Link
-              to="/feed"
-              className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-            >
-              Check out The Pulse
-            </Link>
-          ) : (
-            <>
-              <Link
-                to="/login"
-                className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-              >
-                Login
-              </Link>
-              <Link
-                to="/register"
-                className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                Register
-              </Link>
-            </>
-          )}
-        </nav>
-      </PageHeader>
-
       <section
         aria-labelledby="active-leagues-heading"
         className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8"

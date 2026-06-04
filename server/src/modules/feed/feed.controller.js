@@ -22,6 +22,12 @@ async function createImage(req, res) {
   res.status(201).json({ post });
 }
 
+async function createVideo(req, res) {
+  const userId = requireAuthUserId(req);
+  const post = await service.createVideoPostForUser(userId, req.file, req.body.caption);
+  res.status(201).json({ post });
+}
+
 async function createGameCard(req, res) {
   const userId = requireAuthUserId(req);
   const post = await service.createGameCardPostForUser(userId, req.body);
@@ -67,6 +73,7 @@ async function listShareableTeams(req, res) {
 module.exports = {
   list,
   createImage,
+  createVideo,
   createGameCard,
   createPlayerCard,
   createTeamCard,

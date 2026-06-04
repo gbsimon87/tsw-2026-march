@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import { feedApi } from '../api/feedApi';
 
 const tabs = [
+  { value: 'video', label: '🎥 Video' },
   { value: 'image', label: 'Image' },
   { value: 'game', label: 'Game' },
   { value: 'player', label: 'Player' },
   { value: 'team', label: 'Team' },
 ];
+
+const VIDEO_MAX_BYTES = 100 * 1024 * 1024;
+const VIDEO_MAX_SECONDS = 60;
 
 function mergeInitialGameOption(games, initialGameOption) {
   if (!initialGameOption?.id) {
@@ -50,7 +54,7 @@ function mergeInitialPlayerOption(players, initialPlayerOption) {
 export function FeedComposer({
   onCreated,
   onCancel,
-  initialTab = 'image',
+  initialTab = 'video',
   initialSelectedGameId = '',
   initialGameOption = null,
   initialSelectedTeamId = '',
@@ -62,6 +66,9 @@ export function FeedComposer({
   const [activeTab, setActiveTab] = useState(initialTab);
   const [caption, setCaption] = useState('');
   const [imageFile, setImageFile] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState({ game: '', player: '', team: '' });
@@ -101,10 +108,38 @@ export function FeedComposer({
     );
   }, [search.team, initialTeamOption]);
 
+  function handleVideoChange(event) {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+
+    if (file.size > VIDEO_MAX_BYTES) {
+      setError('Video must be 100 MB or smaller');
+      return;
+    }
+
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+
+    setVideoFile(file);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setError('');
+  }
+
+  function clearVideo() {
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setVideoFile(null);
+    setVideoPreviewUrl(null);
+    setUploadProgress(0);
+  }
+
   function reset() {
     setActiveTab(initialTab);
     setCaption('');
     setImageFile(null);
+    clearVideo();
     setSelectedGameId(initialSelectedGameId);
     setSelectedPlayer(initialSelectedPlayer);
     setSelectedTeamId(initialSelectedTeamId);
@@ -119,7 +154,18 @@ export function FeedComposer({
     try {
       let result = null;
 
-      if (activeTab === 'image') {
+      if (activeTab === 'video') {
+        if (!videoFile) {
+          throw new Error('Please choose a video');
+        }
+        const formData = new FormData();
+        formData.append('file', videoFile);
+        if (caption.trim()) {
+          formData.append('caption', caption.trim());
+        }
+        setUploadProgress(0);
+        result = await feedApi.createVideoPost(formData, (pct) => setUploadProgress(pct));
+      } else if (activeTab === 'image') {
         if (!imageFile) {
           throw new Error('Please choose an image');
         }
@@ -226,6 +272,8 @@ export function FeedComposer({
           <button
             key={tab.value}
             type="button"
+            aria-label={tab.value.charAt(0).toUpperCase() + tab.value.slice(1)}
+            aria-pressed={activeTab === tab.value}
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${
               activeTab === tab.value
                 ? 'bg-slate-900 text-white'
@@ -240,6 +288,62 @@ export function FeedComposer({
 
       <form onSubmit={submit} className="space-y-4">
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        {activeTab === 'video' ? (
+          <div className="space-y-3">
+            {videoPreviewUrl ? (
+              <div className="relative overflow-hidden rounded-xl bg-black">
+                <video
+                  src={videoPreviewUrl}
+                  controls
+                  playsInline
+                  muted
+                  className="max-h-64 w-full object-contain"
+                />
+                <button
+                  type="button"
+                  aria-label="Remove video"
+                  onClick={clearVideo}
+                  className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center hover:border-slate-400">
+                <span className="text-3xl">🎥</span>
+                <span className="text-sm font-medium text-slate-700">
+                  Tap to record or choose a video
+                </span>
+                <span className="text-xs text-slate-400">
+                  MP4, MOV or WebM · max 100 MB · max {VIDEO_MAX_SECONDS}s
+                </span>
+                <input
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={handleVideoChange}
+                />
+              </label>
+            )}
+
+            {isSubmitting && uploadProgress > 0 ? (
+              <div>
+                <div className="mb-1 flex justify-between text-xs text-slate-500">
+                  <span>Uploading…</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-slate-900 transition-all duration-200"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {activeTab === 'image' ? (
           <label className="block">
@@ -361,7 +465,11 @@ export function FeedComposer({
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Posting...' : 'Post'}
+            {isSubmitting && activeTab === 'video' && uploadProgress > 0
+              ? `Uploading ${uploadProgress}%`
+              : isSubmitting
+                ? 'Posting...'
+                : 'Post'}
           </button>
           {onCancel ? (
             <button

@@ -34,6 +34,19 @@ const teamCardSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const videoSchema = new mongoose.Schema(
+  {
+    url: { type: String, default: null },
+    publicId: { type: String, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    duration: { type: Number, default: null },
+    thumbnailUrl: { type: String, default: null },
+    mimeType: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 const postSchema = new mongoose.Schema(
   {
     creatorUserId: {
@@ -44,12 +57,13 @@ const postSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['image', 'game_card', 'player_card', 'team_card'],
+      enum: ['image', 'video', 'game_card', 'player_card', 'team_card'],
       required: true,
       index: true,
     },
     caption: { type: String, trim: true, default: null },
     image: { type: imageSchema, default: null },
+    video: { type: videoSchema, default: null },
     gameCard: { type: gameCardSchema, default: null },
     playerCard: { type: playerCardSchema, default: null },
     teamCard: { type: teamCardSchema, default: null },

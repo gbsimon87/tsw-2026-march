@@ -54,6 +54,12 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(5 * 1024 * 1024),
+  FEED_VIDEO_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(100 * 1024 * 1024),
+  FEED_VIDEO_MAX_DURATION_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 const parsed = envSchema.safeParse(process.env);

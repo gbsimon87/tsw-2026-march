@@ -6,13 +6,27 @@ const {
   createPlayerCardPostSchema,
   createTeamCardPostSchema,
 } = require('./feed.validation');
-const { uploadImageBuffer, destroyImage, isCloudinaryConfigured } = require('./cloudinary.client');
+const {
+  uploadImageBuffer,
+  destroyImage,
+  isCloudinaryConfigured,
+  uploadVideoBuffer,
+  destroyVideo,
+} = require('./cloudinary.client');
 const { env } = require('../../config/env');
 const { findUserById } = require('../auth/auth.repository');
 const { findGameById, listCompletedGames } = require('../games/games.repository');
 const { getPublicGame } = require('../games/games.service');
 const { listTeams } = require('../teams/teams.repository');
 const { getPublicPlayer, getPublicTeam } = require('../teams/teams.service');
+
+function cloudinaryThumbnailUrl(publicId, resourceType) {
+  if (!publicId || resourceType !== 'video') return null;
+  const cloudName = env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName) return null;
+  // Generate a JPEG thumbnail at the first second of the video
+  return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,f_jpg,q_auto/${publicId}.jpg`;
+}
 
 function sanitizeCaption(value) {
   if (typeof value !== 'string') {
@@ -54,6 +68,23 @@ async function resolveImagePayload(post) {
       url: post.image.url,
       width: post.image.width ?? null,
       height: post.image.height ?? null,
+    },
+    video: null,
+    gameCard: null,
+    playerCard: null,
+    teamCard: null,
+  };
+}
+
+async function resolveVideoPayload(post) {
+  return {
+    image: null,
+    video: {
+      url: post.video.url,
+      thumbnailUrl: post.video.thumbnailUrl ?? null,
+      width: post.video.width ?? null,
+      height: post.video.height ?? null,
+      duration: post.video.duration ?? null,
     },
     gameCard: null,
     playerCard: null,
@@ -155,6 +186,10 @@ async function resolvePostPayload(post) {
     return resolveImagePayload(post);
   }
 
+  if (post.type === 'video') {
+    return resolveVideoPayload(post);
+  }
+
   if (post.type === 'game_card') {
     return resolveGameCardPayload(post);
   }
@@ -186,6 +221,7 @@ async function sanitizePost(post, viewerUserId = null) {
       creator: {
         id: String(creator._id),
         name: creator.name,
+        avatarUrl: creator.avatar?.url ?? null,
       },
       canDelete: Boolean(viewerUserId && String(viewerUserId) === String(post.creatorUserId)),
       ...payload,
@@ -257,6 +293,60 @@ async function createImagePostForUser(userId, file, caption) {
       width: upload.width ?? null,
       height: upload.height ?? null,
       mimeType: file.mimetype,
+    },
+  });
+
+  return sanitizePost(post, userId);
+}
+
+async function createVideoPostForUser(userId, file, caption) {
+  if (!userId) {
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  if (!isCloudinaryConfigured()) {
+    throw new ApiError(500, 'Cloudinary is not configured');
+  }
+
+  if (!file) {
+    throw new ApiError(400, 'Video file is required');
+  }
+
+  if (file.size > env.FEED_VIDEO_MAX_BYTES) {
+    throw new ApiError(400, 'Video exceeds upload size limit');
+  }
+
+  const allowed = ['video/mp4', 'video/quicktime', 'video/webm'];
+  if (!allowed.includes(file.mimetype)) {
+    throw new ApiError(400, 'Unsupported video type');
+  }
+
+  const upload = await uploadVideoBuffer(file);
+
+  if (upload.duration != null && upload.duration > env.FEED_VIDEO_MAX_DURATION_SECONDS) {
+    destroyVideo(upload.public_id).catch(() => null);
+    throw new ApiError(
+      422,
+      `Video must be ${env.FEED_VIDEO_MAX_DURATION_SECONDS} seconds or shorter`
+    );
+  }
+
+  // Prefer the eager MP4 URL for consistent playback, fall back to original
+  const playbackUrl = upload.eager?.[0]?.secure_url ?? upload.secure_url;
+  const thumbnailUrl = cloudinaryThumbnailUrl(upload.public_id, upload.resource_type);
+
+  const post = await createPost({
+    creatorUserId: userId,
+    type: 'video',
+    caption: sanitizeCaption(caption),
+    video: {
+      url: playbackUrl,
+      publicId: upload.public_id,
+      width: upload.width ?? null,
+      height: upload.height ?? null,
+      duration: upload.duration ?? null,
+      thumbnailUrl,
+      mimeType: 'video/mp4',
     },
   });
 
@@ -339,6 +429,10 @@ async function deletePostForUser(userId, postId) {
     destroyImage(post.image.publicId).catch(() => null);
   }
 
+  if (post.type === 'video' && post.video?.publicId) {
+    destroyVideo(post.video.publicId).catch(() => null);
+  }
+
   return { deleted: true };
 }
 
@@ -409,6 +503,7 @@ async function listShareablePlayers(query = {}) {
 module.exports = {
   listFeedPosts,
   createImagePostForUser,
+  createVideoPostForUser,
   createGameCardPostForUser,
   createPlayerCardPostForUser,
   createTeamCardPostForUser,

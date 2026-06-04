@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -17,6 +17,7 @@ export function FeedPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isLoadingMoreRef = useRef(false);
   const composeRedirectTarget = useMemo(() => '/feed?compose=1', []);
   const isComposerOpen = Boolean(user) && searchParams.get('compose') === '1';
 
@@ -31,6 +32,20 @@ export function FeedPage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load feed'))
       .finally(() => setIsLoading(false));
   }, []);
+
+  async function loadMore() {
+    if (isLoadingMoreRef.current || !nextCursor) return;
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      await loadFeed(nextCursor, true);
+    } catch (loadMoreError) {
+      setError(loadMoreError.message || 'Failed to load more posts');
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }
 
   async function onDelete(postId) {
     try {
@@ -53,7 +68,6 @@ export function FeedPage() {
       setSearchParams(nextParams, { replace: true });
       return;
     }
-
     navigate(`/login?redirectTo=${encodeURIComponent(composeRedirectTarget)}`);
   }
 
@@ -68,36 +82,40 @@ export function FeedPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6">
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <FeedList posts={posts} onDelete={onDelete} />
+    <>
+      {error ? (
+        <p className="fixed left-4 right-4 top-20 z-50 rounded-lg bg-red-600 px-4 py-2 text-sm text-white shadow-lg md:static md:mb-4">
+          {error}
+        </p>
+      ) : null}
 
+      {/* FeedList handles its own layout: fixed snap-scroll on mobile, normal flow on desktop */}
+      <FeedList posts={posts} onDelete={onDelete} onNearEnd={loadMore} />
+
+      {/* Desktop load more */}
       {nextCursor ? (
-        <div className="flex justify-center">
+        <div className="mt-4 hidden justify-center md:flex">
           <button
             type="button"
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
             disabled={isLoadingMore}
-            onClick={async () => {
-              setIsLoadingMore(true);
-              try {
-                await loadFeed(nextCursor, true);
-              } catch (loadMoreError) {
-                setError(loadMoreError.message || 'Failed to load more posts');
-              } finally {
-                setIsLoadingMore(false);
-              }
-            }}
+            onClick={loadMore}
           >
             {isLoadingMore ? 'Loading...' : 'Load More'}
           </button>
         </div>
       ) : null}
 
-      <FloatingActionButton label="Create post" onClick={openComposer} />
+      {/* FAB — lifted above the tab bar on mobile */}
+      <FloatingActionButton
+        label="Create post"
+        onClick={openComposer}
+        className="bottom-20 md:bottom-6"
+      />
+
       <Modal open={isComposerOpen} onClose={closeComposer} title="Create Post">
         <FeedComposer onCreated={onCreated} onCancel={closeComposer} />
       </Modal>
-    </main>
+    </>
   );
 }

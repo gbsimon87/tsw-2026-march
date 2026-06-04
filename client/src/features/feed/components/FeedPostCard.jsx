@@ -2,6 +2,7 @@ import { GameCardPost } from './posts/GameCardPost';
 import { ImagePostCard } from './posts/ImagePostCard';
 import { PlayerCardPost } from './posts/PlayerCardPost';
 import { TeamCardPost } from './posts/TeamCardPost';
+import { VideoPostCard } from './posts/VideoPostCard';
 
 function formatTimestamp(value) {
   const parsed = new Date(value);
@@ -17,6 +18,8 @@ export function FeedPostCard({ post, onDelete }) {
 
   if (post.type === 'image') {
     content = <ImagePostCard image={post.image} caption={post.caption} />;
+  } else if (post.type === 'video') {
+    content = <VideoPostCard video={post.video} caption={post.caption} />;
   } else if (post.type === 'game_card') {
     content = (
       <div className="space-y-3">
