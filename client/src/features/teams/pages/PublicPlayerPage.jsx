@@ -7,6 +7,7 @@ import { FeedComposer } from '../../feed/components/FeedComposer';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 import { PlayerCardPost } from '../../feed/components/posts/PlayerCardPost';
+import { extractYouTubeVideoId } from '../../games/youtube';
 
 function formatGameDate(game) {
   const rawValue = game.date || game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -57,6 +58,62 @@ function FeedIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+const HIGHLIGHT_LABELS = {
+  FG2_MADE: '2PT Make',
+  FG2_MISS: '2PT Miss',
+  FG3_MADE: '3PT Make',
+  FG3_MISS: '3PT Miss',
+  FT_MADE: 'FT Make',
+  FT_MISS: 'FT Miss',
+  AST: 'Assist',
+  STL: 'Steal',
+  BLK: 'Block',
+};
+
+const CLIP_BUFFER = 5;
+const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
+const MAX_HIGHLIGHTS = 5;
+
+function selectHighlights(highlights) {
+  return [...(highlights || [])]
+    .sort((a, b) => {
+      const pa = HIGHLIGHT_PRIORITY[a.statType] ?? 2;
+      const pb = HIGHLIGHT_PRIORITY[b.statType] ?? 2;
+      return pa - pb;
+    })
+    .slice(0, MAX_HIGHLIGHTS);
+}
+
+function HighlightClip({ videoUrl, timestamp, statType, gameTitle }) {
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) return null;
+
+  const start = Math.max(0, timestamp - CLIP_BUFFER);
+  const end = timestamp + CLIP_BUFFER;
+  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
+
+  return (
+    <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="aspect-video w-full bg-slate-950">
+        <iframe
+          className="h-full w-full"
+          src={src}
+          title={`${HIGHLIGHT_LABELS[statType] || statType} — ${gameTitle || 'Game'}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-xs font-semibold text-slate-900">
+          {HIGHLIGHT_LABELS[statType] || statType}
+        </p>
+        {gameTitle ? <p className="truncate text-xs text-slate-400">{gameTitle}</p> : null}
+      </div>
+    </div>
   );
 }
 
@@ -306,44 +363,61 @@ export function PublicPlayerPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">PPG</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatAverage(summary.pointsPerGame)}
           </p>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">RPG</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatAverage(summary.reboundsPerGame)}
           </p>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">APG</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatAverage(summary.assistsPerGame)}
           </p>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">SPG</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatAverage(summary.stealsPerGame)}
           </p>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">TOPG</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatAverage(summary.turnoversPerGame)}
           </p>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FPG</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {formatAverage(summary.foulsPerGame)}
           </p>
         </article>
       </section>
+
+      {data.highlights?.length > 0 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {selectHighlights(data.highlights).map((h) => (
+              <HighlightClip
+                key={h.eventId}
+                videoUrl={h.videoUrl}
+                timestamp={h.videoTimestamp}
+                statType={h.statType}
+                gameTitle={h.gameTitle}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">

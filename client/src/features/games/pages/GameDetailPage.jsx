@@ -7,6 +7,7 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
+import { extractYouTubeVideoId } from '../youtube.js';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
@@ -19,6 +20,63 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
+
+const HIGHLIGHT_LABELS = {
+  FG2_MADE: '2PT Make',
+  FG2_MISS: '2PT Miss',
+  FG3_MADE: '3PT Make',
+  FG3_MISS: '3PT Miss',
+  FT_MADE: 'FT Make',
+  FT_MISS: 'FT Miss',
+  AST: 'Assist',
+  STL: 'Steal',
+  BLK: 'Block',
+};
+
+const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
+const MAX_HIGHLIGHTS = 5;
+
+function selectHighlights(highlights) {
+  return [...(highlights || [])]
+    .sort((a, b) => (HIGHLIGHT_PRIORITY[a.statType] ?? 2) - (HIGHLIGHT_PRIORITY[b.statType] ?? 2))
+    .slice(0, MAX_HIGHLIGHTS);
+}
+
+function GameHighlightClip({
+  videoUrl,
+  timestamp,
+  statType,
+  playerName,
+  teamSide,
+  participantName,
+}) {
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) return null;
+  const start = Math.max(0, timestamp - 5);
+  const end = timestamp + 5;
+  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
+  const label = HIGHLIGHT_LABELS[statType] || statType;
+  const sideLabel = participantName || teamSide || null;
+  return (
+    <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="aspect-video w-full bg-slate-950">
+        <iframe
+          className="h-full w-full"
+          src={src}
+          title={`${playerName ? `${playerName} — ` : ''}${label}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-xs font-semibold text-slate-900">{label}</p>
+        {playerName ? <p className="truncate text-xs text-slate-600">{playerName}</p> : null}
+        {sideLabel ? <p className="truncate text-xs text-slate-400">{sideLabel}</p> : null}
+      </div>
+    </div>
+  );
+}
 
 function eventTime(value) {
   if (!value) {
@@ -914,6 +972,27 @@ export function GameDetailPage() {
       ) : null}
 
       {isPrintMode ? printContent : null}
+
+      {!isPrintMode && data.highlights?.length > 0 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {selectHighlights(data.highlights).map((h) => (
+              <GameHighlightClip
+                key={h.eventId}
+                videoUrl={h.videoUrl}
+                timestamp={h.videoTimestamp}
+                statType={h.statType}
+                playerName={h.playerName}
+                teamSide={h.teamSide}
+                participantName={
+                  isDualTeam && h.teamSide ? getParticipantName(participants, h.teamSide) : null
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {!isPrintMode ? (
         <Tabs

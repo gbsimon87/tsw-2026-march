@@ -299,6 +299,40 @@ function buildPublicTeamSummary(games, team) {
   };
 }
 
+const HIGHLIGHT_STAT_TYPES = new Set([
+  'FG2_MADE',
+  'FG2_MISS',
+  'FG3_MADE',
+  'FG3_MISS',
+  'FT_MADE',
+  'FT_MISS',
+  'AST',
+  'STL',
+  'BLK',
+]);
+
+function buildPlayerHighlights(games, playerIdStr) {
+  return games
+    .filter((game) => game.videoUrl)
+    .flatMap((game) =>
+      (game.events || [])
+        .filter(
+          (ev) =>
+            ev.playerId &&
+            String(ev.playerId) === playerIdStr &&
+            HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
+            typeof ev.videoTimestamp === 'number'
+        )
+        .map((ev) => ({
+          eventId: String(ev._id),
+          statType: ev.statType,
+          videoTimestamp: ev.videoTimestamp,
+          videoUrl: game.videoUrl,
+          gameTitle: game.title || game.opponent || null,
+        }))
+    );
+}
+
 function buildPublicPlayerGameRows(games, team, player, teamLookup = new Map()) {
   return games
     .filter((game) => game.status === 'completed' && isGamePubliclyViewable(game))
@@ -483,6 +517,7 @@ async function getPublicPlayer(teamId, playerId) {
   const teams = await listTeams();
   const teamLookup = buildTeamLookup(teams);
   const gameRows = buildPublicPlayerGameRows(games, team, player, teamLookup);
+  const highlights = buildPlayerHighlights(games, String(player._id));
 
   return {
     team: {
@@ -496,6 +531,7 @@ async function getPublicPlayer(teamId, playerId) {
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),
     games: gameRows,
+    highlights,
   };
 }
 

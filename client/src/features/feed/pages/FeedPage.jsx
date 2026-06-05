@@ -110,7 +110,7 @@ export function FeedPage() {
       <FloatingActionButton
         label="Create post"
         onClick={openComposer}
-        className="bottom-20 md:bottom-6"
+        className="bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+1rem)] md:bottom-6"
       />
 
       <Modal open={isComposerOpen} onClose={closeComposer} title="Create Post">

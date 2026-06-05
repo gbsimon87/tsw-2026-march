@@ -738,6 +738,49 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
   };
 }
 
+const HIGHLIGHT_STAT_TYPES = new Set([
+  'FG2_MADE',
+  'FG2_MISS',
+  'FG3_MADE',
+  'FG3_MISS',
+  'FT_MADE',
+  'FT_MISS',
+  'AST',
+  'STL',
+  'BLK',
+]);
+
+function buildLeaguePlayerHighlights(games, leagueTeamId, leaguePlayerId) {
+  const highlights = [];
+  for (const game of games) {
+    if (!game.videoUrl) continue;
+    const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, leagueTeamId);
+    const snapshotPlayer = rosterSnapshot.find(
+      (p) => String(p.leaguePlayerId || p._id) === String(leaguePlayerId)
+    );
+    if (!snapshotPlayer) continue;
+    const snapshotPlayerIdStr = String(snapshotPlayer._id);
+    for (const ev of game.events || []) {
+      if (
+        ev.playerId &&
+        String(ev.playerId) === snapshotPlayerIdStr &&
+        eventFilter(ev) &&
+        HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
+        typeof ev.videoTimestamp === 'number'
+      ) {
+        highlights.push({
+          eventId: String(ev._id),
+          statType: ev.statType,
+          videoTimestamp: ev.videoTimestamp,
+          videoUrl: game.videoUrl,
+          gameTitle: game.title || null,
+        });
+      }
+    }
+  }
+  return highlights;
+}
+
 function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsById = new Map()) {
   const gameRows = [];
 
@@ -905,6 +948,7 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
+  const highlights = buildLeaguePlayerHighlights(games, team._id, player._id);
 
   return {
     league: sanitizeLeague(league),
@@ -912,6 +956,7 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
     player: sanitizeLeaguePlayer(player, usersById),
     summary: buildLeaguePlayerSummary(gameRows),
     games: gameRows,
+    highlights,
   };
 }
 

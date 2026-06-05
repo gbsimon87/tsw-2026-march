@@ -83,6 +83,7 @@ const shotEventSchema = new mongoose.Schema(
       enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
       required: false,
     },
+    videoTimestamp: { type: Number, min: 0, required: false },
     occurredAt: { type: Date, default: Date.now },
   },
   { _id: true }
