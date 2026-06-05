@@ -17,13 +17,12 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const homeHref = user ? '/home' : '/';
-  const brandHref = user ? '/feed' : '/';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
-          <Link to={brandHref} className="text-lg font-semibold">
+          <Link to="/feed" className="text-lg font-semibold">
             {import.meta.env.VITE_APP_NAME}
           </Link>
 
