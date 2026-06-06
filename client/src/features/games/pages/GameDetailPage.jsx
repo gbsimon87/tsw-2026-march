@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { useAuth } from '../../../app/store/AuthContext';
+import { trackEvent } from '../../analytics/trackEvent';
 import { Tabs } from '../../../components/Tabs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
@@ -709,6 +710,7 @@ export function GameDetailPage() {
   function openFeedComposer() {
     if (user) {
       updateSearchParam('composeFeedGame', '1');
+      trackEvent('game_detail_feed_composer_opened', { game_id: gameId });
       return;
     }
 
@@ -718,6 +720,7 @@ export function GameDetailPage() {
 
   function onFeedPostCreated() {
     closeFeedComposer();
+    trackEvent('game_detail_feed_post_created', { game_id: gameId });
     setFeedPostState('posted');
     window.setTimeout(() => {
       setFeedPostState((current) => (current === 'posted' ? '' : current));
@@ -751,6 +754,7 @@ export function GameDetailPage() {
       return;
     }
 
+    trackEvent('game_detail_card_downloaded', { game_id: gameId });
     const link = document.createElement('a');
     link.href = headerCardDataUrl;
     link.download = cardFilename;
@@ -800,6 +804,7 @@ export function GameDetailPage() {
       return;
     }
 
+    trackEvent('game_detail_share_initiated', { game_id: gameId });
     isSharingHeaderCardRef.current = true;
     setIsSharingHeaderCard(true);
 
@@ -997,6 +1002,7 @@ export function GameDetailPage() {
       {!isPrintMode ? (
         <Tabs
           defaultValue="recap"
+          onChange={(tab) => trackEvent('game_detail_tab_changed', { game_id: gameId, tab })}
           items={[
             {
               value: 'recap',

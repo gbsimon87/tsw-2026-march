@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { useAuth } from '../../app/store/AuthContext';
 import { env } from '../../lib/env';
-import { capturePostHogPageView, identifyPostHogUser, resetPostHogUser } from '../../lib/posthog';
+import {
+  capturePostHogPageLeave,
+  capturePostHogPageView,
+  identifyPostHogUser,
+  resetPostHogUser,
+} from '../../lib/posthog';
+import { useScrollDepth } from './useScrollDepth';
 
 const routePatterns = [
   '/',
@@ -58,8 +64,17 @@ export function PostHogRouteTracker() {
   const location = useLocation();
   const { user, isLoading } = useAuth();
   const lastPageKeyRef = useRef('');
+  const lastPagePropsRef = useRef(null);
+  const maxScrollDepthRef = useRef(0);
   const identifiedUserIdRef = useRef('');
   const routePattern = useMemo(() => getRoutePattern(location.pathname), [location.pathname]);
+  const routeKey = `${location.pathname}${location.search}`;
+
+  const onScrollDepthReached = useCallback((depth) => {
+    maxScrollDepthRef.current = Math.max(maxScrollDepthRef.current, depth);
+  }, []);
+
+  useScrollDepth(onScrollDepthReached, routeKey);
 
   useEffect(() => {
     const pageKey = `${location.pathname}${location.search}${location.hash}`;
@@ -68,9 +83,17 @@ export function PostHogRouteTracker() {
       return;
     }
 
-    lastPageKeyRef.current = pageKey;
+    if (lastPagePropsRef.current) {
+      capturePostHogPageLeave({
+        ...lastPagePropsRef.current,
+        scroll_depth: maxScrollDepthRef.current,
+      });
+    }
 
-    capturePostHogPageView({
+    lastPageKeyRef.current = pageKey;
+    maxScrollDepthRef.current = 0;
+
+    const pageProps = {
       $current_url: window.location.href,
       path: location.pathname,
       search: location.search,
@@ -78,7 +101,10 @@ export function PostHogRouteTracker() {
       referrer: document.referrer || '',
       app_env: env.appEnv,
       route_pattern: routePattern,
-    });
+    };
+
+    lastPagePropsRef.current = pageProps;
+    capturePostHogPageView(pageProps);
   }, [location.hash, location.pathname, location.search, routePattern]);
 
   useEffect(() => {

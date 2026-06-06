@@ -16,7 +16,7 @@ export function initPostHog() {
     api_host: env.posthogHost,
     autocapture: false,
     capture_pageview: false,
-    capture_pageleave: false,
+    capture_pageleave: true,
     disable_session_recording: true,
     persistence: 'localStorage+cookie',
   });
@@ -30,6 +30,14 @@ export function capturePostHogPageView(properties) {
   }
 
   posthog.capture('$pageview', properties);
+}
+
+export function capturePostHogPageLeave(properties) {
+  if (!initialized || !isPostHogEnabled()) {
+    return;
+  }
+
+  posthog.capture('$pageleave', properties);
 }
 
 export function identifyPostHogUser(userId, properties) {

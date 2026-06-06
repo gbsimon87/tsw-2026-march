@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
@@ -391,12 +392,14 @@ export function GameTrackPage() {
 
     setError('');
     setIsTrackingFullscreen(true);
+    trackEvent('game_tracking_overlay_opened', { game_id: gameId });
   }
 
   function closeTrackingOverlay() {
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
     setIsTrackingFullscreen(false);
+    trackEvent('game_tracking_overlay_closed', { game_id: gameId });
   }
 
   function resetTransientTrackingState() {
@@ -439,6 +442,7 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -601,6 +605,10 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', {
+      game_id: gameId,
+      stat_type: buildShotStatType(selectedShot.shotFamily, outcome),
+    });
 
     const payload = buildEventPayload({
       playerId: currentSideState.selectedPlayerId,
@@ -670,6 +678,10 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', {
+      game_id: gameId,
+      stat_type: outcome === 'made' ? 'FT_MADE' : 'FT_MISS',
+    });
 
     const inferred = buildFreeThrowPayload(
       selectedShot?.nearestHoop || lastTappedHoop,
@@ -747,6 +759,7 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -993,6 +1006,7 @@ export function GameTrackPage() {
   async function finishGame() {
     setError('');
     setIsSaving(true);
+    trackEvent('game_tracking_finished', { game_id: gameId });
     try {
       await gamesApi.finish(gameId);
       navigate(`/games/${gameId}`);

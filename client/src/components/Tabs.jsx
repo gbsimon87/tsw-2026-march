@@ -1,8 +1,13 @@
 import { useId, useState } from 'react';
 
-export function Tabs({ items, defaultValue }) {
+export function Tabs({ items, defaultValue, onChange }) {
   const fallback = items[0]?.value || '';
   const [active, setActive] = useState(defaultValue || fallback);
+
+  function setActiveAndNotify(value) {
+    setActive(value);
+    onChange?.(value);
+  }
   const baseId = useId();
 
   if (!items.length) {
@@ -19,17 +24,17 @@ export function Tabs({ items, defaultValue }) {
 
     event.preventDefault();
     if (event.key === 'Home') {
-      setActive(items[0].value);
+      setActiveAndNotify(items[0].value);
       return;
     }
     if (event.key === 'End') {
-      setActive(items[items.length - 1].value);
+      setActiveAndNotify(items[items.length - 1].value);
       return;
     }
 
     const direction = event.key === 'ArrowRight' ? 1 : -1;
     const nextIndex = (activeIndex + direction + items.length) % items.length;
-    setActive(items[nextIndex].value);
+    setActiveAndNotify(items[nextIndex].value);
   }
 
   return (
@@ -57,7 +62,7 @@ export function Tabs({ items, defaultValue }) {
               className={`rounded px-3 py-1.5 text-sm font-medium ${
                 isActive ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
-              onClick={() => setActive(item.value)}
+              onClick={() => setActiveAndNotify(item.value)}
             >
               {item.label}
             </button>

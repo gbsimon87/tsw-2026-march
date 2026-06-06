@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { FloatingActionButton } from '../../../components/ui/FloatingActionButton';
 import { Modal } from '../../../components/ui/Modal';
@@ -37,6 +38,7 @@ export function FeedPage() {
     if (isLoadingMoreRef.current || !nextCursor) return;
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
+    trackEvent('feed_load_more');
     try {
       await loadFeed(nextCursor, true);
     } catch (loadMoreError) {
@@ -51,6 +53,7 @@ export function FeedPage() {
     try {
       await feedApi.deletePost(postId);
       setPosts((current) => current.filter((post) => post.id !== postId));
+      trackEvent('feed_post_deleted');
     } catch (deleteError) {
       setError(deleteError.message || 'Failed to delete post');
     }
@@ -58,6 +61,7 @@ export function FeedPage() {
 
   function onCreated(post) {
     setPosts((current) => [post, ...current]);
+    trackEvent('feed_post_created', { post_type: post.type || 'unknown' });
     closeComposer();
   }
 
@@ -66,6 +70,7 @@ export function FeedPage() {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set('compose', '1');
       setSearchParams(nextParams, { replace: true });
+      trackEvent('feed_composer_opened');
       return;
     }
     navigate(`/login?redirectTo=${encodeURIComponent(composeRedirectTarget)}`);
