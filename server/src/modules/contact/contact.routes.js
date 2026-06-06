@@ -57,6 +57,7 @@ contactRouter.post(
     // and returns { delivery: 'fallback' } instead of throwing.
     await sendTemplateEmail({
       to: env.SMTP_FROM_EMAIL,
+      replyTo: email,
       subject: `Contact form: ${name} (${clubName})`,
       text: bodyLines,
       html: `<pre style="font-family:sans-serif;font-size:14px;line-height:1.6">${bodyLines}</pre>`,
