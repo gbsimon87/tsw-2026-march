@@ -27,7 +27,7 @@ function getTransport() {
   return nodemailer.createTransport(transportOptions);
 }
 
-async function sendTemplateEmail({ to, subject, text, html, fallbackLabel }) {
+async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLabel }) {
   const transport = getTransport();
 
   if (!transport) {
@@ -40,13 +40,15 @@ async function sendTemplateEmail({ to, subject, text, html, fallbackLabel }) {
   }
 
   try {
-    await transport.sendMail({
+    const mailOptions = {
       from: `${env.SMTP_FROM_NAME} <${env.SMTP_FROM_EMAIL}>`,
       to,
       subject,
       text,
       html,
-    });
+    };
+    if (replyTo) mailOptions.replyTo = replyTo;
+    await transport.sendMail(mailOptions);
   } catch (error) {
     if (env.NODE_ENV === 'production') {
       throw error;

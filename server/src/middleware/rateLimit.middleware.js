@@ -24,7 +24,20 @@ const authRecoveryLimiter = rateLimit({
   },
 });
 
+const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: {
+      message: 'Too many messages sent. Please try again in an hour.',
+    },
+  },
+});
+
 module.exports = {
   apiRateLimiter,
   authRecoveryLimiter,
+  contactLimiter,
 };
