@@ -1,67 +1,49 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const { env } = require('../config/env');
 const { logger } = require('../config/logger');
 
-function hasSmtpConfiguration() {
-  return Boolean(env.SMTP_HOST && env.SMTP_PORT && env.SMTP_FROM_EMAIL && env.SMTP_FROM_NAME);
-}
-
-function getTransport() {
-  if (!hasSmtpConfiguration()) {
-    return null;
-  }
-
-  const transportOptions = {
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: env.SMTP_SECURE,
-  };
-
-  if (env.SMTP_USER && env.SMTP_PASS) {
-    transportOptions.auth = {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
-    };
-  }
-
-  return nodemailer.createTransport(transportOptions);
+function getClient() {
+  if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL || !env.RESEND_FROM_NAME) return null;
+  return new Resend(env.RESEND_API_KEY);
 }
 
 async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLabel }) {
-  const transport = getTransport();
+  const client = getClient();
 
-  if (!transport) {
+  if (!client) {
     if (env.NODE_ENV === 'production') {
-      throw new Error('SMTP configuration is required in production to send auth emails.');
-    }
-
-    logger.warn({ to, fallbackLabel, text }, 'SMTP not configured; emitting local email fallback');
-    return { delivery: 'fallback' };
-  }
-
-  try {
-    const mailOptions = {
-      from: `${env.SMTP_FROM_NAME} <${env.SMTP_FROM_EMAIL}>`,
-      to,
-      subject,
-      text,
-      html,
-    };
-    if (replyTo) mailOptions.replyTo = replyTo;
-    await transport.sendMail(mailOptions);
-  } catch (error) {
-    if (env.NODE_ENV === 'production') {
-      throw error;
+      throw new Error('RESEND_API_KEY is required in production to send emails.');
     }
 
     logger.warn(
-      { err: error, to, fallbackLabel, text },
-      'SMTP delivery failed; emitting local email fallback'
+      { to, fallbackLabel, text },
+      'Resend not configured; emitting local email fallback'
     );
     return { delivery: 'fallback' };
   }
 
-  return { delivery: 'smtp' };
+  const { error } = await client.emails.send({
+    from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
+    to,
+    replyTo,
+    subject,
+    text,
+    html,
+  });
+
+  if (error) {
+    if (env.NODE_ENV === 'production') {
+      throw new Error(error.message);
+    }
+
+    logger.warn(
+      { err: error, to, fallbackLabel, text },
+      'Resend delivery failed; emitting local email fallback'
+    );
+    return { delivery: 'fallback' };
+  }
+
+  return { delivery: 'resend' };
 }
 
 async function sendVerificationEmail({ to, name, verifyUrl }) {
@@ -92,5 +74,4 @@ module.exports = {
   sendTemplateEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,
-  hasSmtpConfiguration,
 };

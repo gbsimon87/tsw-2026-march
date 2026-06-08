@@ -9,7 +9,7 @@ jest.mock('../../services/email.service', () => ({
 describe('contact routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    sendTemplateEmail.mockResolvedValue({ delivery: 'smtp' });
+    sendTemplateEmail.mockResolvedValue({ delivery: 'resend' });
   });
 
   test('sends a contact form email', async () => {

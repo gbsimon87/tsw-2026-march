@@ -53,10 +53,8 @@ contactRouter.post(
       .filter(Boolean)
       .join('\n');
 
-    // In dev without SMTP configured, sendTemplateEmail logs the email locally
-    // and returns { delivery: 'fallback' } instead of throwing.
     await sendTemplateEmail({
-      to: env.SMTP_FROM_EMAIL,
+      to: env.CONTACT_EMAIL,
       replyTo: email,
       subject: `Contact form: ${name} (${clubName})`,
       text: bodyLines,
