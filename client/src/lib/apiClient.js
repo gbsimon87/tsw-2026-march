@@ -1,6 +1,10 @@
 import { env } from './env';
 
-let csrfToken = null;
+let csrfToken =
+  document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('XSRF-TOKEN='))
+    ?.split('=')[1] ?? null;
 let refreshPromise = null;
 
 async function refreshSession() {

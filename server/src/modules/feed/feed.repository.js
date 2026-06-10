@@ -71,8 +71,6 @@ const postSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-postSchema.index({ _id: -1 });
-
 const Post = mongoose.models.Post || mongoose.model('Post', postSchema);
 
 async function createPost(input) {

@@ -1,0 +1,107 @@
+Execution Plan: Highlight Clip Sharing to Pulse
+Phase 1 — Optional auth middleware
+File: server/src/middleware/auth.middleware.js
+
+Add optionalAuthMiddleware: same as authMiddleware but calls next() without error when the token is absent or invalid. Attaches req.auth when valid, leaves it undefined when not.
+Phase 2 — Thread viewer identity into public endpoints
+File: server/src/modules/games/games.routes.js
+
+Mount optionalAuthMiddleware before GET /:gameId so req.auth is populated for logged-in users.
+File: server/src/modules/leagues/leagues.routes.js
+
+Mount optionalAuthMiddleware before publicLeaguesRouter so the public player route also receives the viewer's userId.
+Phase 3 — Boolean game access helper
+File: server/src/modules/games/games.service.js
+
+Extract a canAccessGame(userId, game) async function that returns true/false without throwing — reuses the same checks inside assertGameAccess (ownerUserId, standalone dual team ownership, league manager). Export it.
+Phase 4 — canShareHighlights flag on public game response
+File: server/src/modules/games/games.service.js → getPublicGame
+
+Accept an optional second argument userId.
+Add canShareHighlights: userId ? await canAccessGame(userId, game) : false to the returned object.
+File: server/src/modules/games/games.controller.js → getPublicById
+
+Pass req.auth?.userId || null to getPublicGame.
+Phase 5 — isMe flag on public league player response
+File: server/src/modules/leagues/leagues.service.js → getPublicLeaguePlayerBySlug
+
+Accept an optional viewerUserId parameter.
+Add isMe: Boolean(viewerUserId && player.claimedByUserId && String(player.claimedByUserId) === String(viewerUserId)) to the sanitized player in the response.
+File: server/src/modules/leagues/leagues.controller.js → getPublicPlayer
+
+Pass req.auth?.userId || null to getPublicLeaguePlayerBySlug.
+Phase 6 — Mongoose schema for highlight_clip post type
+File: server/src/modules/feed/feed.repository.js
+
+Add highlightClipSchema sub-schema: { gameId, eventId, videoUrl, videoTimestamp, statType, playerId, playerName } — all denormalized at creation time so the feed card renders even if the game is later edited.
+Add highlight_clip to the type enum on postSchema.
+Add findPostByHighlightEventId(eventId) repository function to detect duplicate shares of the same event.
+Phase 7 — Validation
+File: server/src/modules/feed/feed.validation.js
+
+Add createHighlightClipPostSchema: { gameId: string, eventId: string, caption: captionSchema }.
+Phase 8 — Access check helper and service function
+File: server/src/modules/feed/feed.service.js
+
+New internal helper assertCanShareHighlightClip(userId, game, event):
+
+Try canAccessGame(userId, game) (imported from games.service) — if true, return immediately (full game access: game owner, team owner, league admin).
+Otherwise: locate the snapshot player matching event.playerId across game.rosterSnapshot, game.homeRosterSnapshot, game.awayRosterSnapshot.
+If the snapshot player has a leaguePlayerId, look up the live LeaguePlayer via findLeaguePlayerById and check leaguePlayer.claimedByUserId === userId.
+If no leaguePlayerId, fall back to snapshotPlayer.claimedByUserId === userId.
+Throw ApiError(403) if neither check passes.
+New createHighlightClipPostForUser(userId, input) function:
+
+Validate with createHighlightClipPostSchema.
+Load game via findGameById(input.gameId) — throw 404 if not found or has no videoUrl.
+Find the event matching input.eventId in game.events — throw 404 if not found. Confirm it has a videoTimestamp and is a HIGHLIGHT_STAT_TYPE.
+Run assertCanShareHighlightClip(userId, game, event).
+Check findPostByHighlightEventId(input.eventId) — throw ApiError(409, 'This clip has already been shared') if a post already exists.
+Resolve playerName from the snapshot player.
+Call createPost with all data denormalized.
+Return sanitizePost(post, userId).
+Update resolvePostPayload:
+
+Add highlight_clip branch → resolveHighlightClipPayload(post) which just reads the stored sub-document directly (no async resolution needed since everything is denormalized).
+Phase 9 — Controller and route
+File: server/src/modules/feed/feed.controller.js
+
+Add createHighlightClip handler.
+File: server/src/modules/feed/feed.routes.js
+
+Add POST /highlight-clip (under authMiddleware).
+File: server/src/modules/feed/feed.service.js
+
+Export createHighlightClipPostForUser.
+Phase 10 — Client: feed API method
+File: client/src/features/feed/api/feedApi.js
+
+Add createHighlightClipPost(payload) → POST /feed/highlight-clip.
+Phase 11 — Client: feed card component
+New file: client/src/features/feed/components/posts/HighlightClipPostCard.jsx
+
+Props: { highlightClip, caption }.
+Renders a YouTube embed iframe with start = max(0, videoTimestamp - 5) and end = videoTimestamp + 5 (reuse the same pattern from GameDetailPage's GameHighlightClip). extractYouTubeVideoId is importable from ../../games/youtube.
+Shows stat label (map from STAT_LABELS constants), player name, game title.
+File: client/src/features/feed/components/FeedPostCard.jsx
+
+Import HighlightClipPostCard.
+Add highlight_clip branch.
+Phase 12 — Client: share button on GameDetailPage
+File: client/src/features/games/pages/GameDetailPage.jsx
+
+Read canShareHighlights = Boolean(data?.game?.canShareHighlights).
+In the highlights section, add a "Share to Pulse" icon button per clip (visible only when canShareHighlights).
+Per-clip state: track { [eventId]: 'idle' | 'loading' | 'shared' | 'error' } in a single useState object.
+On click: call feedApi.createHighlightClipPost({ gameId: game.id, eventId: h.eventId }) and update that clip's state slot.
+Show a spinner while loading, a checkmark / "Shared" label on success, and an inline error message on failure (including the "already shared" 409 case with a friendly message).
+Phase 13 — Client: share button on PublicLeaguePlayerPage
+File: client/src/features/leagues/pages/PublicLeaguePlayerPage.jsx
+
+Read canShareOwnHighlights = Boolean(user && data?.player?.isMe).
+Same per-clip share button and state pattern as Phase 12 (same state shape, same API call).
+Only visible on own highlights when canShareOwnHighlights is true.
+What this does NOT touch:
+
+deletePostsByGameId — worth noting: it only deletes game_card type posts. A follow-up can extend it to also delete highlight_clip posts for the same game. Not blocking for the MVP.
+No changes to the feed list rendering, pagination, or FeedList — the new card slots into the existing post card dispatch.
