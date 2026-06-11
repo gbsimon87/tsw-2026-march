@@ -189,6 +189,30 @@ async function resolveTeamCardPayload(post) {
   };
 }
 
+const YOUTUBE_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+
+function isSafeYouTubeUrl(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(host))
+      return false;
+    // Extract and validate the video ID so a crafted URL can't inject params.
+    let id = null;
+    if (host === 'youtu.be') {
+      id = parsed.pathname.split('/').filter(Boolean)[0] || null;
+    } else if (parsed.pathname === '/watch') {
+      id = parsed.searchParams.get('v');
+    } else if (parsed.pathname.startsWith('/embed/') || parsed.pathname.startsWith('/shorts/')) {
+      id = parsed.pathname.split('/').filter(Boolean)[1] || null;
+    }
+    return Boolean(id && YOUTUBE_VIDEO_ID_RE.test(id));
+  } catch {
+    return false;
+  }
+}
+
 function resolveHighlightClipPayload(post) {
   const clip = post.highlightClip;
   return {
@@ -200,7 +224,7 @@ function resolveHighlightClipPayload(post) {
     highlightClip: {
       gameId: String(clip.gameId),
       eventId: clip.eventId,
-      videoUrl: clip.videoUrl,
+      videoUrl: isSafeYouTubeUrl(clip.videoUrl) ? clip.videoUrl : null,
       videoTimestamp: clip.videoTimestamp,
       statType: clip.statType,
       playerId: clip.playerId ?? null,
@@ -271,21 +295,25 @@ async function listFeedPosts(viewerUserId, options = {}) {
   }
   const rawPosts = await listPosts({ limit: limit + 10, cursor: options.cursor || null });
   const resolved = [];
+  let lastResolvedRaw = null;
+  let hitLimit = false;
 
   for (const post of rawPosts) {
     const sanitized = await sanitizePost(post, viewerUserId);
     if (sanitized) {
       resolved.push(sanitized);
+      lastResolvedRaw = post;
     }
     if (resolved.length >= limit) {
+      hitLimit = true;
       break;
     }
   }
 
-  const nextCursor =
-    rawPosts.length > 0 && rawPosts.length >= limit
-      ? String(rawPosts[rawPosts.length - 1]._id)
-      : null;
+  // Only emit a cursor when we hit the limit mid-batch, meaning there are
+  // likely more posts. If we consumed the whole batch without hitting the
+  // limit there is nothing left to page through.
+  const nextCursor = hitLimit && lastResolvedRaw ? String(lastResolvedRaw._id) : null;
 
   return {
     posts: resolved,
@@ -558,10 +586,11 @@ async function assertCanShareHighlightClip(userId, game, event) {
   if (snapshotPlayer.leaguePlayerId) {
     const leaguePlayer = await findLeaguePlayerById(snapshotPlayer.leaguePlayerId);
     if (leaguePlayer && String(leaguePlayer.claimedByUserId) === String(userId)) return;
-  } else if (
-    snapshotPlayer.claimedByUserId &&
-    String(snapshotPlayer.claimedByUserId) === String(userId)
-  ) {
+  }
+
+  // Fall through to snapshot claimedByUserId as a secondary check — covers cases
+  // where the snapshot has a direct claim but leaguePlayerId is also set.
+  if (snapshotPlayer.claimedByUserId && String(snapshotPlayer.claimedByUserId) === String(userId)) {
     return;
   }
 

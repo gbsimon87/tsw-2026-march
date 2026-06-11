@@ -7,10 +7,16 @@ export function HighlightClipPostCard({ highlightClip, caption }) {
   const videoId = extractYouTubeVideoId(videoUrl);
 
   const label = STAT_LABELS[statType] || statType;
-  const start = Math.max(0, videoTimestamp - 5);
-  const end = videoTimestamp + 5;
+  const safeTimestamp = Number.isFinite(videoTimestamp) ? videoTimestamp : null;
+  const start = safeTimestamp !== null ? Math.max(0, safeTimestamp - 5) : null;
+  const end = safeTimestamp !== null ? safeTimestamp + 5 : null;
 
-  const { containerRef, iframeRef } = useYouTubeAutoplay({ threshold: 0.5 });
+  const embedSrc =
+    videoId && safeTimestamp !== null
+      ? `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&mute=1&playsinline=1&controls=0&loop=1&playlist=${videoId}&rel=0&modestbranding=1&enablejsapi=1`
+      : null;
+
+  const { containerRef, iframeRef } = useYouTubeAutoplay({ src: embedSrc, threshold: 0.5 });
 
   return (
     <article
@@ -18,11 +24,16 @@ export function HighlightClipPostCard({ highlightClip, caption }) {
       className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950"
     >
       {videoId ? (
-        <div className="relative aspect-video w-full">
+        <div className="relative aspect-video w-full bg-slate-950">
+          {/* Thumbnail visible while iframe lazy-loads */}
+          <img
+            src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
           <iframe
             ref={iframeRef}
             className="absolute inset-0 h-full w-full"
-            src={`https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&mute=1&playsinline=1&controls=0&loop=1&playlist=${videoId}&rel=0&modestbranding=1&enablejsapi=1`}
             title={`${playerName ? `${playerName} — ` : ''}${label}`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen

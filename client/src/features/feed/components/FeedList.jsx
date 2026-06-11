@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { useIsMobileDevice } from '../hooks/useIsMobileDevice';
 import { useSnapScrollAutoplay } from '../hooks/useSnapScrollAutoplay';
 import { FullScreenPost } from './FullScreenPost';
 import { FullScreenGameCard } from './posts/FullScreenGameCard';
@@ -34,32 +35,39 @@ function FullScreenSlide({ post, onDelete, observeSlide }) {
 }
 
 export function FeedList({ posts, onDelete, onNearEnd }) {
+  const isMobile = useIsMobileDevice();
   const containerRef = useRef(null);
+  const sentinelRef = useRef(null);
   const { observeSlide } = useSnapScrollAutoplay(containerRef);
 
+  // Desktop: trigger onNearEnd when the sentinel at the bottom of the list comes into view.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !onNearEnd) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) onNearEnd();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onNearEnd]);
+
   if (!posts.length) {
-    return (
-      <>
-        {/* Mobile empty state */}
-        <div className="md:hidden flex h-dvh items-center justify-center bg-slate-950">
-          <p className="text-sm text-slate-400">No posts yet.</p>
-        </div>
-        {/* Desktop empty state */}
-        <div className="hidden md:block">
-          <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-6 text-sm text-slate-600">
-            No posts yet.
-          </p>
-        </div>
-      </>
+    return isMobile ? (
+      <div className="flex h-dvh items-center justify-center bg-slate-950">
+        <p className="text-sm text-slate-400">No posts yet.</p>
+      </div>
+    ) : (
+      <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-6 text-sm text-slate-600">
+        No posts yet.
+      </p>
     );
   }
 
-  return (
-    <>
-      {/* ── Mobile: full-screen snap-scroll ── */}
+  if (isMobile) {
+    return (
       <div
         ref={containerRef}
-        className="md:hidden fixed inset-0 bottom-16 overflow-y-scroll snap-y snap-mandatory"
+        className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory"
         style={{ scrollbarWidth: 'none' }}
         onScroll={(e) => {
           if (!onNearEnd) return;
@@ -79,13 +87,15 @@ export function FeedList({ posts, onDelete, onNearEnd }) {
           />
         ))}
       </div>
+    );
+  }
 
-      {/* ── Desktop: card grid ── */}
-      <div className="hidden md:block space-y-4">
-        {posts.map((post) => (
-          <FeedPostCard key={post.id} post={post} onDelete={onDelete} />
-        ))}
-      </div>
-    </>
+  return (
+    <div className="space-y-4">
+      {posts.map((post) => (
+        <FeedPostCard key={post.id} post={post} onDelete={onDelete} />
+      ))}
+      <div ref={sentinelRef} className="h-px" />
+    </div>
   );
 }

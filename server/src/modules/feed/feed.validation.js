@@ -18,9 +18,11 @@ const createTeamCardPostSchema = z.object({
   caption: captionSchema,
 });
 
+const mongoIdSchema = z.string().regex(/^[a-f0-9]{24}$/, 'Invalid id format');
+
 const createHighlightClipPostSchema = z.object({
-  gameId: z.string().min(1),
-  eventId: z.string().min(1),
+  gameId: mongoIdSchema,
+  eventId: mongoIdSchema,
   caption: captionSchema,
 });
 

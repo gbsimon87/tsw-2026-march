@@ -17,7 +17,6 @@ export function FeedPage() {
   const [nextCursor, setNextCursor] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const isLoadingMoreRef = useRef(false);
   const composeRedirectTarget = useMemo(() => '/feed?compose=1', []);
   const isComposerOpen = Boolean(user) && searchParams.get('compose') === '1';
@@ -37,7 +36,6 @@ export function FeedPage() {
   async function loadMore() {
     if (isLoadingMoreRef.current || !nextCursor) return;
     isLoadingMoreRef.current = true;
-    setIsLoadingMore(true);
     trackEvent('feed_load_more');
     try {
       await loadFeed(nextCursor, true);
@@ -45,7 +43,6 @@ export function FeedPage() {
       setError(loadMoreError.message || 'Failed to load more posts');
     } finally {
       isLoadingMoreRef.current = false;
-      setIsLoadingMore(false);
     }
   }
 
@@ -96,20 +93,6 @@ export function FeedPage() {
 
       {/* FeedList handles its own layout: fixed snap-scroll on mobile, normal flow on desktop */}
       <FeedList posts={posts} onDelete={onDelete} onNearEnd={loadMore} />
-
-      {/* Desktop load more */}
-      {nextCursor ? (
-        <div className="mt-4 hidden justify-center md:flex">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-            disabled={isLoadingMore}
-            onClick={loadMore}
-          >
-            {isLoadingMore ? 'Loading...' : 'Load More'}
-          </button>
-        </div>
-      ) : null}
 
       {/* FAB — lifted above the tab bar on mobile */}
       <FloatingActionButton

@@ -120,7 +120,12 @@ async function deletePostById(postId) {
 }
 
 async function deletePostsByGameId(gameId) {
-  return Post.deleteMany({ type: 'game_card', 'gameCard.gameId': gameId });
+  return Post.deleteMany({
+    $or: [
+      { type: 'game_card', 'gameCard.gameId': gameId },
+      { type: 'highlight_clip', 'highlightClip.gameId': gameId },
+    ],
+  });
 }
 
 async function findPostByHighlightEventId(eventId) {

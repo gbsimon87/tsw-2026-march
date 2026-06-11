@@ -1140,15 +1140,29 @@ async function getGameForUser(userId, gameId) {
   };
 }
 
+function isClaimedPlayerInGameSnapshot(userId, game) {
+  const allRosters = [
+    ...(game.rosterSnapshot || []),
+    ...(game.homeRosterSnapshot || []),
+    ...(game.awayRosterSnapshot || []),
+  ];
+  return allRosters.some((p) => p.claimedByUserId && String(p.claimedByUserId) === String(userId));
+}
+
 async function getPublicGame(gameId, viewerUserId = null) {
   const result = await getGameForUser(null, gameId);
 
   const highlightEventIds = (result.highlights || []).map((h) => h.eventId).filter(Boolean);
   result.sharedEventIds = await findSharedEventIds(highlightEventIds);
+  result.canShareHighlights = false;
 
   if (viewerUserId) {
     const rawGame = await findGameById(gameId);
-    result.canShareHighlights = rawGame ? await canAccessGame(viewerUserId, rawGame) : false;
+    if (rawGame) {
+      result.canShareHighlights =
+        (await canAccessGame(viewerUserId, rawGame)) ||
+        isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
+    }
   }
   return result;
 }
