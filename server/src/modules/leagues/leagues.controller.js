@@ -103,7 +103,8 @@ async function getPublicPlayer(req, res) {
   const result = await leaguesService.getPublicLeaguePlayerBySlug(
     req.params.leagueSlug,
     req.params.teamSlug,
-    req.params.leaguePlayerId
+    req.params.leaguePlayerId,
+    req.auth?.userId || null
   );
   res.status(200).json(result);
 }

@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useSnapScrollAutoplay } from '../hooks/useSnapScrollAutoplay';
 import { FullScreenPost } from './FullScreenPost';
 import { FullScreenGameCard } from './posts/FullScreenGameCard';
+import { FullScreenHighlightClipPost } from './posts/FullScreenHighlightClipPost';
 import { FullScreenImagePost } from './posts/FullScreenImagePost';
 import { FullScreenPlayerCard } from './posts/FullScreenPlayerCard';
 import { FullScreenTeamCard } from './posts/FullScreenTeamCard';
@@ -21,6 +22,8 @@ function FullScreenSlide({ post, onDelete, observeSlide }) {
     content = <FullScreenPlayerCard playerCard={post.playerCard} />;
   } else if (post.type === 'team_card') {
     content = <FullScreenTeamCard teamCard={post.teamCard} />;
+  } else if (post.type === 'highlight_clip') {
+    content = <FullScreenHighlightClipPost highlightClip={post.highlightClip} />;
   }
 
   return (

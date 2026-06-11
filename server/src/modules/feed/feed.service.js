@@ -1,10 +1,17 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
-const { createPost, listPosts, findPostById, deletePostById } = require('./feed.repository');
+const {
+  createPost,
+  listPosts,
+  findPostById,
+  deletePostById,
+  findPostByHighlightEventId,
+} = require('./feed.repository');
 const {
   createGameCardPostSchema,
   createPlayerCardPostSchema,
   createTeamCardPostSchema,
+  createHighlightClipPostSchema,
 } = require('./feed.validation');
 const {
   uploadImageBuffer,
@@ -16,7 +23,8 @@ const {
 const { env } = require('../../config/env');
 const { findUserById } = require('../auth/auth.repository');
 const { findGameById, listCompletedGames } = require('../games/games.repository');
-const { getPublicGame } = require('../games/games.service');
+const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
+const { findLeaguePlayerById } = require('../leagues/leagues.repository');
 const { listTeams } = require('../teams/teams.repository');
 const { getPublicPlayer, getPublicTeam } = require('../teams/teams.service');
 
@@ -181,6 +189,27 @@ async function resolveTeamCardPayload(post) {
   };
 }
 
+function resolveHighlightClipPayload(post) {
+  const clip = post.highlightClip;
+  return {
+    image: null,
+    video: null,
+    gameCard: null,
+    playerCard: null,
+    teamCard: null,
+    highlightClip: {
+      gameId: String(clip.gameId),
+      eventId: clip.eventId,
+      videoUrl: clip.videoUrl,
+      videoTimestamp: clip.videoTimestamp,
+      statType: clip.statType,
+      playerId: clip.playerId ?? null,
+      playerName: clip.playerName ?? null,
+      gameTitle: clip.gameTitle ?? null,
+    },
+  };
+}
+
 async function resolvePostPayload(post) {
   if (post.type === 'image') {
     return resolveImagePayload(post);
@@ -200,6 +229,10 @@ async function resolvePostPayload(post) {
 
   if (post.type === 'team_card') {
     return resolveTeamCardPayload(post);
+  }
+
+  if (post.type === 'highlight_clip') {
+    return resolveHighlightClipPayload(post);
   }
 
   throw new ApiError(400, 'Unsupported post type');
@@ -500,6 +533,86 @@ async function listShareablePlayers(query = {}) {
   return players.slice(0, query.limit || 10);
 }
 
+function findSnapshotPlayer(game, playerId) {
+  const playerIdStr = String(playerId);
+  for (const roster of [game.rosterSnapshot, game.homeRosterSnapshot, game.awayRosterSnapshot]) {
+    if (!Array.isArray(roster)) continue;
+    const found = roster.find((p) => String(p._id) === playerIdStr);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function assertCanShareHighlightClip(userId, game, event) {
+  if (await canAccessGame(userId, game)) return;
+
+  if (!event.playerId) {
+    throw new ApiError(403, 'You do not have permission to share this clip');
+  }
+
+  const snapshotPlayer = findSnapshotPlayer(game, event.playerId);
+  if (!snapshotPlayer) {
+    throw new ApiError(403, 'You do not have permission to share this clip');
+  }
+
+  if (snapshotPlayer.leaguePlayerId) {
+    const leaguePlayer = await findLeaguePlayerById(snapshotPlayer.leaguePlayerId);
+    if (leaguePlayer && String(leaguePlayer.claimedByUserId) === String(userId)) return;
+  } else if (
+    snapshotPlayer.claimedByUserId &&
+    String(snapshotPlayer.claimedByUserId) === String(userId)
+  ) {
+    return;
+  }
+
+  throw new ApiError(403, 'You do not have permission to share this clip');
+}
+
+async function createHighlightClipPostForUser(userId, input) {
+  if (!userId) throw new ApiError(401, 'Unauthorized');
+
+  const payload = createHighlightClipPostSchema.parse(input);
+  ensureObjectId(payload.gameId, 'game id');
+
+  const game = await findGameById(payload.gameId);
+  if (!game) throw new ApiError(404, 'Game not found');
+  if (!game.videoUrl) throw new ApiError(400, 'This game has no video linked');
+
+  const event = (game.events || []).find((ev) => String(ev._id) === payload.eventId);
+  if (!event) throw new ApiError(404, 'Event not found');
+  if (typeof event.videoTimestamp !== 'number') {
+    throw new ApiError(400, 'This event has no video timestamp');
+  }
+  if (!HIGHLIGHT_STAT_TYPES.has(event.statType)) {
+    throw new ApiError(400, 'This event type cannot be shared as a highlight');
+  }
+
+  await assertCanShareHighlightClip(userId, game, event);
+
+  const existing = await findPostByHighlightEventId(payload.eventId);
+  if (existing) throw new ApiError(409, 'This clip has already been shared to the Pulse');
+
+  const snapshotPlayer = event.playerId ? findSnapshotPlayer(game, event.playerId) : null;
+
+  const post = await createPost({
+    creatorUserId: userId,
+    type: 'highlight_clip',
+    caption: sanitizeCaption(payload.caption),
+    highlightClip: {
+      gameId: payload.gameId,
+      eventId: payload.eventId,
+      videoUrl: game.videoUrl,
+      videoTimestamp: event.videoTimestamp,
+      statType: event.statType,
+      playerId: event.playerId ? String(event.playerId) : null,
+      playerName: snapshotPlayer?.displayName ?? null,
+      gameTitle: game.title ?? null,
+    },
+  });
+
+  return sanitizePost(post, userId);
+}
+
 module.exports = {
   listFeedPosts,
   createImagePostForUser,
@@ -507,6 +620,7 @@ module.exports = {
   createGameCardPostForUser,
   createPlayerCardPostForUser,
   createTeamCardPostForUser,
+  createHighlightClipPostForUser,
   deletePostForUser,
   listShareableGames,
   listShareablePlayers,

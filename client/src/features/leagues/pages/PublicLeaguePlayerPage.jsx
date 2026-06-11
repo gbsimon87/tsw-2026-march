@@ -9,6 +9,7 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { extractYouTubeVideoId } from '../../games/youtube';
+import { feedApi } from '../../feed/api/feedApi';
 
 const HIGHLIGHT_LABELS = {
   FG2_MADE: '2PT Make',
@@ -91,6 +92,7 @@ export function PublicLeaguePlayerPage() {
   const [claimStatus, setClaimStatus] = useState('');
   const [claimError, setClaimError] = useState('');
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [clipShareState, setClipShareState] = useState({});
   const pendingHandled = useRef(false);
   const pendingKey = `claim_pending_${leagueSlug}_${teamSlug}_${leaguePlayerId}`;
 
@@ -140,6 +142,21 @@ export function PublicLeaguePlayerPage() {
       return;
     }
     await submitClaim(data.league, data.team);
+  }
+
+  const canShareOwnHighlights = Boolean(user && data?.player?.isMe);
+
+  async function shareHighlightClip(eventId, gameId) {
+    setClipShareState((s) => ({ ...s, [eventId]: 'loading' }));
+    try {
+      await feedApi.createHighlightClipPost({ gameId, eventId });
+      setClipShareState((s) => ({ ...s, [eventId]: 'shared' }));
+    } catch (err) {
+      const msg = err.message?.toLowerCase().includes('already been shared')
+        ? 'Already shared'
+        : 'Failed to share';
+      setClipShareState((s) => ({ ...s, [eventId]: msg }));
+    }
   }
 
   const totals = useMemo(() => {
@@ -397,15 +414,37 @@ export function PublicLeaguePlayerPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {selectHighlights(data.highlights).map((h) => (
-              <HighlightClip
-                key={h.eventId}
-                videoUrl={h.videoUrl}
-                timestamp={h.videoTimestamp}
-                statType={h.statType}
-                gameTitle={h.gameTitle}
-              />
-            ))}
+            {selectHighlights(data.highlights).map((h) => {
+              const clipState =
+                clipShareState[h.eventId] ||
+                (data.sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
+              return (
+                <div key={h.eventId} className="flex shrink-0 flex-col">
+                  <HighlightClip
+                    videoUrl={h.videoUrl}
+                    timestamp={h.videoTimestamp}
+                    statType={h.statType}
+                    gameTitle={h.gameTitle}
+                  />
+                  {canShareOwnHighlights ? (
+                    <button
+                      type="button"
+                      disabled={clipState === 'loading' || clipState === 'shared'}
+                      onClick={() => shareHighlightClip(h.eventId, h.gameId)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {clipState === 'loading'
+                        ? 'Sharing…'
+                        : clipState === 'shared'
+                          ? '✓ Shared to Pulse'
+                          : clipState !== 'idle'
+                            ? clipState
+                            : 'Share to Pulse'}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}

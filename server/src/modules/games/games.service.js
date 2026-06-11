@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
+const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
@@ -580,6 +581,18 @@ async function assertGameAccess(userId, gameId) {
   throw new ApiError(404, 'Game not found');
 }
 
+async function canAccessGame(userId, game) {
+  if (!userId || !game) return false;
+  if (String(game.ownerUserId) === String(userId)) return true;
+  if (game.trackingMode === 'dual_team' && game.gameContext === 'standalone') {
+    if (await canAccessStandaloneDualGame(userId, game)) return true;
+  }
+  if (game.gameContext === 'league') {
+    if (await canManageLeagueGame(userId, game)) return true;
+  }
+  return false;
+}
+
 function buildParticipantFromStandaloneTeam(team, side) {
   return {
     side,
@@ -1127,8 +1140,17 @@ async function getGameForUser(userId, gameId) {
   };
 }
 
-async function getPublicGame(gameId) {
-  return getGameForUser(null, gameId);
+async function getPublicGame(gameId, viewerUserId = null) {
+  const result = await getGameForUser(null, gameId);
+
+  const highlightEventIds = (result.highlights || []).map((h) => h.eventId).filter(Boolean);
+  result.sharedEventIds = await findSharedEventIds(highlightEventIds);
+
+  if (viewerUserId) {
+    const rawGame = await findGameById(gameId);
+    result.canShareHighlights = rawGame ? await canAccessGame(viewerUserId, rawGame) : false;
+  }
+  return result;
 }
 
 function getTeamDocForSide(game, participants, side, fallbackTeamDoc) {
@@ -1473,5 +1495,7 @@ module.exports = {
   buildGameSummary,
   canAccessStandaloneDualGame,
   canEditStandaloneDualGame,
+  canAccessGame,
   resolveDualGameParticipants,
+  HIGHLIGHT_STAT_TYPES,
 };

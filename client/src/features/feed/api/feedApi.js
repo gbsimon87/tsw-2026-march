@@ -28,6 +28,9 @@ export const feedApi = {
   createTeamCardPost(payload) {
     return apiClient.post('/feed/team-card', payload);
   },
+  createHighlightClipPost(payload) {
+    return apiClient.post('/feed/highlight-clip', payload);
+  },
   deletePost(postId) {
     return apiClient.delete(`/feed/${postId}`);
   },

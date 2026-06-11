@@ -1,4 +1,5 @@
 import { GameCardPost } from './posts/GameCardPost';
+import { HighlightClipPostCard } from './posts/HighlightClipPostCard';
 import { ImagePostCard } from './posts/ImagePostCard';
 import { PlayerCardPost } from './posts/PlayerCardPost';
 import { TeamCardPost } from './posts/TeamCardPost';
@@ -57,6 +58,8 @@ export function FeedPostCard({ post, onDelete }) {
         <TeamCardPost teamCard={post.teamCard} />
       </div>
     );
+  } else if (post.type === 'highlight_clip') {
+    content = <HighlightClipPostCard highlightClip={post.highlightClip} caption={post.caption} />;
   }
 
   return (

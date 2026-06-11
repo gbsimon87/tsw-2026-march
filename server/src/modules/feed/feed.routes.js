@@ -34,6 +34,7 @@ feedRouter.post('/video', videoUpload.single('file'), asyncHandler(controller.cr
 feedRouter.post('/game-card', asyncHandler(controller.createGameCard));
 feedRouter.post('/player-card', asyncHandler(controller.createPlayerCard));
 feedRouter.post('/team-card', asyncHandler(controller.createTeamCard));
+feedRouter.post('/highlight-clip', asyncHandler(controller.createHighlightClip));
 feedRouter.delete('/:postId', asyncHandler(controller.remove));
 
 module.exports = {

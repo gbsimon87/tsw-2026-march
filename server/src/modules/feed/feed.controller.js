@@ -46,6 +46,12 @@ async function createTeamCard(req, res) {
   res.status(201).json({ post });
 }
 
+async function createHighlightClip(req, res) {
+  const userId = requireAuthUserId(req);
+  const post = await service.createHighlightClipPostForUser(userId, req.body);
+  res.status(201).json({ post });
+}
+
 async function remove(req, res) {
   const userId = requireAuthUserId(req);
   const result = await service.deletePostForUser(userId, req.params.postId);
@@ -77,6 +83,7 @@ module.exports = {
   createGameCard,
   createPlayerCard,
   createTeamCard,
+  createHighlightClip,
   remove,
   listShareableGames,
   listShareablePlayers,

@@ -34,6 +34,20 @@ const teamCardSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const highlightClipSchema = new mongoose.Schema(
+  {
+    gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
+    eventId: { type: String, required: true },
+    videoUrl: { type: String, required: true },
+    videoTimestamp: { type: Number, required: true },
+    statType: { type: String, required: true },
+    playerId: { type: String, default: null },
+    playerName: { type: String, default: null },
+    gameTitle: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 const videoSchema = new mongoose.Schema(
   {
     url: { type: String, default: null },
@@ -57,7 +71,7 @@ const postSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['image', 'video', 'game_card', 'player_card', 'team_card'],
+      enum: ['image', 'video', 'game_card', 'player_card', 'team_card', 'highlight_clip'],
       required: true,
       index: true,
     },
@@ -67,9 +81,13 @@ const postSchema = new mongoose.Schema(
     gameCard: { type: gameCardSchema, default: null },
     playerCard: { type: playerCardSchema, default: null },
     teamCard: { type: teamCardSchema, default: null },
+    highlightClip: { type: highlightClipSchema, default: null },
   },
   { timestamps: true }
 );
+
+// Prevent the same game event from being shared more than once, even under concurrent requests.
+postSchema.index({ 'highlightClip.eventId': 1 }, { unique: true, sparse: true });
 
 const Post = mongoose.models.Post || mongoose.model('Post', postSchema);
 
@@ -105,6 +123,19 @@ async function deletePostsByGameId(gameId) {
   return Post.deleteMany({ type: 'game_card', 'gameCard.gameId': gameId });
 }
 
+async function findPostByHighlightEventId(eventId) {
+  return Post.findOne({ type: 'highlight_clip', 'highlightClip.eventId': eventId });
+}
+
+async function findSharedEventIds(eventIds) {
+  if (!eventIds || eventIds.length === 0) return [];
+  const posts = await Post.find(
+    { type: 'highlight_clip', 'highlightClip.eventId': { $in: eventIds } },
+    { 'highlightClip.eventId': 1 }
+  ).lean();
+  return posts.map((p) => p.highlightClip.eventId);
+}
+
 module.exports = {
   Post,
   createPost,
@@ -113,4 +144,6 @@ module.exports = {
   findPostById,
   deletePostById,
   deletePostsByGameId,
+  findPostByHighlightEventId,
+  findSharedEventIds,
 };

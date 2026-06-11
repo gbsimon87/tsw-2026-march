@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { findSharedEventIds } = require('../feed/feed.repository');
 const { env } = require('../../config/env');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
 const { TEAM_SIDES } = require('../shared/stats.constants');
@@ -770,6 +771,7 @@ function buildLeaguePlayerHighlights(games, leagueTeamId, leaguePlayerId) {
       ) {
         highlights.push({
           eventId: String(ev._id),
+          gameId: String(game._id),
           statType: ev.statType,
           videoTimestamp: ev.videoTimestamp,
           videoUrl: game.videoUrl,
@@ -929,7 +931,12 @@ async function getMyLeagueProfiles(userId) {
   return { profiles };
 }
 
-async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId) {
+async function getPublicLeaguePlayerBySlug(
+  leagueSlug,
+  teamSlug,
+  leaguePlayerId,
+  viewerUserId = null
+) {
   const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
   const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
   if (!team) {
@@ -950,13 +957,24 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
   const highlights = buildLeaguePlayerHighlights(games, team._id, player._id);
 
+  const highlightEventIds = highlights.map((h) => h.eventId).filter(Boolean);
+  const sharedEventIds = await findSharedEventIds(highlightEventIds);
+
+  const sanitizedPlayer = sanitizeLeaguePlayer(player, usersById);
+  sanitizedPlayer.isMe = Boolean(
+    viewerUserId &&
+    player.claimedByUserId &&
+    String(player.claimedByUserId) === String(viewerUserId)
+  );
+
   return {
     league: sanitizeLeague(league),
     team: sanitizeLeagueTeam(team),
-    player: sanitizeLeaguePlayer(player, usersById),
+    player: sanitizedPlayer,
     summary: buildLeaguePlayerSummary(gameRows),
     games: gameRows,
     highlights,
+    sharedEventIds,
   };
 }
 

@@ -18,6 +18,12 @@ const createTeamCardPostSchema = z.object({
   caption: captionSchema,
 });
 
+const createHighlightClipPostSchema = z.object({
+  gameId: z.string().min(1),
+  eventId: z.string().min(1),
+  caption: captionSchema,
+});
+
 const listFeedSchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(50).default(20),
@@ -32,6 +38,7 @@ module.exports = {
   createGameCardPostSchema,
   createPlayerCardPostSchema,
   createTeamCardPostSchema,
+  createHighlightClipPostSchema,
   listFeedSchema,
   shareableLookupSchema,
 };

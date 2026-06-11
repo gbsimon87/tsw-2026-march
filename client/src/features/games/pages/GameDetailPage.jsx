@@ -7,6 +7,7 @@ import { Tabs } from '../../../components/Tabs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
+import { feedApi } from '../../feed/api/feedApi';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 import { extractYouTubeVideoId } from '../youtube.js';
 import { StatsTable } from '../../teams/components/StatsTable';
@@ -391,6 +392,7 @@ export function GameDetailPage() {
   const [headerCardDataUrl, setHeaderCardDataUrl] = useState('');
   const [isSharingHeaderCard, setIsSharingHeaderCard] = useState(false);
   const isSharingHeaderCardRef = useRef(false);
+  const [clipShareState, setClipShareState] = useState({});
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
@@ -485,6 +487,7 @@ export function GameDetailPage() {
   };
   const entitlements = data.teamEntitlements || team.entitlements || {};
   const canViewReplay = canAccessReplay(team, entitlements);
+  const canShareHighlights = Boolean(data.canShareHighlights);
   const sortedEvents = [...game.events].sort((a, b) => {
     const aTime = new Date(a.occurredAt || 0).getTime();
     const bTime = new Date(b.occurredAt || 0).getTime();
@@ -716,6 +719,20 @@ export function GameDetailPage() {
 
     const returnUrl = `/games/${gameId}?composeFeedGame=1`;
     navigate(`/login?redirectTo=${encodeURIComponent(returnUrl)}`);
+  }
+
+  async function shareHighlightClip(eventId) {
+    setClipShareState((s) => ({ ...s, [eventId]: 'loading' }));
+    try {
+      await feedApi.createHighlightClipPost({ gameId, eventId });
+      setClipShareState((s) => ({ ...s, [eventId]: 'shared' }));
+      trackEvent('game_highlight_clip_shared', { game_id: gameId });
+    } catch (err) {
+      const msg = err.message?.toLowerCase().includes('already been shared')
+        ? 'Already shared'
+        : 'Failed to share';
+      setClipShareState((s) => ({ ...s, [eventId]: msg }));
+    }
   }
 
   function onFeedPostCreated() {
@@ -982,19 +999,41 @@ export function GameDetailPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {selectHighlights(data.highlights).map((h) => (
-              <GameHighlightClip
-                key={h.eventId}
-                videoUrl={h.videoUrl}
-                timestamp={h.videoTimestamp}
-                statType={h.statType}
-                playerName={h.playerName}
-                teamSide={h.teamSide}
-                participantName={
-                  isDualTeam && h.teamSide ? getParticipantName(participants, h.teamSide) : null
-                }
-              />
-            ))}
+            {selectHighlights(data.highlights).map((h) => {
+              const clipState =
+                clipShareState[h.eventId] ||
+                (data.sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
+              return (
+                <div key={h.eventId} className="flex shrink-0 flex-col">
+                  <GameHighlightClip
+                    videoUrl={h.videoUrl}
+                    timestamp={h.videoTimestamp}
+                    statType={h.statType}
+                    playerName={h.playerName}
+                    teamSide={h.teamSide}
+                    participantName={
+                      isDualTeam && h.teamSide ? getParticipantName(participants, h.teamSide) : null
+                    }
+                  />
+                  {canShareHighlights ? (
+                    <button
+                      type="button"
+                      disabled={clipState === 'loading' || clipState === 'shared'}
+                      onClick={() => shareHighlightClip(h.eventId)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {clipState === 'loading'
+                        ? 'Sharing…'
+                        : clipState === 'shared'
+                          ? '✓ Shared to Pulse'
+                          : clipState !== 'idle'
+                            ? clipState
+                            : 'Share to Pulse'}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}
