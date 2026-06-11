@@ -67,7 +67,7 @@ export function FeedList({ posts, onDelete, onNearEnd }) {
     return (
       <div
         ref={containerRef}
-        className="fixed inset-0 overflow-y-scroll snap-y snap-mandatory"
+        className="fixed inset-0 z-10 overflow-y-scroll snap-y snap-mandatory"
         style={{ scrollbarWidth: 'none' }}
         onScroll={(e) => {
           if (!onNearEnd) return;
