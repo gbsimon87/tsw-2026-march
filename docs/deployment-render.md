@@ -44,8 +44,14 @@ Set separate values for each environment:
 - MongoDB URIs
 - JWT secrets
 - Google OAuth callback URLs
-- SMTP credentials and sender identity (`SMTP_*`)
+- Resend credentials (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `CONTACT_EMAIL`)
+- Stripe credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO_MONTHLY`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`)
+- Cloudinary credentials (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`) — prod uses `tsw/feed/prod`, dev uses `tsw/feed/dev`
+- OpenAI (`OPENAI_API_KEY`, `OPENAI_GAME_SUMMARY_MODEL`, `OPENAI_GAME_SUMMARY_TIMEOUT_MS`)
+- `COOKIE_DOMAIN` — must match the deployed client domain (e.g. `.thesportyway.com` for prod; leave empty for dev)
 - PostHog keys (if enabled)
+
+> **Warning:** `render.yaml` currently still contains seven legacy SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`) that the application no longer reads. These must be replaced with the four Resend variables above before deploying, or the server will exit at startup in production.
 
 ## Post-deploy verification
 
@@ -62,10 +68,10 @@ Run these checks for both prod and dev stacks:
 If not using Blueprint sync:
 
 - API Service (`server/`)
-  - Build: `pnpm install --frozen-lockfile && pnpm build`
-  - Start: `pnpm start`
+  - Build: `pnpm install --frozen-lockfile && pnpm --filter server build`
+  - Start: `pnpm --filter server start`
 - Client Static Site (`client/`)
-  - Build: `pnpm install --frozen-lockfile && pnpm build`
-  - Publish dir: `dist`
+  - Build: `pnpm install --frozen-lockfile && pnpm --filter client build`
+  - Publish dir: `client/dist`
 
 You still need separate prod/dev services configured with the same branch rules.

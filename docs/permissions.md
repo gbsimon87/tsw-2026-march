@@ -39,13 +39,13 @@ This document defines the permission model for leagues, teams, and games. Enforc
 | Schedule a game (own team vs opponent)          | ✅    | ✅             | ✅                    | ❌            |
 | Track / append events to game                   | ✅    | ✅             | ✅ (managed team)     | ❌            |
 | Track button visible in league game list        | ✅    | ✅             | ✅ (own team's games) | ❌            |
-| Finalize (complete) a game                      | ✅    | ✅             | ❌                    | ❌            |
+| Finalize (complete) a game                      | ✅    | ✅             | ✅ (if game creator)  | ❌            |
 
 ## UI Behaviour Notes
 
 - **Track button** on `AdminLeaguePage` is disabled/greyed for team managers on games that don't involve their team. Computed client-side from `league.viewerContext.managedTeamIds`.
 - **Schedule Game form** (`AdminNewLeagueGamePage`) shows a reduced UI for team managers: their team is pre-set (read-only), they pick Home or Away, and choose an opponent. Full home/away/tracking selects are shown to owners and league managers only.
-- **League Managers section** on `AdminLeaguePage` is only rendered for the league owner.
+- **League Managers section** on `AdminLeaguePage` is visible to owners, league managers, and team managers (`canViewManagers = canEditLeague || viewerRole === 'team_manager'`). The Remove and Add-manager controls within it are restricted to the league owner only.
 
 ## Key Enforcement Points (server)
 
@@ -54,5 +54,7 @@ This document defines the permission model for leagues, teams, and games. Enforc
 - `assertTeamManagerOrOwner` — owner, league manager, or team manager (roster/member ops, team logo, join requests); returns `role` so callers can add further restrictions
 - `archiveLeagueTeamForLeague` — calls `assertTeamManagerOrOwner` then explicitly rejects `role === 'manager'`
 - `finishGameForUser` — calls `canFinalizeLeagueGame` (owner/league manager only) for any league game the requester didn't originally create
-- `getLeagueContextForGame` — league managers bypass both the `allowManager` gate and the per-team manager check; team managers must be the manager of the tracked team
+- `canManageLeagueGame` — called by `assertGameAccess`, `appendEventForUser`, and `deleteGameForUser`; returns true for the league owner, any active league manager, or a team manager of _either_ the home or away team. This is the runtime gate for event tracking and game deletion — distinct from the stricter tracked-team check in `getLeagueContextForGame`.
+- `canEditCompletedLeagueGame` — guards edits to already-completed league games; checks owner, active league manager, or team manager of the home, away, or tracked team.
+- `getLeagueContextForGame` — owners and league managers bypass both the `allowManager` gate and the per-team manager check; team managers must be the manager of the tracked team
 - `buildLeagueViewerContext` — attached to every `GET /leagues/:id` response as `viewerContext: { viewerRole, managedTeamIds }`; drives all client-side permission UI

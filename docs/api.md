@@ -13,12 +13,21 @@ Base path: `/api/v1`
 - `POST /auth/logout`
 - `POST /auth/refresh`
 - `GET /auth/me`
+- `POST /auth/avatar`
 - `POST /auth/request-verification`
 - `POST /auth/verify-email`
 - `POST /auth/forgot-password`
 - `POST /auth/reset-password`
-- `GET /auth/google/start`
-- `GET /auth/google/callback`
+- `GET /auth/google/start` _(requires Google OAuth configured)_
+- `GET /auth/google/callback` _(requires Google OAuth configured)_
+- `POST /auth/google/exchange` _(requires Google OAuth configured)_
+
+### Avatar Upload (`POST /auth/avatar`)
+
+- Requires authentication.
+- Multipart form-data.
+- Field name: `avatar`
+- Accepted mime types: `image/jpeg`, `image/png`, `image/webp`
 
 ### Request Payloads
 
@@ -74,6 +83,8 @@ Base path: `/api/v1`
 - `POST /teams`
 - `GET /teams`
 - `GET /teams/:teamId`
+- `PATCH /teams/:teamId`
+- `GET /teams/:teamId/entitlements`
 - `POST /teams/:teamId/logo`
 - `DELETE /teams/:teamId/logo`
 - `POST /teams/:teamId/players`
@@ -119,16 +130,34 @@ Base path: `/api/v1`
 
 - Removes the team logo metadata and attempts Cloudinary cleanup.
 
+### Entitlements (`GET /teams/:teamId/entitlements`)
+
+Returns the feature entitlements for the specified team. Requires authentication.
+
 ## Games
 
 - `POST /games`
 - `GET /games`
-- `GET /games/:gameId`
+- `GET /games/:gameId` _(public; authentication optional)_
+- `PATCH /games/:gameId`
+- `POST /games/:gameId/lineup`
 - `POST /games/:gameId/events`
+- `POST /games/:gameId/events/:eventId/insert-before`
+- `PATCH /games/:gameId/events/:eventId`
 - `DELETE /games/:gameId/events/:eventId`
 - `POST /games/:gameId/finish`
+- `DELETE /games/:gameId`
 
 ### Game Event Payload (`POST /games/:gameId/events`)
+
+The payload shape varies by `statType`:
+
+- **Tracked shot** (`FT_MADE`, `FT_MISS`, `FG2_MADE`, `FG2_MISS`, `FG3_MADE`, `FG3_MISS`): `playerId`, `zoneId`, `x`, `y` are **required**. Optional: `occurredAt` (ISO datetime), `teamSide` (`"home"` | `"away"`), `videoTimestamp` (number, seconds ≥ 0).
+- **Non-shot** (`AST`, `OREB`, `DREB`, `STL`, `BLK`, `TOV`, `FOUL`): `playerId` required. `zoneId`, `x`, `y` optional. Optional: `occurredAt`, `teamSide`, `videoTimestamp`.
+- **Substitution** (`SUB_IN`, `SUB_OUT`): `playerId` required. Optional: `relatedPlayerId`, `relatedTeamSide` (`"home"` | `"away"`), `zoneId`, `x`, `y`, `occurredAt`, `teamSide`, `videoTimestamp`.
+- **Opponent** (`OPP_FT_MADE`, `OPP_FG2_MADE`, `OPP_FG3_MADE`, `OPP_REB`): `playerId` is **not accepted**. Optional: `zoneId`, `x`, `y`, `occurredAt`, `videoTimestamp`.
+
+Example (tracked shot):
 
 ```json
 {
@@ -140,7 +169,37 @@ Base path: `/api/v1`
 }
 ```
 
+### Set Lineup Payload (`POST /games/:gameId/lineup`)
+
+```json
+{
+  "playerIds": ["id1", "id2", "id3", "id4", "id5"],
+  "teamSide": "home"
+}
+```
+
+- `playerIds` must contain exactly 5 player ID strings.
+- `teamSide` is optional (`"home"` | `"away"`); used in dual-team tracking games.
+
+### Update Game (`PATCH /games/:gameId`)
+
+All fields optional; at least one must be provided: `title`, `opponent` (nullable string), `scheduledAt` (ISO datetime, nullable), `videoUrl` (YouTube URL, nullable), `initialActiveSide` (`"home"` | `"away"`).
+
+### Update Event (`PATCH /games/:gameId/events/:eventId`)
+
+All fields optional: `playerId`, `teamSide`, `statType`, `zoneId`, `x`, `y`, `videoTimestamp` (number ≥ 0, nullable).
+
+### Insert Event Before (`POST /games/:gameId/events/:eventId/insert-before`)
+
+Inserts a new event immediately before the referenced event. Accepts the same payload shapes as `POST /games/:gameId/events`.
+
+### Delete Game (`DELETE /games/:gameId`)
+
+Permanently deletes the game and all its events.
+
 ### `statType` values
+
+Shooting (tracked team):
 
 - `FT_MADE`
 - `FT_MISS`
@@ -148,6 +207,28 @@ Base path: `/api/v1`
 - `FG2_MISS`
 - `FG3_MADE`
 - `FG3_MISS`
+
+Opponent scoring:
+
+- `OPP_FT_MADE`
+- `OPP_FG2_MADE`
+- `OPP_FG3_MADE`
+- `OPP_REB`
+
+Non-shooting stats:
+
+- `AST`
+- `OREB`
+- `DREB`
+- `STL`
+- `BLK`
+- `TOV`
+- `FOUL`
+
+Substitution:
+
+- `SUB_IN`
+- `SUB_OUT`
 
 ### `zoneId` values
 

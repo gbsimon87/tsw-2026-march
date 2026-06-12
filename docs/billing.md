@@ -20,6 +20,7 @@ Team Pro is billed monthly per team. It unlocks:
 
 - replay
 - shot maps on public game pages
+- priority billing support
 
 ## Billing Scope
 
@@ -44,7 +45,8 @@ Entitlements must be enforced server-side for premium data and mirrored client-s
 - Express webhook endpoint for subscription lifecycle updates
 - Team document stores billing state
 - Team billing success page polls owner team data to confirm access after redirect
-- Webhook replay protection is keyed by Stripe webhook `event.id` and stored on the team document as a bounded recent-event history
+- Webhook replay protection is keyed by Stripe webhook `event.id` and stored on the team document as a bounded recent-event history (capped at 25 entries via `MAX_PROCESSED_WEBHOOK_EVENT_IDS`; oldest entries evicted when the cap is exceeded). Idempotency checks consult both a `processedWebhookEventIds` array and a `lastWebhookEventId` field on the team document.
+- After every webhook mutation, `syncOwnerPlan` re-scans all teams owned by the affected user and sets their user plan to `pro` if any team has an active Pro subscription, or `free` otherwise. This means `user.plan` reflects whether the user owns _any_ Pro team, not just the one being updated.
 
 ## Source of Truth
 

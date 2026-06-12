@@ -86,9 +86,11 @@ Use these local URLs:
 - `STRIPE_CANCEL_URL`
 - `CLIENT_ORIGIN`
 - `MONGO_URI`
-- `MONGO_DB_NAME`
+- `MONGO_DB_NAME` (optional)
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`
+
+Note: all five Stripe vars are declared `.optional()` in `env.js` — the server boots without them, but billing endpoints will respond with `503 Billing is not configured` if `STRIPE_SECRET_KEY` is absent. For local portal testing (cancel/reactivate), ensure the Stripe Dashboard has the portal enabled in test mode and that `STRIPE_SUCCESS_URL` is set as the portal return URL (`POST /api/v1/billing/customer-portal` uses it).
 
 ## 8. Start the App
 
@@ -111,6 +113,9 @@ Keep the Stripe webhook forwarding command running in a separate terminal.
 7. Confirm redirect to the success page
 8. Confirm the success page is checking the specific upgraded team
 9. Confirm webhook processing updates the team to Pro
+
+   > Note: `checkout.session.completed` only stores the Stripe customer ID and billing email on the team — it does **not** set the plan to Pro. The plan upgrade is applied by the `customer.subscription.created` or `customer.subscription.updated` event that Stripe sends immediately after. Both events must be delivered and processed for Pro status to appear.
+
 10. Reload a game page and verify replay and shot maps are unlocked
 
 ## 10. Failure Checks
@@ -122,6 +127,7 @@ Verify these cases as well:
 - canceled subscription removes entitlements after webhook processing
 - replaying the same Stripe webhook does not create duplicate state transitions
 - a `past_due` team is not treated like fully active Team Pro in pricing or gated surfaces
+- `checkout.session.completed` arrives but no subsequent `customer.subscription.created` or `customer.subscription.updated` event — team remains on free plan even though checkout succeeded (check Stripe CLI output for the subscription event delivery)
 
 ## Troubleshooting
 
@@ -129,6 +135,7 @@ Verify these cases as well:
 - If webhook verification fails, verify `STRIPE_WEBHOOK_SECRET` came from the current `stripe listen` session
 - If billing state does not update, inspect server logs and Stripe CLI output for event delivery errors
 - If checkout finishes but the success page stays pending, confirm the returned `teamId` matches an owned team and the webhook event reached the API
+- If the team remains on the free plan after checkout completes, confirm both `checkout.session.completed` and `customer.subscription.created` (or `customer.subscription.updated`) were delivered — only the subscription event applies Pro entitlements
 
 ## Deployment Checklist
 
