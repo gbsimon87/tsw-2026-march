@@ -42,7 +42,7 @@ const teamSchema = new mongoose.Schema(
     colors: { type: [String], default: [] },
     homeVenue: { type: homeVenueSchema, default: null },
     players: { type: [playerSchema], default: [] },
-    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    plan: { type: String, enum: ['free', 'pro', 'team'], default: 'free' },
     subscriptionStatus: {
       type: String,
       enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
@@ -51,7 +51,9 @@ const teamSchema = new mongoose.Schema(
     stripeCustomerId: { type: String, default: null },
     stripeSubscriptionId: { type: String, default: null },
     stripePriceId: { type: String, default: null },
+    billingInterval: { type: String, enum: ['monthly', 'season', null], default: null },
     currentPeriodEnd: { type: Date, default: null },
+    trialEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     billingEmail: { type: String, default: null },
     lastWebhookEventId: { type: String, default: null },
@@ -89,6 +91,7 @@ async function saveTeam(team) {
 }
 
 module.exports = {
+  Team,
   createTeam,
   listTeamsByOwner,
   findTeamByIdAndOwner,

@@ -7,8 +7,16 @@ const teamsApiMocks = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 
+const leaguesApiMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+}));
+
 vi.mock('../../teams/api/teamsApi', () => ({
   teamsApi: teamsApiMocks,
+}));
+
+vi.mock('../../leagues/api/leaguesApi', () => ({
+  leaguesApi: leaguesApiMocks,
 }));
 
 function renderSuccessPage(initialEntry = '/billing/success?teamId=team-1') {
@@ -24,26 +32,27 @@ function renderSuccessPage(initialEntry = '/billing/success?teamId=team-1') {
 describe('BillingSuccessPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    leaguesApiMocks.list.mockResolvedValue({ leagues: [] });
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  test('shows active state once the upgraded team becomes pro', async () => {
+  test('shows active state once the team plan becomes active', async () => {
     teamsApiMocks.list.mockResolvedValue({
       teams: [
         {
           id: 'team-1',
           name: 'TSW A',
-          billing: { plan: 'pro', subscriptionStatus: 'active' },
+          billing: { plan: 'team', subscriptionStatus: 'active' },
         },
       ],
     });
 
     renderSuccessPage();
 
-    expect(await screen.findByText(/TSW A is now on Team Pro/i)).toBeInTheDocument();
+    expect(await screen.findByText(/TSW A is now on the Team plan/i)).toBeInTheDocument();
   });
 
   test('keeps polling while the team is still pending, then resolves active', async () => {
@@ -62,16 +71,16 @@ describe('BillingSuccessPage', () => {
           {
             id: 'team-1',
             name: 'TSW A',
-            billing: { plan: 'pro', subscriptionStatus: 'active' },
+            billing: { plan: 'team', subscriptionStatus: 'active' },
           },
         ],
       });
 
     renderSuccessPage();
 
-    expect(await screen.findByText(/Team Pro is still being finalized/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Team plan is still being finalized/i)).toBeInTheDocument();
     expect(
-      await screen.findByText(/TSW A is now on Team Pro/i, {}, { timeout: 4000 })
+      await screen.findByText(/TSW A is now on the Team plan/i, {}, { timeout: 4000 })
     ).toBeInTheDocument();
   }, 7000);
 
@@ -81,7 +90,7 @@ describe('BillingSuccessPage', () => {
         {
           id: 'team-1',
           name: 'TSW A',
-          billing: { plan: 'pro', subscriptionStatus: 'past_due' },
+          billing: { plan: 'team', subscriptionStatus: 'past_due' },
         },
       ],
     });
@@ -90,5 +99,21 @@ describe('BillingSuccessPage', () => {
 
     expect(await screen.findByText(/Billing Needs Attention/i)).toBeInTheDocument();
     expect(await screen.findByText(/still needs a billing review/i)).toBeInTheDocument();
+  });
+
+  test('shows active state for league resourceType', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-1',
+          name: 'TSW League',
+          billing: { plan: 'league', subscriptionStatus: 'trialing', trialEnd: null },
+        },
+      ],
+    });
+
+    renderSuccessPage('/billing/success?resourceType=league');
+
+    expect(await screen.findByText(/TSW League is now on the League plan/i)).toBeInTheDocument();
   });
 });

@@ -97,7 +97,7 @@ describe('NewTeamPage', () => {
       });
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/games/new');
+    expect(mockNavigate).toHaveBeenCalledWith('/pricing?teamId=team-1');
   });
 
   test('shows friendly inline errors when venue details are incomplete', async () => {

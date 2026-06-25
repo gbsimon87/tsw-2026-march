@@ -13,7 +13,11 @@ const {
 } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
-const { getTeamEntitlements, getBillingSummary } = require('../billing/billing.service');
+const {
+  getTeamEntitlements,
+  getBillingSummary,
+  isTeamActive,
+} = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
 const {
@@ -947,7 +951,10 @@ async function createGameForUser(userId, payload) {
     return sanitizeGame(game);
   }
 
-  await assertTeamOwnership(userId, payload.teamId);
+  const ownedTeam = await assertTeamOwnership(userId, payload.teamId);
+  if (!isTeamActive(ownedTeam)) {
+    throw new ApiError(402, 'An active Team subscription is required to track games');
+  }
   const game = await createGame({
     ownerUserId: userId,
     teamId: payload.teamId,
@@ -1204,6 +1211,13 @@ function requireBothLineups(game) {
 
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
+
+  if (game.gameContext === 'standalone' && game.teamId) {
+    const gameTeam = await findTeamById(String(game.teamId));
+    if (gameTeam && !isTeamActive(gameTeam)) {
+      throw new ApiError(402, 'An active Team subscription is required to track stats');
+    }
+  }
 
   const context = await resolveGameTeamContext(userId, game);
   const insertBeforeEventId = options.insertBeforeEventId || null;

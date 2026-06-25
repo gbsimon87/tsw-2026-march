@@ -16,7 +16,11 @@ const {
 } = require('./teams.repository');
 const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
-const { getBillingSummary, getTeamEntitlements } = require('../billing/billing.service');
+const {
+  getBillingSummary,
+  getTeamEntitlements,
+  assertTeamCreationAllowed,
+} = require('../billing/billing.service');
 const {
   uploadImageBuffer,
   destroyImage,
@@ -413,6 +417,8 @@ function buildPublicPlayerSummary(gameRows) {
 }
 
 async function createTeamForUser(userId, payload) {
+  await assertTeamCreationAllowed(userId);
+
   const players = (payload.players || []).map((player) => ({
     displayName: player.displayName.trim(),
     jerseyNumber: player.jerseyNumber,

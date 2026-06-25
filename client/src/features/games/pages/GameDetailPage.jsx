@@ -256,7 +256,9 @@ function canAccessReplay(team, entitlements) {
     return true;
   }
 
-  return team?.billing?.plan === 'pro' && team?.billing?.subscriptionStatus === 'active';
+  const plan = team?.billing?.plan;
+  const status = team?.billing?.subscriptionStatus;
+  return (plan === 'team' || plan === 'pro') && (status === 'active' || status === 'trialing');
 }
 
 function buildPlayersById(data, isDualTeam) {
@@ -690,10 +692,12 @@ export function GameDetailPage() {
       replayFilters={data.replayFilters || ['all']}
     />
   ) : (
-    <LockedFeatureCard
-      title="Replay is only available for Pro users"
-      description="Upgrade this team to Pro to unlock possession replay for tracked games."
-    />
+    <LockedFeatureCard planName="Team" pricingHref="/pricing">
+      <div className="rounded-xl bg-slate-100 p-8 text-center text-slate-400">
+        <p className="text-lg font-semibold">Replay</p>
+        <p className="mt-1 text-sm">Event-by-event possession replay</p>
+      </div>
+    </LockedFeatureCard>
   );
 
   function updateSearchParam(name, value) {

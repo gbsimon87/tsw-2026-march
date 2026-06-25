@@ -1021,6 +1021,26 @@ export function GameTrackPage() {
     return <SportsLoader label="Loading tracking session" fullPage />;
   }
 
+  if (team && team.entitlements?.canTrackStats === false) {
+    return (
+      <main className="mx-auto max-w-xl space-y-6 py-16 text-center">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team feature</p>
+        <h1 className="text-2xl font-bold text-slate-900">
+          This team needs an active plan to track games.
+        </h1>
+        <p className="text-sm text-slate-600">
+          Subscribe to the Team plan to unlock full game tracking, replay, and shot maps.
+        </p>
+        <Link
+          to={`/pricing?teamId=${encodeURIComponent(teamId || '')}`}
+          className="inline-block rounded-lg bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+        >
+          Start free trial →
+        </Link>
+      </main>
+    );
+  }
+
   const gameSummary = data.gameSummary || {
     teamPoints: boxScore.teamTotals?.points || 0,
     opponentPoints: boxScore.opponentTotals?.points || 0,

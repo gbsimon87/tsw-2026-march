@@ -1,6 +1,7 @@
 const { ApiError } = require('../../utils/apiError');
 const service = require('./feed.service');
 const { listFeedSchema, shareableLookupSchema } = require('./feed.validation');
+const { assertFeedPostingAllowed } = require('../billing/billing.service');
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -18,36 +19,42 @@ async function list(req, res) {
 
 async function createImage(req, res) {
   const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
   const post = await service.createImagePostForUser(userId, req.file, req.body.caption);
   res.status(201).json({ post });
 }
 
 async function createVideo(req, res) {
   const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
   const post = await service.createVideoPostForUser(userId, req.file, req.body.caption);
   res.status(201).json({ post });
 }
 
 async function createGameCard(req, res) {
   const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
   const post = await service.createGameCardPostForUser(userId, req.body);
   res.status(201).json({ post });
 }
 
 async function createPlayerCard(req, res) {
   const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
   const post = await service.createPlayerCardPostForUser(userId, req.body);
   res.status(201).json({ post });
 }
 
 async function createTeamCard(req, res) {
   const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
   const post = await service.createTeamCardPostForUser(userId, req.body);
   res.status(201).json({ post });
 }
 
 async function createHighlightClip(req, res) {
   const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
   const post = await service.createHighlightClipPostForUser(userId, req.body);
   res.status(201).json({ post });
 }
