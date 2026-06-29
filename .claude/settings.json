@@ -1,0 +1,29 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(git -C /Users/simoncordova/Desktop/Simon/tsw-2026-march status)",
+      "Bash(git -C /Users/simoncordova/Desktop/Simon/tsw-2026-march commit -m ' *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(git status)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git branch *)",
+      "Bash(git show *)",
+      "Bash(pnpm *)",
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(docker compose *)",
+      "Bash(jest *)",
+      "Bash(eslint *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(git commit -m 'chore: configure Claude Code settings for MERN stack *)"
+    ]
+  }
+}
