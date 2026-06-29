@@ -23,6 +23,7 @@ jest.mock('../../modules/billing/billing.service', () => ({
     canViewReplay: false,
     canViewShotMaps: false,
   })),
+  isTeamActive: jest.fn(() => true),
 }));
 
 jest.mock('../../modules/games/gameRecap.service', () => ({
@@ -48,6 +49,14 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
 }));
 
 jest.mock('mongoose', () => ({
+  Schema: Object.assign(
+    function Schema() {
+      return { index: jest.fn() };
+    },
+    { Types: { ObjectId: function ObjectId() {} } }
+  ),
+  model: jest.fn(() => ({})),
+  models: {},
   Types: {
     ObjectId: {
       isValid: jest.fn(() => true),

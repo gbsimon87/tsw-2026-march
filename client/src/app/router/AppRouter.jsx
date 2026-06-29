@@ -33,7 +33,6 @@ import { PublicLeaguePlayerPage } from '../../features/leagues/pages/PublicLeagu
 import { MySportyPage } from '../../features/leagues/pages/MySportyPage';
 import { AboutPage } from '../../pages/AboutPage';
 import { ContactPage } from '../../pages/ContactPage';
-import { PricingPage } from '../../features/billing/pages/PricingPage';
 import { BillingSuccessPage } from '../../features/billing/pages/BillingSuccessPage';
 import { BillingCancelPage } from '../../features/billing/pages/BillingCancelPage';
 
@@ -89,7 +88,7 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/pricing" element={<Navigate to="/" replace />} />
         <Route path="/billing/success" element={<BillingSuccessPage />} />
         <Route path="/billing/cancel" element={<BillingCancelPage />} />
         <Route path="/league/:leagueSlug" element={<PublicLeaguePage />} />

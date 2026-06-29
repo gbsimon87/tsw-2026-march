@@ -43,9 +43,6 @@ export function AppLayout() {
                 Admin
               </NavLink>
             ) : null}
-            <NavLink to="/pricing" className={desktopNavLinkClass}>
-              Pricing
-            </NavLink>
             <NavLink to="/about" className={desktopNavLinkClass}>
               About
             </NavLink>
@@ -159,13 +156,6 @@ export function AppLayout() {
                 Admin
               </NavLink>
             ) : null}
-            <NavLink
-              to="/pricing"
-              className={mobileNavLinkClass}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Pricing
-            </NavLink>
             <NavLink
               to="/about"
               className={mobileNavLinkClass}
