@@ -22,6 +22,7 @@ jest.mock('../../modules/billing/billing.service', () => ({
     canViewReplay: false,
     canViewShotMaps: false,
   })),
+  isTeamActive: jest.fn(() => true),
 }));
 
 jest.mock('../../modules/leagues/leagues.service', () => ({
@@ -32,6 +33,14 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
 }));
 
 jest.mock('mongoose', () => ({
+  Schema: Object.assign(
+    function Schema() {
+      return { index: jest.fn() };
+    },
+    { Types: { ObjectId: function ObjectId() {} } }
+  ),
+  model: jest.fn(() => ({})),
+  models: {},
   Types: {
     ObjectId: {
       isValid: jest.fn(() => true),
@@ -39,7 +48,7 @@ jest.mock('mongoose', () => ({
   },
 }));
 
-const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
+const { findTeamByIdAndOwner, findTeamById } = require('../../modules/teams/teams.repository');
 const {
   createGame,
   listGamesByOwner,
@@ -88,6 +97,7 @@ describe('games service opponent support', () => {
   });
 
   test('listGamesForUser includes opponent and null fallback', async () => {
+    findTeamById.mockResolvedValue({ _id: 'team-1', name: 'Team', players: [] });
     listGamesByOwner.mockResolvedValue([
       {
         _id: 'game-1',

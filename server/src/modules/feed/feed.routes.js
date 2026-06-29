@@ -13,6 +13,14 @@ const upload = multer({
   },
 });
 
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: env.FEED_VIDEO_MAX_BYTES,
+    files: 1,
+  },
+});
+
 const feedRouter = Router();
 
 feedRouter.get('/', asyncHandler(controller.list));
@@ -22,9 +30,11 @@ feedRouter.get('/shareable/teams', asyncHandler(controller.listShareableTeams));
 
 feedRouter.use(authMiddleware);
 feedRouter.post('/image', upload.single('file'), asyncHandler(controller.createImage));
+feedRouter.post('/video', videoUpload.single('file'), asyncHandler(controller.createVideo));
 feedRouter.post('/game-card', asyncHandler(controller.createGameCard));
 feedRouter.post('/player-card', asyncHandler(controller.createPlayerCard));
 feedRouter.post('/team-card', asyncHandler(controller.createTeamCard));
+feedRouter.post('/highlight-clip', asyncHandler(controller.createHighlightClip));
 feedRouter.delete('/:postId', asyncHandler(controller.remove));
 
 module.exports = {

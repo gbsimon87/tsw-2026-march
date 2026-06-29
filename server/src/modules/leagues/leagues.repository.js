@@ -21,7 +21,7 @@ const leagueSchema = new mongoose.Schema(
     status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
     isPublic: { type: Boolean, default: true },
     logo: { type: logoSchema, default: null },
-    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    plan: { type: String, enum: ['free', 'pro', 'league'], default: 'free' },
     subscriptionStatus: {
       type: String,
       enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
@@ -30,8 +30,13 @@ const leagueSchema = new mongoose.Schema(
     stripeCustomerId: { type: String, default: null },
     stripeSubscriptionId: { type: String, default: null },
     stripePriceId: { type: String, default: null },
+    billingInterval: { type: String, enum: ['monthly', 'season', null], default: null },
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
+    trialEnd: { type: Date, default: null },
+    billingEmail: { type: String, default: null },
+    processedWebhookEventIds: { type: [String], default: [] },
+    lastWebhookEventId: { type: String, default: null },
   },
   { timestamps: true }
 );
@@ -159,6 +164,10 @@ function createLeague(input) {
 
 function listLeaguesByOwner(ownerUserId) {
   return League.find({ ownerUserId }).sort({ createdAt: -1 });
+}
+
+function findLeaguesByOwner(ownerUserId) {
+  return listLeaguesByOwner(ownerUserId);
 }
 
 function listPublicLeagues() {
@@ -321,12 +330,14 @@ module.exports = {
   LeagueTeam,
   LeaguePlayer,
   LeagueTeamMember,
+  LeagueManager,
   LeagueJoinRequest,
   createLeague,
   listLeaguesByOwner,
   listPublicLeagues,
   findLeagueById,
   findLeagueByIdAndOwner,
+  findLeaguesByOwner,
   findLeagueBySlug,
   listLeaguesByIds,
   saveLeague,

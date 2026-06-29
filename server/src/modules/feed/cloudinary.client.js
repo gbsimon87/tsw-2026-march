@@ -48,8 +48,46 @@ async function destroyImage(publicId) {
   return cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
 }
 
+async function uploadVideoBuffer(file) {
+  if (!isCloudinaryConfigured()) {
+    throw new Error('Cloudinary is not configured');
+  }
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: env.CLOUDINARY_FOLDER,
+        resource_type: 'video',
+        eager: [{ format: 'mp4', quality: 'auto' }],
+        eager_async: false,
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(result);
+      }
+    );
+
+    const readable = new stream.PassThrough();
+    readable.end(file.buffer);
+    readable.pipe(uploadStream);
+  });
+}
+
+async function destroyVideo(publicId) {
+  if (!publicId || !isCloudinaryConfigured()) {
+    return null;
+  }
+
+  return cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+}
+
 module.exports = {
   isCloudinaryConfigured,
   uploadImageBuffer,
   destroyImage,
+  uploadVideoBuffer,
+  destroyVideo,
 };

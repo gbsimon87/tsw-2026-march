@@ -1,11 +1,11 @@
 const { Router } = require('express');
 const { asyncHandler } = require('../../utils/asyncHandler');
-const { authMiddleware } = require('../../middleware/auth.middleware');
+const { authMiddleware, optionalAuthMiddleware } = require('../../middleware/auth.middleware');
 const controller = require('./games.controller');
 
 const gamesRouter = Router();
 
-gamesRouter.get('/:gameId', asyncHandler(controller.getPublicById));
+gamesRouter.get('/:gameId', optionalAuthMiddleware, asyncHandler(controller.getPublicById));
 gamesRouter.use(authMiddleware);
 gamesRouter.post('/', asyncHandler(controller.create));
 gamesRouter.get('/', asyncHandler(controller.list));

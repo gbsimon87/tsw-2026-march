@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { findSharedEventIds } = require('../feed/feed.repository');
 const { env } = require('../../config/env');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
 const { TEAM_SIDES } = require('../shared/stats.constants');
 const {
-  createLeague,
   listLeaguesByOwner,
   listPublicLeagues: listPublicLeaguesRepo,
   findLeagueById,
@@ -98,10 +98,14 @@ function sanitizeLogo(logo) {
   };
 }
 
+const VALID_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'canceled']);
+
 function normalizeLeagueBilling(league) {
   return {
     plan: league.plan || 'free',
-    subscriptionStatus: league.subscriptionStatus || 'inactive',
+    subscriptionStatus: VALID_SUBSCRIPTION_STATUSES.has(league.subscriptionStatus)
+      ? league.subscriptionStatus
+      : 'inactive',
     cancelAtPeriodEnd: Boolean(league.cancelAtPeriodEnd),
     currentPeriodEnd: league.currentPeriodEnd ?? null,
   };
@@ -384,41 +388,48 @@ async function buildUsersMap(userIds) {
   return new Map(entries.filter(Boolean).map((user) => [String(user._id), user]));
 }
 
-async function assertLeaguePremiumUser(userId) {
-  const user = await findUserById(userId);
-  if (!user) {
-    throw new ApiError(404, 'User not found');
+async function createLeagueForUser(userId, payload) {
+  // League documents are created by the Stripe webhook after checkout.
+  // This function configures the stub league (name, slug, settings) that the
+  // webhook created. It finds the most recent unconfigured league for this owner.
+  const { isLeagueActive } = require('../billing/billing.service');
+  const { League } = require('./leagues.repository');
+
+  const stub = await League.findOne({
+    ownerUserId: userId,
+    name: 'My League',
+  }).sort({ createdAt: -1 });
+
+  if (!stub) {
+    throw new ApiError(
+      402,
+      'No pending league found. Complete checkout before configuring your league.'
+    );
   }
 
-  return user;
-}
+  if (!isLeagueActive(stub)) {
+    throw new ApiError(402, 'League subscription is not active. Complete checkout first.');
+  }
 
-async function createLeagueForUser(userId, payload) {
-  await assertLeaguePremiumUser(userId);
   const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
-
   if (!slug) {
     throw new ApiError(400, 'League slug is required');
   }
 
   const existing = await findLeagueBySlug(slug);
-  if (existing) {
+  if (existing && String(existing._id) !== String(stub._id)) {
     throw new ApiError(409, 'League slug is already in use');
   }
 
-  const league = await createLeague({
-    ownerUserId: userId,
-    name: payload.name.trim(),
-    slug,
-    description: payload.description?.trim() || undefined,
-    seasonLabel: payload.seasonLabel?.trim() || undefined,
-    status: 'active',
-    isPublic: true,
-    plan: 'pro',
-    subscriptionStatus: 'active',
-  });
+  stub.name = payload.name.trim();
+  stub.slug = slug;
+  stub.description = payload.description?.trim() || stub.description || undefined;
+  stub.seasonLabel = payload.seasonLabel?.trim() || stub.seasonLabel || undefined;
+  stub.status = 'active';
+  stub.isPublic = payload.isPublic !== false;
 
-  return sanitizeLeague(league);
+  await saveLeague(stub);
+  return sanitizeLeague(stub);
 }
 
 async function listLeaguesForUser(userId) {
@@ -586,7 +597,11 @@ async function archiveLeagueForUser(userId, leagueId) {
 }
 
 async function createLeagueTeamForLeague(userId, leagueId, payload) {
+  const { isLeagueActive } = require('../billing/billing.service');
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+  if (!isLeagueActive(league)) {
+    throw new ApiError(402, 'An active League subscription is required to add teams');
+  }
   ensureLeagueEditable(league);
 
   const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
@@ -738,6 +753,50 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
   };
 }
 
+const HIGHLIGHT_STAT_TYPES = new Set([
+  'FG2_MADE',
+  'FG2_MISS',
+  'FG3_MADE',
+  'FG3_MISS',
+  'FT_MADE',
+  'FT_MISS',
+  'AST',
+  'STL',
+  'BLK',
+]);
+
+function buildLeaguePlayerHighlights(games, leagueTeamId, leaguePlayerId) {
+  const highlights = [];
+  for (const game of games) {
+    if (!game.videoUrl) continue;
+    const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, leagueTeamId);
+    const snapshotPlayer = rosterSnapshot.find(
+      (p) => String(p.leaguePlayerId || p._id) === String(leaguePlayerId)
+    );
+    if (!snapshotPlayer) continue;
+    const snapshotPlayerIdStr = String(snapshotPlayer._id);
+    for (const ev of game.events || []) {
+      if (
+        ev.playerId &&
+        String(ev.playerId) === snapshotPlayerIdStr &&
+        eventFilter(ev) &&
+        HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
+        typeof ev.videoTimestamp === 'number'
+      ) {
+        highlights.push({
+          eventId: String(ev._id),
+          gameId: String(game._id),
+          statType: ev.statType,
+          videoTimestamp: ev.videoTimestamp,
+          videoUrl: game.videoUrl,
+          gameTitle: game.title || null,
+        });
+      }
+    }
+  }
+  return highlights;
+}
+
 function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsById = new Map()) {
   const gameRows = [];
 
@@ -886,7 +945,12 @@ async function getMyLeagueProfiles(userId) {
   return { profiles };
 }
 
-async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId) {
+async function getPublicLeaguePlayerBySlug(
+  leagueSlug,
+  teamSlug,
+  leaguePlayerId,
+  viewerUserId = null
+) {
   const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
   const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
   if (!team) {
@@ -905,13 +969,26 @@ async function getPublicLeaguePlayerBySlug(leagueSlug, teamSlug, leaguePlayerId)
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
+  const highlights = buildLeaguePlayerHighlights(games, team._id, player._id);
+
+  const highlightEventIds = highlights.map((h) => h.eventId).filter(Boolean);
+  const sharedEventIds = await findSharedEventIds(highlightEventIds);
+
+  const sanitizedPlayer = sanitizeLeaguePlayer(player, usersById);
+  sanitizedPlayer.isMe = Boolean(
+    viewerUserId &&
+    player.claimedByUserId &&
+    String(player.claimedByUserId) === String(viewerUserId)
+  );
 
   return {
     league: sanitizeLeague(league),
     team: sanitizeLeagueTeam(team),
-    player: sanitizeLeaguePlayer(player, usersById),
+    player: sanitizedPlayer,
     summary: buildLeaguePlayerSummary(gameRows),
     games: gameRows,
+    highlights,
+    sharedEventIds,
   };
 }
 

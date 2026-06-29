@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const multer = require('multer');
 const { asyncHandler } = require('../../utils/asyncHandler');
-const { authMiddleware } = require('../../middleware/auth.middleware');
+const { authMiddleware, optionalAuthMiddleware } = require('../../middleware/auth.middleware');
 const { env } = require('../../config/env');
 const controller = require('./leagues.controller');
 
@@ -15,6 +15,7 @@ const upload = multer({
   },
 });
 
+publicLeaguesRouter.use(optionalAuthMiddleware);
 publicLeaguesRouter.get('/', asyncHandler(controller.listPublic));
 publicLeaguesRouter.get('/:leagueSlug/standings', asyncHandler(controller.publicStandings));
 publicLeaguesRouter.get('/:leagueSlug/games', asyncHandler(controller.publicGames));

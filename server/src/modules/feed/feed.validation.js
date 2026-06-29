@@ -18,6 +18,14 @@ const createTeamCardPostSchema = z.object({
   caption: captionSchema,
 });
 
+const mongoIdSchema = z.string().regex(/^[a-f0-9]{24}$/, 'Invalid id format');
+
+const createHighlightClipPostSchema = z.object({
+  gameId: mongoIdSchema,
+  eventId: mongoIdSchema,
+  caption: captionSchema,
+});
+
 const listFeedSchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(50).default(20),
@@ -32,6 +40,7 @@ module.exports = {
   createGameCardPostSchema,
   createPlayerCardPostSchema,
   createTeamCardPostSchema,
+  createHighlightClipPostSchema,
   listFeedSchema,
   shareableLookupSchema,
 };

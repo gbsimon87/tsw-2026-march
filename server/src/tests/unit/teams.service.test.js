@@ -19,6 +19,7 @@ jest.mock('../../modules/games/games.service', () => ({
 jest.mock('../../modules/billing/billing.service', () => ({
   getBillingSummary: jest.fn(() => ({ plan: 'free' })),
   getTeamEntitlements: jest.fn(() => ({ canUseReplay: false })),
+  assertTeamCreationAllowed: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('../../modules/feed/cloudinary.client', () => ({

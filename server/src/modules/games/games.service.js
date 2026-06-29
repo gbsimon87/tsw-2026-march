@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
+const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
@@ -12,7 +13,11 @@ const {
 } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
-const { getTeamEntitlements, getBillingSummary } = require('../billing/billing.service');
+const {
+  getTeamEntitlements,
+  getBillingSummary,
+  isTeamActive,
+} = require('../billing/billing.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
 const {
@@ -35,8 +40,65 @@ function sanitizeEvent(event) {
     zoneId: event.zoneId ?? null,
     x: event.x ?? null,
     y: event.y ?? null,
+    videoTimestamp: typeof event.videoTimestamp === 'number' ? event.videoTimestamp : null,
     occurredAt: event.occurredAt,
   };
+}
+
+const HIGHLIGHT_STAT_TYPES = new Set([
+  'FG2_MADE',
+  'FG2_MISS',
+  'FG3_MADE',
+  'FG3_MISS',
+  'FT_MADE',
+  'FT_MISS',
+  'AST',
+  'STL',
+  'BLK',
+]);
+
+function buildPlayersByIdMap(game, participants, teamDoc) {
+  const entries = [];
+  if (game.trackingMode === 'dual_team') {
+    for (const side of ['home', 'away']) {
+      const roster = participants?.[side]?.rosterSnapshot || participants?.[side]?.players || [];
+      for (const p of roster) {
+        entries.push([String(p._id || p.id), p]);
+      }
+    }
+  } else {
+    const roster = game.rosterSnapshot?.length ? game.rosterSnapshot : teamDoc?.players || [];
+    for (const p of roster) {
+      entries.push([String(p._id || p.id), p]);
+    }
+  }
+  return new Map(entries);
+}
+
+function buildGameHighlights(game, playersById) {
+  if (!game.videoUrl) return [];
+
+  return (game.events || [])
+    .filter(
+      (ev) =>
+        ev.playerId &&
+        HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
+        typeof ev.videoTimestamp === 'number'
+    )
+    .map((ev) => {
+      const player = playersById.get(String(ev.playerId));
+      return {
+        eventId: String(ev._id),
+        playerId: String(ev.playerId),
+        playerName: player?.displayName || null,
+        leaguePlayerId: player?.leaguePlayerId ? String(player.leaguePlayerId) : null,
+        teamSide: ev.teamSide || null,
+        statType: ev.statType,
+        videoTimestamp: ev.videoTimestamp,
+        videoUrl: game.videoUrl,
+        gameTitle: game.title || null,
+      };
+    });
 }
 
 function sanitizeLogo(logo) {
@@ -523,6 +585,18 @@ async function assertGameAccess(userId, gameId) {
   throw new ApiError(404, 'Game not found');
 }
 
+async function canAccessGame(userId, game) {
+  if (!userId || !game) return false;
+  if (String(game.ownerUserId) === String(userId)) return true;
+  if (game.trackingMode === 'dual_team' && game.gameContext === 'standalone') {
+    if (await canAccessStandaloneDualGame(userId, game)) return true;
+  }
+  if (game.gameContext === 'league') {
+    if (await canManageLeagueGame(userId, game)) return true;
+  }
+  return false;
+}
+
 function buildParticipantFromStandaloneTeam(team, side) {
   return {
     side,
@@ -877,7 +951,10 @@ async function createGameForUser(userId, payload) {
     return sanitizeGame(game);
   }
 
-  await assertTeamOwnership(userId, payload.teamId);
+  const ownedTeam = await assertTeamOwnership(userId, payload.teamId);
+  if (!isTeamActive(ownedTeam)) {
+    throw new ApiError(402, 'An active Team subscription is required to track games');
+  }
   const game = await createGame({
     ownerUserId: userId,
     teamId: payload.teamId,
@@ -1055,6 +1132,7 @@ async function getGameForUser(userId, gameId) {
           logo: league.logo?.url ? { url: league.logo.url } : null,
         }
       : null,
+    highlights: buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc)),
     boxScore,
     replayFilters: game.trackingMode === 'dual_team' ? ['all', 'home', 'away'] : ['all'],
     teamEntitlements: team.entitlements,
@@ -1069,8 +1147,31 @@ async function getGameForUser(userId, gameId) {
   };
 }
 
-async function getPublicGame(gameId) {
-  return getGameForUser(null, gameId);
+function isClaimedPlayerInGameSnapshot(userId, game) {
+  const allRosters = [
+    ...(game.rosterSnapshot || []),
+    ...(game.homeRosterSnapshot || []),
+    ...(game.awayRosterSnapshot || []),
+  ];
+  return allRosters.some((p) => p.claimedByUserId && String(p.claimedByUserId) === String(userId));
+}
+
+async function getPublicGame(gameId, viewerUserId = null) {
+  const result = await getGameForUser(null, gameId);
+
+  const highlightEventIds = (result.highlights || []).map((h) => h.eventId).filter(Boolean);
+  result.sharedEventIds = await findSharedEventIds(highlightEventIds);
+  result.canShareHighlights = false;
+
+  if (viewerUserId) {
+    const rawGame = await findGameById(gameId);
+    if (rawGame) {
+      result.canShareHighlights =
+        (await canAccessGame(viewerUserId, rawGame)) ||
+        isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
+    }
+  }
+  return result;
 }
 
 function getTeamDocForSide(game, participants, side, fallbackTeamDoc) {
@@ -1110,6 +1211,13 @@ function requireBothLineups(game) {
 
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
+
+  if (game.gameContext === 'standalone' && game.teamId) {
+    const gameTeam = await findTeamById(String(game.teamId));
+    if (gameTeam && !isTeamActive(gameTeam)) {
+      throw new ApiError(402, 'An active Team subscription is required to track stats');
+    }
+  }
 
   const context = await resolveGameTeamContext(userId, game);
   const insertBeforeEventId = options.insertBeforeEventId || null;
@@ -1199,6 +1307,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
         zoneId: payload.zoneId,
         x: payload.x,
         y: payload.y,
+        ...(typeof payload.videoTimestamp === 'number'
+          ? { videoTimestamp: payload.videoTimestamp }
+          : {}),
         occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
       },
       insertBeforeEventId
@@ -1266,6 +1377,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
       zoneId: payload.zoneId,
       x: payload.x,
       y: payload.y,
+      ...(typeof payload.videoTimestamp === 'number'
+        ? { videoTimestamp: payload.videoTimestamp }
+        : {}),
       occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
     },
     insertBeforeEventId
@@ -1332,6 +1446,7 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (patch.zoneId !== undefined) event.zoneId = patch.zoneId;
   if (patch.x !== undefined) event.x = patch.x;
   if (patch.y !== undefined) event.y = patch.y;
+  if (patch.videoTimestamp !== undefined) event.videoTimestamp = patch.videoTimestamp ?? undefined;
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
   await saveGame(game);
@@ -1408,5 +1523,7 @@ module.exports = {
   buildGameSummary,
   canAccessStandaloneDualGame,
   canEditStandaloneDualGame,
+  canAccessGame,
   resolveDualGameParticipants,
+  HIGHLIGHT_STAT_TYPES,
 };

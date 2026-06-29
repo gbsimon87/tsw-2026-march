@@ -47,7 +47,7 @@ async function getById(req, res) {
 }
 
 async function getPublicById(req, res) {
-  const result = await gamesService.getPublicGame(req.params.gameId);
+  const result = await gamesService.getPublicGame(req.params.gameId, req.auth?.userId || null);
   res.status(200).json(result);
 }
 

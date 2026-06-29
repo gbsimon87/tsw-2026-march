@@ -9,7 +9,7 @@ jest.mock('../../services/email.service', () => ({
 describe('contact routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    sendTemplateEmail.mockResolvedValue({ delivery: 'smtp' });
+    sendTemplateEmail.mockResolvedValue({ delivery: 'resend' });
   });
 
   test('sends a contact form email', async () => {
@@ -31,6 +31,7 @@ describe('contact routes', () => {
     expect(response.body).toEqual({ ok: true });
     expect(sendTemplateEmail).toHaveBeenCalledWith(
       expect.objectContaining({
+        replyTo: 'local.test@example.com',
         fallbackLabel: 'contact_form',
         subject: 'Contact form: Local Test (Eastside Hoops)',
         text: expect.stringContaining('Email: local.test@example.com'),

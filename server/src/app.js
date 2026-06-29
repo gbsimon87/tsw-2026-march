@@ -17,6 +17,7 @@ const { notFoundMiddleware } = require('./middleware/notFound.middleware');
 
 function createApp() {
   const app = express();
+  app.set('trust proxy', 1);
 
   app.use(requestIdMiddleware);
   app.use(

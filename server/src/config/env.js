@@ -18,16 +18,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.coerce.number().int().positive().optional(),
-  SMTP_SECURE: z
-    .union([z.boolean(), z.string()])
-    .transform((value) => value === true || value === 'true')
-    .default(false),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
-  SMTP_FROM_EMAIL: z.string().email().optional(),
-  SMTP_FROM_NAME: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().email().optional(),
+  RESEND_FROM_NAME: z.string().optional(),
+  CONTACT_EMAIL: z.string().email().optional(),
   EMAIL_VERIFY_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   POSTHOG_KEY: z.string().optional(),
@@ -38,6 +32,10 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID_PRO_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_ID_TEAM_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_ID_TEAM_SEASON: z.string().optional(),
+  STRIPE_PRICE_ID_LEAGUE_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_ID_LEAGUE_SEASON: z.string().optional(),
   STRIPE_SUCCESS_URL: z.string().url().optional(),
   STRIPE_CANCEL_URL: z.string().url().optional(),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -54,6 +52,12 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(5 * 1024 * 1024),
+  FEED_VIDEO_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(100 * 1024 * 1024),
+  FEED_VIDEO_MAX_DURATION_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -67,12 +71,10 @@ const env = parsed.data;
 
 if (env.NODE_ENV === 'production') {
   const requiredSmtpKeys = [
-    'SMTP_HOST',
-    'SMTP_PORT',
-    'SMTP_USER',
-    'SMTP_PASS',
-    'SMTP_FROM_EMAIL',
-    'SMTP_FROM_NAME',
+    'RESEND_API_KEY',
+    'RESEND_FROM_EMAIL',
+    'RESEND_FROM_NAME',
+    'CONTACT_EMAIL',
   ];
   const missing = requiredSmtpKeys.filter((key) => {
     const value = env[key];

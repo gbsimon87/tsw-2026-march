@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { useAuth } from '../../../app/store/AuthContext';
+import { trackEvent } from '../../analytics/trackEvent';
 import { Tabs } from '../../../components/Tabs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
+import { feedApi } from '../../feed/api/feedApi';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
+import { extractYouTubeVideoId } from '../youtube.js';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
@@ -19,6 +22,63 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
+
+const HIGHLIGHT_LABELS = {
+  FG2_MADE: '2PT Make',
+  FG2_MISS: '2PT Miss',
+  FG3_MADE: '3PT Make',
+  FG3_MISS: '3PT Miss',
+  FT_MADE: 'FT Make',
+  FT_MISS: 'FT Miss',
+  AST: 'Assist',
+  STL: 'Steal',
+  BLK: 'Block',
+};
+
+const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
+const MAX_HIGHLIGHTS = 5;
+
+function selectHighlights(highlights) {
+  return [...(highlights || [])]
+    .sort((a, b) => (HIGHLIGHT_PRIORITY[a.statType] ?? 2) - (HIGHLIGHT_PRIORITY[b.statType] ?? 2))
+    .slice(0, MAX_HIGHLIGHTS);
+}
+
+function GameHighlightClip({
+  videoUrl,
+  timestamp,
+  statType,
+  playerName,
+  teamSide,
+  participantName,
+}) {
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) return null;
+  const start = Math.max(0, timestamp - 5);
+  const end = timestamp + 5;
+  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
+  const label = HIGHLIGHT_LABELS[statType] || statType;
+  const sideLabel = participantName || teamSide || null;
+  return (
+    <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="aspect-video w-full bg-slate-950">
+        <iframe
+          className="h-full w-full"
+          src={src}
+          title={`${playerName ? `${playerName} — ` : ''}${label}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-xs font-semibold text-slate-900">{label}</p>
+        {playerName ? <p className="truncate text-xs text-slate-600">{playerName}</p> : null}
+        {sideLabel ? <p className="truncate text-xs text-slate-400">{sideLabel}</p> : null}
+      </div>
+    </div>
+  );
+}
 
 function eventTime(value) {
   if (!value) {
@@ -196,7 +256,9 @@ function canAccessReplay(team, entitlements) {
     return true;
   }
 
-  return team?.billing?.plan === 'pro' && team?.billing?.subscriptionStatus === 'active';
+  const plan = team?.billing?.plan;
+  const status = team?.billing?.subscriptionStatus;
+  return (plan === 'team' || plan === 'pro') && (status === 'active' || status === 'trialing');
 }
 
 function buildPlayersById(data, isDualTeam) {
@@ -332,6 +394,7 @@ export function GameDetailPage() {
   const [headerCardDataUrl, setHeaderCardDataUrl] = useState('');
   const [isSharingHeaderCard, setIsSharingHeaderCard] = useState(false);
   const isSharingHeaderCardRef = useRef(false);
+  const [clipShareState, setClipShareState] = useState({});
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
@@ -426,6 +489,7 @@ export function GameDetailPage() {
   };
   const entitlements = data.teamEntitlements || team.entitlements || {};
   const canViewReplay = canAccessReplay(team, entitlements);
+  const canShareHighlights = Boolean(data.canShareHighlights);
   const sortedEvents = [...game.events].sort((a, b) => {
     const aTime = new Date(a.occurredAt || 0).getTime();
     const bTime = new Date(b.occurredAt || 0).getTime();
@@ -628,10 +692,12 @@ export function GameDetailPage() {
       replayFilters={data.replayFilters || ['all']}
     />
   ) : (
-    <LockedFeatureCard
-      title="Replay is only available for Pro users"
-      description="Upgrade this team to Pro to unlock possession replay for tracked games."
-    />
+    <LockedFeatureCard planName="Team" pricingHref="/pricing">
+      <div className="rounded-xl bg-slate-100 p-8 text-center text-slate-400">
+        <p className="text-lg font-semibold">Replay</p>
+        <p className="mt-1 text-sm">Event-by-event possession replay</p>
+      </div>
+    </LockedFeatureCard>
   );
 
   function updateSearchParam(name, value) {
@@ -651,6 +717,7 @@ export function GameDetailPage() {
   function openFeedComposer() {
     if (user) {
       updateSearchParam('composeFeedGame', '1');
+      trackEvent('game_detail_feed_composer_opened', { game_id: gameId });
       return;
     }
 
@@ -658,8 +725,23 @@ export function GameDetailPage() {
     navigate(`/login?redirectTo=${encodeURIComponent(returnUrl)}`);
   }
 
+  async function shareHighlightClip(eventId) {
+    setClipShareState((s) => ({ ...s, [eventId]: 'loading' }));
+    try {
+      await feedApi.createHighlightClipPost({ gameId, eventId });
+      setClipShareState((s) => ({ ...s, [eventId]: 'shared' }));
+      trackEvent('game_highlight_clip_shared', { game_id: gameId });
+    } catch (err) {
+      const msg = err.message?.toLowerCase().includes('already been shared')
+        ? 'Already shared'
+        : 'Failed to share';
+      setClipShareState((s) => ({ ...s, [eventId]: msg }));
+    }
+  }
+
   function onFeedPostCreated() {
     closeFeedComposer();
+    trackEvent('game_detail_feed_post_created', { game_id: gameId });
     setFeedPostState('posted');
     window.setTimeout(() => {
       setFeedPostState((current) => (current === 'posted' ? '' : current));
@@ -693,6 +775,7 @@ export function GameDetailPage() {
       return;
     }
 
+    trackEvent('game_detail_card_downloaded', { game_id: gameId });
     const link = document.createElement('a');
     link.href = headerCardDataUrl;
     link.download = cardFilename;
@@ -705,11 +788,44 @@ export function GameDetailPage() {
     }, 1500);
   }
 
+  async function shareGameLinkFallback() {
+    if (navigator?.share) {
+      try {
+        await navigator.share({
+          title: `${matchupName} Game Card`,
+          text: shareText,
+          url: shareUrl,
+        });
+        return true;
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') {
+          return true;
+        }
+      }
+    }
+
+    if (navigator?.clipboard?.writeText && shareUrl) {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        setImageState('copied');
+        window.setTimeout(() => {
+          setImageState((current) => (current === 'copied' ? '' : current));
+        }, 1500);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   async function shareHeaderCard() {
     if (isSharingHeaderCardRef.current) {
       return;
     }
 
+    trackEvent('game_detail_share_initiated', { game_id: gameId });
     isSharingHeaderCardRef.current = true;
     setIsSharingHeaderCard(true);
 
@@ -730,13 +846,22 @@ export function GameDetailPage() {
           };
 
           if (navigator.canShare(payload)) {
-            await navigator.share(payload);
-            return;
+            try {
+              await navigator.share(payload);
+              return;
+            } catch (shareError) {
+              if (shareError?.name === 'AbortError') {
+                return;
+              }
+            }
           }
         }
       }
 
-      downloadHeaderCard();
+      const didShareLink = await shareGameLinkFallback();
+      if (!didShareLink) {
+        downloadHeaderCard();
+      }
     } finally {
       isSharingHeaderCardRef.current = false;
       setIsSharingHeaderCard(false);
@@ -874,9 +999,53 @@ export function GameDetailPage() {
 
       {isPrintMode ? printContent : null}
 
+      {!isPrintMode && data.highlights?.length > 0 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {selectHighlights(data.highlights).map((h) => {
+              const clipState =
+                clipShareState[h.eventId] ||
+                (data.sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
+              return (
+                <div key={h.eventId} className="flex shrink-0 flex-col">
+                  <GameHighlightClip
+                    videoUrl={h.videoUrl}
+                    timestamp={h.videoTimestamp}
+                    statType={h.statType}
+                    playerName={h.playerName}
+                    teamSide={h.teamSide}
+                    participantName={
+                      isDualTeam && h.teamSide ? getParticipantName(participants, h.teamSide) : null
+                    }
+                  />
+                  {canShareHighlights ? (
+                    <button
+                      type="button"
+                      disabled={clipState === 'loading' || clipState === 'shared'}
+                      onClick={() => shareHighlightClip(h.eventId)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {clipState === 'loading'
+                        ? 'Sharing…'
+                        : clipState === 'shared'
+                          ? '✓ Shared to Pulse'
+                          : clipState !== 'idle'
+                            ? clipState
+                            : 'Share to Pulse'}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       {!isPrintMode ? (
         <Tabs
           defaultValue="recap"
+          onChange={(tab) => trackEvent('game_detail_tab_changed', { game_id: gameId, tab })}
           items={[
             {
               value: 'recap',

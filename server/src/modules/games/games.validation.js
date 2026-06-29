@@ -157,10 +157,13 @@ const opponentStatTypeSchema = z.enum([
   STAT_TYPES.OPP_REB,
 ]);
 
+const videoTimestampField = { videoTimestamp: z.number().min(0).optional() };
+
 const baseEventSchema = z.object({
   playerId: z.string().min(1),
   occurredAt: z.string().datetime().optional(),
   teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  ...videoTimestampField,
 });
 
 const appendTrackedShotEventSchema = baseEventSchema.extend({
@@ -192,6 +195,7 @@ const appendOpponentEventSchema = z.object({
   statType: opponentStatTypeSchema,
   occurredAt: z.string().datetime().optional(),
   ...courtFieldsSchema,
+  ...videoTimestampField,
 });
 
 const appendEventSchema = z.union([
@@ -213,6 +217,7 @@ const updateEventSchema = z.object({
   zoneId: zoneIdSchema.optional(),
   x: z.number().min(0).max(100).optional(),
   y: z.number().min(0).max(100).optional(),
+  videoTimestamp: z.number().min(0).nullable().optional(),
 });
 
 module.exports = {

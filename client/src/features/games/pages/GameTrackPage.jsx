@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
+import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
 import {
   buildFreeThrowPayload,
@@ -88,11 +90,14 @@ export function GameTrackPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isTrackingFullscreen, setIsTrackingFullscreen] = useState(false);
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+  const [videoUrlDraft, setVideoUrlDraft] = useState('');
+  const [isVideoUrlEditOpen, setIsVideoUrlEditOpen] = useState(false);
   const [error, setError] = useState('');
   const [lastActionLabel, setLastActionLabel] = useState('');
   const [lastActionMeta, setLastActionMeta] = useState({ playerId: null });
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
   const [insertBeforeEventId, setInsertBeforeEventId] = useState('');
+  const [currentVideoTimestamp, setCurrentVideoTimestamp] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
   const [activePanel, setActivePanel] = useState('court');
@@ -104,6 +109,38 @@ export function GameTrackPage() {
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
+  const videoIframeRef = useRef(null);
+  const videoCurrentTimeRef = useRef(null);
+
+  useEffect(() => {
+    function onMessage(event) {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        // infoDelivery fires continuously while playing and also on seek/pause
+        if (data?.event === 'infoDelivery' && typeof data?.info?.currentTime === 'number') {
+          videoCurrentTimeRef.current = data.info.currentTime;
+        }
+      } catch {
+        // ignore non-JSON messages
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  function pauseVideo() {
+    videoIframeRef.current?.contentWindow?.postMessage(
+      '{"event":"command","func":"pauseVideo","args":""}',
+      '*'
+    );
+  }
+
+  function playVideo() {
+    videoIframeRef.current?.contentWindow?.postMessage(
+      '{"event":"command","func":"playVideo","args":""}',
+      '*'
+    );
+  }
 
   useEffect(() => {
     async function loadGame() {
@@ -313,7 +350,11 @@ export function GameTrackPage() {
   }
 
   function buildEventPayload(payload) {
-    return isDualTeam ? { ...payload, teamSide: activeSide } : payload;
+    const withTimestamp =
+      typeof currentVideoTimestamp === 'number'
+        ? { ...payload, videoTimestamp: currentVideoTimestamp }
+        : payload;
+    return isDualTeam ? { ...withTimestamp, teamSide: activeSide } : withTimestamp;
   }
 
   function buildCourtFields(shot) {
@@ -336,6 +377,12 @@ export function GameTrackPage() {
     setLastTappedHoop(inferred.nearestHoop);
     setError('');
     ghostClickGuardRef.current = Date.now();
+    pauseVideo();
+    setCurrentVideoTimestamp(
+      typeof videoCurrentTimeRef.current === 'number'
+        ? Math.round(videoCurrentTimeRef.current)
+        : null
+    );
   }
 
   function openTrackingOverlay() {
@@ -345,12 +392,14 @@ export function GameTrackPage() {
 
     setError('');
     setIsTrackingFullscreen(true);
+    trackEvent('game_tracking_overlay_opened', { game_id: gameId });
   }
 
   function closeTrackingOverlay() {
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
     setIsTrackingFullscreen(false);
+    trackEvent('game_tracking_overlay_closed', { game_id: gameId });
   }
 
   function resetTransientTrackingState() {
@@ -368,11 +417,15 @@ export function GameTrackPage() {
     setActiveSide(nextSide);
   }
 
-  function clearEventPicker(reason = '') {
+  function clearEventPicker(reason = '', { resume = false } = {}) {
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
+    setCurrentVideoTimestamp(null);
     if (isReasonLabel(reason)) {
       setLastActionLabel(reason);
+    }
+    if (resume) {
+      playVideo();
     }
   }
 
@@ -389,6 +442,7 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -431,7 +485,7 @@ export function GameTrackPage() {
         updateLastAction(label, reboundPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker();
+          clearEventPicker('', { resume: true });
         }
       })
       .catch((err) => {
@@ -449,7 +503,7 @@ export function GameTrackPage() {
     }
 
     if (option === 'NO_ASSIST') {
-      clearEventPicker();
+      clearEventPicker('', { resume: true });
       setError('');
       return;
     }
@@ -504,7 +558,7 @@ export function GameTrackPage() {
         };
         label = STAT_LABELS[pendingFollowUpPrompt.statType] || pendingFollowUpPrompt.statType;
       } else if (pendingFollowUpPrompt.kind === 'who_was_fouled') {
-        clearEventPicker();
+        clearEventPicker('', { resume: true });
         return;
       } else {
         payload = buildEventPayload({
@@ -520,7 +574,7 @@ export function GameTrackPage() {
         .appendEvent(gameId, payload)
         .then((response) => {
           updateData(response, label);
-          clearEventPicker();
+          clearEventPicker('', { resume: true });
         })
         .catch((submitError) => {
           setError(
@@ -551,6 +605,10 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', {
+      game_id: gameId,
+      stat_type: buildShotStatType(selectedShot.shotFamily, outcome),
+    });
 
     const payload = buildEventPayload({
       playerId: currentSideState.selectedPlayerId,
@@ -589,7 +647,7 @@ export function GameTrackPage() {
         courtLocation: shotCourtFields,
       });
     } else {
-      clearEventPicker();
+      clearEventPicker('', { resume: true });
     }
 
     inflightRef.current = (
@@ -602,7 +660,7 @@ export function GameTrackPage() {
         updateLastAction(shotLabel, actorPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker();
+          clearEventPicker('', { resume: true });
         }
       })
       .catch((err) => {
@@ -620,6 +678,10 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', {
+      game_id: gameId,
+      stat_type: outcome === 'made' ? 'FT_MADE' : 'FT_MISS',
+    });
 
     const inferred = buildFreeThrowPayload(
       selectedShot?.nearestHoop || lastTappedHoop,
@@ -649,7 +711,7 @@ export function GameTrackPage() {
         courtLocation: { zoneId: inferred.zoneId, x: inferred.x, y: inferred.y },
       });
     } else {
-      clearEventPicker();
+      clearEventPicker('', { resume: true });
     }
 
     inflightRef.current = (
@@ -662,7 +724,7 @@ export function GameTrackPage() {
         updateLastAction(ftLabel, actorPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker();
+          clearEventPicker('', { resume: true });
         }
       })
       .catch((err) => {
@@ -697,6 +759,7 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -748,7 +811,7 @@ export function GameTrackPage() {
         courtLocation: courtFields,
       });
     } else {
-      clearEventPicker();
+      clearEventPicker('', { resume: true });
     }
 
     inflightRef.current = (
@@ -761,7 +824,7 @@ export function GameTrackPage() {
         updateLastAction(quickLabel, actorPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker();
+          clearEventPicker('', { resume: true });
         }
       })
       .catch((err) => {
@@ -786,7 +849,7 @@ export function GameTrackPage() {
         ...buildCourtFields(selectedShot),
       });
       updateData(response, STAT_LABELS[statType] || statType);
-      clearEventPicker();
+      clearEventPicker('', { resume: true });
     } catch (submitError) {
       setError(submitError.message || 'Failed to add opponent score');
     } finally {
@@ -925,9 +988,25 @@ export function GameTrackPage() {
     }
   }
 
+  async function saveVideoUrl() {
+    if (isSaving) return;
+    setError('');
+    setIsSaving(true);
+    try {
+      const response = await gamesApi.update(gameId, { videoUrl: videoUrlDraft.trim() });
+      updateData(response);
+      setIsVideoUrlEditOpen(false);
+    } catch (err) {
+      setError(err.message || 'Failed to save video URL');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function finishGame() {
     setError('');
     setIsSaving(true);
+    trackEvent('game_tracking_finished', { game_id: gameId });
     try {
       await gamesApi.finish(gameId);
       navigate(`/games/${gameId}`);
@@ -940,6 +1019,26 @@ export function GameTrackPage() {
 
   if (!data || !game || !boxScore) {
     return <SportsLoader label="Loading tracking session" fullPage />;
+  }
+
+  if (team && team.entitlements?.canTrackStats === false) {
+    return (
+      <main className="mx-auto max-w-xl space-y-6 py-16 text-center">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team feature</p>
+        <h1 className="text-2xl font-bold text-slate-900">
+          This team needs an active plan to track games.
+        </h1>
+        <p className="text-sm text-slate-600">
+          Subscribe to the Team plan to unlock full game tracking, replay, and shot maps.
+        </p>
+        <Link
+          to={`/pricing?teamId=${encodeURIComponent(teamId || '')}`}
+          className="inline-block rounded-lg bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+        >
+          Start free trial →
+        </Link>
+      </main>
+    );
   }
 
   const gameSummary = data.gameSummary || {
@@ -1810,6 +1909,65 @@ export function GameTrackPage() {
                     )}
                   </div>
                 ) : null}
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold text-slate-900">
+                      {game.videoUrl ? 'Game Video' : 'Add Video'}
+                    </h2>
+                    {!isVideoUrlEditOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVideoUrlDraft(game.videoUrl || '');
+                          setIsVideoUrlEditOpen(true);
+                        }}
+                        className="text-xs font-semibold text-indigo-600 hover:underline"
+                      >
+                        {game.videoUrl ? 'Edit URL' : 'Add URL'}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {isVideoUrlEditOpen ? (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        type="url"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        value={videoUrlDraft}
+                        onChange={(e) => setVideoUrlDraft(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={saveVideoUrl}
+                          disabled={isSaving}
+                          className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                        >
+                          {isSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsVideoUrlEditOpen(false)}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : game.videoUrl ? (
+                    <div className="mt-3">
+                      <GameVideoEmbed
+                        ref={videoIframeRef}
+                        videoUrl={game.videoUrl}
+                        title={game.title}
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-sm text-slate-400">No video linked yet.</p>
+                  )}
+                </div>
               </div>
             ) : null}
 

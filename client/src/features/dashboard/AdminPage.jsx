@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 const TABS = [
   {
     id: 'leagues',
-    label: 'Leagues',
+    label: 'My Leagues',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -19,7 +19,7 @@ const TABS = [
   },
   {
     id: 'games',
-    label: 'Games',
+    label: 'One-off Games',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -34,7 +34,7 @@ const TABS = [
   },
   {
     id: 'teams',
-    label: 'Teams',
+    label: 'One-off Teams',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -242,13 +242,14 @@ export function AdminPage() {
             <div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Leagues You Manage</h2>
+                  <h2 className="text-lg font-semibold text-slate-900">My Leagues</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Manage teams, standings, fixtures, and games from one place.
+                    Leagues bring multiple teams under one roof — standings, fixtures, and join
+                    requests all in one place.
                   </p>
                 </div>
                 <Link
-                  to="/contact"
+                  to="/pricing"
                   className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
                 >
                   New League
@@ -257,7 +258,17 @@ export function AdminPage() {
               {isLoading ? (
                 <p className="mt-3 text-sm text-slate-500">Loading leagues…</p>
               ) : leagues.length === 0 ? (
-                <p className="mt-3 text-sm text-slate-600">No leagues yet.</p>
+                <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                  <p className="text-sm text-slate-600">
+                    No leagues yet.{' '}
+                    <Link
+                      to="/pricing"
+                      className="font-medium text-slate-900 underline underline-offset-4"
+                    >
+                      Start a free trial →
+                    </Link>
+                  </p>
+                </div>
               ) : (
                 <div className="mt-4 grid gap-3">
                   {leagues.map((league) => (
@@ -291,8 +302,10 @@ export function AdminPage() {
 
           {activeTab === 'games' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Recent Games</h2>
-              <p className="mt-1 text-sm text-slate-600">Includes both one-off and league games.</p>
+              <h2 className="text-lg font-semibold text-slate-900">One-off Games</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Standalone games tracked independently, outside of any league.
+              </p>
               {isLoading ? (
                 <p className="mt-3 text-sm text-slate-500">Loading games…</p>
               ) : recentGames.length === 0 ? (
@@ -418,9 +431,9 @@ export function AdminPage() {
 
           {activeTab === 'teams' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">One-off Tools</h2>
+              <h2 className="text-lg font-semibold text-slate-900">One-off Teams</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Standalone teams and games outside of league management.
+                Standalone teams and their games, managed independently from any league.
               </p>
               <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <QuickActionLink to="/games/new" label="New Game">

@@ -43,7 +43,7 @@ Current verified status:
 
 - `[x]` Prod client host responds at `https://tsw-2026-march-client-prod.onrender.com`
 - `[]` Prod API health does not currently respond at `https://tsw-2026-march-api-prod.onrender.com/api/v1/health`
-- `[]` Most likely current blocker: missing required production API env vars, especially SMTP credentials, which are enforced at startup
+- Most likely current blocker: missing required production API env vars — especially `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, and `CONTACT_EMAIL`, which are enforced by a production-only check after Zod parsing (these vars are optional in Zod but required by the `if (NODE_ENV === 'production')` block in `env.js`)
 
 ## Public APIs / Interfaces / Types
 
@@ -88,16 +88,15 @@ Planned application-facing changes:
 - `[]` `MONGO_DB_NAME=tsw_2026_prod`
 - `[]` `JWT_ACCESS_SECRET=<32+ chars>`
 - `[]` `JWT_REFRESH_SECRET=<32+ chars>`
+- `[]` `ACCESS_TOKEN_TTL=15m`
+- `[]` `REFRESH_TOKEN_TTL=7d`
 - `[]` `GOOGLE_CLIENT_ID=<prod google client id>`
 - `[]` `GOOGLE_CLIENT_SECRET=<prod google client secret>`
 - `[]` `GOOGLE_CALLBACK_URL=https://api.thesportyway.com/api/v1/auth/google/callback`
-- `[]` `SMTP_HOST=<provider host>`
-- `[]` `SMTP_PORT=<provider port>`
-- `[]` `SMTP_SECURE=<true|false>`
-- `[]` `SMTP_USER=<provider username>`
-- `[]` `SMTP_PASS=<provider password>`
-- `[]` `SMTP_FROM_EMAIL=<from address>`
-- `[]` `SMTP_FROM_NAME=The Sporty Way`
+- `[]` `RESEND_API_KEY=<resend api key>`
+- `[]` `RESEND_FROM_EMAIL=<from address>`
+- `[]` `RESEND_FROM_NAME=The Sporty Way`
+- `[]` `CONTACT_EMAIL=<contact destination email>`
 - `[]` `EMAIL_VERIFY_TTL_MINUTES=60`
 - `[]` `PASSWORD_RESET_TTL_MINUTES=30`
 - `[]` `POSTHOG_KEY=`
@@ -113,6 +112,11 @@ Planned application-facing changes:
 - `[]` `CLOUDINARY_FOLDER=tsw/feed/prod`
 - `[]` `TEAM_LOGO_MAX_BYTES=2097152`
 - `[]` `FEED_IMAGE_MAX_BYTES=5242880`
+- `[]` `FEED_VIDEO_MAX_BYTES=104857600`
+- `[]` `FEED_VIDEO_MAX_DURATION_SECONDS=60`
+- `[]` `OPENAI_API_KEY=`
+- `[]` `OPENAI_GAME_SUMMARY_MODEL=gpt-5.4-mini`
+- `[]` `OPENAI_GAME_SUMMARY_TIMEOUT_MS=8000`
 - `[]` `COOKIE_DOMAIN=.thesportyway.com`
 
 ### Client prod
@@ -131,7 +135,7 @@ Planned application-facing changes:
 - `[]` Keep production database clean
 - `[]` Use one Cloudinary account with `tsw/feed/dev` and `tsw/feed/prod`
 - `[]` Create production Google OAuth credentials for `thesportyway.com`
-- `[]` Create transactional SMTP credentials such as Resend
+- `[]` Create a Resend account, generate an API key, and set `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, and `CONTACT_EMAIL` in the prod API service
 - `[]` Leave Stripe and analytics disabled for launch
 
 ## Product Changes
@@ -165,6 +169,7 @@ Planned application-facing changes:
 - `[]` Verify verification email and password reset
 - `[]` Verify team logo upload
 - `[]` Verify feed image upload
+- `[]` Verify feed video upload
 - `[]` Verify homepage public discovery sections
 - `[]` Verify public team page
 - `[]` Verify public league page

@@ -10,7 +10,8 @@ Notes:
 - `dev` and `prod` separation should come from branch, URLs, DB name, Cloudinary folder, and Stripe mode.
 - Production database naming uses `tsw_2026_prod`.
 - Launch mode for production can leave Stripe and PostHog keys blank.
-- Production API startup still requires SMTP settings. If `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`, or `SMTP_FROM_NAME` are missing, the server exits before `/api/v1/health` can respond.
+- Production API startup requires Resend settings. If any of `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, or `CONTACT_EMAIL` are missing, the server exits before `/api/v1/health` can respond.
+- **Important:** `render.yaml` still contains seven legacy SMTP variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`) from before the Resend migration. These keys are not recognized by `server/src/config/env.js` and must be replaced with the four Resend variables shown in the templates below.
 
 ## Render Services
 
@@ -67,13 +68,10 @@ These come from the runtime validation in:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_CALLBACK_URL`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_SECURE`
-- `SMTP_USER`
-- `SMTP_PASS`
-- `SMTP_FROM_EMAIL`
-- `SMTP_FROM_NAME`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_FROM_NAME`
+- `CONTACT_EMAIL`
 - `EMAIL_VERIFY_TTL_MINUTES`
 - `PASSWORD_RESET_TTL_MINUTES`
 - `POSTHOG_KEY`
@@ -89,7 +87,14 @@ These come from the runtime validation in:
 - `CLOUDINARY_FOLDER`
 - `TEAM_LOGO_MAX_BYTES`
 - `FEED_IMAGE_MAX_BYTES`
+- `FEED_VIDEO_MAX_BYTES`
+- `FEED_VIDEO_MAX_DURATION_SECONDS`
 - `COOKIE_DOMAIN`
+- `ACCESS_TOKEN_TTL`
+- `REFRESH_TOKEN_TTL`
+- `OPENAI_API_KEY`
+- `OPENAI_GAME_SUMMARY_MODEL`
+- `OPENAI_GAME_SUMMARY_TIMEOUT_MS`
 
 ### Client variables used by deployed client services
 
@@ -107,10 +112,11 @@ These come from the runtime validation in:
 
 - `NODE_ENV`
 - `PORT`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_SECURE`
 - `EMAIL_VERIFY_TTL_MINUTES`
+- `ACCESS_TOKEN_TTL`
+- `REFRESH_TOKEN_TTL`
+- `OPENAI_GAME_SUMMARY_MODEL`
+- `OPENAI_GAME_SUMMARY_TIMEOUT_MS`
 - `PASSWORD_RESET_TTL_MINUTES`
 - `POSTHOG_HOST`
 - `CLOUDINARY_FOLDER`
@@ -131,10 +137,10 @@ These come from the runtime validation in:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_CALLBACK_URL`
-- `SMTP_USER`
-- `SMTP_PASS`
-- `SMTP_FROM_EMAIL`
-- `SMTP_FROM_NAME`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_FROM_NAME`
+- `CONTACT_EMAIL`
 - `POSTHOG_KEY`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
@@ -168,13 +174,10 @@ GOOGLE_CLIENT_ID=<your-google-client-id>
 GOOGLE_CLIENT_SECRET=<your-google-client-secret>
 GOOGLE_CALLBACK_URL=https://tsw-2026-march-api-dev.onrender.com/api/v1/auth/google/callback
 
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=<your-gmail-address>
-SMTP_PASS=<your-gmail-app-password>
-SMTP_FROM_EMAIL=<your-gmail-address>
-SMTP_FROM_NAME=TSW Dev
+RESEND_API_KEY=<your-resend-api-key>
+RESEND_FROM_EMAIL=<your-from-email>
+RESEND_FROM_NAME=TSW Dev
+CONTACT_EMAIL=<your-contact-destination-email>
 
 EMAIL_VERIFY_TTL_MINUTES=60
 PASSWORD_RESET_TTL_MINUTES=30
@@ -200,7 +203,7 @@ FEED_IMAGE_MAX_BYTES=5242880
 ### Client Dev
 
 ```env
-VITE_APP_NAME=TSW
+VITE_APP_NAME=tsw-2026-march (Dev)
 VITE_APP_ENV=development
 VITE_API_BASE_URL=https://tsw-2026-march-api-dev.onrender.com/api/v1
 VITE_ENABLE_ANALYTICS=false
@@ -226,13 +229,10 @@ GOOGLE_CLIENT_ID=<your-google-client-id>
 GOOGLE_CLIENT_SECRET=<your-google-client-secret>
 GOOGLE_CALLBACK_URL=https://api.thesportyway.com/api/v1/auth/google/callback
 
-SMTP_HOST=<your-smtp-host>
-SMTP_PORT=<your-smtp-port>
-SMTP_SECURE=<true-or-false>
-SMTP_USER=<your-smtp-username>
-SMTP_PASS=<your-smtp-password>
-SMTP_FROM_EMAIL=<your-from-email>
-SMTP_FROM_NAME=The Sporty Way
+RESEND_API_KEY=<your-resend-api-key>
+RESEND_FROM_EMAIL=<your-from-email>
+RESEND_FROM_NAME=The Sporty Way
+CONTACT_EMAIL=<your-contact-destination-email>
 
 EMAIL_VERIFY_TTL_MINUTES=60
 PASSWORD_RESET_TTL_MINUTES=30

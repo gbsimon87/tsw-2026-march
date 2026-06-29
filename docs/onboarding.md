@@ -20,15 +20,16 @@ bash scripts/bootstrap.sh
 - Use `MONGO_DB_NAME=tsw_2026_dev` for development and `MONGO_DB_NAME=tsw_2026_prod` for production.
 - Optional: for local-only dev, set development `MONGO_URI` to `mongodb://127.0.0.1:27017`.
 - Configure separate prod/dev Google OAuth callback URLs.
-- Configure SMTP credentials for verification and password reset emails.
+- Configure Resend credentials (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `CONTACT_EMAIL`) in the server env files for verification, password reset, and contact-form emails. All four are required in production — the server will refuse to start if any are missing.
+- For optional integrations (Cloudinary media uploads, Stripe billing, OpenAI game summaries, PostHog analytics), see `server/src/config/env.js` for the full variable list and their defaults.
 - Configure separate prod/dev frontend origins and API base URLs.
-- Run checks: `pnpm check-env && pnpm test && pnpm lint`.
+- Run checks: `pnpm test && pnpm lint`. (`pnpm check-env` checks for legacy SMTP keys rather than the Resend keys above — it will report false failures on a correctly-configured Resend setup. Verify email config manually against `env.js` instead.)
 
 ## Branch Workflow
 
 1. Create feature branch from `dev`.
 2. Merge feature branch into `dev`.
-3. Validate changes in Render dev services (`*-api-dev`, `*-client-dev`).
+3. Validate changes in Render dev services (`*-api-dev`, `*-client-dev`). Dev services auto-deploy on push to `dev` (`autoDeployTrigger: commit`); production requires a manual trigger (`autoDeployTrigger: off`).
 4. Promote by merging `dev` into `main`.
 5. Trigger manual deploy for production services (`*-api-prod`, `*-client-prod`).
 
@@ -43,3 +44,7 @@ Keep these values separate for prod and dev:
 - `MONGO_DB_NAME`
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_FROM_NAME`
+- `CONTACT_EMAIL`

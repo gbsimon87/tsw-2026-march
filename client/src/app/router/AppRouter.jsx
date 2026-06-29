@@ -33,6 +33,8 @@ import { PublicLeaguePlayerPage } from '../../features/leagues/pages/PublicLeagu
 import { MySportyPage } from '../../features/leagues/pages/MySportyPage';
 import { AboutPage } from '../../pages/AboutPage';
 import { ContactPage } from '../../pages/ContactPage';
+import { BillingSuccessPage } from '../../features/billing/pages/BillingSuccessPage';
+import { BillingCancelPage } from '../../features/billing/pages/BillingCancelPage';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -87,8 +89,8 @@ export function AppRouter() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/pricing" element={<Navigate to="/" replace />} />
-        <Route path="/billing/success" element={<Navigate to="/" replace />} />
-        <Route path="/billing/cancel" element={<Navigate to="/" replace />} />
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+        <Route path="/billing/cancel" element={<BillingCancelPage />} />
         <Route path="/league/:leagueSlug" element={<PublicLeaguePage />} />
         <Route path="/league/:leagueSlug/standings" element={<PublicLeagueStandingsPage />} />
         <Route path="/league/:leagueSlug/games" element={<PublicLeagueGamesPage />} />

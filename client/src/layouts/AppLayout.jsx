@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
+import { FeedTabBar } from '../features/feed/components/FeedTabBar';
 
 const desktopNavLinkClass = ({ isActive }) =>
   `text-sm transition-colors ${
@@ -16,13 +17,12 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const homeHref = user ? '/home' : '/';
-  const brandHref = user ? '/feed' : '/';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
-          <Link to={brandHref} className="text-lg font-semibold">
+          <Link to="/feed" className="text-lg font-semibold">
             {import.meta.env.VITE_APP_NAME}
           </Link>
 
@@ -194,9 +194,11 @@ export function AppLayout() {
         </nav>
       </div>
 
-      <main className="mx-auto max-w-5xl p-4">
+      <main className="mx-auto max-w-5xl p-4 pb-20 md:pb-4">
         <Outlet />
       </main>
+
+      <FeedTabBar />
     </div>
   );
 }

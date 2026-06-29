@@ -1,26 +1,27 @@
 const Stripe = require('stripe');
 const { ApiError } = require('../../utils/apiError');
 const {
+  Team,
   findTeamByIdAndOwner,
   findTeamById,
   listTeamsByOwner,
   saveTeam,
 } = require('../teams/teams.repository');
+const {
+  League,
+  LeagueManager,
+  LeagueTeamMember,
+  findLeagueByIdAndOwner,
+  findLeaguesByOwner,
+  saveLeague,
+} = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 const MAX_PROCESSED_WEBHOOK_EVENT_IDS = 25;
 
-function appendQueryParam(urlString, key, value) {
-  if (!urlString || value === undefined || value === null || value === '') {
-    return urlString;
-  }
-
-  const nextUrl = new URL(urlString);
-  nextUrl.searchParams.set(key, String(value));
-  return nextUrl.toString();
-}
+// ─── Stripe client ────────────────────────────────────────────────────────────
 
 let stripeClient = null;
 
@@ -28,171 +29,312 @@ function getStripe() {
   if (!env.STRIPE_SECRET_KEY) {
     throw new ApiError(503, 'Billing is not configured');
   }
-
   if (!stripeClient) {
     stripeClient = new Stripe(env.STRIPE_SECRET_KEY);
   }
-
   return stripeClient;
 }
 
+// ─── URL helpers ──────────────────────────────────────────────────────────────
+
+function appendQueryParam(urlString, key, value) {
+  if (!urlString || value === undefined || value === null || value === '') {
+    return urlString;
+  }
+  const nextUrl = new URL(urlString);
+  nextUrl.searchParams.set(key, String(value));
+  return nextUrl.toString();
+}
+
+// ─── Status normalisation ─────────────────────────────────────────────────────
+
 function normalizeSubscriptionStatus(value) {
-  if (!value) {
-    return 'inactive';
-  }
-
-  if (['trialing', 'active', 'past_due', 'canceled'].includes(value)) {
-    return value;
-  }
-
+  if (!value) return 'inactive';
+  if (['trialing', 'active', 'past_due', 'canceled'].includes(value)) return value;
   return 'inactive';
 }
 
-function getTeamEntitlements(team) {
-  const billing = getBillingSummary(team);
-  const hasProAccess = billing.plan === 'pro' && ACTIVE_STATUSES.has(billing.subscriptionStatus);
+// ─── Entitlement checks ───────────────────────────────────────────────────────
 
+function isTeamActive(team) {
+  const plan = team.plan || 'free';
+  const status = normalizeSubscriptionStatus(team.subscriptionStatus);
+  // 'pro' is the legacy plan value used before the pricing redesign
+  return (plan === 'team' || plan === 'pro') && ACTIVE_STATUSES.has(status);
+}
+
+function isLeagueActive(league) {
+  const plan = league.plan || 'free';
+  const status = normalizeSubscriptionStatus(league.subscriptionStatus);
+  // 'pro' is the manually-set value on We-ball Saturday (no Stripe subscription)
+  return (plan === 'league' || plan === 'pro') && ACTIVE_STATUSES.has(status);
+}
+
+function getTeamEntitlements(team) {
+  const active = isTeamActive(team);
   return {
-    canViewReplay: hasProAccess,
-    canViewShotMaps: hasProAccess,
+    canTrackStats: active,
+    canViewReplay: active,
+    canViewShotMaps: active,
+    canViewHighlightClips: active,
   };
 }
 
-function getBillingSummary(team) {
+function getLeagueEntitlements(league) {
+  const active = isLeagueActive(league);
+  return {
+    canManageLeague: active,
+    canTrackStats: active,
+    canViewReplay: active,
+    canViewShotMaps: active,
+    canViewHighlightClips: active,
+  };
+}
+
+// ─── Billing summaries ────────────────────────────────────────────────────────
+
+function getTeamBillingSummary(team) {
   return {
     plan: team.plan || 'free',
     subscriptionStatus: normalizeSubscriptionStatus(team.subscriptionStatus),
     cancelAtPeriodEnd: Boolean(team.cancelAtPeriodEnd),
     currentPeriodEnd: team.currentPeriodEnd ?? null,
+    trialEnd: team.trialEnd ?? null,
+    billingInterval: team.billingInterval ?? null,
   };
 }
 
-function getProcessedWebhookEventIds(team) {
-  return Array.isArray(team.processedWebhookEventIds) ? team.processedWebhookEventIds : [];
+function getLeagueBillingSummary(league) {
+  return {
+    plan: league.plan || 'free',
+    subscriptionStatus: normalizeSubscriptionStatus(league.subscriptionStatus),
+    cancelAtPeriodEnd: Boolean(league.cancelAtPeriodEnd),
+    currentPeriodEnd: league.currentPeriodEnd ?? null,
+    trialEnd: league.trialEnd ?? null,
+    billingInterval: league.billingInterval ?? null,
+  };
 }
 
-function hasProcessedWebhookEvent(team, eventId) {
-  if (!eventId) {
-    return false;
-  }
-
-  return team.lastWebhookEventId === eventId || getProcessedWebhookEventIds(team).includes(eventId);
+// Keep getBillingSummary as alias for backward compatibility
+function getBillingSummary(team) {
+  return getTeamBillingSummary(team);
 }
 
-function markWebhookEventProcessed(team, eventId) {
-  if (!eventId) {
-    return;
-  }
+// ─── Webhook idempotency ──────────────────────────────────────────────────────
 
-  const processedIds = getProcessedWebhookEventIds(team);
+function getProcessedWebhookEventIds(resource) {
+  return Array.isArray(resource.processedWebhookEventIds) ? resource.processedWebhookEventIds : [];
+}
+
+function hasProcessedWebhookEvent(resource, eventId) {
+  if (!eventId) return false;
+  return (
+    resource.lastWebhookEventId === eventId ||
+    getProcessedWebhookEventIds(resource).includes(eventId)
+  );
+}
+
+function markWebhookEventProcessed(resource, eventId) {
+  if (!eventId) return;
+  const processedIds = getProcessedWebhookEventIds(resource);
   if (!processedIds.includes(eventId)) {
     processedIds.push(eventId);
   }
-
   if (processedIds.length > MAX_PROCESSED_WEBHOOK_EVENT_IDS) {
     processedIds.splice(0, processedIds.length - MAX_PROCESSED_WEBHOOK_EVENT_IDS);
   }
-
-  team.processedWebhookEventIds = processedIds;
-  team.lastWebhookEventId = eventId;
+  resource.processedWebhookEventIds = processedIds;
+  resource.lastWebhookEventId = eventId;
 }
+
+// ─── Sync owner plan ──────────────────────────────────────────────────────────
 
 async function syncOwnerPlan(ownerUserId) {
   const teams = await listTeamsByOwner(ownerUserId);
-  const hasProTeam = teams.some((team) => {
-    const billing = getBillingSummary(team);
-    return billing.plan === 'pro' && ACTIVE_STATUSES.has(billing.subscriptionStatus);
-  });
-
-  await updateUserPlan(ownerUserId, hasProTeam ? 'pro' : 'free');
+  const hasActiveTeam = teams.some(isTeamActive);
+  await updateUserPlan(ownerUserId, hasActiveTeam ? 'pro' : 'free');
 }
+
+// ─── Team billing reads ───────────────────────────────────────────────────────
 
 async function getTeamBillingForOwner(userId, teamId) {
   const team = await findTeamByIdAndOwner(teamId, userId);
-  if (!team) {
-    throw new ApiError(404, 'Team not found');
-  }
-
+  if (!team) throw new ApiError(404, 'Team not found');
   return {
-    billing: getBillingSummary(team),
+    billing: getTeamBillingSummary(team),
     entitlements: getTeamEntitlements(team),
   };
 }
 
-async function createCheckoutSession(userId, teamId) {
+async function getLeagueBillingForOwner(userId, leagueId) {
+  const league = await findLeagueByIdAndOwner(leagueId, userId);
+  if (!league) throw new ApiError(404, 'League not found');
+  return {
+    billing: getLeagueBillingSummary(league),
+    entitlements: getLeagueEntitlements(league),
+  };
+}
+
+// ─── Price ID resolution ──────────────────────────────────────────────────────
+
+function resolveTeamPriceId(interval) {
+  if (interval === 'season') return env.STRIPE_PRICE_ID_TEAM_SEASON;
+  return env.STRIPE_PRICE_ID_TEAM_MONTHLY;
+}
+
+function resolveLeaguePriceId(interval) {
+  if (interval === 'season') return env.STRIPE_PRICE_ID_LEAGUE_SEASON;
+  return env.STRIPE_PRICE_ID_LEAGUE_MONTHLY;
+}
+
+// ─── Checkout sessions ────────────────────────────────────────────────────────
+
+async function createTeamCheckoutSession(userId, teamId, interval = 'monthly') {
   const team = await findTeamByIdAndOwner(teamId, userId);
-  if (!team) {
-    throw new ApiError(404, 'Team not found');
+  if (!team) throw new ApiError(404, 'Team not found');
+
+  if (isTeamActive(team)) {
+    throw new ApiError(400, 'Team already has an active subscription');
   }
 
-  const billing = getBillingSummary(team);
-  if (billing.plan === 'pro' && ACTIVE_STATUSES.has(billing.subscriptionStatus)) {
-    throw new ApiError(400, 'Team is already on Team Pro');
-  }
+  const priceId = resolveTeamPriceId(interval);
+  if (!priceId) throw new ApiError(503, 'Billing is not configured');
 
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
+    payment_method_collection: 'always',
     success_url: appendQueryParam(
-      appendQueryParam(env.STRIPE_SUCCESS_URL, 'teamId', team._id),
+      appendQueryParam(
+        appendQueryParam(env.STRIPE_SUCCESS_URL, 'resourceType', 'team'),
+        'teamId',
+        team._id
+      ),
       'checkout',
       'success'
     ),
     cancel_url: appendQueryParam(
-      appendQueryParam(env.STRIPE_CANCEL_URL, 'teamId', team._id),
+      appendQueryParam(
+        appendQueryParam(env.STRIPE_CANCEL_URL, 'resourceType', 'team'),
+        'teamId',
+        team._id
+      ),
       'checkout',
       'canceled'
     ),
     customer_email: team.billingEmail || undefined,
-    line_items: [
-      {
-        price: env.STRIPE_PRICE_ID_PRO_MONTHLY,
-        quantity: 1,
-      },
-    ],
-    metadata: {
-      teamId: String(team._id),
-      ownerUserId: String(userId),
-      plan: 'pro',
-    },
+    line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
+      trial_period_days: 14,
       metadata: {
+        resourceType: 'team',
         teamId: String(team._id),
         ownerUserId: String(userId),
-        plan: 'pro',
+        plan: 'team',
+        billingInterval: interval,
       },
+    },
+    metadata: {
+      resourceType: 'team',
+      teamId: String(team._id),
+      ownerUserId: String(userId),
+      plan: 'team',
+      billingInterval: interval,
     },
   });
 
-  return {
-    url: session.url,
-  };
+  return { url: session.url };
 }
 
-async function createCustomerPortalSession(userId, teamId) {
-  const team = await findTeamByIdAndOwner(teamId, userId);
-  if (!team) {
-    throw new ApiError(404, 'Team not found');
+async function createLeagueCheckoutSession(userId, interval = 'monthly') {
+  const existingLeagues = await findLeaguesByOwner(userId);
+  if (existingLeagues.some(isLeagueActive)) {
+    throw new ApiError(400, 'You already have an active League subscription');
   }
 
-  if (!team.stripeCustomerId) {
-    throw new ApiError(400, 'No billing customer exists for this team');
-  }
+  const priceId = resolveLeaguePriceId(interval);
+  if (!priceId) throw new ApiError(503, 'Billing is not configured');
+
+  const stripe = getStripe();
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    payment_method_collection: 'always',
+    success_url: appendQueryParam(
+      appendQueryParam(env.STRIPE_SUCCESS_URL, 'resourceType', 'league'),
+      'checkout',
+      'success'
+    ),
+    cancel_url: appendQueryParam(
+      appendQueryParam(env.STRIPE_CANCEL_URL, 'resourceType', 'league'),
+      'checkout',
+      'canceled'
+    ),
+    line_items: [{ price: priceId, quantity: 1 }],
+    subscription_data: {
+      trial_period_days: 14,
+      metadata: {
+        resourceType: 'league',
+        ownerUserId: String(userId),
+        plan: 'league',
+        billingInterval: interval,
+      },
+    },
+    metadata: {
+      resourceType: 'league',
+      ownerUserId: String(userId),
+      plan: 'league',
+      billingInterval: interval,
+    },
+  });
+
+  return { url: session.url };
+}
+
+// Keep old name as alias so existing routes don't break until migrated
+async function createCheckoutSession(userId, teamId) {
+  return createTeamCheckoutSession(userId, teamId, 'monthly');
+}
+
+// ─── Customer portal ──────────────────────────────────────────────────────────
+
+async function createTeamPortalSession(userId, teamId) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) throw new ApiError(404, 'Team not found');
+  if (!team.stripeCustomerId) throw new ApiError(400, 'No billing customer exists for this team');
 
   const stripe = getStripe();
   const session = await stripe.billingPortal.sessions.create({
     customer: team.stripeCustomerId,
     return_url: env.STRIPE_SUCCESS_URL,
   });
-
-  return {
-    url: session.url,
-  };
+  return { url: session.url };
 }
 
-function applySubscriptionState(team, subscription) {
+async function createLeaguePortalSession(userId, leagueId) {
+  const league = await findLeagueByIdAndOwner(leagueId, userId);
+  if (!league) throw new ApiError(404, 'League not found');
+  if (!league.stripeCustomerId) {
+    throw new ApiError(400, 'No billing customer exists for this league');
+  }
+
+  const stripe = getStripe();
+  const session = await stripe.billingPortal.sessions.create({
+    customer: league.stripeCustomerId,
+    return_url: env.STRIPE_SUCCESS_URL,
+  });
+  return { url: session.url };
+}
+
+// Keep old name as alias
+async function createCustomerPortalSession(userId, teamId) {
+  return createTeamPortalSession(userId, teamId);
+}
+
+// ─── Apply subscription state ─────────────────────────────────────────────────
+
+function applyTeamSubscriptionState(team, subscription) {
   const status = normalizeSubscriptionStatus(subscription.status);
-  team.plan = ACTIVE_STATUSES.has(status) ? 'pro' : 'free';
+  team.plan = ACTIVE_STATUSES.has(status) ? 'team' : 'free';
   team.subscriptionStatus = status;
   team.stripeCustomerId =
     typeof subscription.customer === 'string'
@@ -200,26 +342,41 @@ function applySubscriptionState(team, subscription) {
       : subscription.customer?.id || team.stripeCustomerId || null;
   team.stripeSubscriptionId = subscription.id || null;
   team.stripePriceId = subscription.items?.data?.[0]?.price?.id || team.stripePriceId || null;
+  team.billingInterval = subscription.metadata?.billingInterval || team.billingInterval || null;
   team.currentPeriodEnd = subscription.current_period_end
     ? new Date(subscription.current_period_end * 1000)
     : null;
   team.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+  team.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
 }
+
+function applyLeagueSubscriptionState(league, subscription) {
+  const status = normalizeSubscriptionStatus(subscription.status);
+  league.plan = ACTIVE_STATUSES.has(status) ? 'league' : 'free';
+  league.subscriptionStatus = status;
+  league.stripeCustomerId =
+    typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer?.id || league.stripeCustomerId || null;
+  league.stripeSubscriptionId = subscription.id || null;
+  league.stripePriceId = subscription.items?.data?.[0]?.price?.id || league.stripePriceId || null;
+  league.billingInterval = subscription.metadata?.billingInterval || league.billingInterval || null;
+  league.currentPeriodEnd = subscription.current_period_end
+    ? new Date(subscription.current_period_end * 1000)
+    : null;
+  league.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+  league.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+}
+
+// ─── Webhook handlers: teams ──────────────────────────────────────────────────
 
 async function markTeamFromCheckoutSession(session, eventId) {
   const teamId = session.metadata?.teamId;
-  if (!teamId) {
-    return;
-  }
+  if (!teamId) return;
 
   const team = await findTeamById(teamId);
-  if (!team) {
-    return;
-  }
-
-  if (hasProcessedWebhookEvent(team, eventId)) {
-    return;
-  }
+  if (!team) return;
+  if (hasProcessedWebhookEvent(team, eventId)) return;
 
   team.stripeCustomerId =
     typeof session.customer === 'string' ? session.customer : team.stripeCustomerId || null;
@@ -231,47 +388,101 @@ async function markTeamFromCheckoutSession(session, eventId) {
 
 async function updateTeamFromSubscription(subscription, eventId) {
   const teamId = subscription.metadata?.teamId;
-  if (!teamId) {
-    return;
-  }
+  if (!teamId) return;
 
   const team = await findTeamById(teamId);
-  if (!team) {
-    return;
-  }
+  if (!team) return;
+  if (hasProcessedWebhookEvent(team, eventId)) return;
 
-  if (hasProcessedWebhookEvent(team, eventId)) {
-    return;
-  }
-
-  applySubscriptionState(team, subscription);
+  applyTeamSubscriptionState(team, subscription);
   markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
 
-async function markInvoiceFailure(invoice, eventId) {
+async function markTeamInvoiceFailure(invoice, eventId) {
   const teamId =
     invoice.parent?.subscription_details?.metadata?.teamId ||
     invoice.lines?.data?.[0]?.metadata?.teamId;
-  if (!teamId) {
-    return;
-  }
+  if (!teamId) return;
 
   const team = await findTeamById(teamId);
-  if (!team) {
-    return;
-  }
-
-  if (hasProcessedWebhookEvent(team, eventId)) {
-    return;
-  }
+  if (!team) return;
+  if (hasProcessedWebhookEvent(team, eventId)) return;
 
   team.subscriptionStatus = 'past_due';
   markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
+
+// ─── Webhook handlers: leagues ────────────────────────────────────────────────
+
+async function createLeagueFromCheckoutSession(session, eventId) {
+  const ownerUserId = session.metadata?.ownerUserId;
+  const billingInterval = session.metadata?.billingInterval || 'monthly';
+  if (!ownerUserId) return;
+
+  // League is created here (post-checkout) to avoid chicken-and-egg problem
+  const existingByCustomer = await League.findOne({
+    stripeCustomerId: session.customer,
+  });
+  if (existingByCustomer) return; // already handled
+
+  const placeholderSlug = `league-${String(ownerUserId).slice(-8)}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const league = await League.create({
+    ownerUserId,
+    name: 'My League',
+    slug: placeholderSlug,
+    plan: 'free',
+    subscriptionStatus: 'inactive',
+    stripeCustomerId: typeof session.customer === 'string' ? session.customer : null,
+    billingEmail: session.customer_details?.email || null,
+    billingInterval,
+    processedWebhookEventIds: [eventId].filter(Boolean),
+    lastWebhookEventId: eventId || null,
+  });
+
+  return league;
+}
+
+async function updateLeagueFromSubscription(subscription, eventId) {
+  const ownerUserId = subscription.metadata?.ownerUserId;
+  if (!ownerUserId) return;
+
+  const customerId =
+    typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+
+  const league = await League.findOne({ stripeCustomerId: customerId });
+  if (!league) return;
+  if (hasProcessedWebhookEvent(league, eventId)) return;
+
+  applyLeagueSubscriptionState(league, subscription);
+  markWebhookEventProcessed(league, eventId);
+  await saveLeague(league);
+}
+
+async function markLeagueInvoiceFailure(invoice, eventId) {
+  const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+
+  if (!customerId) return;
+
+  const league = await League.findOne({ stripeCustomerId: customerId });
+  if (!league) return;
+
+  const resourceType =
+    invoice.parent?.subscription_details?.metadata?.resourceType ||
+    invoice.lines?.data?.[0]?.metadata?.resourceType;
+  if (resourceType !== 'league') return;
+
+  if (hasProcessedWebhookEvent(league, eventId)) return;
+
+  league.subscriptionStatus = 'past_due';
+  markWebhookEventProcessed(league, eventId);
+  await saveLeague(league);
+}
+
+// ─── Main webhook dispatcher ──────────────────────────────────────────────────
 
 async function handleWebhookEvent(signature, rawBody) {
   const stripe = getStripe();
@@ -283,39 +494,93 @@ async function handleWebhookEvent(signature, rawBody) {
     throw new ApiError(400, 'Invalid webhook signature');
   }
 
+  const obj = event.data.object;
+  const resourceType = obj.metadata?.resourceType;
+
   switch (event.type) {
     case 'checkout.session.completed':
-      await markTeamFromCheckoutSession(event.data.object, event.id);
+      if (resourceType === 'league') {
+        await createLeagueFromCheckoutSession(obj, event.id);
+      } else {
+        await markTeamFromCheckoutSession(obj, event.id);
+      }
       break;
+
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
-      await updateTeamFromSubscription(event.data.object, event.id);
+      if (resourceType === 'league') {
+        await updateLeagueFromSubscription(obj, event.id);
+      } else {
+        await updateTeamFromSubscription(obj, event.id);
+      }
       break;
+
     case 'invoice.payment_failed':
-      await markInvoiceFailure(event.data.object, event.id);
+      if (resourceType === 'league') {
+        await markLeagueInvoiceFailure(obj, event.id);
+      } else {
+        await markTeamInvoiceFailure(obj, event.id);
+      }
       break;
+
     case 'invoice.paid':
+    case 'customer.subscription.trial_will_end':
     default:
       break;
-  }
-
-  if (event.data?.object?.metadata?.teamId) {
-    const team = await findTeamById(event.data.object.metadata.teamId);
-    if (team && !hasProcessedWebhookEvent(team, event.id)) {
-      markWebhookEventProcessed(team, event.id);
-      await saveTeam(team);
-    }
   }
 
   return { received: true };
 }
 
+// ─── Team creation guard ──────────────────────────────────────────────────────
+
+async function assertTeamCreationAllowed(userId) {
+  const teams = await listTeamsByOwner(userId);
+  const inactiveTeams = teams.filter((t) => !isTeamActive(t));
+  if (inactiveTeams.length >= 1) {
+    throw new ApiError(402, 'Complete checkout for your existing team before creating another');
+  }
+}
+
+// ─── Feed affiliation gate ────────────────────────────────────────────────────
+
+async function assertFeedPostingAllowed(userId) {
+  const [ownsTeam, isLeagueManager, isLeagueMember] = await Promise.all([
+    Team.exists({ ownerUserId: userId }),
+    LeagueManager.exists({ userId, status: 'active' }),
+    LeagueTeamMember.exists({ userId, status: 'active' }),
+  ]);
+
+  if (!ownsTeam && !isLeagueManager && !isLeagueMember) {
+    throw new ApiError(403, 'You must be part of a team or league to post');
+  }
+}
+
 module.exports = {
-  getBillingSummary,
+  // Entitlement checks
+  isTeamActive,
+  isLeagueActive,
   getTeamEntitlements,
+  getLeagueEntitlements,
+  // Billing summaries
+  getBillingSummary,
+  getTeamBillingSummary,
+  getLeagueBillingSummary,
+  // Billing reads
   getTeamBillingForOwner,
+  getLeagueBillingForOwner,
+  // Checkout
   createCheckoutSession,
+  createTeamCheckoutSession,
+  createLeagueCheckoutSession,
+  // Portal
   createCustomerPortalSession,
+  createTeamPortalSession,
+  createLeaguePortalSession,
+  // Webhook
   handleWebhookEvent,
+  // Guards
+  assertTeamCreationAllowed,
+  assertFeedPostingAllowed,
 };

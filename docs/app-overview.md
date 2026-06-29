@@ -14,7 +14,8 @@ Core product capabilities today:
 - Capture shots by tapping or clicking a calibrated full-court image.
 - Track lineup state, substitutions, rebounds, assists, steals, turnovers, fouls, and opponent scoring.
 - Finish games and derive box scores, recaps, replay views, and public-facing summaries from saved events.
-- Publish public team/player pages and a social feed with image posts and shareable game, player, and team cards.
+- Publish public team/player pages and a social feed with image posts and shareable game, player, team, and highlight clip cards.
+- Create and manage leagues with standings, join requests, rosters, and public-facing league/team/player pages.
 - Gate replay and public shot-map features behind team-level Pro billing.
 
 The current product model is centered on one tracked team per game. Opponents are represented primarily by score totals and opponent labels, not full opponent rosters.
@@ -87,9 +88,12 @@ Major feature areas:
 - `auth/`: login, registration, verification, password reset
 - `teams/`: team CRUD, public team/player pages, reusable stats table
 - `games/`: new game flow, live tracking, game detail, recap, replay, shot-map logic
-- `feed/`: feed listing, composer, shareable cards, image posts
-- `billing/`: pricing, checkout redirect flow, billing return pages
+- `feed/`: feed listing, composer, shareable cards, image/video/highlight clip posts
+- `leagues/`: league creation and admin, public standings/team/player pages, join requests, roster management
+- `billing/`: billing-related page components (PricingPage, BillingSuccessPage, BillingCancelPage); note that `/pricing`, `/billing/success`, and `/billing/cancel` currently redirect to `/` in AppRouter rather than rendering these pages directly
 - `analytics/`: client-side event tracking
+- `dashboard/`: AdminPage — the authenticated entry point at `/admin` and `/dashboard` for league management
+- `contact/`: client-side contact form API wrapper (`contactApi.js`)
 
 Main user journeys:
 
@@ -97,9 +101,17 @@ Main user journeys:
   - [`client/src/features/teams/pages/TeamsPage.jsx`](../client/src/features/teams/pages/TeamsPage.jsx)
   - create/edit flows live in `NewTeamPage.jsx` and `EditTeamPage.jsx`
 - Games:
+  - [`client/src/features/games/pages/GamesListPage.jsx`](../client/src/features/games/pages/GamesListPage.jsx)
   - [`client/src/features/games/pages/NewGamePage.jsx`](../client/src/features/games/pages/NewGamePage.jsx)
-  - [`client/src/features/games/pages/GameTrackPage.jsx`](../client/src/features/games/pages/GameTrackPage.jsx)
+  - [`client/src/features/games/pages/GameTrackPage.jsx`](../client/src/features/games/pages/GameTrackPage.jsx) _(rendered outside AppLayout — full-screen, no shared nav)_
   - [`client/src/features/games/pages/GameDetailPage.jsx`](../client/src/features/games/pages/GameDetailPage.jsx)
+- Leagues (protected):
+  - [`client/src/features/leagues/pages/AdminLeaguePage.jsx`](../client/src/features/leagues/pages/AdminLeaguePage.jsx)
+  - [`client/src/features/leagues/pages/AdminNewLeaguePage.jsx`](../client/src/features/leagues/pages/AdminNewLeaguePage.jsx)
+  - [`client/src/features/leagues/pages/MySportyPage.jsx`](../client/src/features/leagues/pages/MySportyPage.jsx)
+- Leagues (public):
+  - [`client/src/features/leagues/pages/PublicLeaguePage.jsx`](../client/src/features/leagues/pages/PublicLeaguePage.jsx)
+  - [`client/src/features/leagues/pages/PublicLeagueStandingsPage.jsx`](../client/src/features/leagues/pages/PublicLeagueStandingsPage.jsx)
 - Feed:
   - [`client/src/features/feed/pages/FeedPage.jsx`](../client/src/features/feed/pages/FeedPage.jsx)
 - Billing:
@@ -163,7 +175,7 @@ Global middleware stack:
 - cookie parser
 - Passport initialization for Google OAuth
 - CSRF token attach/protect middleware
-- API rate limiting
+- API rate limiting (note: the `/contact` route also has its own stricter `contactLimiter` applied at the router level, in addition to the global rate limiter)
 - domain routers
 - not-found and error middleware
 
@@ -174,11 +186,13 @@ Registered API modules:
 - `auth`
 - `analytics`
 - `billing`
+- `contact`
 - `feed`
 - `health`
+- `leagues`
 - `teams`
 - `games`
-- public team and opponent surfaces under `/public/...`
+- public team, opponent, and league surfaces under `/public/...` (`/public/teams`, `/public/opponents`, `/public/leagues`)
 
 Representative route files:
 
@@ -186,6 +200,7 @@ Representative route files:
 - [`server/src/modules/teams/teams.routes.js`](../server/src/modules/teams/teams.routes.js)
 - [`server/src/modules/games/games.routes.js`](../server/src/modules/games/games.routes.js)
 - [`server/src/modules/feed/feed.routes.js`](../server/src/modules/feed/feed.routes.js)
+- [`server/src/modules/leagues/leagues.routes.js`](../server/src/modules/leagues/leagues.routes.js)
 - [`server/src/modules/billing/billing.routes.js`](../server/src/modules/billing/billing.routes.js)
 
 Access model:
@@ -203,7 +218,13 @@ The main Mongo documents are:
 - `AuthToken`: email verification and password reset tokens
 - `Team`: roster, branding, billing fields, subscription status, Stripe linkage
 - `Game`: team reference, opponent label, lineup state, and embedded event list
-- `Post`: feed post with `image`, `game_card`, `player_card`, or `team_card` payload
+- `Post`: feed post with `image`, `video`, `game_card`, `player_card`, `team_card`, or `highlight_clip` payload
+- `League`: league metadata, owner, status, and slug
+- `LeagueTeam`: a team registered within a league
+- `LeaguePlayer`: a player registered within a league team
+- `LeagueTeamMember`: a user linked to a league team roster entry
+- `LeagueJoinRequest`: a player request to join a league team
+- `LeagueManager`: a user granted manager rights over a league
 
 Files that define those schemas:
 
@@ -211,6 +232,7 @@ Files that define those schemas:
 - [`server/src/modules/teams/teams.repository.js`](../server/src/modules/teams/teams.repository.js)
 - [`server/src/modules/games/games.repository.js`](../server/src/modules/games/games.repository.js)
 - [`server/src/modules/feed/feed.repository.js`](../server/src/modules/feed/feed.repository.js)
+- [`server/src/modules/leagues/leagues.repository.js`](../server/src/modules/leagues/leagues.repository.js) _(League, LeagueTeam, LeaguePlayer, LeagueTeamMember, LeagueJoinRequest, LeagueManager)_
 
 Notable design choice:
 

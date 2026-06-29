@@ -1,6 +1,10 @@
 import { env } from './env';
 
-let csrfToken = null;
+let csrfToken =
+  document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('XSRF-TOKEN='))
+    ?.split('=')[1] ?? null;
 let refreshPromise = null;
 
 async function refreshSession() {
@@ -99,6 +103,53 @@ export const apiClient = {
     return request(path, {
       method: 'POST',
       body: formData,
+    });
+  },
+  postFormDataWithProgress(path, formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.withCredentials = true;
+      xhr.open('POST', `${env.apiBaseUrl}${path}`);
+
+      if (csrfToken) {
+        xhr.setRequestHeader('x-csrf-token', csrfToken);
+      }
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        const nextCsrfToken = xhr.getResponseHeader('x-csrf-token');
+        if (nextCsrfToken) {
+          csrfToken = nextCsrfToken;
+        }
+        let data = {};
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch {
+          // non-JSON response body, keep empty data object
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          let message = data?.error?.message || 'Upload failed';
+          if (xhr.status === 401) {
+            message = 'Your session expired. Please refresh the page and try again.';
+          }
+          const error = new Error(message);
+          error.details = data?.error?.details || null;
+          reject(error);
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.onabort = () => reject(new Error('Upload cancelled'));
+
+      xhr.send(formData);
     });
   },
   put(path, body) {

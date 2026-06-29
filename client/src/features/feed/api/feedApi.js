@@ -16,6 +16,9 @@ export const feedApi = {
   createImagePost(formData) {
     return apiClient.postFormData('/feed/image', formData);
   },
+  createVideoPost(formData, onProgress) {
+    return apiClient.postFormDataWithProgress('/feed/video', formData, onProgress);
+  },
   createGameCardPost(payload) {
     return apiClient.post('/feed/game-card', payload);
   },
@@ -24,6 +27,9 @@ export const feedApi = {
   },
   createTeamCardPost(payload) {
     return apiClient.post('/feed/team-card', payload);
+  },
+  createHighlightClipPost(payload) {
+    return apiClient.post('/feed/highlight-clip', payload);
   },
   deletePost(postId) {
     return apiClient.delete(`/feed/${postId}`);

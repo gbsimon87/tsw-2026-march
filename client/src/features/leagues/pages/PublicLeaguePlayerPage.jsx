@@ -8,6 +8,61 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
+import { extractYouTubeVideoId } from '../../games/youtube';
+import { feedApi } from '../../feed/api/feedApi';
+
+const HIGHLIGHT_LABELS = {
+  FG2_MADE: '2PT Make',
+  FG2_MISS: '2PT Miss',
+  FG3_MADE: '3PT Make',
+  FG3_MISS: '3PT Miss',
+  FT_MADE: 'FT Make',
+  FT_MISS: 'FT Miss',
+  AST: 'Assist',
+  STL: 'Steal',
+  BLK: 'Block',
+};
+
+const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
+const MAX_HIGHLIGHTS = 5;
+
+function selectHighlights(highlights) {
+  return [...(highlights || [])]
+    .sort((a, b) => {
+      const pa = HIGHLIGHT_PRIORITY[a.statType] ?? 2;
+      const pb = HIGHLIGHT_PRIORITY[b.statType] ?? 2;
+      return pa - pb;
+    })
+    .slice(0, MAX_HIGHLIGHTS);
+}
+
+function HighlightClip({ videoUrl, timestamp, statType, gameTitle }) {
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) return null;
+  const start = Math.max(0, timestamp - 5);
+  const end = timestamp + 5;
+  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
+  return (
+    <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="aspect-video w-full bg-slate-950">
+        <iframe
+          className="h-full w-full"
+          src={src}
+          title={`${HIGHLIGHT_LABELS[statType] || statType} — ${gameTitle || 'Game'}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-xs font-semibold text-slate-900">
+          {HIGHLIGHT_LABELS[statType] || statType}
+        </p>
+        {gameTitle ? <p className="truncate text-xs text-slate-400">{gameTitle}</p> : null}
+      </div>
+    </div>
+  );
+}
 
 function formatGameDate(game) {
   const rawValue = game.completedAt || game.scheduledAt || game.createdAt || null;
@@ -37,6 +92,7 @@ export function PublicLeaguePlayerPage() {
   const [claimStatus, setClaimStatus] = useState('');
   const [claimError, setClaimError] = useState('');
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [clipShareState, setClipShareState] = useState({});
   const pendingHandled = useRef(false);
   const pendingKey = `claim_pending_${leagueSlug}_${teamSlug}_${leaguePlayerId}`;
 
@@ -88,6 +144,21 @@ export function PublicLeaguePlayerPage() {
     await submitClaim(data.league, data.team);
   }
 
+  const canShareOwnHighlights = Boolean(user && data?.player?.isMe);
+
+  async function shareHighlightClip(eventId, gameId) {
+    setClipShareState((s) => ({ ...s, [eventId]: 'loading' }));
+    try {
+      await feedApi.createHighlightClipPost({ gameId, eventId });
+      setClipShareState((s) => ({ ...s, [eventId]: 'shared' }));
+    } catch (err) {
+      const msg = err.message?.toLowerCase().includes('already been shared')
+        ? 'Already shared'
+        : 'Failed to share';
+      setClipShareState((s) => ({ ...s, [eventId]: msg }));
+    }
+  }
+
   const totals = useMemo(() => {
     return (data?.games || []).reduce(
       (summary, game) => ({
@@ -123,9 +194,9 @@ export function PublicLeaguePlayerPage() {
     { label: 'APG', value: formatAverage(summary.assistsPerGame) },
   ];
   const totalStats = [
-    { label: 'PTS', value: totals.points, featured: true },
-    { label: 'REB', value: totals.reb, featured: true },
-    { label: 'AST', value: totals.ast, featured: true },
+    { label: 'PTS', value: totals.points, featured: false },
+    { label: 'REB', value: totals.reb, featured: false },
+    { label: 'AST', value: totals.ast, featured: false },
     { label: 'STL', value: totals.stl },
     { label: 'BLK', value: totals.blk },
     { label: 'TOV', value: totals.tov },
@@ -310,7 +381,7 @@ export function PublicLeaguePlayerPage() {
             {summary.gamesCount} GP
           </p>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-7">
           {totalStats.map((stat) => (
             <article
               key={stat.label}
@@ -338,6 +409,45 @@ export function PublicLeaguePlayerPage() {
           ))}
         </div>
       </section>
+
+      {data.highlights?.length > 0 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {selectHighlights(data.highlights).map((h) => {
+              const clipState =
+                clipShareState[h.eventId] ||
+                (data.sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
+              return (
+                <div key={h.eventId} className="flex shrink-0 flex-col">
+                  <HighlightClip
+                    videoUrl={h.videoUrl}
+                    timestamp={h.videoTimestamp}
+                    statType={h.statType}
+                    gameTitle={h.gameTitle}
+                  />
+                  {canShareOwnHighlights ? (
+                    <button
+                      type="button"
+                      disabled={clipState === 'loading' || clipState === 'shared'}
+                      onClick={() => shareHighlightClip(h.eventId, h.gameId)}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {clipState === 'loading'
+                        ? 'Sharing…'
+                        : clipState === 'shared'
+                          ? '✓ Shared to Pulse'
+                          : clipState !== 'idle'
+                            ? clipState
+                            : 'Share to Pulse'}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-semibold text-slate-900">Game Log</h2>

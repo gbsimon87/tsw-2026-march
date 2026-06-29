@@ -22,3 +22,6 @@ coverage
 .vite
 .nyc_output
 Google App Passwords
+
+# Database backups
+backups/

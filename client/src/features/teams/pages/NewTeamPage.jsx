@@ -140,7 +140,8 @@ export function NewTeamPage() {
   const [logoError, setLogoError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const redirectTo = searchParams.get('redirectTo') || '';
+  const rawRedirectTo = searchParams.get('redirectTo') || '';
+  const redirectTo = rawRedirectTo.startsWith('/') ? rawRedirectTo : '';
 
   const playerRows = useMemo(
     () =>
@@ -232,7 +233,11 @@ export function NewTeamPage() {
       }
 
       if (!didLogoUploadFail) {
-        navigate(redirectTo || '/games/new');
+        const newTeamId = response.team?.id;
+        navigate(
+          redirectTo ||
+            (newTeamId ? `/pricing?teamId=${encodeURIComponent(newTeamId)}` : '/pricing')
+        );
       }
     } catch (submitError) {
       const nextFieldErrors = mapServerErrorToFieldErrors(submitError);

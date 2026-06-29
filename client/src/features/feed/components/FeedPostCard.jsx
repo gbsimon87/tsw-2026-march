@@ -1,7 +1,9 @@
 import { GameCardPost } from './posts/GameCardPost';
+import { HighlightClipPostCard } from './posts/HighlightClipPostCard';
 import { ImagePostCard } from './posts/ImagePostCard';
 import { PlayerCardPost } from './posts/PlayerCardPost';
 import { TeamCardPost } from './posts/TeamCardPost';
+import { VideoPostCard } from './posts/VideoPostCard';
 
 function formatTimestamp(value) {
   const parsed = new Date(value);
@@ -17,6 +19,8 @@ export function FeedPostCard({ post, onDelete }) {
 
   if (post.type === 'image') {
     content = <ImagePostCard image={post.image} caption={post.caption} />;
+  } else if (post.type === 'video') {
+    content = <VideoPostCard video={post.video} caption={post.caption} />;
   } else if (post.type === 'game_card') {
     content = (
       <div className="space-y-3">
@@ -54,6 +58,8 @@ export function FeedPostCard({ post, onDelete }) {
         <TeamCardPost teamCard={post.teamCard} />
       </div>
     );
+  } else if (post.type === 'highlight_clip') {
+    content = <HighlightClipPostCard highlightClip={post.highlightClip} caption={post.caption} />;
   }
 
   return (
