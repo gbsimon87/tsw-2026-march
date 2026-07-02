@@ -261,6 +261,7 @@ export function PublicLeagueTeamPage() {
             <button
               key={tab.id}
               type="button"
+              aria-label={tab.label}
               onClick={() => setActiveTab(tab.id)}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
                 index < visibleTabs.length - 1 ? 'border-r border-slate-200' : ''
@@ -280,23 +281,29 @@ export function PublicLeagueTeamPage() {
           {activeTab === 'stats' ? (
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Player Stats</h2>
-              <div className="mt-4 overflow-x-auto">
-                <StatsTable
-                  columns={PLAYER_STATS_COLUMNS}
-                  rows={playerStatsRows}
-                  tableClassName="w-full text-sm"
-                />
-              </div>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                <svg
-                  viewBox="0 0 12 12"
-                  className="h-3 w-3 shrink-0 text-emerald-600"
-                  fill="currentColor"
-                >
-                  <path d="M6 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 6c2.76 0 5 1.12 5 2.5V10H1v-.5C1 8.12 3.24 7 6 7Z" />
-                </svg>
-                Profile claimed — this player has linked their account.
-              </p>
+              {playerStatsRows.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-600">No player stats yet.</p>
+              ) : (
+                <>
+                  <div className="mt-4 overflow-x-auto">
+                    <StatsTable
+                      columns={PLAYER_STATS_COLUMNS}
+                      rows={playerStatsRows}
+                      tableClassName="w-full text-sm"
+                    />
+                  </div>
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                    <svg
+                      viewBox="0 0 12 12"
+                      className="h-3 w-3 shrink-0 text-emerald-600"
+                      fill="currentColor"
+                    >
+                      <path d="M6 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 6c2.76 0 5 1.12 5 2.5V10H1v-.5C1 8.12 3.24 7 6 7Z" />
+                    </svg>
+                    Profile claimed — this player has linked their account.
+                  </p>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -327,6 +334,7 @@ export function PublicLeagueTeamPage() {
                   <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
                     <input
                       type="checkbox"
+                      aria-label="Player — claim my profile"
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
                       checked={rolePlayer}
                       onChange={(e) => setRolePlayer(e.target.checked)}
@@ -343,6 +351,7 @@ export function PublicLeagueTeamPage() {
                   <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
                     <input
                       type="checkbox"
+                      aria-label="Team Manager"
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
                       checked={roleTeamManager}
                       onChange={(e) => setRoleTeamManager(e.target.checked)}
