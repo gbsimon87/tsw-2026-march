@@ -249,7 +249,7 @@ export function PublicLeaguePlayerPage() {
   ];
 
   const breadcrumbs = [
-    { label: 'Discover', href: '/' },
+    { label: 'Discover', href: '/home' },
     { label: league.name, href: `/league/${league.slug}` },
     { label: team.name, href: `/league/${league.slug}/teams/${team.slug}` },
     { label: player.displayName },
