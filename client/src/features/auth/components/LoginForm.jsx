@@ -127,7 +127,7 @@ export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
 
       <p className="text-center">
         <Link
-          className="text-xs text-slate-400 transition-colors hover:text-slate-600"
+          className="text-xs text-slate-500 transition-colors hover:text-slate-700"
           to="/verify-email"
         >
           Need a new verification email?
