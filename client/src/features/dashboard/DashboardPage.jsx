@@ -178,7 +178,7 @@ export function DashboardPage() {
               <path d="M16 11h6" />
             </svg>
           </QuickActionLink>
-          <QuickActionLink to="/admin/leagues/new" label="New League">
+          <QuickActionLink to="/pricing" label="New League">
             <svg
               viewBox="0 0 24 24"
               className="h-5 w-5"
@@ -353,7 +353,7 @@ export function DashboardPage() {
             Your Leagues
           </h2>
           <Link
-            to="/admin/leagues/new"
+            to="/pricing"
             className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700"
           >
             Create League

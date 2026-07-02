@@ -2,6 +2,8 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
 import { NotFoundPage } from '../../pages/NotFoundPage';
+import { PricingPage } from '../../features/billing/pages/PricingPage';
+import { env } from '../../lib/env';
 import { SportsLoader } from '../../components/SportsLoader';
 import { AdminPage } from '../../features/dashboard/AdminPage';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
@@ -76,7 +78,10 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/pricing" element={<Navigate to="/" replace />} />
+        <Route
+          path="/pricing"
+          element={env.appEnv === 'production' ? <Navigate to="/pulse" replace /> : <PricingPage />}
+        />
         <Route path="/billing/success" element={<BillingSuccessPage />} />
         <Route path="/billing/cancel" element={<BillingCancelPage />} />
         <Route path="/league/:leagueSlug" element={<PublicLeaguePage />} />
@@ -115,7 +120,7 @@ export function AppRouter() {
         <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/teams/:teamId" element={<PublicTeamPage />} />
         <Route path="/leagues" element={<Navigate to="/admin" replace />} />
-        <Route path="/leagues/new" element={<Navigate to="/admin/leagues/new" replace />} />
+        <Route path="/leagues/new" element={<Navigate to="/pricing" replace />} />
         <Route
           path="/leagues/:leagueId/manage"
           element={<LegacyLeagueRedirect target="/admin/leagues/:leagueId" />}

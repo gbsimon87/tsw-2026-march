@@ -81,6 +81,7 @@ async function request(path, options = {}, retryState = {}) {
   if (!response.ok) {
     const message = data?.error?.message || 'Request failed';
     const error = new Error(message);
+    error.status = response.status;
     error.details = data?.error?.details || null;
     error.requestId = data?.error?.requestId || null;
     throw error;

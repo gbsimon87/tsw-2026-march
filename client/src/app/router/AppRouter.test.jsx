@@ -10,10 +10,12 @@ const authMocks = vi.hoisted(() => ({
 const teamsApiMocks = vi.hoisted(() => ({
   listPublicExploreGames: vi.fn(() => Promise.resolve({ games: [] })),
   listPublic: vi.fn(() => Promise.resolve({ teams: [] })),
+  list: vi.fn(() => Promise.resolve({ teams: [] })),
 }));
 
 const leaguesApiMocks = vi.hoisted(() => ({
   listPublic: vi.fn(() => Promise.resolve({ leagues: [] })),
+  list: vi.fn(() => Promise.resolve({ leagues: [] })),
 }));
 
 const feedApiMocks = vi.hoisted(() => ({
@@ -108,6 +110,38 @@ describe('AppRouter', () => {
     });
 
     expect(screen.getByTestId('location')).toHaveTextContent('/home');
+  });
+
+  test('renders pricing page in development so league checkout is reachable', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Start your free trial today/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/pricing');
+  });
+
+  test('redirects legacy /leagues/new to pricing instead of the creation form', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/leagues/new']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/pricing');
+    });
   });
 
   test('renders not found page for unknown routes instead of redirecting home', async () => {
