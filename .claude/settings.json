@@ -38,7 +38,8 @@
       "Bash(echo \"=== exit code: $? \\(empty diff = no changes since\\) ===\")",
       "Bash(grep -n \"assertFeedPostingAllowed\\\\|feed.controller\" /dev/null; git show 852858f -- server/src/modules/feed/feed.controller.js)",
       "Read(//dev/**)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(git commit *)"
     ]
   }
 }
