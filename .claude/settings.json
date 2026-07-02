@@ -40,7 +40,9 @@
       "Read(//dev/**)",
       "Bash(python3 -c ' *)",
       "Bash(git commit *)",
-      "Bash(npx prettier *)"
+      "Bash(npx prettier *)",
+      "Bash(wc -l \"/Users/simoncordova/.claude/projects/-Users-simoncordova-Desktop-Simon-tsw-2026-march/0736959e-a72e-455f-ad33-cadca4890b44/subagents/agent-a8e8a314e7fb59a50.jsonl\" 2>&1)",
+      "Read(//Users/simoncordova/.claude/projects/-Users-simoncordova-Desktop-Simon-tsw-2026-march/0736959e-a72e-455f-ad33-cadca4890b44/subagents/**)"
     ]
   }
 }

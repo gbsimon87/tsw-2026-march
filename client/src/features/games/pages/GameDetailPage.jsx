@@ -19,6 +19,8 @@ import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { createRecapCardDataUrl } from '../recapCardImage';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
@@ -468,6 +470,35 @@ export function GameDetailPage() {
       cancelled = true;
     };
   }, [data]);
+
+  const metaIsDualTeam = data?.game?.trackingMode === 'dual_team';
+  const metaGameSummary = data?.gameSummary || {
+    teamPoints: data?.boxScore?.teamTotals?.points || 0,
+    opponentPoints: data?.boxScore?.opponentTotals?.points || 0,
+  };
+  const metaMatchupName = data
+    ? metaIsDualTeam
+      ? `${getParticipantName(data.participants, 'away')} at ${getParticipantName(data.participants, 'home')}`
+      : `${data.team?.name || 'Team'} vs ${data.recap?.opponent?.name || data.game?.opponent || 'Opponent'}`
+    : undefined;
+  const metaImage = data
+    ? metaIsDualTeam
+      ? data.participants?.home?.logo?.url
+      : data.game?.gameContext === 'league'
+        ? getLeagueHeaderImage(data.league)
+        : getGameHeaderImage(data.team)
+    : undefined;
+
+  useDocumentMeta({
+    title: data ? `${data.game?.title || metaMatchupName} — Game Recap` : undefined,
+    description: data
+      ? metaIsDualTeam
+        ? `${metaMatchupName} final: ${metaGameSummary.homePoints || 0}-${metaGameSummary.awayPoints || 0}.`
+        : `${metaMatchupName} final: ${metaGameSummary.teamPoints || 0}-${metaGameSummary.opponentPoints || 0}.`
+      : undefined,
+    image: data ? resolveShareImage(metaImage) : undefined,
+    url: data ? `${window.location.origin}/games/${gameId}` : undefined,
+  });
 
   if (isLoading) {
     return <SportsLoader label="Loading game" fullPage />;

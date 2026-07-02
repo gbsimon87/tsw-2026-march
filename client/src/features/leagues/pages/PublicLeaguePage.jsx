@@ -10,6 +10,8 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { resolveShareImage } from '../../../hooks/resolveShareImage';
 
 function formatPercentage(value) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '--';
@@ -170,6 +172,15 @@ export function PublicLeaguePage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load league'))
       .finally(() => setIsLoading(false));
   }, [leagueSlug]);
+
+  useDocumentMeta({
+    title: league ? `${league.name} — League Standings & Games` : undefined,
+    description: league
+      ? `${league.seasonLabel || 'Season TBD'} • Public league standings and game results.`
+      : undefined,
+    image: league ? resolveShareImage(league.logo?.url) : undefined,
+    url: league ? `${window.location.origin}/league/${league.slug}` : undefined,
+  });
 
   if (isLoading) {
     return <SportsLoader label="Loading league" fullPage />;

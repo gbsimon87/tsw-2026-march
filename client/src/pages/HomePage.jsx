@@ -4,6 +4,8 @@ import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
 import { SportsLoader } from '../components/SportsLoader';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
+import { resolveShareImage } from '../hooks/resolveShareImage';
 import basketballImage1 from '../assets/home/basketball_image_1.png';
 import basketballImage2 from '../assets/home/basketball_image_2.png';
 import basketballImage3 from '../assets/home/basketball_image_3.png';
@@ -42,6 +44,14 @@ export function HomePage() {
   const [publicLeagues, setPublicLeagues] = useState([]);
   const [publicTeams, setPublicTeams] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useDocumentMeta({
+    title: 'Discover Leagues & Teams — The Sporty Way',
+    description:
+      'Browse public basketball leagues, standings, and games from teams currently competing.',
+    image: resolveShareImage(),
+    url: `${window.location.origin}/home`,
+  });
 
   useEffect(() => {
     Promise.all([

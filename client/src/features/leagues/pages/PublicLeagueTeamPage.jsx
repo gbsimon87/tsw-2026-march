@@ -10,6 +10,8 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
+import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { resolveShareImage } from '../../../hooks/resolveShareImage';
 
 const TABS = [
   {
@@ -146,6 +148,17 @@ export function PublicLeagueTeamPage() {
       .catch((loadError) => setError(loadError.message || 'Failed to load team'))
       .finally(() => setIsLoading(false));
   }, [leagueSlug, teamSlug]);
+
+  useDocumentMeta({
+    title: data?.team ? `${data.team.name} — ${data.league?.name || 'League'}` : undefined,
+    description: data?.team
+      ? `${data.team.name} of ${data.league?.name || 'the league'}. Rank: ${data.team.standingsPosition || 'N/A'}.`
+      : undefined,
+    image: data?.team ? resolveShareImage(data.team.logo?.url) : undefined,
+    url: data?.team
+      ? `${window.location.origin}/league/${leagueSlug}/teams/${teamSlug}`
+      : undefined,
+  });
 
   if (isLoading) {
     return <SportsLoader label="Loading league team" fullPage />;
