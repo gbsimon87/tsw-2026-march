@@ -106,7 +106,9 @@ export function HomePage() {
                       alt={`${league.name} logo`}
                       className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
-                    <h3 className="text-lg font-semibold text-slate-900">{league.name}</h3>
+                    <h3 className="text-lg font-semibold text-slate-900" aria-label={league.name}>
+                      {league.name}
+                    </h3>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
                     {league.seasonLabel || 'Season TBD'}
@@ -203,7 +205,11 @@ export function HomePage() {
             className="grid items-center gap-6 rounded-2xl bg-white border border-slate-200 p-6 md:grid-cols-2 md:p-8"
           >
             <div className={imageIsSecond ? 'order-2 md:order-1' : undefined}>
-              <h2 id={section.headingId} className="text-2xl font-semibold text-slate-900">
+              <h2
+                id={section.headingId}
+                className="text-2xl font-semibold text-slate-900"
+                aria-label={section.title}
+              >
                 {section.title}
               </h2>
               <p className="mt-3 text-slate-700">{section.body}</p>
