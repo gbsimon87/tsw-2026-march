@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { GameVideoEmbed } from './GameVideoEmbed';
+import { GameStatsCharts } from './GameStatsCharts';
+import { ScoringTimelineChart } from './ScoringTimelineChart';
 
 function formatPercentage(value) {
   return value == null ? '--' : `${value.toFixed(0)}%`;
@@ -32,6 +34,7 @@ export function GameRecapPanel({
   aiSummary = null,
   videoUrl = null,
   videoTitle = null,
+  events = [],
 }) {
   return (
     <div className="space-y-5">
@@ -170,6 +173,15 @@ export function GameRecapPanel({
               ))}
             </div>
           )}
+
+          <GameStatsCharts
+            isDualTeam={isDualTeam}
+            homeStats={recap?.homeStats}
+            awayStats={recap?.awayStats}
+            teamStats={recap?.teamStats}
+            homeLabel={recap?.home?.name || 'Home'}
+            awayLabel={recap?.away?.name || 'Away'}
+          />
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -257,6 +269,17 @@ export function GameRecapPanel({
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="text-xl font-semibold text-slate-900">Scoring Timeline</h3>
+        <p className="text-sm text-slate-600">How the score progressed as the game went on.</p>
+        <ScoringTimelineChart
+          events={events}
+          isDualTeam={isDualTeam}
+          homeLabel={recap?.home?.name || 'Home'}
+          awayLabel={recap?.away?.name || 'Away'}
+        />
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">

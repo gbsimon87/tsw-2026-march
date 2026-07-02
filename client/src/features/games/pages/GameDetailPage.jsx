@@ -1113,6 +1113,7 @@ export function GameDetailPage() {
                   aiSummary={aiSummary}
                   videoUrl={game.videoUrl}
                   videoTitle={game.title}
+                  events={sortedEvents}
                 />
               ),
             },
