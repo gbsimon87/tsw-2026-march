@@ -25,7 +25,14 @@
       "Bash(find *)",
       "Bash(git commit -m 'chore: configure Claude Code settings for MERN stack *)",
       "Bash(npx eslint *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(rg -n \"'/feed\" .)",
+      "Bash(rg -n '\"/feed' .)",
+      "Bash(rg -n '`/feed' .)",
+      "Bash(cd /Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src *)",
+      "Read(//Users/simoncordova/Desktop/Simon/**)",
+      "Bash(rg -n '/feed\\\\b' --pcre2 .)",
+      "Bash(rg -n '/feed[/\"'\"'\"'` \\)]' .)"
     ]
   }
 }
