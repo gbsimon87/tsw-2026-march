@@ -26,3 +26,7 @@ Provide a fast, reliable basketball stat tracking workflow for real games: creat
 - V1 standalone games remain intentionally narrow for speed: one tracked team per game, event-sourced scoring, and minimal UI complexity.
 - For standalone games, opponent support is limited to score totals. Full opponent roster tracking is available in league games via dual-team tracking mode (`trackingMode: 'dual_team'` in the game schema).
 - Leagues are a shipped feature: users can create leagues, add teams and players to league rosters, schedule league games with dual-team tracking, view standings, and manage join requests. League team members hold roles of manager, helper, or player. Public league, team, and player pages are live. See `server/src/modules/leagues/` and `client/src/features/leagues/` for the implementation.
+
+- Make it easier for anyone to find different profiles of a different player, for example if they play in more than one team/league.
+- Consider players requesting a missed stat or incorrect stat, consider requiring a timestamp in the video. The request should go to the league/team managers to approve.
+- Announcements

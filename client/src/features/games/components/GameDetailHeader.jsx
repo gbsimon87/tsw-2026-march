@@ -98,6 +98,7 @@ export function GameDetailHeader({
         <div className="space-y-3 px-4 py-4">
           {[
             {
+              side: 'home',
               logo: isDualTeam
                 ? participants?.home?.logo?.url || teamPlaceholder
                 : game?.gameContext === 'league'
@@ -108,13 +109,14 @@ export function GameDetailHeader({
               won: homePoints > awayPoints,
             },
             {
+              side: 'away',
               logo: isDualTeam ? participants?.away?.logo?.url || teamPlaceholder : teamPlaceholder,
               name: awayName,
               points: awayPoints,
               won: awayPoints > homePoints,
             },
           ].map((side) => (
-            <div key={side.name} className="flex items-center gap-3">
+            <div key={side.side} className="flex items-center gap-3">
               <img
                 src={side.logo}
                 alt={`${side.name} logo`}
@@ -157,7 +159,9 @@ export function GameDetailHeader({
         </div>
       ) : null}
 
-      {actions ? <div className="mt-4 flex flex-wrap gap-2 print:hidden">{actions}</div> : null}
+      {actions ? (
+        <div className="mt-4 flex flex-wrap justify-end gap-2 print:hidden">{actions}</div>
+      ) : null}
     </section>
   );
 }

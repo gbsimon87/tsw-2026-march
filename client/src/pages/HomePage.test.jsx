@@ -54,11 +54,11 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Active Leagues' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Featured Leagues' })).toBeInTheDocument();
     });
 
     expect(screen.getByRole('link', { name: /TSW Blue/ })).toHaveAttribute('href', '/teams/team-1');
-    expect(screen.getByRole('heading', { name: 'Featured Public Teams' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
       'href',
       '/league/spring-league'

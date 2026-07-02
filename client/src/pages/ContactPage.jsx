@@ -101,9 +101,16 @@ function ContactForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Your name" error={touched.name ? errors.name : null}>
+        <Field
+          id="contact-name"
+          label="Your name"
+          required
+          error={touched.name ? errors.name : null}
+        >
           <input
+            id="contact-name"
             type="text"
+            autoComplete="name"
             value={form.name}
             onChange={(e) => set('name', e.target.value)}
             onBlur={() => touch('name')}
@@ -112,9 +119,16 @@ function ContactForm() {
           />
         </Field>
 
-        <Field label="Email address" error={touched.email ? errors.email : null}>
+        <Field
+          id="contact-email"
+          label="Email address"
+          required
+          error={touched.email ? errors.email : null}
+        >
           <input
+            id="contact-email"
             type="email"
+            autoComplete="email"
             value={form.email}
             onChange={(e) => set('email', e.target.value)}
             onBlur={() => touch('email')}
@@ -125,8 +139,15 @@ function ContactForm() {
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Your role" error={touched.role ? errors.role : null}>
+        <Field
+          id="contact-role"
+          label="Your role"
+          required
+          error={touched.role ? errors.role : null}
+        >
           <select
+            id="contact-role"
+            aria-label="Your role"
             value={form.role}
             onChange={(e) => set('role', e.target.value)}
             onBlur={() => touch('role')}
@@ -141,9 +162,16 @@ function ContactForm() {
           </select>
         </Field>
 
-        <Field label="Club or team name" error={touched.clubName ? errors.clubName : null}>
+        <Field
+          id="contact-club-name"
+          label="Club or team name"
+          required
+          error={touched.clubName ? errors.clubName : null}
+        >
           <input
+            id="contact-club-name"
             type="text"
+            autoComplete="organization"
             value={form.clubName}
             onChange={(e) => set('clubName', e.target.value)}
             onBlur={() => touch('clubName')}
@@ -153,8 +181,15 @@ function ContactForm() {
         </Field>
       </div>
 
-      <Field label="What are you looking to do?" error={touched.interest ? errors.interest : null}>
+      <Field
+        id="contact-interest"
+        label="What are you looking to do?"
+        required
+        error={touched.interest ? errors.interest : null}
+      >
         <select
+          id="contact-interest"
+          aria-label="What are you looking to do?"
           value={form.interest}
           onChange={(e) => set('interest', e.target.value)}
           onBlur={() => touch('interest')}
@@ -169,8 +204,9 @@ function ContactForm() {
         </select>
       </Field>
 
-      <Field label="Anything else you'd like us to know" hint="Optional">
+      <Field id="contact-message" label="Anything else you'd like us to know" hint="Optional">
         <textarea
+          id="contact-message"
           value={form.message}
           onChange={(e) => set('message', e.target.value)}
           rows={4}
@@ -185,6 +221,7 @@ function ContactForm() {
         <button
           type="submit"
           disabled={status === 'loading'}
+          aria-label={status === 'loading' ? 'Sending...' : 'Send message'}
           className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
         >
           {status === 'loading' ? 'Sending...' : 'Send message'}
@@ -194,11 +231,14 @@ function ContactForm() {
   );
 }
 
-function Field({ label, hint, error, children }) {
+function Field({ id, label, hint, required, error, children }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <label className="text-sm font-medium text-slate-700">{label}</label>
+        <label htmlFor={id} className="text-sm font-medium text-slate-700">
+          {label}
+          {required && <span className="text-red-600"> *</span>}
+        </label>
         {hint && <span className="text-xs text-slate-400">{hint}</span>}
         {error && <span className="text-xs text-red-600">{error}</span>}
       </div>

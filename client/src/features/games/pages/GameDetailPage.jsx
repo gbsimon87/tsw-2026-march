@@ -9,76 +9,21 @@ import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { feedApi } from '../../feed/api/feedApi';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
-import { extractYouTubeVideoId } from '../youtube.js';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameRecapPanel } from '../components/GameRecapPanel';
+import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { createRecapCardDataUrl } from '../recapCardImage';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
+import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import gameConstants from '../constants';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
-
-const HIGHLIGHT_LABELS = {
-  FG2_MADE: '2PT Make',
-  FG2_MISS: '2PT Miss',
-  FG3_MADE: '3PT Make',
-  FG3_MISS: '3PT Miss',
-  FT_MADE: 'FT Make',
-  FT_MISS: 'FT Miss',
-  AST: 'Assist',
-  STL: 'Steal',
-  BLK: 'Block',
-};
-
-const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
-const MAX_HIGHLIGHTS = 5;
-
-function selectHighlights(highlights) {
-  return [...(highlights || [])]
-    .sort((a, b) => (HIGHLIGHT_PRIORITY[a.statType] ?? 2) - (HIGHLIGHT_PRIORITY[b.statType] ?? 2))
-    .slice(0, MAX_HIGHLIGHTS);
-}
-
-function GameHighlightClip({
-  videoUrl,
-  timestamp,
-  statType,
-  playerName,
-  teamSide,
-  participantName,
-}) {
-  const videoId = extractYouTubeVideoId(videoUrl);
-  if (!videoId) return null;
-  const start = Math.max(0, timestamp - 5);
-  const end = timestamp + 5;
-  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
-  const label = HIGHLIGHT_LABELS[statType] || statType;
-  const sideLabel = participantName || teamSide || null;
-  return (
-    <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="aspect-video w-full bg-slate-950">
-        <iframe
-          className="h-full w-full"
-          src={src}
-          title={`${playerName ? `${playerName} — ` : ''}${label}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-      </div>
-      <div className="px-3 py-2">
-        <p className="text-xs font-semibold text-slate-900">{label}</p>
-        {playerName ? <p className="truncate text-xs text-slate-600">{playerName}</p> : null}
-        {sideLabel ? <p className="truncate text-xs text-slate-400">{sideLabel}</p> : null}
-      </div>
-    </div>
-  );
-}
 
 function eventTime(value) {
   if (!value) {
@@ -158,6 +103,20 @@ function getHeaderStatusLabel(game, recap) {
   return game?.status || 'Game Detail';
 }
 
+function PrintIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M5.5 7V4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v3M5.5 15.5H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1h-1.5M5.5 12.5h9v4h-9z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ShareIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
@@ -210,6 +169,50 @@ function FeedIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function RecapTabIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-4 w-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M3 3h10v10H3z" strokeLinejoin="round" />
+      <path d="M5.5 6.5h5M5.5 9h3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StatsTabIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-4 w-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M2 12h12M5 12V6M8 12V3M11 12V8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ReplayTabIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-4 w-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M4 4.5v7l6-3.5-6-3.5Z" strokeLinejoin="round" />
+      <path d="M12.5 4v8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -469,6 +472,35 @@ export function GameDetailPage() {
     };
   }, [data]);
 
+  const metaIsDualTeam = data?.game?.trackingMode === 'dual_team';
+  const metaGameSummary = data?.gameSummary || {
+    teamPoints: data?.boxScore?.teamTotals?.points || 0,
+    opponentPoints: data?.boxScore?.opponentTotals?.points || 0,
+  };
+  const metaMatchupName = data
+    ? metaIsDualTeam
+      ? `${getParticipantName(data.participants, 'away')} at ${getParticipantName(data.participants, 'home')}`
+      : `${data.team?.name || 'Team'} vs ${data.recap?.opponent?.name || data.game?.opponent || 'Opponent'}`
+    : undefined;
+  const metaImage = data
+    ? metaIsDualTeam
+      ? data.participants?.home?.logo?.url
+      : data.game?.gameContext === 'league'
+        ? getLeagueHeaderImage(data.league)
+        : getGameHeaderImage(data.team)
+    : undefined;
+
+  useDocumentMeta({
+    title: data ? `${data.game?.title || metaMatchupName} — Game Recap` : undefined,
+    description: data
+      ? metaIsDualTeam
+        ? `${metaMatchupName} final: ${metaGameSummary.homePoints || 0}-${metaGameSummary.awayPoints || 0}.`
+        : `${metaMatchupName} final: ${metaGameSummary.teamPoints || 0}-${metaGameSummary.opponentPoints || 0}.`
+      : undefined,
+    image: data ? resolveShareImage(metaImage) : undefined,
+    url: data ? `${window.location.origin}/games/${gameId}` : undefined,
+  });
+
   if (isLoading) {
     return <SportsLoader label="Loading game" fullPage />;
   }
@@ -636,7 +668,20 @@ export function GameDetailPage() {
         </div>
       ) : null}
 
-      <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-xl font-semibold text-slate-900">Scoring Timeline</h3>
+          <p className="text-sm text-slate-600">How the score progressed as the game went on.</p>
+          <ScoringTimelineChart
+            events={sortedEvents}
+            isDualTeam={isDualTeam}
+            homeLabel={getParticipantName(participants, 'home')}
+            awayLabel={getParticipantName(participants, 'away')}
+          />
+        </div>
+
+        <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
+      </div>
 
       <div className="rounded border bg-white">
         <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-2">
@@ -645,6 +690,7 @@ export function GameDetailPage() {
             <button
               type="button"
               onClick={() => setShowAllEvents((value) => !value)}
+              aria-label={showAllEvents ? 'Show Last 5' : 'Show All'}
               className="text-xs font-semibold text-blue-600 hover:underline"
             >
               {showAllEvents ? 'Show Last 5' : 'Show All'}
@@ -890,7 +936,9 @@ export function GameDetailPage() {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Printable Box Score
         </p>
-        <h1 className="text-2xl font-bold text-slate-900">{game.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900" aria-label={game.title}>
+          {game.title}
+        </h1>
         <p className="text-sm text-slate-700">
           {isDualTeam
             ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')}`
@@ -934,7 +982,7 @@ export function GameDetailPage() {
   const leagueBreadcrumbs =
     isDualTeam && data.league
       ? [
-          { label: 'Leagues' },
+          { label: 'Discover', href: '/home' },
           { label: data.league.name, href: `/league/${data.league.slug}` },
           { label: game.title || 'Game' },
         ]
@@ -959,38 +1007,52 @@ export function GameDetailPage() {
               <button
                 type="button"
                 onClick={() => updateSearchParam('print', '1')}
-                className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                aria-label="Print box score"
+                title="Print box score"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
-                Print Box Score
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                  <PrintIcon />
+                </span>
+                <span className="text-[11px] font-medium">Print</span>
               </button>
               <button
                 type="button"
                 onClick={shareHeaderCard}
                 aria-label="Share image card"
                 title={isSharingHeaderCard ? 'Preparing image card' : 'Share image card'}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!headerCardDataUrl || isSharingHeaderCard}
               >
-                <ShareIcon />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                  <ShareIcon />
+                </span>
+                <span className="text-[11px] font-medium">Share</span>
               </button>
               <button
                 type="button"
                 onClick={downloadHeaderCard}
                 aria-label="Download image card"
                 title={imageState === 'downloaded' ? 'Downloaded' : 'Download image card'}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!headerCardDataUrl}
               >
-                <DownloadIcon downloaded={imageState === 'downloaded'} />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                  <DownloadIcon downloaded={imageState === 'downloaded'} />
+                </span>
+                <span className="text-[11px] font-medium">Download</span>
               </button>
               <button
                 type="button"
                 onClick={openFeedComposer}
                 aria-label="Share to The Pulse"
                 title="Share to The Pulse"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
-                <FeedIcon />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                  <FeedIcon />
+                </span>
+                <span className="text-[11px] font-medium">Pulse</span>
               </button>
             </>
           }
@@ -998,49 +1060,6 @@ export function GameDetailPage() {
       ) : null}
 
       {isPrintMode ? printContent : null}
-
-      {!isPrintMode && data.highlights?.length > 0 ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {selectHighlights(data.highlights).map((h) => {
-              const clipState =
-                clipShareState[h.eventId] ||
-                (data.sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
-              return (
-                <div key={h.eventId} className="flex shrink-0 flex-col">
-                  <GameHighlightClip
-                    videoUrl={h.videoUrl}
-                    timestamp={h.videoTimestamp}
-                    statType={h.statType}
-                    playerName={h.playerName}
-                    teamSide={h.teamSide}
-                    participantName={
-                      isDualTeam && h.teamSide ? getParticipantName(participants, h.teamSide) : null
-                    }
-                  />
-                  {canShareHighlights ? (
-                    <button
-                      type="button"
-                      disabled={clipState === 'loading' || clipState === 'shared'}
-                      onClick={() => shareHighlightClip(h.eventId)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {clipState === 'loading'
-                        ? 'Sharing…'
-                        : clipState === 'shared'
-                          ? '✓ Shared to Pulse'
-                          : clipState !== 'idle'
-                            ? clipState
-                            : 'Share to Pulse'}
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
 
       {!isPrintMode ? (
         <Tabs
@@ -1050,22 +1069,37 @@ export function GameDetailPage() {
             {
               value: 'recap',
               label: 'Recap',
+              icon: <RecapTabIcon />,
               content: (
                 <GameRecapPanel
                   team={team}
                   league={data.league}
                   participants={participants}
                   isDualTeam={isDualTeam}
-                  gameId={game.id}
                   recap={recap}
                   aiSummary={aiSummary}
                   videoUrl={game.videoUrl}
                   videoTitle={game.title}
+                  highlights={data.highlights}
+                  sharedEventIds={data.sharedEventIds}
+                  canShareHighlights={canShareHighlights}
+                  clipShareState={clipShareState}
+                  onShareHighlightClip={shareHighlightClip}
                 />
               ),
             },
-            { value: 'stats', label: 'Stats', content: statsContent },
-            { value: 'replay', label: 'Replay', content: replayContent },
+            {
+              value: 'stats',
+              label: 'Stats',
+              icon: <StatsTabIcon />,
+              content: statsContent,
+            },
+            {
+              value: 'replay',
+              label: 'Replay',
+              icon: <ReplayTabIcon />,
+              content: replayContent,
+            },
           ]}
         />
       ) : null}

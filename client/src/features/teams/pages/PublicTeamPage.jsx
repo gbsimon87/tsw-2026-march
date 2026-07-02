@@ -10,6 +10,8 @@ import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 import { buildTeamCardPreview } from '../shareCardPayloads';
+import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { resolveShareImage } from '../../../hooks/resolveShareImage';
 
 function formatGameDate(game) {
   const rawValue = game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -142,6 +144,22 @@ export function PublicTeamPage() {
   const visibleUpcomingGames = areAllGamesVisible ? upcomingGames : upcomingGames.slice(0, 5);
   const visibleRecentGames = areAllGamesVisible ? recentGames : recentGames.slice(0, 5);
   const isFeedComposerOpen = searchParams.get('composeFeedTeam') === '1';
+
+  const venue = formatVenue(data?.team?.homeVenue);
+  useDocumentMeta({
+    title: data?.team ? `${data.team.name} — Team Page` : undefined,
+    description: data?.team
+      ? [
+          `${data.team.name} on The Sporty Way.`,
+          venue ? `Home games at ${venue.arenaName}.` : null,
+          data.summary?.gamesCount ? `${data.summary.gamesCount} games tracked.` : null,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : undefined,
+    image: data?.team ? resolveShareImage(data.team.logo?.url) : undefined,
+    url: data?.team ? `${window.location.origin}/teams/${teamId}` : undefined,
+  });
 
   function updateSearchParam(name, value) {
     const nextParams = new URLSearchParams(searchParams);

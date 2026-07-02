@@ -31,6 +31,10 @@ export function AdminNewLeaguePage() {
       }
       navigate(`/admin/leagues/${response.league.id}`);
     } catch (submitError) {
+      if (submitError.status === 402) {
+        navigate('/pricing');
+        return;
+      }
       setError(submitError.message || 'Failed to create league');
     } finally {
       setIsSubmitting(false);
@@ -56,29 +60,34 @@ export function AdminNewLeaguePage() {
         onSubmit={onSubmit}
         className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
       >
-        <label className="block">
+        <label className="block" htmlFor="league-name">
           <span className="mb-1 block text-sm text-slate-700">League Name</span>
           <input
+            id="league-name"
             type="text"
             required
+            autoComplete="off"
             className="w-full rounded border border-slate-300 px-3 py-2"
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <label className="block">
+        <label className="block" htmlFor="league-season-label">
           <span className="mb-1 block text-sm text-slate-700">Season Label</span>
           <input
+            id="league-season-label"
             type="text"
+            autoComplete="off"
             className="w-full rounded border border-slate-300 px-3 py-2"
             placeholder="2026 Spring"
             value={seasonLabel}
             onChange={(event) => setSeasonLabel(event.target.value)}
           />
         </label>
-        <label className="block">
+        <label className="block" htmlFor="league-description">
           <span className="mb-1 block text-sm text-slate-700">Description</span>
           <textarea
+            id="league-description"
             className="w-full rounded border border-slate-300 px-3 py-2"
             rows="4"
             value={description}
@@ -97,6 +106,7 @@ export function AdminNewLeaguePage() {
             ) : null}
             <input
               type="file"
+              aria-label="Logo (optional)"
               accept="image/png,image/jpeg,image/webp"
               className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
               onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
@@ -115,6 +125,7 @@ export function AdminNewLeaguePage() {
         <button
           type="submit"
           disabled={isSubmitting}
+          aria-label={isSubmitting ? 'Creating league...' : 'Create League'}
           className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? 'Creating league...' : 'Create League'}

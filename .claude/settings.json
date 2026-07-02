@@ -23,7 +23,27 @@
       "Bash(eslint *)",
       "Bash(grep *)",
       "Bash(find *)",
-      "Bash(git commit -m 'chore: configure Claude Code settings for MERN stack *)"
+      "Bash(git commit -m 'chore: configure Claude Code settings for MERN stack *)",
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)",
+      "Bash(rg -n \"'/feed\" .)",
+      "Bash(rg -n '\"/feed' .)",
+      "Bash(rg -n '`/feed' .)",
+      "Bash(cd /Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src *)",
+      "Read(//Users/simoncordova/Desktop/Simon/**)",
+      "Bash(rg -n '/feed\\\\b' --pcre2 .)",
+      "Bash(rg -n '/feed[/\"'\"'\"'` \\)]' .)",
+      "Bash(wait)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(echo \"=== exit code: $? \\(empty diff = no changes since\\) ===\")",
+      "Bash(grep -n \"assertFeedPostingAllowed\\\\|feed.controller\" /dev/null; git show 852858f -- server/src/modules/feed/feed.controller.js)",
+      "Read(//dev/**)",
+      "Bash(python3 -c ' *)",
+      "Bash(git commit *)",
+      "Bash(npx prettier *)",
+      "Bash(wc -l \"/Users/simoncordova/.claude/projects/-Users-simoncordova-Desktop-Simon-tsw-2026-march/0736959e-a72e-455f-ad33-cadca4890b44/subagents/agent-a8e8a314e7fb59a50.jsonl\" 2>&1)",
+      "Read(//Users/simoncordova/.claude/projects/-Users-simoncordova-Desktop-Simon-tsw-2026-march/0736959e-a72e-455f-ad33-cadca4890b44/subagents/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\); print\\('devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")"
     ]
   }
 }

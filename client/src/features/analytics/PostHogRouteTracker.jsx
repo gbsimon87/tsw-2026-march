@@ -13,7 +13,7 @@ import { useScrollDepth } from './useScrollDepth';
 const routePatterns = [
   '/',
   '/home',
-  '/feed',
+  '/pulse',
   '/login',
   '/register',
   '/auth/google/complete',

@@ -28,7 +28,7 @@ function TestRoutes() {
       <PostHogRouteTracker />
       <Routes>
         <Route
-          path="/feed"
+          path="/pulse"
           element={
             <div>
               <p>Feed</p>
@@ -42,7 +42,7 @@ function TestRoutes() {
   );
 }
 
-function renderTracker(initialEntry = '/feed') {
+function renderTracker(initialEntry = '/pulse') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <TestRoutes />
@@ -64,15 +64,15 @@ describe('PostHogRouteTracker', () => {
   });
 
   test('captures page views on initial render and SPA route changes', () => {
-    renderTracker('/feed');
+    renderTracker('/pulse');
 
     expect(posthogLibMocks.capturePostHogPageView).toHaveBeenCalledTimes(1);
     expect(posthogLibMocks.capturePostHogPageView).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        path: '/feed',
+        path: '/pulse',
         search: '',
         app_env: 'development',
-        route_pattern: '/feed',
+        route_pattern: '/pulse',
       })
     );
 
@@ -107,7 +107,7 @@ describe('PostHogRouteTracker', () => {
       },
     };
 
-    renderTracker('/feed');
+    renderTracker('/pulse');
 
     expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith('user-1', {
       plan: 'pro',
@@ -132,7 +132,7 @@ describe('PostHogRouteTracker', () => {
     };
 
     const { rerender } = render(
-      <MemoryRouter initialEntries={['/feed']}>
+      <MemoryRouter initialEntries={['/pulse']}>
         <TestRoutes />
       </MemoryRouter>
     );
@@ -145,7 +145,7 @@ describe('PostHogRouteTracker', () => {
     };
 
     rerender(
-      <MemoryRouter initialEntries={['/feed']}>
+      <MemoryRouter initialEntries={['/pulse']}>
         <TestRoutes />
       </MemoryRouter>
     );

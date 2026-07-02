@@ -16,18 +16,17 @@ const mobileNavLinkClass = ({ isActive }) =>
 export function AppLayout() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const homeHref = user ? '/home' : '/';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
-          <Link to="/feed" className="text-lg font-semibold">
+          <Link to="/pulse" className="text-lg font-semibold">
             {import.meta.env.VITE_APP_NAME}
           </Link>
 
           <nav className="ml-auto hidden items-center gap-4 md:flex">
-            <NavLink to="/feed" className={desktopNavLinkClass}>
+            <NavLink to="/pulse" className={desktopNavLinkClass}>
               The Pulse
             </NavLink>
             {user ? (
@@ -35,7 +34,7 @@ export function AppLayout() {
                 My Sporty
               </NavLink>
             ) : null}
-            <NavLink to={homeHref} end className={desktopNavLinkClass}>
+            <NavLink to="/home" end className={desktopNavLinkClass}>
               Discover
             </NavLink>
             {user ? (
@@ -124,7 +123,7 @@ export function AppLayout() {
 
           <div className="flex flex-col gap-4">
             <NavLink
-              to="/feed"
+              to="/pulse"
               className={mobileNavLinkClass}
               onClick={() => setIsMobileMenuOpen(false)}
             >
@@ -140,7 +139,7 @@ export function AppLayout() {
               </NavLink>
             ) : null}
             <NavLink
-              to={homeHref}
+              to="/home"
               end
               className={mobileNavLinkClass}
               onClick={() => setIsMobileMenuOpen(false)}

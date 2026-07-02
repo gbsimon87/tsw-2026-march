@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
+import { SportsLoader } from '../components/SportsLoader';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
+import { resolveShareImage } from '../hooks/resolveShareImage';
 import basketballImage1 from '../assets/home/basketball_image_1.png';
 import basketballImage2 from '../assets/home/basketball_image_2.png';
 import basketballImage3 from '../assets/home/basketball_image_3.png';
@@ -40,31 +43,42 @@ const homeAudienceSections = [
 export function HomePage() {
   const [publicLeagues, setPublicLeagues] = useState([]);
   const [publicTeams, setPublicTeams] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useDocumentMeta({
+    title: 'Discover Leagues & Teams — The Sporty Way',
+    description:
+      'Browse public basketball leagues, standings, and games from teams currently competing.',
+    image: resolveShareImage(),
+    url: `${window.location.origin}/home`,
+  });
 
   useEffect(() => {
     Promise.all([
       teamsApi.listPublic().catch(() => ({ teams: [] })),
       leaguesApi.listPublic().catch(() => ({ leagues: [] })),
-    ]).then(([teamsResult, leaguesResult]) => {
-      const activeLeagues = (leaguesResult.leagues || []).filter(
-        (league) => league.isPublic && league.status === 'active'
-      );
-      setPublicLeagues(activeLeagues);
+    ])
+      .then(([teamsResult, leaguesResult]) => {
+        const activeLeagues = (leaguesResult.leagues || []).filter(
+          (league) => league.isPublic && league.status === 'active'
+        );
+        setPublicLeagues(activeLeagues);
 
-      const leagueTeams = activeLeagues.flatMap((league) =>
-        (league.teams || []).map((team) => ({
+        const leagueTeams = activeLeagues.flatMap((league) =>
+          (league.teams || []).map((team) => ({
+            ...team,
+            _kind: 'league',
+            leagueSlug: league.slug,
+            leagueName: league.name,
+          }))
+        );
+        const standaloneTeams = (teamsResult.teams || []).map((team) => ({
           ...team,
-          _kind: 'league',
-          leagueSlug: league.slug,
-          leagueName: league.name,
-        }))
-      );
-      const standaloneTeams = (teamsResult.teams || []).map((team) => ({
-        ...team,
-        _kind: 'standalone',
-      }));
-      setPublicTeams([...leagueTeams, ...standaloneTeams]);
-    });
+          _kind: 'standalone',
+        }));
+        setPublicTeams([...leagueTeams, ...standaloneTeams]);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   return (
@@ -82,7 +96,9 @@ export function HomePage() {
           </p>
         </header>
 
-        {publicLeagues.length === 0 ? (
+        {isLoading ? (
+          <SportsLoader label="Loading featured leagues" className="mt-4" />
+        ) : publicLeagues.length === 0 ? (
           <p
             role="status"
             className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
@@ -100,7 +116,9 @@ export function HomePage() {
                       alt={`${league.name} logo`}
                       className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
-                    <h3 className="text-lg font-semibold text-slate-900">{league.name}</h3>
+                    <h3 className="text-lg font-semibold text-slate-900" aria-label={league.name}>
+                      {league.name}
+                    </h3>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
                     {league.seasonLabel || 'Season TBD'}
@@ -137,7 +155,9 @@ export function HomePage() {
           <p className="mt-2 max-w-2xl text-slate-700">Includes league and non-league teams.</p>
         </header>
 
-        {publicTeams.length === 0 ? (
+        {isLoading ? (
+          <SportsLoader label="Loading featured teams" className="mt-4" />
+        ) : publicTeams.length === 0 ? (
           <p
             role="status"
             className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
@@ -195,7 +215,11 @@ export function HomePage() {
             className="grid items-center gap-6 rounded-2xl bg-white border border-slate-200 p-6 md:grid-cols-2 md:p-8"
           >
             <div className={imageIsSecond ? 'order-2 md:order-1' : undefined}>
-              <h2 id={section.headingId} className="text-2xl font-semibold text-slate-900">
+              <h2
+                id={section.headingId}
+                className="text-2xl font-semibold text-slate-900"
+                aria-label={section.title}
+              >
                 {section.title}
               </h2>
               <p className="mt-3 text-slate-700">{section.body}</p>

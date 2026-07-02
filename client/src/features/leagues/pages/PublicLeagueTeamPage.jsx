@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
@@ -10,6 +10,8 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
+import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { resolveShareImage } from '../../../hooks/resolveShareImage';
 
 const TABS = [
   {
@@ -139,7 +141,6 @@ export function PublicLeagueTeamPage() {
   const [requestStatus, setRequestStatus] = useState('');
   const [requestStatusTone, setRequestStatusTone] = useState('success');
   const [activeTab, setActiveTab] = useState('stats');
-  const pendingHandled = useRef(false);
   const pendingKey = `join_pending_${leagueSlug}_${teamSlug}`;
 
   useEffect(() => {
@@ -150,19 +151,16 @@ export function PublicLeagueTeamPage() {
       .finally(() => setIsLoading(false));
   }, [leagueSlug, teamSlug]);
 
-  useEffect(() => {
-    if (!data?.team || !user || pendingHandled.current) return;
-    const raw = sessionStorage.getItem(pendingKey);
-    if (!raw) return;
-    pendingHandled.current = true;
-    sessionStorage.removeItem(pendingKey);
-    const { rolePlayer: rp, roleTeamManager: rtm, requestedLeaguePlayerId: rpid } = JSON.parse(raw);
-    setRolePlayer(rp);
-    setRoleTeamManager(rtm);
-    setRequestedLeaguePlayerId(rpid || '');
-    setActiveTab('join');
-    submitRoles(data.league, data.team, rp, rtm, rpid || '');
-  }, [data, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  useDocumentMeta({
+    title: data?.team ? `${data.team.name} — ${data.league?.name || 'League'}` : undefined,
+    description: data?.team
+      ? `${data.team.name} of ${data.league?.name || 'the league'}. Rank: ${data.team.standingsPosition || 'N/A'}.`
+      : undefined,
+    image: data?.team ? resolveShareImage(data.team.logo?.url) : undefined,
+    url: data?.team
+      ? `${window.location.origin}/league/${leagueSlug}/teams/${teamSlug}`
+      : undefined,
+  });
 
   if (isLoading) {
     return <SportsLoader label="Loading league team" fullPage />;
@@ -247,7 +245,7 @@ export function PublicLeagueTeamPage() {
   }
 
   const breadcrumbs = [
-    { label: 'Leagues' },
+    { label: 'Discover', href: '/home' },
     { label: league.name, href: `/league/${league.slug}` },
     { label: team.name },
   ];
@@ -288,6 +286,7 @@ export function PublicLeagueTeamPage() {
             <button
               key={tab.id}
               type="button"
+              aria-label={tab.label}
               onClick={() => setActiveTab(tab.id)}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
                 index < visibleTabs.length - 1 ? 'border-r border-slate-200' : ''
@@ -307,23 +306,29 @@ export function PublicLeagueTeamPage() {
           {activeTab === 'stats' ? (
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Player Stats</h2>
-              <div className="mt-4 overflow-x-auto">
-                <StatsTable
-                  columns={PLAYER_STATS_COLUMNS}
-                  rows={playerStatsRows}
-                  tableClassName="w-full text-sm"
-                />
-              </div>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                <svg
-                  viewBox="0 0 12 12"
-                  className="h-3 w-3 shrink-0 text-emerald-600"
-                  fill="currentColor"
-                >
-                  <path d="M6 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 6c2.76 0 5 1.12 5 2.5V10H1v-.5C1 8.12 3.24 7 6 7Z" />
-                </svg>
-                Profile claimed — this player has linked their account.
-              </p>
+              {playerStatsRows.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-600">No player stats yet.</p>
+              ) : (
+                <>
+                  <div className="mt-4 overflow-x-auto">
+                    <StatsTable
+                      columns={PLAYER_STATS_COLUMNS}
+                      rows={playerStatsRows}
+                      tableClassName="w-full text-sm"
+                    />
+                  </div>
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                    <svg
+                      viewBox="0 0 12 12"
+                      className="h-3 w-3 shrink-0 text-emerald-600"
+                      fill="currentColor"
+                    >
+                      <path d="M6 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 6c2.76 0 5 1.12 5 2.5V10H1v-.5C1 8.12 3.24 7 6 7Z" />
+                    </svg>
+                    Profile claimed — this player has linked their account.
+                  </p>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -354,6 +359,7 @@ export function PublicLeagueTeamPage() {
                   <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
                     <input
                       type="checkbox"
+                      aria-label="Player — claim my profile"
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
                       checked={rolePlayer}
                       onChange={(e) => setRolePlayer(e.target.checked)}
@@ -370,6 +376,7 @@ export function PublicLeagueTeamPage() {
                   <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
                     <input
                       type="checkbox"
+                      aria-label="Team Manager"
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
                       checked={roleTeamManager}
                       onChange={(e) => setRoleTeamManager(e.target.checked)}

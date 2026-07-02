@@ -10,10 +10,12 @@ const authMocks = vi.hoisted(() => ({
 const teamsApiMocks = vi.hoisted(() => ({
   listPublicExploreGames: vi.fn(() => Promise.resolve({ games: [] })),
   listPublic: vi.fn(() => Promise.resolve({ teams: [] })),
+  list: vi.fn(() => Promise.resolve({ teams: [] })),
 }));
 
 const leaguesApiMocks = vi.hoisted(() => ({
   listPublic: vi.fn(() => Promise.resolve({ leagues: [] })),
+  list: vi.fn(() => Promise.resolve({ leagues: [] })),
 }));
 
 const feedApiMocks = vi.hoisted(() => ({
@@ -63,17 +65,18 @@ describe('AppRouter', () => {
     cleanup();
   });
 
-  test('renders home page for logged-out users at root', async () => {
+  test('redirects logged-out users from root to The Pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
     render(
       <MemoryRouter initialEntries={['/']}>
         <AppRouter />
+        <LocationProbe />
       </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/TSW Basketball/i)).toBeInTheDocument();
+      expect(screen.getByTestId('location')).toHaveTextContent('/pulse');
     });
   });
 
@@ -83,15 +86,101 @@ describe('AppRouter', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <AppRouter />
+        <LocationProbe />
       </MemoryRouter>
     );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/pulse');
+    });
   });
 
-  test('logged-out feed fab routes to login with compose redirect', async () => {
+  test('renders the Discover page at /home regardless of auth state', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/home']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Featured Leagues/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/home');
+  });
+
+  test('renders pricing page in development so league checkout is reachable', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Start your free trial today/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/pricing');
+  });
+
+  test('redirects legacy /leagues/new to pricing instead of the creation form', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/leagues/new']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/pricing');
+    });
+  });
+
+  test('renders not found page for unknown routes instead of redirecting home', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/some-nonexistent-page']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/page not found/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/some-nonexistent-page');
+  });
+
+  test('redirects legacy /feed path to /pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
     render(
       <MemoryRouter initialEntries={['/feed']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/pulse');
+    });
+  });
+
+  test('logged-out pulse fab routes to login with compose redirect', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/pulse']}>
         <AppRouter />
         <LocationProbe />
       </MemoryRouter>
@@ -106,7 +195,7 @@ describe('AppRouter', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('button', { name: 'Log in' }).length).toBeGreaterThan(0);
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/login?redirectTo=%2Ffeed%3Fcompose%3D1'
+        '/login?redirectTo=%2Fpulse%3Fcompose%3D1'
       );
     });
   });

@@ -223,6 +223,7 @@ export function AdminPage() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
+              aria-label={tab.label}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
                 index < TABS.length - 1 ? 'border-r border-slate-200' : ''
               } ${
@@ -265,7 +266,7 @@ export function AdminPage() {
                       to="/pricing"
                       className="font-medium text-slate-900 underline underline-offset-4"
                     >
-                      Start a free trial →
+                      Start your 14-day trial →
                     </Link>
                   </p>
                 </div>

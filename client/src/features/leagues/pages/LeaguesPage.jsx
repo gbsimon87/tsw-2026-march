@@ -35,7 +35,7 @@ export function LeaguesPage() {
         </h2>
         <div className="flex flex-wrap gap-3">
           <Link
-            to="/admin/leagues/new"
+            to="/pricing"
             className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
           >
             Create League
