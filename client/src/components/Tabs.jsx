@@ -38,14 +38,15 @@ export function Tabs({ items, defaultValue, onChange }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div
-        className="inline-flex rounded border bg-white p-1"
+        className="grid border-b border-slate-200"
         role="tablist"
         aria-label="Game detail sections"
         onKeyDown={onKeyDown}
+        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
       >
-        {items.map((item) => {
+        {items.map((item, index) => {
           const isActive = item.value === activeItem.value;
           const tabId = `${baseId}-${item.value}-tab`;
           const panelId = `${baseId}-${item.value}-panel`;
@@ -59,11 +60,16 @@ export function Tabs({ items, defaultValue, onChange }) {
               aria-selected={isActive}
               aria-controls={panelId}
               tabIndex={isActive ? 0 : -1}
-              className={`rounded px-3 py-1.5 text-sm font-medium ${
-                isActive ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
+                index < items.length - 1 ? 'border-r border-slate-200' : ''
+              } ${
+                isActive
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
               onClick={() => setActiveAndNotify(item.value)}
             >
+              {item.icon ?? null}
               {item.label}
             </button>
           );
@@ -74,6 +80,7 @@ export function Tabs({ items, defaultValue, onChange }) {
         id={`${baseId}-${activeItem.value}-panel`}
         role="tabpanel"
         aria-labelledby={`${baseId}-${activeItem.value}-tab`}
+        className="p-4 sm:p-5"
       >
         {activeItem.content}
       </div>
