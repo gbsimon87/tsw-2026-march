@@ -51,20 +51,6 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-function LandingRoute() {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <SportsLoader label="Loading session" fullPage />;
-  }
-
-  if (user) {
-    return <Navigate to="/feed" replace />;
-  }
-
-  return <HomePage />;
-}
-
 function LegacyLeagueRedirect({ target }) {
   const { leagueId, leagueTeamId } = useParams();
   const targetPath = target
@@ -78,11 +64,12 @@ export function AppRouter() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<LandingRoute />} />
+        <Route path="/" element={<Navigate to="/pulse" replace />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        <Route path="/feed" element={<FeedPage />} />
+        <Route path="/feed" element={<Navigate to="/pulse" replace />} />
+        <Route path="/pulse" element={<FeedPage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />
         <Route path="/auth/google/complete" element={<GoogleCompletePage />} />

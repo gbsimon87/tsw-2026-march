@@ -30,7 +30,7 @@ function GoogleIcon() {
 const inputClass =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100';
 
-export function LoginForm({ redirectTo = '/feed', onSwitchToRegister }) {
+export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(

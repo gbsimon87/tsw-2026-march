@@ -72,9 +72,9 @@ describe('FeedPage', () => {
     authMocks.useAuth.mockReturnValue({ user: null });
 
     render(
-      <MemoryRouter initialEntries={['/feed']}>
+      <MemoryRouter initialEntries={['/pulse']}>
         <Routes>
-          <Route path="/feed" element={<FeedPage />} />
+          <Route path="/pulse" element={<FeedPage />} />
           <Route path="/login" element={<div>Login page</div>} />
         </Routes>
       </MemoryRouter>
@@ -130,7 +130,7 @@ describe('FeedPage', () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
 
     render(
-      <MemoryRouter initialEntries={['/feed?compose=1']}>
+      <MemoryRouter initialEntries={['/pulse?compose=1']}>
         <FeedPage />
       </MemoryRouter>
     );

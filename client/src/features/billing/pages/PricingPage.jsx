@@ -225,6 +225,7 @@ export function PricingPage() {
               key={opt}
               type="button"
               onClick={() => setInterval(opt)}
+              aria-label={opt === 'monthly' ? 'Monthly' : 'Season'}
               className={`px-4 py-1.5 text-sm font-medium transition ${
                 interval === opt
                   ? 'bg-slate-900 text-white'
@@ -249,7 +250,7 @@ export function PricingPage() {
           features={FREE_FEATURES}
         >
           <Link
-            to="/feed"
+            to="/pulse"
             className="block w-full rounded-lg border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
           >
             View The Pulse
@@ -311,6 +312,13 @@ export function PricingPage() {
                   type="button"
                   onClick={handleTeamCheckout}
                   disabled={isSubmittingTeam || isLoadingData}
+                  aria-label={
+                    isSubmittingTeam
+                      ? 'Redirecting…'
+                      : teamIsActive
+                        ? 'Manage Team Billing'
+                        : 'Start 14-day Trial'
+                  }
                   className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                 >
                   {isSubmittingTeam
@@ -378,6 +386,13 @@ export function PricingPage() {
                 type="button"
                 onClick={handleLeagueCheckout}
                 disabled={isSubmittingLeague || isLoadingData}
+                aria-label={
+                  isSubmittingLeague
+                    ? 'Redirecting…'
+                    : leagueIsActive
+                      ? 'Manage League Billing'
+                      : 'Start 14-day Trial'
+                }
                 className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
               >
                 {isSubmittingLeague

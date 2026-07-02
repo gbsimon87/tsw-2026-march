@@ -89,8 +89,8 @@ export function FeedTabBar() {
       aria-label="Main navigation"
       className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch border-t border-white/10 bg-black/80 backdrop-blur-md"
     >
-      <Tab to="/feed" label="Pulse" icon={<PulseIcon />} end />
-      <Tab to="/home" label="Discover" icon={<DiscoverIcon />} />
+      <Tab to="/pulse" label="Pulse" icon={<PulseIcon />} end />
+      <Tab to="/home" label="Discover" icon={<DiscoverIcon />} end />
       {user ? <Tab to="/my-sporty" label="My Sporty" icon={<MySportyIcon />} /> : null}
       {user ? <Tab to="/admin" label="Admin" icon={<AdminIcon />} /> : null}
     </nav>

@@ -18,7 +18,7 @@ export function FeedPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const isLoadingMoreRef = useRef(false);
-  const composeRedirectTarget = useMemo(() => '/feed?compose=1', []);
+  const composeRedirectTarget = useMemo(() => '/pulse?compose=1', []);
   const isComposerOpen = Boolean(user) && searchParams.get('compose') === '1';
 
   async function loadFeed(cursor = null, append = false) {

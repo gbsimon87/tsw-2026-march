@@ -63,17 +63,18 @@ describe('AppRouter', () => {
     cleanup();
   });
 
-  test('renders home page for logged-out users at root', async () => {
+  test('redirects logged-out users from root to The Pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
     render(
       <MemoryRouter initialEntries={['/']}>
         <AppRouter />
+        <LocationProbe />
       </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/TSW Basketball/i)).toBeInTheDocument();
+      expect(screen.getByTestId('location')).toHaveTextContent('/pulse');
     });
   });
 
@@ -83,8 +84,30 @@ describe('AppRouter', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <AppRouter />
+        <LocationProbe />
       </MemoryRouter>
     );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/pulse');
+    });
+  });
+
+  test('renders the Discover page at /home regardless of auth state', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/home']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Featured Leagues/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/home');
   });
 
   test('renders not found page for unknown routes instead of redirecting home', async () => {
@@ -104,11 +127,26 @@ describe('AppRouter', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/some-nonexistent-page');
   });
 
-  test('logged-out feed fab routes to login with compose redirect', async () => {
+  test('redirects legacy /feed path to /pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
     render(
       <MemoryRouter initialEntries={['/feed']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/pulse');
+    });
+  });
+
+  test('logged-out pulse fab routes to login with compose redirect', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/pulse']}>
         <AppRouter />
         <LocationProbe />
       </MemoryRouter>
@@ -123,7 +161,7 @@ describe('AppRouter', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('button', { name: 'Log in' }).length).toBeGreaterThan(0);
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/login?redirectTo=%2Ffeed%3Fcompose%3D1'
+        '/login?redirectTo=%2Fpulse%3Fcompose%3D1'
       );
     });
   });
