@@ -220,7 +220,7 @@ export function PublicLeagueTeamPage() {
   }
 
   const breadcrumbs = [
-    { label: 'Leagues' },
+    { label: 'Discover', href: '/' },
     { label: league.name, href: `/league/${league.slug}` },
     { label: team.name },
   ];

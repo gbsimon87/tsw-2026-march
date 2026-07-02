@@ -179,7 +179,7 @@ export function PublicLeaguePage() {
     return <p className="text-sm text-red-600">{error || 'League not found'}</p>;
   }
 
-  const breadcrumbs = [{ label: 'Leagues' }, { label: league.name }];
+  const breadcrumbs = [{ label: 'Discover', href: '/' }, { label: league.name }];
 
   return (
     <main className="space-y-8">
