@@ -32,7 +32,13 @@
       "Bash(cd /Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src *)",
       "Read(//Users/simoncordova/Desktop/Simon/**)",
       "Bash(rg -n '/feed\\\\b' --pcre2 .)",
-      "Bash(rg -n '/feed[/\"'\"'\"'` \\)]' .)"
+      "Bash(rg -n '/feed[/\"'\"'\"'` \\)]' .)",
+      "Bash(wait)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(echo \"=== exit code: $? \\(empty diff = no changes since\\) ===\")",
+      "Bash(grep -n \"assertFeedPostingAllowed\\\\|feed.controller\" /dev/null; git show 852858f -- server/src/modules/feed/feed.controller.js)",
+      "Read(//dev/**)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
