@@ -57,24 +57,36 @@ export function GameRecapPanel({
                     <th className="py-2 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Stat
                     </th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-700">
+                    <th
+                      scope="col"
+                      aria-label={recap?.home?.name || 'Home'}
+                      className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-700"
+                    >
+                      <span className="sr-only">Home team: </span>
                       <div className="flex items-center justify-center gap-1.5">
                         <img
                           src={participants?.home?.logo?.url || teamPlaceholder}
                           alt=""
+                          aria-hidden="true"
                           className="h-5 w-5 rounded-full border border-slate-200 bg-white object-cover"
                         />
-                        {recap?.home?.name || 'Home'}
+                        <span>{recap?.home?.name || 'Home'}</span>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-700">
+                    <th
+                      scope="col"
+                      aria-label={recap?.home?.name || 'Home'}
+                      className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-700"
+                    >
+                      <span className="sr-only">Away team: </span>
                       <div className="flex items-center justify-center gap-1.5">
                         <img
-                          src={participants?.away?.logo?.url || teamPlaceholder}
+                          src={participants?.home?.logo?.url || teamPlaceholder}
                           alt=""
+                          aria-hidden="true"
                           className="h-5 w-5 rounded-full border border-slate-200 bg-white object-cover"
                         />
-                        {recap?.away?.name || 'Away'}
+                        <span>{recap?.away?.name || 'Away'}</span>
                       </div>
                     </th>
                   </tr>
@@ -160,81 +172,89 @@ export function GameRecapPanel({
           )}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-1">
-          {(recap?.topPerformers || []).map((player) => {
-            const teamLogo =
-              isDualTeam && player.teamSide
-                ? participants?.[player.teamSide]?.logo?.url || teamPlaceholder
-                : null;
-            const inner = (
-              <>
-                <div className="flex items-center gap-3">
-                  <img
-                    src={playerPlaceholder}
-                    alt=""
-                    className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Top Performer
-                    </p>
-                    <h3 className="truncate text-lg font-semibold text-slate-900">
-                      {player.displayName}
-                    </h3>
-                  </div>
-                </div>
-                {isDualTeam && player.teamName ? (
-                  <div className="mt-3 flex items-center gap-1.5">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-xl font-semibold text-slate-900">Top Performers</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-3 lg:grid-cols-1">
+            {(recap?.topPerformers || []).map((player) => {
+              const teamLogo =
+                isDualTeam && player.teamSide
+                  ? participants?.[player.teamSide]?.logo?.url || teamPlaceholder
+                  : null;
+              const inner = (
+                <>
+                  <div className="flex items-center gap-3">
                     <img
-                      src={teamLogo}
+                      src={playerPlaceholder}
                       alt=""
-                      className="h-4 w-4 rounded-full border border-slate-200 bg-white object-cover"
+                      aria-hidden="true"
+                      className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
-                    <span className="text-xs font-medium text-slate-500">{player.teamName}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Top Performer
+                      </p>
+                      <h3
+                        className="truncate text-lg font-semibold text-slate-900"
+                        aria-label={player.displayName}
+                      >
+                        {player.displayName || 'Unknown Player'}
+                      </h3>
+                    </div>
                   </div>
-                ) : null}
-                <p className="mt-3 text-sm font-semibold text-slate-700">
-                  {player.points} PTS · {player.reb} REB · {player.ast} AST
-                </p>
-              </>
-            );
+                  {isDualTeam && player.teamName ? (
+                    <div className="mt-3 flex items-center gap-1.5">
+                      <img
+                        src={teamLogo}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-4 w-4 rounded-full border border-slate-200 bg-white object-cover"
+                      />
+                      <span className="text-xs font-medium text-slate-500">{player.teamName}</span>
+                    </div>
+                  ) : null}
+                  <p className="mt-3 text-sm font-semibold text-slate-700">
+                    {player.points} PTS · {player.reb} REB · {player.ast} AST
+                  </p>
+                </>
+              );
 
-            const participant = isDualTeam ? participants?.[player.teamSide] : null;
-            const playerHref = (() => {
-              if (!player.playerId) return null;
-              if (isDualTeam) {
-                if (league?.slug && participant?.slug) {
-                  return `/league/${league.slug}/teams/${participant.slug}/players/${
+              const participant = isDualTeam ? participants?.[player.teamSide] : null;
+              const playerHref = (() => {
+                if (!player.playerId) return null;
+                if (isDualTeam) {
+                  if (league?.slug && participant?.slug) {
+                    return `/league/${league.slug}/teams/${participant.slug}/players/${
+                      player.leaguePlayerId || player.playerId
+                    }`;
+                  }
+                  return null;
+                }
+                if (league?.slug && team?.slug) {
+                  return `/league/${league.slug}/teams/${team.slug}/players/${
                     player.leaguePlayerId || player.playerId
                   }`;
                 }
-                return null;
-              }
-              if (league?.slug && team?.slug) {
-                return `/league/${league.slug}/teams/${team.slug}/players/${
-                  player.leaguePlayerId || player.playerId
-                }`;
-              }
-              return team?.id ? `/teams/${team.id}/players/${player.playerId}` : null;
-            })();
+                return team?.id ? `/teams/${team.id}/players/${player.playerId}` : null;
+              })();
 
-            return playerHref ? (
-              <Link
-                key={player.playerId}
-                to={playerHref}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-              >
-                {inner}
-              </Link>
-            ) : (
-              <article
-                key={player.playerId || player.displayName}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-              >
-                {inner}
-              </article>
-            );
-          })}
+              return playerHref ? (
+                <Link
+                  key={player.playerId}
+                  to={playerHref}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                >
+                  {inner}
+                </Link>
+              ) : (
+                <article
+                  key={player.playerId || player.displayName}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  {inner}
+                </article>
+              );
+            })}
+          </div>
         </section>
       </div>
 
@@ -258,11 +278,15 @@ export function GameRecapPanel({
                 <img
                   src={playerPlaceholder}
                   alt=""
+                  aria-hidden="true"
                   className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                 />
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {formatMomentTime(moment.occurredAt)}
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                    title="Real-world clock time when this moment was recorded"
+                  >
+                    at {formatMomentTime(moment.occurredAt)}
                   </p>
                   <p className="mt-0.5 text-sm font-medium text-slate-900">
                     {moment.playerName} • {moment.statLabel}
