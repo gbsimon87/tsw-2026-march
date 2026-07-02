@@ -645,6 +645,7 @@ export function GameDetailPage() {
             <button
               type="button"
               onClick={() => setShowAllEvents((value) => !value)}
+              aria-label={showAllEvents ? 'Show Last 5' : 'Show All'}
               className="text-xs font-semibold text-blue-600 hover:underline"
             >
               {showAllEvents ? 'Show Last 5' : 'Show All'}
@@ -890,7 +891,9 @@ export function GameDetailPage() {
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Printable Box Score
         </p>
-        <h1 className="text-2xl font-bold text-slate-900">{game.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900" aria-label={game.title}>
+          {game.title}
+        </h1>
         <p className="text-sm text-slate-700">
           {isDualTeam
             ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')}`
@@ -968,29 +971,38 @@ export function GameDetailPage() {
                 onClick={shareHeaderCard}
                 aria-label="Share image card"
                 title={isSharingHeaderCard ? 'Preparing image card' : 'Share image card'}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!headerCardDataUrl || isSharingHeaderCard}
               >
-                <ShareIcon />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700">
+                  <ShareIcon />
+                </span>
+                <span className="text-[11px] font-medium">Share</span>
               </button>
               <button
                 type="button"
                 onClick={downloadHeaderCard}
                 aria-label="Download image card"
                 title={imageState === 'downloaded' ? 'Downloaded' : 'Download image card'}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!headerCardDataUrl}
               >
-                <DownloadIcon downloaded={imageState === 'downloaded'} />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                  <DownloadIcon downloaded={imageState === 'downloaded'} />
+                </span>
+                <span className="text-[11px] font-medium">Download</span>
               </button>
               <button
                 type="button"
                 onClick={openFeedComposer}
                 aria-label="Share to The Pulse"
                 title="Share to The Pulse"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
-                <FeedIcon />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                  <FeedIcon />
+                </span>
+                <span className="text-[11px] font-medium">Pulse</span>
               </button>
             </>
           }
@@ -1024,6 +1036,15 @@ export function GameDetailPage() {
                       type="button"
                       disabled={clipState === 'loading' || clipState === 'shared'}
                       onClick={() => shareHighlightClip(h.eventId)}
+                      aria-label={
+                        clipState === 'loading'
+                          ? 'Sharing…'
+                          : clipState === 'shared'
+                            ? 'Shared to Pulse'
+                            : clipState !== 'idle'
+                              ? clipState
+                              : 'Share to Pulse'
+                      }
                       className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {clipState === 'loading'
