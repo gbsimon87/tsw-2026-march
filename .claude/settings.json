@@ -23,7 +23,9 @@
       "Bash(eslint *)",
       "Bash(grep *)",
       "Bash(find *)",
-      "Bash(git commit -m 'chore: configure Claude Code settings for MERN stack *)"
+      "Bash(git commit -m 'chore: configure Claude Code settings for MERN stack *)",
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)"
     ]
   }
 }

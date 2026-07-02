@@ -87,6 +87,23 @@ describe('AppRouter', () => {
     );
   });
 
+  test('renders not found page for unknown routes instead of redirecting home', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+
+    render(
+      <MemoryRouter initialEntries={['/some-nonexistent-page']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/page not found/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/some-nonexistent-page');
+  });
+
   test('logged-out feed fab routes to login with compose redirect', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 

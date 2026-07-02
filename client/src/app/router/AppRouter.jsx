@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
+import { NotFoundPage } from '../../pages/NotFoundPage';
 import { SportsLoader } from '../../components/SportsLoader';
 import { AdminPage } from '../../features/dashboard/AdminPage';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
@@ -225,6 +226,7 @@ export function AppRouter() {
             </ProtectedRoute>
           }
         />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
       <Route
         path="/games/:gameId/track"
@@ -234,7 +236,6 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
