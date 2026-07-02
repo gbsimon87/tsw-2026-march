@@ -43,7 +43,6 @@ export function Tabs({ items, defaultValue, onChange }) {
         className="grid border-b border-slate-200"
         role="tablist"
         aria-label="Game detail sections"
-        onKeyDown={onKeyDown}
         style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
       >
         {items.map((item, index) => {
@@ -59,6 +58,7 @@ export function Tabs({ items, defaultValue, onChange }) {
               role="tab"
               aria-selected={isActive}
               aria-controls={panelId}
+              aria-label={item.label}
               tabIndex={isActive ? 0 : -1}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
                 index < items.length - 1 ? 'border-r border-slate-200' : ''
@@ -68,6 +68,7 @@ export function Tabs({ items, defaultValue, onChange }) {
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
               onClick={() => setActiveAndNotify(item.value)}
+              onKeyDown={onKeyDown}
             >
               {item.icon ?? null}
               {item.label}
