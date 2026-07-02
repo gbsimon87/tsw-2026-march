@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { leaguesApi } from '../api/leaguesApi';
@@ -31,8 +32,15 @@ export function PublicLeagueGamesPage() {
     return <p className="text-sm text-red-600">{error || 'League not found'}</p>;
   }
 
+  const breadcrumbs = [
+    { label: 'Discover', href: '/home' },
+    { label: league.name, href: `/league/${league.slug}` },
+    { label: 'Games' },
+  ];
+
   return (
     <main className="space-y-8">
+      <Breadcrumbs crumbs={breadcrumbs} />
       <PageHeader
         eyebrow="Public League Games"
         title={league.name}
