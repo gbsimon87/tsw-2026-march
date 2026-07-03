@@ -10,6 +10,7 @@ const apiMocks = vi.hoisted(() => ({
   setLineup: vi.fn(),
   removeEvent: vi.fn(),
   finish: vi.fn(),
+  update: vi.fn(),
 }));
 
 vi.mock('../api/gamesApi', () => ({
@@ -147,8 +148,25 @@ describe('GameTrackPage', () => {
     apiMocks.setLineup.mockReset();
     apiMocks.removeEvent.mockReset();
     apiMocks.finish.mockReset();
+    apiMocks.update.mockReset();
 
     apiMocks.getById.mockImplementation(() => Promise.resolve(currentResponse));
+
+    apiMocks.update.mockImplementation((gameId, payload) => {
+      currentResponse = {
+        ...currentResponse,
+        game: {
+          ...currentResponse.game,
+          ...payload,
+        },
+      };
+
+      return Promise.resolve({
+        game: currentResponse.game,
+        boxScore: currentResponse.boxScore,
+        gameSummary: currentResponse.gameSummary,
+      });
+    });
 
     apiMocks.setLineup.mockImplementation((gameId, payload) => {
       const playerIds = Array.isArray(payload) ? payload : payload.playerIds;
@@ -380,6 +398,114 @@ describe('GameTrackPage', () => {
     await waitFor(() => {
       expect(screen.queryAllByText(/Add Event/i)).toHaveLength(0);
     });
+  });
+
+  function createLeagueDualTeamResponse({ homeReady = false, awayReady = false } = {}) {
+    const homePlayers = createPlayers();
+    const awayPlayers = createPlayers().map((player, index) => ({
+      ...player,
+      id: `away-${index + 1}`,
+      displayName: `Away ${index + 1}`,
+    }));
+
+    return {
+      game: {
+        id: 'game-1',
+        title: 'League Match',
+        status: 'in_progress',
+        trackingMode: 'dual_team',
+        gameContext: 'league',
+        events: [],
+      },
+      participants: {
+        home: { displayName: 'Home Squad', players: homePlayers },
+        away: { displayName: 'Away Squad', players: awayPlayers },
+      },
+      lineups: {
+        home: {
+          startingPlayerIds: homeReady ? homePlayers.slice(0, 5).map((p) => p.id) : [],
+          currentPlayerIds: homeReady ? homePlayers.slice(0, 5).map((p) => p.id) : [],
+        },
+        away: {
+          startingPlayerIds: awayReady ? awayPlayers.slice(0, 5).map((p) => p.id) : [],
+          currentPlayerIds: awayReady ? awayPlayers.slice(0, 5).map((p) => p.id) : [],
+        },
+      },
+      boxScore: {
+        home: { players: createBoxPlayers(homePlayers), totals: { points: 0 } },
+        away: { players: createBoxPlayers(awayPlayers), totals: { points: 0 } },
+      },
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+    };
+  }
+
+  test('gates a brand-new league dual-team game through home lineup then away lineup before showing normal tabs', async () => {
+    currentResponse = createLeagueDualTeamResponse();
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Set Home Squad Starting Lineup/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: 'Court' })).not.toBeInTheDocument();
+
+    for (const player of ['Alex', 'Blake', 'Casey', 'Drew', 'Evan']) {
+      fireEvent.click(screen.getByLabelText(player));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Save Lineup/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.setLineup).toHaveBeenCalledWith('game-1', {
+        playerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        teamSide: 'home',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Set Away Squad Starting Lineup/i)).toBeInTheDocument();
+    });
+
+    for (const player of ['Away 1', 'Away 2', 'Away 3', 'Away 4', 'Away 5']) {
+      fireEvent.click(screen.getByLabelText(player));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Save Lineup/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.setLineup).toHaveBeenCalledWith('game-1', {
+        playerIds: ['away-1', 'away-2', 'away-3', 'away-4', 'away-5'],
+        teamSide: 'away',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Court' })).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Set .* Starting Lineup/i)).not.toBeInTheDocument();
+  });
+
+  test('resumes at the away lineup step when the home lineup is already set on load', async () => {
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true });
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Set Away Squad Starting Lineup/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Set Home Squad Starting Lineup/i)).not.toBeInTheDocument();
+  });
+
+  test('skips gating and shows normal tabs immediately when both lineups are already set', async () => {
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Court' })).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Set .* Starting Lineup/i)).not.toBeInTheDocument();
   });
 
   test('shows only on-court players for assist follow-up and includes No Assist', async () => {
@@ -677,5 +803,590 @@ describe('GameTrackPage', () => {
     expect(screen.getByText('24')).toBeInTheDocument();
     expect(screen.getByText('18')).toBeInTheDocument();
     expect(screen.getAllByText('Opponent').length).toBeGreaterThan(0);
+  });
+
+  test('rotates the court orientation from the More tab and applies it in both Court and fullscreen views', async () => {
+    currentResponse = createResponse({
+      game: {
+        currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /More/i })).toBeInTheDocument();
+    });
+
+    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
+
+    fireEvent.click(screen.getByRole('button', { name: /More/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
+
+    expect(screen.getByText(/Currently horizontal/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
+
+    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
+  });
+
+  function makeMatchMediaStub(isDesktop, { onListener } = {}) {
+    return (query) => ({
+      matches: query === '(min-width: 1024px)' ? isDesktop : false,
+      media: query,
+      onchange: null,
+      addEventListener: (event, listener) => {
+        if (query === '(min-width: 1024px)') {
+          onListener?.(listener);
+        }
+      },
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
+
+  function stubMatchMedia(isDesktop) {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = makeMatchMediaStub(isDesktop);
+    return () => {
+      window.matchMedia = originalMatchMedia;
+    };
+  }
+
+  test('renders the video panel in a left column on desktop when a video URL is set', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      // Desktop video renders edge-to-edge (fill mode, no "Game Video" card heading), so
+      // assert on the iframe itself via its title.
+      await waitFor(() => {
+        expect(screen.getByTitle('Dev Scrimmage')).toBeInTheDocument();
+      });
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('renders no video panel when the game has no video URL', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Court' })).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Game Video')).not.toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('clears the captured video timestamp when the layout mode changes to avoid a stale timestamp on remount', async () => {
+    let changeListener = null;
+    const mediaQueryList = {
+      matches: true,
+      media: '(min-width: 1024px)',
+      onchange: null,
+      addEventListener: (_event, listener) => {
+        changeListener = listener;
+      },
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    };
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (query) =>
+      query === '(min-width: 1024px)'
+        ? mediaQueryList
+        : {
+            matches: false,
+            media: query,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+          };
+
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      // Desktop video renders edge-to-edge (fill mode, no heading) — assert on the iframe.
+      await waitFor(() => {
+        expect(screen.getByTitle('Dev Scrimmage')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+
+      // Simulate the YouTube iframe reporting a playback position. The onMessage handler
+      // only trusts messages whose source is the iframe's contentWindow, so set it here.
+      const iframe = document.querySelector('iframe');
+      fireEvent(
+        window,
+        new MessageEvent('message', {
+          data: JSON.stringify({ event: 'infoDelivery', info: { currentTime: 42 } }),
+          source: iframe?.contentWindow,
+        })
+      );
+
+      // Simulate crossing the 1024px breakpoint (e.g. resizing/rotating), which remounts
+      // the video in a new location per the two-column layout design. Wait for the mobile
+      // "Track Stat" affordance to appear, confirming the layout actually flipped.
+      mediaQueryList.matches = false;
+      changeListener?.();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+
+      const court = getActiveCourt();
+      court.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 500,
+        height: 940,
+        right: 500,
+        bottom: 940,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      // jsdom does not implement PointerEvent, so fireEvent.click cannot trigger the
+      // court's onPointerDown handler here — use pointerDown directly (see other tests
+      // in this file using fireEvent.click for the same purpose: those currently fail
+      // in this environment for the same underlying jsdom limitation, tracked separately).
+      fireEvent.pointerDown(court, { clientX: 250, clientY: 800 });
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0);
+      });
+
+      // The picker backdrop briefly swallows clicks right after a pointerdown to guard
+      // against synthetic "ghost click" events on touch devices (see ghostClickGuardRef
+      // in GameTrackPage.jsx) — wait past that window before clicking a stat button.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+
+      await waitFor(() => {
+        expect(apiMocks.appendEvent).toHaveBeenCalled();
+      });
+      const [, payload] = apiMocks.appendEvent.mock.calls[0];
+      expect(payload.videoTimestamp).toBeUndefined();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  test('mobile video-first flow: Track Stat pauses and switches to entry view, logging a stat resumes and returns to video', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      // Watch view: Track Stat present; entry UI (court + Back-to-Video) not yet mounted.
+      // The persistent video layer stays mounted across view changes (hidden, not unmounted)
+      // so playback position is preserved — hence we assert on the entry UI's presence, and
+      // on the video layer's `hidden` class (jsdom doesn't load Tailwind CSS, so toBeVisible
+      // can't see class-based display:none; we check the class directly).
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+      const trackStatBtn = screen.getByRole('button', { name: /Track Stat/i });
+      const videoLayer = trackStatBtn.parentElement;
+      expect(videoLayer).not.toHaveClass('hidden');
+      expect(screen.queryByRole('button', { name: /Back to Video/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('interactive-court-image')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
+
+      // Entry mode: Back-to-Video + court now mounted/shown; the persistent video layer is
+      // hidden (still mounted → playback preserved) rather than unmounted.
+      expect(screen.getByRole('button', { name: /Back to Video/i })).toBeInTheDocument();
+      expect(screen.getByTestId('interactive-court-image')).toBeInTheDocument();
+      expect(videoLayer).toHaveClass('hidden');
+
+      const court = getActiveCourt();
+      court.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 500,
+        height: 940,
+        right: 500,
+        bottom: 940,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      fireEvent.pointerDown(court, { clientX: 250, clientY: 800 });
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+
+      await waitFor(() => {
+        expect(apiMocks.appendEvent).toHaveBeenCalled();
+      });
+      // Logging a stat returns to the watch view: the video layer is shown again (no longer
+      // hidden) and the entry-mode UI (Back-to-Video / court) unmounts.
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i }).parentElement).not.toHaveClass(
+          'hidden'
+        );
+      });
+      expect(screen.queryByRole('button', { name: /Back to Video/i })).not.toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('mobile video-first flow: cancelling the event picker stays in entry mode', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
+
+      const court = getActiveCourt();
+      court.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 500,
+        height: 940,
+        right: 500,
+        bottom: 940,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      fireEvent.pointerDown(court, { clientX: 250, clientY: 800 });
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0);
+      });
+
+      fireEvent.click(
+        within(getEventPicker()).getByRole('button', { name: /Close event picker/i })
+      );
+
+      expect(screen.getByRole('button', { name: /Back to Video/i })).toBeInTheDocument();
+      expect(screen.queryByText('Game Video')).not.toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('mobile video-first flow: switching tabs away from Court and back resets to video-first view', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
+      expect(screen.getByRole('button', { name: /Back to Video/i })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Subs' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+
+      expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Back to Video/i })).not.toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('toggling "Pause Video During Stat Entry" off in the More tab disables pause/resume', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      expect(screen.getByText(/On — video pauses/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Pause Video During Stat Entry/i }));
+      expect(screen.getByText(/Off — video keeps playing/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+      fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
+
+      const court = getActiveCourt();
+      court.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 500,
+        height: 940,
+        right: 500,
+        bottom: 940,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      fireEvent.pointerDown(court, { clientX: 250, clientY: 800 });
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+
+      await waitFor(() => {
+        expect(apiMocks.appendEvent).toHaveBeenCalled();
+      });
+      // View still switches manually via Track Stat/Back to Video regardless of the
+      // pause preference — only the pause/resume postMessage calls are suppressed.
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('adds a video URL from the More tab and reflects it in the video panel', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+
+      expect(screen.getByText('Add Video')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Add Video/i }));
+
+      const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
+      fireEvent.change(input, {
+        target: { value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(apiMocks.update).toHaveBeenCalledWith('game-1', {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Update Video')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+      expect(screen.getByTitle('Dev Scrimmage')).toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('updating an existing video URL from the More tab shows "Update Video" and persists the change', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+
+      expect(screen.getByText('Update Video')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Update Video/i }));
+
+      const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
+      expect(input.value).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+
+      fireEvent.change(input, {
+        target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(apiMocks.update).toHaveBeenCalledWith('game-1', {
+          videoUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        });
+      });
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('clearing the video URL in the More tab sends null (not empty string) so the server can detach it', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(screen.getByRole('button', { name: /Update Video/i }));
+
+      const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
+      fireEvent.change(input, { target: { value: '   ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(apiMocks.update).toHaveBeenCalledWith('game-1', { videoUrl: null });
+      });
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('mobile entry mode exposes bench players (not just on-court) for stat attribution', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
+
+      // player-6 (Flynn) is on the roster but not in the starting five → bench.
+      expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: playerButtonName('Flynn') })).toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('toggling "Pause Video During Stat Entry" off resumes the video (no stranded pause)', async () => {
+    // Use desktop layout: the video lives in the persistent left column, mounted across all
+    // tabs, so it's still present (and controllable) when the More-tab toggle is flipped.
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTitle('Dev Scrimmage')).toBeInTheDocument();
+      });
+
+      // Spy on the iframe's postMessage so we can see the resume ("playVideo") command.
+      const iframe = document.querySelector('iframe');
+      const postMessageSpy = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        configurable: true,
+        value: { postMessage: postMessageSpy },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(screen.getByRole('button', { name: /Pause Video During Stat Entry/i }));
+
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('playVideo'),
+        expect.anything()
+      );
+    } finally {
+      restoreMatchMedia();
+    }
   });
 });

@@ -1,7 +1,10 @@
 import { forwardRef, useCallback } from 'react';
 import { buildYouTubeEmbedUrl } from '../youtube';
 
-export const GameVideoEmbed = forwardRef(function GameVideoEmbed({ videoUrl, title }, ref) {
+export const GameVideoEmbed = forwardRef(function GameVideoEmbed(
+  { videoUrl, title, fill = false },
+  ref
+) {
   const embedUrl = buildYouTubeEmbedUrl(videoUrl);
 
   const onLoad = useCallback((event) => {
@@ -20,7 +23,13 @@ export const GameVideoEmbed = forwardRef(function GameVideoEmbed({ videoUrl, tit
   const src = `${embedUrl}?enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1`;
 
   return (
-    <div className="aspect-video w-full overflow-hidden rounded-xl bg-slate-950">
+    <div
+      className={
+        fill
+          ? 'h-full w-full overflow-hidden bg-slate-950'
+          : 'aspect-video w-full overflow-hidden bg-slate-950'
+      }
+    >
       <iframe
         ref={ref}
         className="h-full w-full"

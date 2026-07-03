@@ -79,6 +79,219 @@ function createEmptySideState() {
   };
 }
 
+function readLocalStorageFlag(key, defaultValue) {
+  try {
+    const stored = window.localStorage.getItem(key);
+    return stored === null ? defaultValue : stored === 'true';
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writeLocalStorageFlag(key, value) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // ignore — e.g. storage disabled/unavailable; preference just won't persist
+  }
+}
+
+function LineupPicker({
+  isDualTeam,
+  teamDisplayName,
+  players,
+  lineupDraft,
+  onToggle,
+  onSave,
+  isSaving,
+  teamId,
+  variant = 'inline',
+  stepLabel,
+}) {
+  const content = (
+    <div
+      className={
+        variant === 'fullscreen'
+          ? 'w-full max-w-lg rounded-xl border border-slate-200 bg-slate-50 p-4'
+          : 'rounded-xl border border-slate-200 bg-slate-50 p-4'
+      }
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Starting Lineup</h2>
+          <p className="text-sm text-slate-500">
+            {isDualTeam ? `${teamDisplayName} — ` : ''}
+            {lineupDraft.length} / 5 selected
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving || lineupDraft.length !== 5}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Save Lineup'}
+          </button>
+        </div>
+      </div>
+      {players.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold">No players found on this roster.</p>
+          {teamId ? (
+            <Link to={`/teams/${teamId}/edit`} className="mt-1 inline-block underline">
+              Add players to this team
+            </Link>
+          ) : (
+            <p className="mt-1">Go to Teams to add players before tracking.</p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {players.map((player) => {
+            const checked = lineupDraft.includes(player.id);
+            const isInactive = player.isActive === false;
+            return (
+              <label
+                key={player.id}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
+                  checked
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : isInactive
+                      ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${player.displayName} for the starting lineup`}
+                  className="shrink-0 accent-white"
+                  checked={checked}
+                  disabled={isInactive}
+                  onChange={(event) => {
+                    if (isInactive) return;
+                    onToggle(player.id, event.target.checked);
+                  }}
+                />
+                <span className="text-sm font-medium">
+                  {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
+                  {player.displayName}
+                  {isInactive ? ' (inactive)' : ''}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  if (variant !== 'fullscreen') {
+    return content;
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-4">
+      <div className="mb-4 text-center">
+        {stepLabel ? (
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {stepLabel}
+          </p>
+        ) : null}
+        <h1 className="mt-1 text-xl font-bold text-slate-900">
+          Set {teamDisplayName} Starting Lineup
+        </h1>
+      </div>
+      {content}
+    </div>
+  );
+}
+
+function GameVideoPanel({ videoUrl, title, videoIframeRef }) {
+  if (!videoUrl) {
+    return null;
+  }
+
+  // Always fills its container edge-to-edge (no card chrome / border radius) — both the
+  // desktop left column and the mobile video-first view want the video as large as possible.
+  return <GameVideoEmbed ref={videoIframeRef} videoUrl={videoUrl} title={title} fill />;
+}
+
+function PlayerSelectionPanel({
+  players,
+  onCourtPlayers,
+  benchPlayers,
+  selectedPlayerId,
+  onSelect,
+}) {
+  const activeBench = benchPlayers.filter((p) => p.isActive !== false);
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-slate-900">Player Selection</h2>
+        {selectedPlayerId ? (
+          <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
+            {players.find((p) => p.id === selectedPlayerId)?.displayName || 'Selected'}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {onCourtPlayers.map((player) => (
+          <button
+            key={player.id}
+            type="button"
+            aria-label={player.displayName}
+            aria-pressed={selectedPlayerId === player.id}
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+              selectedPlayerId === player.id
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+            }`}
+            onClick={() => onSelect(player.id)}
+          >
+            {player.jerseyNumber != null ? (
+              <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                {player.jerseyNumber}
+              </span>
+            ) : null}
+            <span className="font-medium">{player.displayName}</span>
+          </button>
+        ))}
+        {activeBench.length > 0 ? (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+              Bench ({activeBench.length})
+            </summary>
+            <div className="mt-1.5 space-y-1.5">
+              {activeBench.map((player) => (
+                <button
+                  key={player.id}
+                  type="button"
+                  aria-label={player.displayName}
+                  aria-pressed={selectedPlayerId === player.id}
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
+                    selectedPlayerId === player.id
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  onClick={() => onSelect(player.id)}
+                >
+                  {player.jerseyNumber != null ? (
+                    <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
+                      {player.jerseyNumber}
+                    </span>
+                  ) : null}
+                  <span className="font-medium">{player.displayName}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function GameTrackPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
@@ -106,14 +319,32 @@ export function GameTrackPage() {
     [TEAM_SIDES.AWAY]: createEmptySideState(),
     oneSided: createEmptySideState(),
   });
+  const [courtOrientation, setCourtOrientation] = useState('vertical');
+  const [isDesktopLayout, setIsDesktopLayout] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  );
+  const [isMobileEntryMode, setIsMobileEntryMode] = useState(false);
+  const [pauseVideoOnEntry, setPauseVideoOnEntry] = useState(() =>
+    readLocalStorageFlag('gameTrack.pauseVideoOnEntry', true)
+  );
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
   const videoIframeRef = useRef(null);
   const videoCurrentTimeRef = useRef(null);
+  const rotateCourt = courtOrientation === 'horizontal';
 
   useEffect(() => {
     function onMessage(event) {
+      // Only trust messages coming from our own YouTube iframe. This guards against any
+      // other frame/script on the page spoofing an infoDelivery payload to poison the
+      // captured playback timestamp. We compare event.source to the iframe's contentWindow
+      // rather than event.origin because YouTube serves embeds from multiple origins
+      // (youtube.com / youtube-nocookie.com). When no iframe is mounted there is no
+      // legitimate infoDelivery source, so reject everything.
+      if (!videoIframeRef.current || event.source !== videoIframeRef.current.contentWindow) {
+        return;
+      }
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         // infoDelivery fires continuously while playing and also on seek/pause
@@ -127,6 +358,41 @@ export function GameTrackPage() {
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktopLayout(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    // The video remounts in a new location when the layout mode flips (see GameVideoPanel
+    // usages below), so any previously-captured playback position is stale until the new
+    // iframe reports its own infoDelivery event — clear it rather than risk tagging a stat
+    // with a wrong timestamp from the just-destroyed iframe.
+    videoCurrentTimeRef.current = null;
+  }, [isDesktopLayout]);
+
+  useEffect(() => {
+    if (activePanel !== 'court') {
+      setIsMobileEntryMode(false);
+    }
+  }, [activePanel]);
+
+  function togglePauseVideoOnEntry() {
+    const next = !pauseVideoOnEntry;
+    writeLocalStorageFlag('gameTrack.pauseVideoOnEntry', next);
+    setPauseVideoOnEntry(next);
+    // Turning the preference off means "stop controlling playback for stat entry".
+    // If the video was auto-paused for an in-progress entry, resume it now — otherwise
+    // it would be stranded paused, since no resume path fires while the pref is off.
+    // (playVideo on an already-playing video is a harmless no-op.)
+    if (!next) {
+      playVideo();
+    }
+  }
 
   function pauseVideo() {
     videoIframeRef.current?.contentWindow?.postMessage(
@@ -268,6 +534,29 @@ export function GameTrackPage() {
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
   const isCompleted = game?.status === 'completed';
+  const homeLineupReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length === 5;
+  const awayLineupReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length === 5;
+  const lineupSetupStep =
+    isLeagueGame && isDualTeam
+      ? !homeLineupReady
+        ? 'home'
+        : !awayLineupReady
+          ? 'away'
+          : null
+      : null;
+  const prevLineupStepRef = useRef(lineupSetupStep);
+
+  useEffect(() => {
+    if (lineupSetupStep === 'home' && activeSide !== TEAM_SIDES.HOME) {
+      setActiveSide(TEAM_SIDES.HOME);
+    } else if (lineupSetupStep === 'away' && activeSide !== TEAM_SIDES.AWAY) {
+      setActiveSide(TEAM_SIDES.AWAY);
+    } else if (prevLineupStepRef.current === 'away' && lineupSetupStep === null) {
+      setActiveSide(TEAM_SIDES.HOME);
+    }
+    prevLineupStepRef.current = lineupSetupStep;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineupSetupStep]);
 
   function updateSideState(key, updates) {
     setSideState((current) => ({
@@ -377,7 +666,9 @@ export function GameTrackPage() {
     setLastTappedHoop(inferred.nearestHoop);
     setError('');
     ghostClickGuardRef.current = Date.now();
-    pauseVideo();
+    if (pauseVideoOnEntry) {
+      pauseVideo();
+    }
     setCurrentVideoTimestamp(
       typeof videoCurrentTimeRef.current === 'number'
         ? Math.round(videoCurrentTimeRef.current)
@@ -425,7 +716,10 @@ export function GameTrackPage() {
       setLastActionLabel(reason);
     }
     if (resume) {
-      playVideo();
+      setIsMobileEntryMode(false);
+      if (pauseVideoOnEntry) {
+        playVideo();
+      }
     }
   }
 
@@ -993,7 +1287,10 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
     try {
-      const response = await gamesApi.update(gameId, { videoUrl: videoUrlDraft.trim() });
+      // Send null (not '') when cleared, so the server can detach the video — an empty
+      // string fails the server's youtubeUrlSchema.min(1), whereas null is accepted.
+      const trimmed = videoUrlDraft.trim();
+      const response = await gamesApi.update(gameId, { videoUrl: trimmed || null });
       updateData(response);
       setIsVideoUrlEditOpen(false);
     } catch (err) {
@@ -1047,6 +1344,15 @@ export function GameTrackPage() {
   };
   const recentEvents = [...game.events].reverse();
   const visibleRecentEvents = showAllRecentEvents ? recentEvents : recentEvents.slice(0, 3);
+  const trackingShellClassName = game.videoUrl
+    ? 'mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col lg:flex-row lg:gap-4'
+    : 'mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col';
+
+  // The mobile "watch" view (video-first, not yet in entry mode) fills the whole remaining
+  // area edge-to-edge — no padding, no scroll — so the video is as large as possible below
+  // the header/tabs/Track-Stat button.
+  const isMobileVideoWatchView =
+    activePanel === 'court' && game.videoUrl && !isDesktopLayout && !isMobileEntryMode;
 
   const followUpPlayers = (() => {
     if (!pendingFollowUpPrompt) return onCourtPlayers;
@@ -1100,9 +1406,15 @@ export function GameTrackPage() {
   const eventPicker = isEventPickerOpen ? (
     <div
       aria-modal="true"
+      aria-label="Add event"
       className={eventPickerShellClass}
       role="dialog"
       onClick={clearEventPicker}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          clearEventPicker();
+        }
+      }}
       onPointerDown={(event) => event.stopPropagation()}
       onClickCapture={(event) => {
         if (ghostClickGuardRef.current !== null && Date.now() - ghostClickGuardRef.current < 350) {
@@ -1230,6 +1542,7 @@ export function GameTrackPage() {
                             <button
                               key={player.id}
                               type="button"
+                              aria-label={player.displayName}
                               className={playerButtonClass(false)}
                               onClick={() => handleFollowUpSelection(player.id)}
                             >
@@ -1255,6 +1568,7 @@ export function GameTrackPage() {
                       <button
                         key={player.id}
                         type="button"
+                        aria-label={player.displayName}
                         className={playerButtonClass(
                           currentSideState.selectedPlayerId === player.id
                         )}
@@ -1486,11 +1800,17 @@ export function GameTrackPage() {
             const isActive = activeSide === side;
             const points =
               side === TEAM_SIDES.HOME ? gameSummary.homePoints : gameSummary.awayPoints;
+            const sideLabel =
+              side === TEAM_SIDES.HOME
+                ? participantsBySide.home?.displayName || 'Home'
+                : participantsBySide.away?.displayName || 'Away';
             return (
               <button
                 key={side}
                 type="button"
                 onClick={() => changeActiveSide(side)}
+                aria-label={`Select ${sideLabel}`}
+                aria-pressed={isActive}
                 className={`flex flex-1 items-center gap-3 px-4 py-4 transition ${
                   side === TEAM_SIDES.HOME
                     ? 'justify-start border-r border-slate-200'
@@ -1586,763 +1906,887 @@ export function GameTrackPage() {
         </div>
       )}
 
-      <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
-        {error ? (
-          <p className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
-            {error}
-          </p>
+      <div className={trackingShellClassName}>
+        {game.videoUrl && isDesktopLayout ? (
+          <div className="lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col">
+            <GameVideoPanel
+              videoUrl={game.videoUrl}
+              title={game.title}
+              videoIframeRef={videoIframeRef}
+            />
+          </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
-          <div className="shrink-0 grid grid-cols-4 border-b border-slate-200">
-            {[
-              {
-                id: 'court',
-                label: 'Court',
-                icon: (
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <rect x="2" y="2" width="12" height="12" rx="1.5" />
-                    <path d="M8 2v12M2 8h12" />
-                  </svg>
-                ),
-              },
-              {
-                id: 'substitutions',
-                label: 'Subs',
-                icon: (
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M3 5h10M11 3l2 2-2 2" />
-                    <path d="M13 11H3M5 9l-2 2 2 2" />
-                  </svg>
-                ),
-              },
-              {
-                id: 'events',
-                label: 'Events',
-                icon: (
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M3 4h10M3 8h7M3 12h5" />
-                  </svg>
-                ),
-              },
-              {
-                id: 'more',
-                label: 'More',
-                icon: (
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" />
-                    <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
-                    <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
-                  </svg>
-                ),
-              },
-            ].map((tab, index, arr) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActivePanel(tab.id)}
-                className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
-                  index < arr.length - 1 ? 'border-r border-slate-200' : ''
-                } ${
-                  activePanel === tab.id
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {error ? (
+            <p className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {activePanel === 'court' ? (
-              <div className="space-y-4">
-                {insertBeforeEventId ? (
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                    <p className="text-xs font-medium text-sky-800">
-                      Tap the court to insert a shot before the selected event.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInsertBeforeEventId('');
-                        setActivePanel('events');
-                      }}
-                      className="shrink-0 text-xs font-semibold text-sky-700 hover:underline"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : null}
-                <div>
-                  <div className="relative">
-                    <InteractiveCourtImage
-                      onSelect={onCourtSelect}
-                      containerClassName="min-h-[26rem]"
-                      courtClassName="min-h-[22rem]"
-                    />
-                    {eventPicker}
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    {lastActionLabel ? (
-                      (() => {
-                        const lastPlayer = lastActionMeta.playerId
-                          ? playersById.get(lastActionMeta.playerId)
-                          : null;
-                        const lastLogoUrl = lastActionMeta.playerId
-                          ? isDualTeam
-                            ? participantsBySide[playerSideMap.get(lastActionMeta.playerId)]?.logo
-                                ?.url || teamPlaceholder
-                            : team?.logo?.url || teamPlaceholder
-                          : null;
-                        return (
-                          <div className="flex min-w-0 items-center gap-2">
-                            {lastLogoUrl ? (
-                              <img
-                                src={lastLogoUrl}
-                                alt=""
-                                className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                              />
-                            ) : null}
-                            {lastPlayer?.jerseyNumber != null ? (
-                              <span className="shrink-0 text-xs font-bold text-slate-500">
-                                #{lastPlayer.jerseyNumber}
-                              </span>
-                            ) : null}
-                            <span className="truncate text-sm font-medium text-emerald-700">
-                              {lastActionLabel}
-                            </span>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <div />
-                    )}
-                    <button
-                      type="button"
-                      onClick={openTrackingOverlay}
-                      aria-label="Open fullscreen tracking"
-                      className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
-                    >
+          {lineupSetupStep ? (
+            <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
+              <LineupPicker
+                variant="fullscreen"
+                stepLabel={lineupSetupStep === 'home' ? 'Step 1 of 2' : 'Step 2 of 2'}
+                isDualTeam
+                teamDisplayName={
+                  participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+                }
+                players={participantsBySide[lineupSetupStep]?.players || []}
+                lineupDraft={sideState[lineupSetupStep]?.lineupDraft || []}
+                onToggle={(playerId, checked) => {
+                  const draft = sideState[lineupSetupStep]?.lineupDraft || [];
+                  const nextDraft = checked
+                    ? [...draft, playerId]
+                    : draft.filter((id) => id !== playerId);
+                  updateSideState(lineupSetupStep, { lineupDraft: nextDraft });
+                }}
+                onSave={saveLineup}
+                isSaving={isSaving}
+                teamId={teamId}
+              />
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
+              <div className="shrink-0 grid grid-cols-4 border-b border-slate-200">
+                {[
+                  {
+                    id: 'court',
+                    label: 'Court',
+                    icon: (
                       <svg
-                        viewBox="0 0 20 20"
-                        className="h-4 w-4"
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4 shrink-0"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.8"
                       >
-                        <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+                        <rect x="2" y="2" width="12" height="12" rx="1.5" />
+                        <path d="M8 2v12M2 8h12" />
                       </svg>
-                    </button>
-                  </div>
-                </div>
-
-                {!isLeagueGame && lineupIds.length > 0 ? (
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className="text-base font-semibold text-slate-900">Player Selection</h2>
-                      {currentSideState.selectedPlayerId ? (
-                        <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
-                          {players.find((p) => p.id === currentSideState.selectedPlayerId)
-                            ?.displayName || 'Selected'}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-2 space-y-1.5">
-                      {onCourtPlayers.map((player) => (
-                        <button
-                          key={player.id}
-                          type="button"
-                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
-                            currentSideState.selectedPlayerId === player.id
-                              ? 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                          }`}
-                          onClick={() =>
-                            updateSideState(activeKey, { selectedPlayerId: player.id })
-                          }
-                        >
-                          {player.jerseyNumber != null ? (
-                            <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
-                              {player.jerseyNumber}
-                            </span>
-                          ) : null}
-                          <span className="font-medium">{player.displayName}</span>
-                        </button>
-                      ))}
-                      {benchPlayers.filter((p) => p.isActive !== false).length > 0 ? (
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
-                            Bench ({benchPlayers.filter((p) => p.isActive !== false).length})
-                          </summary>
-                          <div className="mt-1.5 space-y-1.5">
-                            {benchPlayers
-                              .filter((p) => p.isActive !== false)
-                              .map((player) => (
-                                <button
-                                  key={player.id}
-                                  type="button"
-                                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition ${
-                                    currentSideState.selectedPlayerId === player.id
-                                      ? 'bg-slate-900 text-white'
-                                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                                  }`}
-                                  onClick={() =>
-                                    updateSideState(activeKey, { selectedPlayerId: player.id })
-                                  }
-                                >
-                                  {player.jerseyNumber != null ? (
-                                    <span className="w-6 shrink-0 text-center text-xs font-bold opacity-60">
-                                      {player.jerseyNumber}
-                                    </span>
-                                  ) : null}
-                                  <span className="font-medium">{player.displayName}</span>
-                                </button>
-                              ))}
-                          </div>
-                        </details>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {lineupIds.length < 5 ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <h2 className="text-base font-semibold text-slate-900">Starting Lineup</h2>
-                        <p className="text-sm text-slate-500">
-                          {isDualTeam
-                            ? `${participantsBySide[activeSide]?.displayName || activeSide} — `
-                            : ''}
-                          {currentSideState.lineupDraft.length} / 5 selected
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={saveLineup}
-                          disabled={isSaving || currentSideState.lineupDraft.length !== 5}
-                          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                        >
-                          {isSaving ? 'Saving...' : 'Save Lineup'}
-                        </button>
-                      </div>
-                    </div>
-                    {players.length === 0 ? (
-                      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        <p className="font-semibold">No players found on this roster.</p>
-                        {teamId ? (
-                          <Link
-                            to={`/teams/${teamId}/edit`}
-                            className="mt-1 inline-block underline"
-                          >
-                            Add players to this team
-                          </Link>
-                        ) : (
-                          <p className="mt-1">Go to Teams to add players before tracking.</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                        {players.map((player) => {
-                          const checked = currentSideState.lineupDraft.includes(player.id);
-                          const isInactive = player.isActive === false;
-                          return (
-                            <label
-                              key={player.id}
-                              className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
-                                checked
-                                  ? 'border-slate-900 bg-slate-900 text-white'
-                                  : isInactive
-                                    ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50'
-                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                className="shrink-0 accent-white"
-                                checked={checked}
-                                disabled={isInactive}
-                                onChange={(event) => {
-                                  if (isInactive) return;
-                                  const nextDraft = event.target.checked
-                                    ? [...currentSideState.lineupDraft, player.id]
-                                    : currentSideState.lineupDraft.filter((id) => id !== player.id);
-                                  updateSideState(activeKey, { lineupDraft: nextDraft });
-                                }}
-                              />
-                              <span className="text-sm font-medium">
-                                {player.jerseyNumber != null ? `#${player.jerseyNumber} ` : ''}
-                                {player.displayName}
-                                {isInactive ? ' (inactive)' : ''}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-base font-semibold text-slate-900">
-                      {game.videoUrl ? 'Game Video' : 'Add Video'}
-                    </h2>
-                    {!isVideoUrlEditOpen ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVideoUrlDraft(game.videoUrl || '');
-                          setIsVideoUrlEditOpen(true);
-                        }}
-                        className="text-xs font-semibold text-indigo-600 hover:underline"
+                    ),
+                  },
+                  {
+                    id: 'substitutions',
+                    label: 'Subs',
+                    icon: (
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
                       >
-                        {game.videoUrl ? 'Edit URL' : 'Add URL'}
-                      </button>
-                    ) : null}
-                  </div>
+                        <path d="M3 5h10M11 3l2 2-2 2" />
+                        <path d="M13 11H3M5 9l-2 2 2 2" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    id: 'events',
+                    label: 'Events',
+                    icon: (
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="M3 4h10M3 8h7M3 12h5" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    id: 'more',
+                    label: 'More',
+                    icon: (
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" />
+                        <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+                        <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
+                      </svg>
+                    ),
+                  },
+                ].map((tab, index, arr) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActivePanel(tab.id)}
+                    aria-label={tab.label}
+                    aria-pressed={activePanel === tab.id}
+                    className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
+                      index < arr.length - 1 ? 'border-r border-slate-200' : ''
+                    } ${
+                      activePanel === tab.id
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                    }`}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
-                  {isVideoUrlEditOpen ? (
-                    <div className="mt-3 space-y-2">
-                      <input
-                        type="url"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                        placeholder="https://www.youtube.com/watch?v=..."
-                        value={videoUrlDraft}
-                        onChange={(e) => setVideoUrlDraft(e.target.value)}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={saveVideoUrl}
-                          disabled={isSaving}
-                          className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                        >
-                          {isSaving ? 'Saving…' : 'Save'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsVideoUrlEditOpen(false)}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : game.videoUrl ? (
-                    <div className="mt-3">
-                      <GameVideoEmbed
-                        ref={videoIframeRef}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {/* Persistent mobile video layer — stays mounted across tab switches and
+                    entry-mode toggles so playback position is never lost. It's only shown in
+                    the video-first "watch" view; otherwise it's hidden (not unmounted). The
+                    desktop video lives in its own persistent left column, so this mobile layer
+                    only renders when !isDesktopLayout, avoiding a second live iframe. */}
+                {game.videoUrl && !isDesktopLayout ? (
+                  <div
+                    className={isMobileVideoWatchView ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileEntryMode(true);
+                        if (pauseVideoOnEntry) {
+                          pauseVideo();
+                        }
+                      }}
+                      className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                    >
+                      <svg
+                        viewBox="0 0 20 20"
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <rect x="2" y="2" width="16" height="16" rx="2" />
+                        <path d="M10 2v16M2 10h16" />
+                      </svg>
+                      Track Stat
+                    </button>
+                    <div className="min-h-0 flex-1">
+                      <GameVideoPanel
                         videoUrl={game.videoUrl}
                         title={game.title}
+                        videoIframeRef={videoIframeRef}
                       />
                     </div>
-                  ) : (
-                    <p className="mt-1 text-sm text-slate-400">No video linked yet.</p>
-                  )}
-                </div>
-              </div>
-            ) : null}
+                  </div>
+                ) : null}
 
-            {activePanel === 'substitutions'
-              ? (() => {
-                  const { playerOutId, playerInId } = currentSideState.substitutionState;
-                  const playerOut = playerOutId ? playersById.get(playerOutId) : null;
-                  const playerIn = playerInId ? playersById.get(playerInId) : null;
-                  const bothSelected = Boolean(playerOutId && playerInId);
-
-                  function SubPlayerCard({ player, isSelected, tone, onToggle }) {
-                    const baseRing = tone === 'out' ? 'ring-rose-500' : 'ring-emerald-500';
-                    const selectedBg = tone === 'out' ? 'bg-rose-50' : 'bg-emerald-50';
-                    const avatarBg =
-                      tone === 'out'
-                        ? 'bg-rose-100 text-rose-700'
-                        : 'bg-emerald-100 text-emerald-700';
-                    const defaultAvatarBg = 'bg-slate-100 text-slate-600';
-                    return (
+                {/* Scrollable/padded content region — holds every tab's content EXCEPT the
+                    mobile watch view (which is the persistent layer above). Hidden entirely
+                    while the mobile watch view is showing. */}
+                <div
+                  className={`min-h-0 flex-1 overflow-y-auto p-4 ${
+                    isMobileVideoWatchView ? 'hidden' : ''
+                  }`}
+                >
+                  {activePanel === 'court' &&
+                  game.videoUrl &&
+                  !isDesktopLayout &&
+                  isMobileEntryMode ? (
+                    <div className="flex min-h-0 flex-1 flex-col">
                       <button
                         type="button"
-                        onClick={onToggle}
-                        className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition ${
-                          isSelected
-                            ? `${selectedBg} border-transparent ring-2 ${baseRing}`
-                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                        }`}
+                        onClick={() => setIsMobileEntryMode(false)}
+                        className="mb-2 flex shrink-0 items-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                       >
-                        <span
-                          className={`flex h-11 w-11 items-center justify-center rounded-full text-lg font-black tabular-nums ${
-                            isSelected ? avatarBg : defaultAvatarBg
-                          }`}
+                        <svg
+                          viewBox="0 0 20 20"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
                         >
-                          {player.jerseyNumber ?? '?'}
-                        </span>
-                        <span className="w-full overflow-hidden text-center text-[11px] font-semibold leading-tight text-slate-700">
-                          {player.displayName}
-                        </span>
+                          <path d="M12 15l-5-5 5-5" />
+                        </svg>
+                        Back to Video
                       </button>
-                    );
-                  }
-
-                  return (
-                    <div className="relative">
-                      <div className={`space-y-5 transition-all ${bothSelected ? 'pb-20' : ''}`}>
+                      <div className="space-y-4">
+                        {insertBeforeEventId ? (
+                          <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+                            <p className="text-xs font-medium text-sky-800">
+                              Tap the court to insert a shot before the selected event.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInsertBeforeEventId('');
+                                setActivePanel('events');
+                              }}
+                              className="shrink-0 text-xs font-semibold text-sky-700 hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : null}
                         <div>
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                            On Court — tap to sub out
-                          </p>
-                          {onCourtPlayers.length === 0 ? (
-                            <p className="text-sm text-slate-400">No players on court yet.</p>
-                          ) : (
-                            <div className="grid grid-cols-5 gap-1">
-                              {onCourtPlayers.map((player) => (
-                                <SubPlayerCard
-                                  key={player.id}
-                                  player={player}
-                                  tone="out"
-                                  isSelected={playerOutId === player.id}
-                                  onToggle={() =>
-                                    updateSideState(activeKey, {
-                                      substitutionState: {
-                                        ...currentSideState.substitutionState,
-                                        playerOutId: playerOutId === player.id ? '' : player.id,
-                                      },
-                                    })
-                                  }
-                                />
-                              ))}
-                            </div>
-                          )}
+                          <div className="relative">
+                            <InteractiveCourtImage
+                              onSelect={onCourtSelect}
+                              containerClassName="min-h-[26rem]"
+                              courtClassName="min-h-[22rem]"
+                              rotate90={rotateCourt}
+                            />
+                            {eventPicker}
+                          </div>
                         </div>
-
-                        <div>
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                            On Bench — tap to sub in
-                          </p>
-                          {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
-                            <p className="text-sm text-slate-400">No bench players available.</p>
-                          ) : (
-                            <div className="grid grid-cols-5 gap-1">
-                              {benchPlayers
-                                .filter((p) => p.isActive !== false)
-                                .map((player) => (
-                                  <SubPlayerCard
-                                    key={player.id}
-                                    player={player}
-                                    tone="in"
-                                    isSelected={playerInId === player.id}
-                                    onToggle={() =>
-                                      updateSideState(activeKey, {
-                                        substitutionState: {
-                                          ...currentSideState.substitutionState,
-                                          playerInId: playerInId === player.id ? '' : player.id,
-                                        },
-                                      })
-                                    }
-                                  />
-                                ))}
-                            </div>
-                          )}
-                        </div>
+                        {!isLeagueGame && lineupIds.length > 0 ? (
+                          <PlayerSelectionPanel
+                            players={players}
+                            onCourtPlayers={onCourtPlayers}
+                            benchPlayers={benchPlayers}
+                            selectedPlayerId={currentSideState.selectedPlayerId}
+                            onSelect={(playerId) =>
+                              updateSideState(activeKey, { selectedPlayerId: playerId })
+                            }
+                          />
+                        ) : null}
                       </div>
-
-                      {bothSelected ? (
-                        <div className="absolute inset-x-0 bottom-0 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                          <div className="mb-3 flex items-center justify-center gap-3">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
-                                {playerOut?.jerseyNumber ?? '?'}
-                              </span>
-                              <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
-                                {playerOut?.displayName}
-                              </span>
-                            </div>
+                    </div>
+                  ) : activePanel === 'court' && !(game.videoUrl && !isDesktopLayout) ? (
+                    <div className="space-y-4">
+                      {insertBeforeEventId ? (
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+                          <p className="text-xs font-medium text-sky-800">
+                            Tap the court to insert a shot before the selected event.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInsertBeforeEventId('');
+                              setActivePanel('events');
+                            }}
+                            className="shrink-0 text-xs font-semibold text-sky-700 hover:underline"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : null}
+                      <div>
+                        <div className="relative">
+                          <InteractiveCourtImage
+                            onSelect={onCourtSelect}
+                            containerClassName="min-h-[26rem]"
+                            courtClassName="min-h-[22rem]"
+                            rotate90={rotateCourt}
+                          />
+                          {eventPicker}
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          {lastActionLabel ? (
+                            (() => {
+                              const lastPlayer = lastActionMeta.playerId
+                                ? playersById.get(lastActionMeta.playerId)
+                                : null;
+                              const lastLogoUrl = lastActionMeta.playerId
+                                ? isDualTeam
+                                  ? participantsBySide[playerSideMap.get(lastActionMeta.playerId)]
+                                      ?.logo?.url || teamPlaceholder
+                                  : team?.logo?.url || teamPlaceholder
+                                : null;
+                              return (
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {lastLogoUrl ? (
+                                    <img
+                                      src={lastLogoUrl}
+                                      alt=""
+                                      className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                                    />
+                                  ) : null}
+                                  {lastPlayer?.jerseyNumber != null ? (
+                                    <span className="shrink-0 text-xs font-bold text-slate-500">
+                                      #{lastPlayer.jerseyNumber}
+                                    </span>
+                                  ) : null}
+                                  <span className="truncate text-sm font-medium text-emerald-700">
+                                    {lastActionLabel}
+                                  </span>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div />
+                          )}
+                          <button
+                            type="button"
+                            onClick={openTrackingOverlay}
+                            aria-label="Open fullscreen tracking"
+                            className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
+                          >
                             <svg
                               viewBox="0 0 20 20"
-                              className="h-5 w-5 shrink-0 text-slate-400"
+                              className="h-4 w-4"
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="1.8"
                             >
-                              <path d="M4 7h12M13 4l3 3-3 3M16 13H4M7 10l-3 3 3 3" />
+                              <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
                             </svg>
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">
-                                {playerIn?.jerseyNumber ?? '?'}
-                              </span>
-                              <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
-                                {playerIn?.displayName}
-                              </span>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={saveSubstitution}
-                            disabled={isSaving}
-                            className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                          >
-                            {isSaving ? 'Saving…' : 'Record Sub'}
                           </button>
                         </div>
+                      </div>
+
+                      {!isLeagueGame && lineupIds.length > 0 ? (
+                        <PlayerSelectionPanel
+                          players={players}
+                          onCourtPlayers={onCourtPlayers}
+                          benchPlayers={benchPlayers}
+                          selectedPlayerId={currentSideState.selectedPlayerId}
+                          onSelect={(playerId) =>
+                            updateSideState(activeKey, { selectedPlayerId: playerId })
+                          }
+                        />
+                      ) : null}
+
+                      {lineupIds.length < 5 ? (
+                        <LineupPicker
+                          variant="inline"
+                          isDualTeam={isDualTeam}
+                          teamDisplayName={
+                            participantsBySide[activeSide]?.displayName || activeSide
+                          }
+                          players={players}
+                          lineupDraft={currentSideState.lineupDraft}
+                          onToggle={(playerId, checked) => {
+                            const nextDraft = checked
+                              ? [...currentSideState.lineupDraft, playerId]
+                              : currentSideState.lineupDraft.filter((id) => id !== playerId);
+                            updateSideState(activeKey, { lineupDraft: nextDraft });
+                          }}
+                          onSave={saveLineup}
+                          isSaving={isSaving}
+                          teamId={teamId}
+                        />
                       ) : null}
                     </div>
-                  );
-                })()
-              : null}
+                  ) : null}
 
-            {activePanel === 'events' ? (
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold text-slate-900">Recent Events</h2>
-                  <div className="flex items-center gap-2">
-                    {recentEvents.length > 3 ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllRecentEvents((value) => !value)}
-                        className="text-sm font-medium text-sky-700 hover:underline"
-                      >
-                        {showAllRecentEvents ? 'Show less' : 'Show all'}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={undoLastEvent}
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
-                    >
-                      Undo Last
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <svg
-                      viewBox="0 0 16 16"
-                      className="h-3.5 w-3.5 shrink-0 text-slate-400"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
-                    </svg>
-                    Edit event
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <svg
-                      viewBox="0 0 16 16"
-                      className="h-3.5 w-3.5 shrink-0 text-sky-500"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path d="M8 3v8M5 8l3 3 3-3" />
-                      <path d="M3 13h10" />
-                    </svg>
-                    Insert stat before
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <svg
-                      viewBox="0 0 16 16"
-                      className="h-3.5 w-3.5 shrink-0 text-rose-400"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
-                    </svg>
-                    Delete event
-                  </span>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {visibleRecentEvents.map((event) => {
-                    const eventLogoUrl = isDualTeam
-                      ? participantsBySide[event.teamSide]?.logo?.url || teamPlaceholder
-                      : event.playerId
-                        ? team?.logo?.url || teamPlaceholder
-                        : null;
-                    const { actor, statLabel, meta } = parseEventParts(event, playersById);
-                    return (
-                      <div key={event.id} className="rounded-lg border border-slate-200 px-3 py-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-2">
-                            {eventLogoUrl ? (
-                              <img
-                                src={eventLogoUrl}
-                                alt=""
-                                className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                              />
-                            ) : null}
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">{actor}</p>
-                              {statLabel ? (
-                                <p className="text-xs text-slate-600">{statLabel}</p>
-                              ) : null}
-                              {meta ? <p className="text-xs text-slate-400">{meta}</p> : null}
+                  {activePanel === 'substitutions'
+                    ? (() => {
+                        const { playerOutId, playerInId } = currentSideState.substitutionState;
+                        const playerOut = playerOutId ? playersById.get(playerOutId) : null;
+                        const playerIn = playerInId ? playersById.get(playerInId) : null;
+                        const bothSelected = Boolean(playerOutId && playerInId);
+
+                        function SubPlayerCard({ player, isSelected, tone, onToggle }) {
+                          const baseRing = tone === 'out' ? 'ring-rose-500' : 'ring-emerald-500';
+                          const selectedBg = tone === 'out' ? 'bg-rose-50' : 'bg-emerald-50';
+                          const avatarBg =
+                            tone === 'out'
+                              ? 'bg-rose-100 text-rose-700'
+                              : 'bg-emerald-100 text-emerald-700';
+                          const defaultAvatarBg = 'bg-slate-100 text-slate-600';
+                          return (
+                            <button
+                              type="button"
+                              onClick={onToggle}
+                              aria-label={player.displayName}
+                              aria-pressed={isSelected}
+                              className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition ${
+                                isSelected
+                                  ? `${selectedBg} border-transparent ring-2 ${baseRing}`
+                                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span
+                                className={`flex h-11 w-11 items-center justify-center rounded-full text-lg font-black tabular-nums ${
+                                  isSelected ? avatarBg : defaultAvatarBg
+                                }`}
+                              >
+                                {player.jerseyNumber ?? '?'}
+                              </span>
+                              <span className="w-full overflow-hidden text-center text-[11px] font-semibold leading-tight text-slate-700">
+                                {player.displayName}
+                              </span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div className="relative">
+                            <div
+                              className={`space-y-5 transition-all ${bothSelected ? 'pb-20' : ''}`}
+                            >
+                              <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  On Court — tap to sub out
+                                </p>
+                                {onCourtPlayers.length === 0 ? (
+                                  <p className="text-sm text-slate-400">No players on court yet.</p>
+                                ) : (
+                                  <div className="grid grid-cols-5 gap-1">
+                                    {onCourtPlayers.map((player) => (
+                                      <SubPlayerCard
+                                        key={player.id}
+                                        player={player}
+                                        tone="out"
+                                        isSelected={playerOutId === player.id}
+                                        onToggle={() =>
+                                          updateSideState(activeKey, {
+                                            substitutionState: {
+                                              ...currentSideState.substitutionState,
+                                              playerOutId:
+                                                playerOutId === player.id ? '' : player.id,
+                                            },
+                                          })
+                                        }
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                  On Bench — tap to sub in
+                                </p>
+                                {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
+                                  <p className="text-sm text-slate-400">
+                                    No bench players available.
+                                  </p>
+                                ) : (
+                                  <div className="grid grid-cols-5 gap-1">
+                                    {benchPlayers
+                                      .filter((p) => p.isActive !== false)
+                                      .map((player) => (
+                                        <SubPlayerCard
+                                          key={player.id}
+                                          player={player}
+                                          tone="in"
+                                          isSelected={playerInId === player.id}
+                                          onToggle={() =>
+                                            updateSideState(activeKey, {
+                                              substitutionState: {
+                                                ...currentSideState.substitutionState,
+                                                playerInId:
+                                                  playerInId === player.id ? '' : player.id,
+                                              },
+                                            })
+                                          }
+                                        />
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
+
+                            {bothSelected ? (
+                              <div className="absolute inset-x-0 bottom-0 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                                <div className="mb-3 flex items-center justify-center gap-3">
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
+                                      {playerOut?.jerseyNumber ?? '?'}
+                                    </span>
+                                    <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
+                                      {playerOut?.displayName}
+                                    </span>
+                                  </div>
+                                  <svg
+                                    viewBox="0 0 20 20"
+                                    className="h-5 w-5 shrink-0 text-slate-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                  >
+                                    <path d="M4 7h12M13 4l3 3-3 3M16 13H4M7 10l-3 3 3 3" />
+                                  </svg>
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">
+                                      {playerIn?.jerseyNumber ?? '?'}
+                                    </span>
+                                    <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
+                                      {playerIn?.displayName}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={saveSubstitution}
+                                  disabled={isSaving}
+                                  className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                                >
+                                  {isSaving ? 'Saving…' : 'Record Sub'}
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="flex shrink-0 items-center gap-1">
+                        );
+                      })()
+                    : null}
+
+                  {activePanel === 'events' ? (
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <h2 className="text-base font-semibold text-slate-900">Recent Events</h2>
+                        <div className="flex items-center gap-2">
+                          {recentEvents.length > 3 ? (
                             <button
                               type="button"
-                              aria-label="Edit this event"
-                              onClick={() => openEditEvent(event)}
-                              className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50"
+                              onClick={() => setShowAllRecentEvents((value) => !value)}
+                              className="text-sm font-medium text-sky-700 hover:underline"
                             >
-                              <svg
-                                viewBox="0 0 16 16"
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
-                              </svg>
+                              {showAllRecentEvents ? 'Show less' : 'Show all'}
                             </button>
-                            <button
-                              type="button"
-                              aria-label="Insert stat before this event"
-                              onClick={() => {
-                                setInsertBeforeEventId(event.id);
-                                setActivePanel('court');
-                              }}
-                              className="rounded-md p-1.5 text-sky-600 transition hover:bg-sky-50"
-                            >
-                              <svg
-                                viewBox="0 0 16 16"
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <path d="M8 3v8M5 8l3 3 3-3" />
-                                <path d="M3 13h10" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Remove this event"
-                              onClick={() => removeEvent(event.id)}
-                              className="rounded-md p-1.5 text-rose-600 transition hover:bg-rose-50"
-                            >
-                              <svg
-                                viewBox="0 0 16 16"
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
-                              </svg>
-                            </button>
-                          </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={undoLastEvent}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+                          >
+                            Undo Last
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                        <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-3.5 w-3.5 shrink-0 text-slate-400"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
+                          </svg>
+                          Edit event
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-3.5 w-3.5 shrink-0 text-sky-500"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M8 3v8M5 8l3 3 3-3" />
+                            <path d="M3 13h10" />
+                          </svg>
+                          Insert stat before
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-3.5 w-3.5 shrink-0 text-rose-400"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
+                          </svg>
+                          Delete event
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        {visibleRecentEvents.map((event) => {
+                          const eventLogoUrl = isDualTeam
+                            ? participantsBySide[event.teamSide]?.logo?.url || teamPlaceholder
+                            : event.playerId
+                              ? team?.logo?.url || teamPlaceholder
+                              : null;
+                          const { actor, statLabel, meta } = parseEventParts(event, playersById);
+                          return (
+                            <div
+                              key={event.id}
+                              className="rounded-lg border border-slate-200 px-3 py-2"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2">
+                                  {eventLogoUrl ? (
+                                    <img
+                                      src={eventLogoUrl}
+                                      alt=""
+                                      className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                                    />
+                                  ) : null}
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">{actor}</p>
+                                    {statLabel ? (
+                                      <p className="text-xs text-slate-600">{statLabel}</p>
+                                    ) : null}
+                                    {meta ? <p className="text-xs text-slate-400">{meta}</p> : null}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <button
+                                    type="button"
+                                    aria-label="Edit this event"
+                                    onClick={() => openEditEvent(event)}
+                                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50"
+                                  >
+                                    <svg
+                                      viewBox="0 0 16 16"
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                    >
+                                      <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label="Insert stat before this event"
+                                    onClick={() => {
+                                      setInsertBeforeEventId(event.id);
+                                      setActivePanel('court');
+                                    }}
+                                    className="rounded-md p-1.5 text-sky-600 transition hover:bg-sky-50"
+                                  >
+                                    <svg
+                                      viewBox="0 0 16 16"
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                    >
+                                      <path d="M8 3v8M5 8l3 3 3-3" />
+                                      <path d="M3 13h10" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label="Remove this event"
+                                    onClick={() => removeEvent(event.id)}
+                                    className="rounded-md p-1.5 text-rose-600 transition hover:bg-rose-50"
+                                  >
+                                    <svg
+                                      viewBox="0 0 16 16"
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                    >
+                                      <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {activePanel === 'more' ? (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCourtOrientation((o) => (o === 'vertical' ? 'horizontal' : 'vertical'))
+                        }
+                        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                          <svg
+                            viewBox="0 0 20 20"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M4 4v5h5M16 16v-5h-5" />
+                            <path d="M4.5 9a7.5 7.5 0 0 1 12.6-4M15.5 11a7.5 7.5 0 0 1-12.6 4" />
+                          </svg>
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Rotate Court</p>
+                          <p className="text-xs text-slate-500">
+                            Currently {courtOrientation} — tap to rotate{' '}
+                            {courtOrientation === 'vertical' ? 'horizontal' : 'vertical'}
+                          </p>
+                        </div>
+                      </button>
+
+                      {game.videoUrl ? (
+                        <button
+                          type="button"
+                          onClick={togglePauseVideoOnEntry}
+                          className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <svg
+                              viewBox="0 0 20 20"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <path d="M7 4v12M13 4v12" />
+                            </svg>
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              Pause Video During Stat Entry
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {pauseVideoOnEntry
+                                ? 'On — video pauses while you tag a stat, resumes after.'
+                                : 'Off — video keeps playing while you tag a stat.'}
+                            </p>
+                          </div>
+                          <span
+                            className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                          >
+                            {pauseVideoOnEntry ? 'On' : 'Off'}
+                          </span>
+                        </button>
+                      ) : null}
+
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isVideoUrlEditOpen) {
+                              setIsVideoUrlEditOpen(false);
+                              return;
+                            }
+                            setVideoUrlDraft(game.videoUrl || '');
+                            setIsVideoUrlEditOpen(true);
+                          }}
+                          className="flex w-full items-center gap-3 text-left"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <svg
+                              viewBox="0 0 20 20"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <rect x="2" y="5" width="12" height="10" rx="1.5" />
+                              <path d="M14 8.5l4-2.5v8l-4-2.5" />
+                            </svg>
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {game.videoUrl ? 'Update Video' : 'Add Video'}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {game.videoUrl
+                                ? 'Change the linked game video URL.'
+                                : 'Link a YouTube video to sync with tracking.'}
+                            </p>
+                          </div>
+                        </button>
+
+                        {isVideoUrlEditOpen ? (
+                          <div className="mt-3 space-y-2">
+                            <input
+                              type="url"
+                              aria-label="Game video URL"
+                              autoComplete="off"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              value={videoUrlDraft}
+                              onChange={(e) => setVideoUrlDraft(e.target.value)}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={saveVideoUrl}
+                                disabled={isSaving}
+                                className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                              >
+                                {isSaving ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIsVideoUrlEditOpen(false)}
+                                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate('/admin')}
+                        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                          <svg
+                            viewBox="0 0 20 20"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M3 10h14M10 3l7 7-7 7" />
+                          </svg>
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Save &amp; Exit</p>
+                          <p className="text-xs text-slate-500">
+                            Return to admin. All changes are already saved.
+                          </p>
+                        </div>
+                      </button>
+
+                      {isCompleted ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/games/${gameId}`)}
+                          disabled={isSaving}
+                          className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <svg
+                              viewBox="0 0 20 20"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <path d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Done Editing</p>
+                            <p className="text-xs text-slate-500">
+                              View the finalized game record.
+                            </p>
+                          </div>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowFinishConfirm(true)}
+                          disabled={isSaving}
+                          className="flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-left transition hover:bg-emerald-100 disabled:opacity-60"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                            <svg
+                              viewBox="0 0 20 20"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            >
+                              <path d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-900">Finish Game</p>
+                            <p className="text-xs text-emerald-700">Mark the game as complete.</p>
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
-            ) : null}
-
-            {activePanel === 'more' ? (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin')}
-                  className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                    <svg
-                      viewBox="0 0 20 20"
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path d="M3 10h14M10 3l7 7-7 7" />
-                    </svg>
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Save &amp; Exit</p>
-                    <p className="text-xs text-slate-500">
-                      Return to admin. All changes are already saved.
-                    </p>
-                  </div>
-                </button>
-
-                {isCompleted ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/games/${gameId}`)}
-                    disabled={isSaving}
-                    className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                      <svg
-                        viewBox="0 0 20 20"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Done Editing</p>
-                      <p className="text-xs text-slate-500">View the finalized game record.</p>
-                    </div>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowFinishConfirm(true)}
-                    disabled={isSaving}
-                    className="flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-left transition hover:bg-emerald-100 disabled:opacity-60"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                      <svg
-                        viewBox="0 0 20 20"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-900">Finish Game</p>
-                      <p className="text-xs text-emerald-700">Mark the game as complete.</p>
-                    </div>
-                  </button>
-                )}
-              </div>
-            ) : null}
-          </div>
+            </div>
+          )}
         </div>
 
         {editingEvent
@@ -2350,8 +2794,14 @@ export function GameTrackPage() {
               const allStatTypes = Object.keys(STAT_LABELS);
               return (
                 <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Edit event"
                   className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
                   onClick={() => setEditingEvent(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setEditingEvent(null);
+                  }}
                 >
                   <div
                     className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
@@ -2413,6 +2863,7 @@ export function GameTrackPage() {
                           Player
                         </p>
                         <select
+                          aria-label="Player"
                           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
                           value={editingEvent.playerId}
                           onChange={(e) =>
@@ -2437,6 +2888,7 @@ export function GameTrackPage() {
                           Stat
                         </p>
                         <select
+                          aria-label="Stat type"
                           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
                           value={editingEvent.statType}
                           onChange={(e) =>
@@ -2456,6 +2908,7 @@ export function GameTrackPage() {
                           Zone
                         </p>
                         <select
+                          aria-label="Court zone"
                           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
                           value={editingEvent.zoneId}
                           onChange={(e) =>
@@ -2477,6 +2930,8 @@ export function GameTrackPage() {
                               min="0"
                               max="100"
                               step="0.1"
+                              aria-label="X coordinate (0–100)"
+                              autoComplete="off"
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
                               value={editingEvent.x}
                               onChange={(e) =>
@@ -2491,6 +2946,8 @@ export function GameTrackPage() {
                               min="0"
                               max="100"
                               step="0.1"
+                              aria-label="Y coordinate (0–100)"
+                              autoComplete="off"
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
                               value={editingEvent.y}
                               onChange={(e) =>
@@ -2527,8 +2984,14 @@ export function GameTrackPage() {
 
         {showFinishConfirm ? (
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Finish tracking"
             className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
             onClick={() => setShowFinishConfirm(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowFinishConfirm(false);
+            }}
           >
             <div
               className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
@@ -2613,6 +3076,7 @@ export function GameTrackPage() {
                 courtClassName="h-full"
                 helperText=""
                 flat
+                rotate90={rotateCourt}
               />
               {eventPicker}
             </div>
