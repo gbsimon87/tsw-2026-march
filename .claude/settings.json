@@ -43,7 +43,20 @@
       "Bash(npx prettier *)",
       "Bash(wc -l \"/Users/simoncordova/.claude/projects/-Users-simoncordova-Desktop-Simon-tsw-2026-march/0736959e-a72e-455f-ad33-cadca4890b44/subagents/agent-a8e8a314e7fb59a50.jsonl\" 2>&1)",
       "Read(//Users/simoncordova/.claude/projects/-Users-simoncordova-Desktop-Simon-tsw-2026-march/0736959e-a72e-455f-ad33-cadca4890b44/subagents/**)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\); print\\('devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")"
-    ]
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\); print\\('devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(git checkout *)",
+      "Bash(cp /tmp/check_ls.test.js src/localstorage-check.test.js && npx vitest run src/localstorage-check.test.js 2>&1 | tail -30 && rm src/localstorage-check.test.js)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"eslint exit: $?\")",
+      "Bash(echo \"eslint: $?\")",
+      "mcp__plugin_mongodb_mongodb__connect",
+      "mcp__plugin_mongodb_mongodb__find",
+      "mcp__plugin_mongodb_mongodb__insert-many",
+      "mcp__plugin_mongodb_mongodb__update-many",
+      "Bash(cp /private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/47184530-22cf-4a99-aa0a-41054fd59fbf/scratchpad/fix-snapshot-ids.js /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/_tmp_fix_snapshot_ids.js)",
+      "Bash(rm -f _tmp_fix_snapshot_ids.js)",
+      "Bash(awk 'NR>=2536 && /activePanel === .more. \\\\? \\\\\\(/{f=1} f&&/\\\\\\) : null\\\\}/{print NR\": \"$0; exit}' client/src/features/games/pages/GameTrackPage.jsx)"
+    ],
+    "additionalDirectories": ["/private/tmp"]
   }
 }
