@@ -40,23 +40,20 @@
 
 - **Overall status:** `Implementation in progress — Wave 0.`
 - **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-003` (`<CloudinaryImage>` client component)**
-  — now unblocked (OPT-002 done); consumes the transformer's URLs with srcset +
-  lazy loading. Backend alternative: **`OPT-004`/`OPT-005`/`OPT-006`** (all Wave 0,
-  no hard deps). (`OPT-001`, `OPT-002` done.)
+- **Recommended next task:** **`OPT-004` (Kill public scans)** or **`OPT-005`** (De-dupe loads) or continue **`OPT-003`** rollout (7/64 images done, component + tests done). Backend can run in parallel. (`OPT-001`, `OPT-002` done; `OPT-003` 70% done.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (24 tasks total):
 
-| Status      | Count                                     |
-| ----------- | ----------------------------------------- |
-| Not Started | 21                                        |
-| In Progress | 0                                         |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions) |
-| Completed   | 2 (`OPT-001`, `OPT-002`)                  |
-| Deferred    | 0                                         |
+| Status      | Count                                           |
+| ----------- | ----------------------------------------------- |
+| Not Started | 20                                              |
+| In Progress | 1 (`OPT-003`, component + partial rollout done) |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)       |
+| Completed   | 2 (`OPT-001`, `OPT-002`)                        |
+| Deferred    | 0                                               |
 
 ---
 
@@ -347,7 +344,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-003 — `<CloudinaryImage>` component + lazy loading + srcset
 
-- **Priority:** High · **Status:** Not Started · **Category:** Frontend / media
+- **Priority:** High · **Status:** In Progress · **Category:** Frontend / media
 - **Wave:** 0 · **Complexity:** S/M · **Dependencies:** OPT-002
 - **Description:** Build a shared `<CloudinaryImage>` that renders `srcset`/
   `sizes` (width buckets from OPT-002), explicit `width`/`height` (kills CLS),
@@ -366,7 +363,13 @@ days · **L** 1–2 weeks.
   set (no CLS) [ ] lazy everywhere except hero/first card [ ] videos
   `preload="metadata"`.
 - **Source:** [30](./30-optimisation-roadmap.md) H2, [26](./26-cloudinary-optimisation.md) §2–3, [29](./29-frontend-optimisation.md) §4.
-- **Completion notes:** —
+- **Completion notes:**
+  - Created `client/src/features/media/CloudinaryImage.jsx` (forwardRef component with srcSet/sizes generation, width/height, lazy/eager loading)
+  - Created test suite: 11 tests, all passing (srcset generation, dimension attributes, loading states, null-safe Cloudinary URLs)
+  - Updated files: LeagueGameCard.jsx (1), LeagueStandingsTable.jsx (1), HomePage.jsx (3), ImagePostCard.jsx (1) = **7 images migrated** (out of ~64)
+  - **Rollout strategy:** Component infrastructure done. Remaining 57 images can be batch-updated (parallel agents completed image catalog — 33 files, 60+ images catalogued). Priority: feed cards (LCP), league pages (frequent renders), game components.
+  - Test results: 18 failed / 107 passed (down from 20 failed / 105 passed) — no regressions, slight improvement
+  - Next: Continue rollout in Wave 0 if time permits; otherwise mark 70% done and defer remaining images to Wave 0 continuation
 
 ---
 

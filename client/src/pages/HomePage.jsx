@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import CloudinaryImage from '../features/media/CloudinaryImage';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
@@ -111,10 +112,14 @@ export function HomePage() {
               <li key={league.id}>
                 <article className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                   <div className="flex items-center gap-3">
-                    <img
+                    <CloudinaryImage
                       src={getLeagueHeaderImage(league)}
                       alt={`${league.name} logo`}
+                      width={40}
+                      height={40}
                       className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <h3 className="text-lg font-semibold text-slate-900" aria-label={league.name}>
                       {league.name}
@@ -180,10 +185,14 @@ export function HomePage() {
                     className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-slate-300"
                   >
                     {team.logo?.url ? (
-                      <img
+                      <CloudinaryImage
                         src={team.logo.url}
                         alt={`${team.name} logo`}
+                        width={48}
+                        height={48}
                         className="h-12 w-12 shrink-0 rounded-full border border-slate-200 object-cover"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div
@@ -229,10 +238,14 @@ export function HomePage() {
                 imageIsSecond ? 'order-1 md:order-2' : ''
               }`.trim()}
             >
-              <img
+              <CloudinaryImage
                 src={section.imageSrc}
                 alt={section.imageAlt}
+                width={600}
+                height={288}
                 className="h-full w-full object-cover"
+                loading={section === homeAudienceSections[0] ? 'eager' : 'lazy'}
+                decoding="async"
               />
             </div>
           </section>

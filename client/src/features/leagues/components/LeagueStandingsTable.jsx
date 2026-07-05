@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import CloudinaryImage from '../../../features/media/CloudinaryImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 
 export function LeagueStandingsTable({
@@ -27,10 +28,14 @@ export function LeagueStandingsTable({
               <tr key={row.teamId} className="border-t border-slate-200">
                 <td className="py-2 pl-3 pr-2 font-medium text-slate-900">
                   <div className="flex items-center gap-2">
-                    <img
+                    <CloudinaryImage
                       src={getTeamLogo ? (getTeamLogo(row) ?? teamPlaceholder) : teamPlaceholder}
                       alt=""
+                      width={24}
+                      height={24}
                       className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                     {teamHref ? (
                       <Link
