@@ -2,7 +2,12 @@ const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const { findSharedEventIds } = require('../feed/feed.repository');
 const { env } = require('../../config/env');
-const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const {
+  summarizeEvents,
+  summarizeEventsBySide,
+  createEmptyPlayerStatLine,
+  applyEventToPlayerStatLine,
+} = require('../shared/statSummary');
 const { TEAM_SIDES } = require('../shared/stats.constants');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
@@ -1468,88 +1473,14 @@ async function unclaimLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerI
   return sanitizeLeaguePlayer(player);
 }
 
+// OPT-006: delegate to the shared player-line accumulator. League player rows
+// do not carry a leaguePlayerId field, so it is omitted.
 function emptyStats(playerId, displayName) {
-  return {
-    playerId,
-    displayName,
-    ftm: 0,
-    fta: 0,
-    fg2m: 0,
-    fg2a: 0,
-    fg3m: 0,
-    fg3a: 0,
-    ast: 0,
-    oreb: 0,
-    dreb: 0,
-    stl: 0,
-    blk: 0,
-    tov: 0,
-    foul: 0,
-    reb: 0,
-    points: 0,
-  };
+  return createEmptyPlayerStatLine(playerId, displayName);
 }
 
 function applyEventToLine(line, statType) {
-  if (statType === 'FT_MADE') {
-    line.ftm += 1;
-    line.fta += 1;
-    line.points += 1;
-    return;
-  }
-  if (statType === 'FT_MISS') {
-    line.fta += 1;
-    return;
-  }
-  if (statType === 'FG2_MADE') {
-    line.fg2m += 1;
-    line.fg2a += 1;
-    line.points += 2;
-    return;
-  }
-  if (statType === 'FG2_MISS') {
-    line.fg2a += 1;
-    return;
-  }
-  if (statType === 'FG3_MADE') {
-    line.fg3m += 1;
-    line.fg3a += 1;
-    line.points += 3;
-    return;
-  }
-  if (statType === 'FG3_MISS') {
-    line.fg3a += 1;
-    return;
-  }
-  if (statType === 'AST') {
-    line.ast += 1;
-    return;
-  }
-  if (statType === 'OREB') {
-    line.oreb += 1;
-    line.reb += 1;
-    return;
-  }
-  if (statType === 'DREB') {
-    line.dreb += 1;
-    line.reb += 1;
-    return;
-  }
-  if (statType === 'STL') {
-    line.stl += 1;
-    return;
-  }
-  if (statType === 'BLK') {
-    line.blk += 1;
-    return;
-  }
-  if (statType === 'TOV') {
-    line.tov += 1;
-    return;
-  }
-  if (statType === 'FOUL') {
-    line.foul += 1;
-  }
+  applyEventToPlayerStatLine(line, statType);
 }
 
 function getLeagueGameTeamSide(game, leagueTeamId) {

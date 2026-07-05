@@ -12,7 +12,12 @@ const {
   saveGameSummary,
 } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
-const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const {
+  summarizeEvents,
+  summarizeEventsBySide,
+  createEmptyPlayerStatLine,
+  applyEventToPlayerStatLine,
+} = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
   getTeamEntitlements,
@@ -229,89 +234,17 @@ function findTeamPlayerById(team, playerId) {
   );
 }
 
+// OPT-006: delegate to the shared player-line accumulator. Game box scores
+// always carry a leaguePlayerId field, so include it here.
 function emptyStats(playerId, displayName, options = {}) {
-  return {
-    playerId,
-    leaguePlayerId: options.leaguePlayerId ? String(options.leaguePlayerId) : null,
-    displayName,
-    ftm: 0,
-    fta: 0,
-    fg2m: 0,
-    fg2a: 0,
-    fg3m: 0,
-    fg3a: 0,
-    ast: 0,
-    oreb: 0,
-    dreb: 0,
-    stl: 0,
-    blk: 0,
-    tov: 0,
-    foul: 0,
-    reb: 0,
-    points: 0,
-  };
+  return createEmptyPlayerStatLine(playerId, displayName, {
+    includeLeaguePlayerId: true,
+    leaguePlayerId: options.leaguePlayerId,
+  });
 }
 
 function applyEventToRow(row, statType) {
-  if (statType === STAT_TYPES.FT_MADE) {
-    row.ftm += 1;
-    row.fta += 1;
-    row.points += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FT_MISS) {
-    row.fta += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FG2_MADE) {
-    row.fg2m += 1;
-    row.fg2a += 1;
-    row.points += 2;
-    return;
-  }
-  if (statType === STAT_TYPES.FG2_MISS) {
-    row.fg2a += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FG3_MADE) {
-    row.fg3m += 1;
-    row.fg3a += 1;
-    row.points += 3;
-    return;
-  }
-  if (statType === STAT_TYPES.FG3_MISS) {
-    row.fg3a += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.AST) {
-    row.ast += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.OREB) {
-    row.oreb += 1;
-    row.reb += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.DREB) {
-    row.dreb += 1;
-    row.reb += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.STL) {
-    row.stl += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.BLK) {
-    row.blk += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.TOV) {
-    row.tov += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FOUL) {
-    row.foul += 1;
-  }
+  applyEventToPlayerStatLine(row, statType);
 }
 
 function isOpponentEvent(statType) {

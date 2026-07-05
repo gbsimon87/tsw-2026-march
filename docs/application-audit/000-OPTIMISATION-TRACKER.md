@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Implementation in progress — Wave 0 (3 complete, 1 in-progress, ready for next).`
+- **Overall status:** `Implementation in progress — Wave 0 (4 complete, 1 in-progress; 2 tasks left in wave).`
 - **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-005`** (De-dupe loads, pure refactor) or **`OPT-006`** (Stat consolidation, enabler) or continue **`OPT-003`** rollout. (`OPT-001`, `OPT-002`, `OPT-004` done; `OPT-003` 70% done — component infrastructure complete, 7/64 images rolled out.)
+- **Recommended next task:** **`OPT-005`** (De-dupe league loads, pure refactor) or **`OPT-007`** (Index hygiene — verify with `$indexStats` first) or continue **`OPT-003`** rollout. (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-006` done; `OPT-003` partial — 7/64 images.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (24 tasks total):
 
-| Status      | Count                                      |
-| ----------- | ------------------------------------------ |
-| Not Started | 19                                         |
-| In Progress | 1 (`OPT-003`, component + partial rollout) |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)  |
-| Completed   | 3 (`OPT-001`, `OPT-002`, `OPT-004`)        |
-| Deferred    | 0                                          |
+| Status      | Count                                          |
+| ----------- | ---------------------------------------------- |
+| Not Started | 18                                             |
+| In Progress | 1 (`OPT-003`, component + partial rollout)     |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)      |
+| Completed   | 4 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-006`) |
+| Deferred    | 0                                              |
 
 ---
 
@@ -105,7 +105,7 @@ consumers and rework is minimised.
 | OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | 🔄 In Progress | OPT-002            |
 | OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed   | (OPT-007)          |
 | OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started    | —                  |
-| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | Not Started    | —                  |
+| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed   | —                  |
 | OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started    | — (verify first)   |
 | OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started    | OPT-006            |
 | OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started    | OPT-002            |
@@ -143,6 +143,18 @@ blockers._
   (`transformCloudinaryUrl` + `buildCloudinarySrcSet`, unit-tested) applied at
   all logo/avatar/feed-media sanitize points; video thumbnail fixed to `f_auto`.
   40–80% image byte savings, zero client change. All 171 server tests pass.
+  See its card for detail.
+- **OPT-004** — Kill full-collection public scans. _2026-07-05._ Branch
+  `feat/opt-wave-0`. New `listPublicCompletedGames(limit)` repo method
+  (`.select('-events -rosterSnapshot -boxScore').limit()`) replaces
+  load-everything-then-filter in three public endpoints (`getPublicOpponentBySlug`,
+  `listPublicExploreGames`, `listPublicTeams`). Removes O(total-games) public
+  loads; response shapes unchanged. See its card for detail.
+- **OPT-006** — Consolidate per-player stat accumulation. _2026-07-05._ Branch
+  `feat/opt-wave-0`. Added `createEmptyPlayerStatLine` + `applyEventToPlayerStatLine`
+  to `shared/statSummary.js`; games & leagues services (which had identical ~85-line
+  inline duplicates) now delegate to the shared implementation. Single source of
+  truth for OPT-010/011 materialisation to reuse. 174 tests pass (parity confirmed).
   See its card for detail.
 
 ## 🔄 In Progress
@@ -356,6 +368,33 @@ unchanged for the client.
 
 ---
 
+### ✅ OPT-006 — Consolidate per-player stat accumulation (server-side)
+
+**What to test:** Box-score / player-stat numbers are now computed by one shared
+function instead of two duplicated ones. This is a **pure refactor** — the
+numbers must be byte-for-byte identical to before. No visual change; verify by
+spot-checking that stats still add up correctly.
+
+1. **Standalone game box score:** Open any completed game (`/games/:id`) → the
+   **Box Score** tab.
+   - **Look for:** Each player's PTS/FG/REB/AST/etc. are correct. Spot-check the
+     math: e.g. a player with 2 made 3-pointers and 1 made free throw = 7 pts.
+2. **League player stats:** Open a league (`/league/:slug`) → player/leaders or
+   a team roster with stats.
+   - **Look for:** Per-player totals render correctly and match the games they
+     played.
+3. **League standings** (`/league/:slug/standings`):
+   - **Look for:** Team W-L, PF, PA still correct (team-level summary path,
+     also part of the shared module).
+4. **Live game (optional):** Track a game (`/games/:id/track`), record a few
+   events, and confirm the running box score updates correctly per stat type.
+
+**Pass criteria:** All stat displays produce the same numbers as before the
+refactor (server suite proves parity: 174 tests pass). No player line is missing
+fields; points math is correct for every shot type.
+
+---
+
 ## 🗂️ Task detail cards
 
 Each card follows the standard structure. Complexity: **S** ≤1 day · **M** 2–4
@@ -559,7 +598,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-006 — Consolidate stat code → `shared/statSummary.js`
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / refactor
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend / refactor
 - **Wave:** 0 · **Complexity:** S/M · **Dependencies:** none · **Enables:** OPT-010, OPT-011, OPT-013
 - **Description:** Extract the duplicated event→stat accumulation logic (spread
   across games/leagues/teams services) into one reusable module. This becomes
@@ -574,10 +613,24 @@ days · **L** 1–2 weeks.
   services updated to call it.
 - **Testing:** parity tests — the consolidated function reproduces current
   standings/stat output exactly on dev data.
-- **Validation checklist:** [ ] all callers migrated [ ] output identical to
-  pre-refactor [ ] no duplicate stat logic remains.
+- **Validation checklist:** [x] all callers migrated [x] output identical to
+  pre-refactor [x] no duplicate stat logic remains.
 - **Source:** [30](./30-optimisation-roadmap.md) L4, [28](./28-computation-optimisation.md) §Recompute.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-05
+  - `shared/statSummary.js` already existed (team-level summaries). This task
+    eliminated the remaining **per-player box-score line** duplication.
+  - Added `createEmptyPlayerStatLine(playerId, displayName, {includeLeaguePlayerId, leaguePlayerId})`
+    and `applyEventToPlayerStatLine(line, statType)` to the shared module. The
+    `includeLeaguePlayerId` flag preserves the shape difference between the two
+    callers (games box scores carry `leaguePlayerId`; league player rows do not).
+  - **games.service.js:** `emptyStats` / `applyEventToRow` (was ~85 lines of
+    inline switch logic) now thin wrappers over the shared functions.
+  - **leagues.service.js:** `emptyStats` / `applyEventToLine` (was ~85 lines,
+    identical duplicate) now thin wrappers over the same shared functions.
+  - **Single source of truth** for player-stat accumulation — ready to be reused
+    by OPT-010/011 `recomputeLeagueAggregates` so materialised == live.
+  - Added 3 unit tests for the new functions. Full suite: **174 passing** (was
+    171). Output parity confirmed — no test expectations changed.
 
 ---
 
