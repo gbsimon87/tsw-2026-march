@@ -24,6 +24,7 @@ const {
 } = require('../feed/cloudinary.client');
 const { ApiError } = require('../../utils/apiError');
 const { env } = require('../../config/env');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
   signAccessToken,
   signRefreshToken,
@@ -48,7 +49,7 @@ function sanitizeUser(user) {
     roles: user.roles,
     emailVerified: Boolean(user.emailVerified),
     authProvider: user.authProvider,
-    avatarUrl: user.avatar?.url || null,
+    avatarUrl: transformCloudinaryUrl(user.avatar?.url || null),
   };
 }
 

@@ -4,6 +4,7 @@ const { findSharedEventIds } = require('../feed/feed.repository');
 const { env } = require('../../config/env');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
 const { TEAM_SIDES } = require('../shared/stats.constants');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
   listLeaguesByOwner,
   listPublicLeagues: listPublicLeaguesRepo,
@@ -92,7 +93,7 @@ function sanitizeLogo(logo) {
   }
 
   return {
-    url: logo.url,
+    url: transformCloudinaryUrl(logo.url),
     width: logo.width ?? null,
     height: logo.height ?? null,
   };
@@ -145,7 +146,7 @@ function sanitizeLeaguePlayer(player, usersById = new Map(), options = {}) {
     isActive: Boolean(player.isActive),
     isClaimed: Boolean(player.claimedByUserId),
     claimedBadgeLabel: player.claimedByUserId ? 'Claimed profile' : null,
-    avatarUrl: claimedUser?.avatar?.url || null,
+    avatarUrl: transformCloudinaryUrl(claimedUser?.avatar?.url || null),
     ...(options.includePrivateClaim
       ? {
           claimedBy: player.claimedByUserId
@@ -731,7 +732,7 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
       .filter((p) => p.claimedByUserId)
       .map((p) => {
         const user = usersById.get(String(p.claimedByUserId));
-        return [String(p._id), user?.avatar?.url || null];
+        return [String(p._id), transformCloudinaryUrl(user?.avatar?.url || null)];
       })
   );
   const playerStatsWithAvatars = playerStats.map((row) => ({
@@ -832,7 +833,7 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsByI
           String(game.homeLeagueTeamId) === String(leagueTeamId)
             ? String(game.awayLeagueTeamId)
             : String(game.homeLeagueTeamId);
-        return teamsById.get(opponentTeamId)?.logo?.url || null;
+        return transformCloudinaryUrl(teamsById.get(opponentTeamId)?.logo?.url || null);
       })(),
       opponentDestination: {
         kind: 'game',
@@ -1635,8 +1636,12 @@ function createLeagueGameRow(game, teamsById) {
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
     homeTeamName: teamsById.get(String(game.homeLeagueTeamId))?.name || null,
     awayTeamName: teamsById.get(String(game.awayLeagueTeamId))?.name || null,
-    homeTeamLogoUrl: teamsById.get(String(game.homeLeagueTeamId))?.logo?.url || null,
-    awayTeamLogoUrl: teamsById.get(String(game.awayLeagueTeamId))?.logo?.url || null,
+    homeTeamLogoUrl: transformCloudinaryUrl(
+      teamsById.get(String(game.homeLeagueTeamId))?.logo?.url || null
+    ),
+    awayTeamLogoUrl: transformCloudinaryUrl(
+      teamsById.get(String(game.awayLeagueTeamId))?.logo?.url || null
+    ),
     homePoints: isCompleted ? score.homePoints : null,
     awayPoints: isCompleted ? score.awayPoints : null,
     teamPoints: isCompleted ? score.homePoints : null,
@@ -1996,7 +2001,9 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
         jerseyNumber: player.jerseyNumber ?? null,
         position: player.position ?? null,
         avatarUrl: player.claimedByUserId
-          ? usersById.get(String(player.claimedByUserId))?.avatar?.url || null
+          ? transformCloudinaryUrl(
+              usersById.get(String(player.claimedByUserId))?.avatar?.url || null
+            )
           : null,
       },
     ])
@@ -2064,7 +2071,7 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
         avatarUrl: currentPlayer?.avatarUrl || null,
         teamName: team?.name || null,
         teamSlug: team?.slug || null,
-        teamLogoUrl: team?.logo?.url || null,
+        teamLogoUrl: transformCloudinaryUrl(team?.logo?.url || null),
         gamesCount,
         ppg,
         rpg,

@@ -21,6 +21,7 @@ const {
   destroyVideo,
 } = require('./cloudinary.client');
 const { env } = require('../../config/env');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { findUserById } = require('../auth/auth.repository');
 const { findGameById, listCompletedGames } = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
@@ -32,8 +33,9 @@ function cloudinaryThumbnailUrl(publicId, resourceType) {
   if (!publicId || resourceType !== 'video') return null;
   const cloudName = env.CLOUDINARY_CLOUD_NAME;
   if (!cloudName) return null;
-  // Generate a JPEG thumbnail at the first second of the video
-  return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,f_jpg,q_auto/${publicId}.jpg`;
+  // Generate a JPEG thumbnail at the first second of the video.
+  // f_auto lets Cloudinary serve WebP/AVIF to capable browsers (OPT-002 #4).
+  return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,f_auto,q_auto/${publicId}.jpg`;
 }
 
 function sanitizeCaption(value) {
@@ -73,7 +75,7 @@ function matchesQuery(text, query) {
 async function resolveImagePayload(post) {
   return {
     image: {
-      url: post.image.url,
+      url: transformCloudinaryUrl(post.image.url),
       width: post.image.width ?? null,
       height: post.image.height ?? null,
     },
@@ -88,8 +90,8 @@ async function resolveVideoPayload(post) {
   return {
     image: null,
     video: {
-      url: post.video.url,
-      thumbnailUrl: post.video.thumbnailUrl ?? null,
+      url: transformCloudinaryUrl(post.video.url),
+      thumbnailUrl: transformCloudinaryUrl(post.video.thumbnailUrl ?? null),
       width: post.video.width ?? null,
       height: post.video.height ?? null,
       duration: post.video.duration ?? null,
@@ -278,7 +280,7 @@ async function sanitizePost(post, viewerUserId = null) {
       creator: {
         id: String(creator._id),
         name: creator.name,
-        avatarUrl: creator.avatar?.url ?? null,
+        avatarUrl: transformCloudinaryUrl(creator.avatar?.url ?? null),
       },
       canDelete: Boolean(viewerUserId && String(viewerUserId) === String(post.creatorUserId)),
       ...payload,

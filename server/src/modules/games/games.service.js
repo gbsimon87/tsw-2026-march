@@ -13,6 +13,7 @@ const {
 } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
   getTeamEntitlements,
   getBillingSummary,
@@ -107,7 +108,7 @@ function sanitizeLogo(logo) {
   }
 
   return {
-    url: logo.url,
+    url: transformCloudinaryUrl(logo.url),
     width: logo.width ?? null,
     height: logo.height ?? null,
   };
@@ -994,10 +995,10 @@ async function listGamesForUser(userId, filter = {}) {
 
   const teamLogoById = new Map();
   for (const team of standaloneTeams) {
-    if (team) teamLogoById.set(String(team._id), team.logo?.url || null);
+    if (team) teamLogoById.set(String(team._id), transformCloudinaryUrl(team.logo?.url || null));
   }
   for (const team of leagueTeams) {
-    if (team) teamLogoById.set(String(team._id), team.logo?.url || null);
+    if (team) teamLogoById.set(String(team._id), transformCloudinaryUrl(team.logo?.url || null));
   }
 
   function resolveLogoUrl(game) {
@@ -1078,7 +1079,8 @@ async function getGameForUser(userId, gameId) {
     const ids = [game.homeLeagueTeamId, game.awayLeagueTeamId].filter(Boolean);
     const teams = await Promise.all(ids.map((id) => findLeagueTeamById(id).catch(() => null)));
     for (const t of teams) {
-      if (t) freshLogoByLeagueTeamId.set(String(t._id), t.logo?.url || null);
+      if (t)
+        freshLogoByLeagueTeamId.set(String(t._id), transformCloudinaryUrl(t.logo?.url || null));
     }
   }
 
@@ -1086,6 +1088,9 @@ async function getGameForUser(userId, gameId) {
     if (leagueTeamId) {
       const fresh = freshLogoByLeagueTeamId.get(String(leagueTeamId));
       if (fresh !== undefined) return fresh ? { url: fresh } : null;
+    }
+    if (participant.logo?.url) {
+      return { ...participant.logo, url: transformCloudinaryUrl(participant.logo.url) };
     }
     return participant.logo || null;
   }
@@ -1129,7 +1134,7 @@ async function getGameForUser(userId, gameId) {
           name: league.name,
           slug: league.slug,
           seasonLabel: league.seasonLabel ?? null,
-          logo: league.logo?.url ? { url: league.logo.url } : null,
+          logo: league.logo?.url ? { url: transformCloudinaryUrl(league.logo.url) } : null,
         }
       : null,
     highlights: buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc)),

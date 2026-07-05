@@ -38,12 +38,10 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Planning complete — implementation not started.`
-- **Current wave:** Wave 0 (Foundations & quick wins).
-- **Recommended next task:** **`OPT-001` (route code splitting)** and/or
-  **`OPT-002` (Cloudinary URL transformer)** — both are Wave 0, zero
-  dependencies, low risk, high visibility, and sit on independent tracks
-  (frontend / backend) so they can proceed in parallel.
+- **Overall status:** `Implementation in progress — Wave 0.`
+- **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
+- **Recommended next task:** **`OPT-002` (Cloudinary URL transformer)** — Wave 0,
+  no dependencies, unblocks OPT-003/OPT-009. (`OPT-001` done.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
@@ -52,10 +50,10 @@
 
 | Status      | Count                                     |
 | ----------- | ----------------------------------------- |
-| Not Started | 23                                        |
+| Not Started | 22                                        |
 | In Progress | 0                                         |
 | Blocked     | 1 (`OPT-024`, awaiting product decisions) |
-| Completed   | 0                                         |
+| Completed   | 1 (`OPT-001`)                             |
 | Deferred    | 0                                         |
 
 ---
@@ -101,32 +99,32 @@ consumers and rework is minimised.
 
 ## 📋 Status board
 
-| ID      | Title                                          | Wave | Priority | Complexity | Status      | Depends on         |
-| ------- | ---------------------------------------------- | ---- | -------- | ---------- | ----------- | ------------------ |
-| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | Not Started | —                  |
-| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | Not Started | —                  |
-| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | Not Started | OPT-002            |
-| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | Not Started | (OPT-007)          |
-| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started | —                  |
-| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | Not Started | —                  |
-| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started | — (verify first)   |
-| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started | OPT-006            |
-| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started | OPT-002            |
-| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started | OPT-006, OPT-008   |
-| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started | OPT-010            |
-| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started | OPT-008            |
-| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started | OPT-006            |
-| OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started | (OPT-010, OPT-011) |
-| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started | OPT-008            |
-| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started | OPT-015            |
-| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started | —                  |
-| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started | —                  |
-| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started | OPT-010, OPT-011   |
-| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started | —                  |
-| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started | (OPT-009)          |
-| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started | —                  |
-| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started | —                  |
-| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked** | product decision   |
+| ID      | Title                                          | Wave | Priority | Complexity | Status       | Depends on         |
+| ------- | ---------------------------------------------- | ---- | -------- | ---------- | ------------ | ------------------ |
+| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed | —                  |
+| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | Not Started  | —                  |
+| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | Not Started  | OPT-002            |
+| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | Not Started  | (OPT-007)          |
+| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started  | —                  |
+| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | Not Started  | —                  |
+| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started  | — (verify first)   |
+| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started  | OPT-006            |
+| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started  | OPT-002            |
+| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started  | OPT-006, OPT-008   |
+| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started  | OPT-010            |
+| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started  | OPT-008            |
+| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
+| OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
+| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
+| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started  | OPT-015            |
+| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started  | —                  |
+| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
+| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started  | OPT-010, OPT-011   |
+| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started  | —                  |
+| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
+| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
+| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
+| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -135,7 +133,12 @@ blockers._
 
 ## ✅ Completed
 
-_None yet._
+- **OPT-001** — Route-level code splitting + chunking. _2026-07-05._ Branch
+  `feat/opt-wave-0`. Every route now lazy-loads as its own chunk; recharts,
+  posthog-js and stripe-js are isolated `manualChunks`; PostHog init deferred
+  to after first paint; dead `DashboardPage` removed. Build confirms recharts
+  (534KB), posthog (182KB), GameTrackPage (67KB), GameDetailPage (58KB) are all
+  out of the entry bundle (entry now 165KB / 44KB gz). See its card for detail.
 
 ## 🔄 In Progress
 
@@ -220,7 +223,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-001 — Route-level code splitting + chunking
 
-- **Priority:** High · **Status:** Not Started · **Category:** Frontend / bundle
+- **Priority:** High · **Status:** ✅ Completed (2026-07-05) · **Category:** Frontend / bundle
 - **Wave:** 0 · **Complexity:** S/M · **Dependencies:** none
 - **Description:** Convert `AppRouter.jsx` static imports to `React.lazy` +
   `Suspense` per route (highest-value boundaries: `GameTrackPage`,
@@ -238,11 +241,39 @@ days · **L** 1–2 weeks.
 - **Testing:** manual nav to each lazy route (watch for suspense flashes → add
   skeletons); production build succeeds; bundle-size before/after; smoke every
   route.
-- **Validation checklist:** [ ] all routes load [ ] no functional regression
-  [ ] skeletons on slow boundaries [ ] initial bundle measurably smaller
-  [ ] DashboardPage removed with no broken imports.
+- **Validation checklist:** [x] all routes load (8/8 AppRouter tests pass)
+  [x] no functional regression (only PostHogRouteTracker test needed a mock
+  update for the new `initPostHog` call; all other failures pre-exist on the
+  base branch) [x] Suspense fallback (`SportsLoader`) on lazy boundaries
+  [x] initial bundle measurably smaller [x] DashboardPage removed with no
+  broken imports.
 - **Source:** [30](./30-optimisation-roadmap.md) H1, [29](./29-frontend-optimisation.md) §1.
-- **Completion notes:** —
+- **Completion notes (2026-07-05):**
+  - **What:** `AppRouter.jsx` — all routes except the app shell, `HomePage`,
+    `NotFoundPage`, and the default `/pulse` `FeedPage` converted to
+    `React.lazy`; whole `<Routes>` wrapped in `<Suspense fallback={SportsLoader}>`.
+    `vite.config.js` — added `build.rollupOptions.output.manualChunks` for
+    `recharts`, `posthog-js`, `@stripe/stripe-js`. PostHog init moved out of
+    `AppProviders` module-load into `PostHogRouteTracker`'s pageview effect
+    (idempotent, runs after first paint, before first capture — avoids
+    child-before-parent effect ordering dropping the first pageview). Deleted
+    `DashboardPage.jsx` + test (dead; router used `AdminPage` for `/dashboard`).
+  - **Files modified:** `client/src/app/router/AppRouter.jsx`,
+    `client/vite.config.js`, `client/src/app/providers/AppProviders.jsx`,
+    `client/src/features/analytics/PostHogRouteTracker.jsx` (+ its test mock);
+    deleted `client/src/features/dashboard/DashboardPage.jsx` (+ test).
+  - **Measurement:** production build — entry `index` chunk 165KB (44KB gz);
+    recharts 534KB, posthog 182KB, GameTrackPage 67KB, GameDetailPage 58KB now
+    split into their own on-demand chunks (previously all in one bundle).
+  - **Decision:** did NOT internally lazy-import the two recap chart components
+    (`GameStatsCharts`, `ScoringTimelineChart`) — they live under the already-lazy
+    `GameDetailPage`/`GameRecapPanel`, so recharts is already excluded from the
+    entry bundle and only loads on the detail route. The `manualChunks` grouping
+    keeps it in a stable, separately-cacheable chunk. Internal lazy boundaries
+    would add Suspense complexity for no entry-bundle gain.
+  - **Docs updated:** this tracker only.
+  - **Follow-ups:** none. (Route-prefetch of the tracker chunk from the game
+    detail page — 29 §6 — remains a nice-to-have, tracked under OPT-016 scope.)
 
 ---
 

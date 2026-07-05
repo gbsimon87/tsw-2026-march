@@ -26,6 +26,7 @@ const {
   destroyImage,
   isCloudinaryConfigured,
 } = require('../feed/cloudinary.client');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { env } = require('../../config/env');
 
 const PLAYER_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C']);
@@ -139,7 +140,7 @@ function sanitizeLogo(logo) {
   }
 
   return {
-    url: logo.url,
+    url: transformCloudinaryUrl(logo.url),
     width: logo.width ?? null,
     height: logo.height ?? null,
   };
