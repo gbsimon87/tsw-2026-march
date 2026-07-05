@@ -55,7 +55,13 @@
       "mcp__plugin_mongodb_mongodb__update-many",
       "Bash(cp /private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/47184530-22cf-4a99-aa0a-41054fd59fbf/scratchpad/fix-snapshot-ids.js /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/_tmp_fix_snapshot_ids.js)",
       "Bash(rm -f _tmp_fix_snapshot_ids.js)",
-      "Bash(awk 'NR>=2536 && /activePanel === .more. \\\\? \\\\\\(/{f=1} f&&/\\\\\\) : null\\\\}/{print NR\": \"$0; exit}' client/src/features/games/pages/GameTrackPage.jsx)"
+      "Bash(awk 'NR>=2536 && /activePanel === .more. \\\\? \\\\\\(/{f=1} f&&/\\\\\\) : null\\\\}/{print NR\": \"$0; exit}' client/src/features/games/pages/GameTrackPage.jsx)",
+      "mcp__plugin_mongodb_mongodb__list-collections",
+      "mcp__plugin_mongodb_mongodb__db-stats",
+      "mcp__plugin_mongodb_mongodb__collection-indexes",
+      "mcp__plugin_mongodb_mongodb__count",
+      "mcp__plugin_mongodb_mongodb__collection-storage-size",
+      "mcp__plugin_mongodb_mongodb__explain"
     ],
     "additionalDirectories": ["/private/tmp"]
   }
