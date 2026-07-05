@@ -1515,6 +1515,12 @@ function getLeagueGameTeamSide(game, leagueTeamId) {
 
 function getLeagueGameScore(game) {
   if (game.trackingMode === 'dual_team') {
+    // OPT-008: fast path — use the frozen finalScore when present (completed
+    // games). For dual_team, finalScore's {home, away} maps directly to the
+    // league home/away sides. Falls back to compute for legacy/in-progress games.
+    if (game.finalScore && (game.finalScore.home != null || game.finalScore.away != null)) {
+      return { homePoints: game.finalScore.home, awayPoints: game.finalScore.away };
+    }
     const summary = summarizeEventsBySide(game.events || []);
     return {
       homePoints: summary[TEAM_SIDES.HOME].points,
@@ -1522,7 +1528,6 @@ function getLeagueGameScore(game) {
     };
   }
 
-  const trackedSummary = summarizeEvents(game.events || []);
   const trackedTeamId = game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null;
   const homeTeamId = game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null;
 
@@ -1530,17 +1535,26 @@ function getLeagueGameScore(game) {
     return { homePoints: 0, awayPoints: 0 };
   }
 
-  if (trackedTeamId === homeTeamId) {
-    return {
-      homePoints: trackedSummary.points,
-      awayPoints: trackedSummary.opponentPoints || 0,
-    };
+  // OPT-008: fast path — the frozen finalScore stores {home: tracked-team points,
+  // away: opponent points} (games.service computeGameFinalScore maps tracked→home).
+  // Re-map onto the league's home/away sides using the tracked-team identity.
+  // Falls back to compute for legacy/in-progress games with no finalScore.
+  let trackedPoints;
+  let opponentPoints;
+  if (game.finalScore && (game.finalScore.home != null || game.finalScore.away != null)) {
+    trackedPoints = game.finalScore.home;
+    opponentPoints = game.finalScore.away;
+  } else {
+    const trackedSummary = summarizeEvents(game.events || []);
+    trackedPoints = trackedSummary.points;
+    opponentPoints = trackedSummary.opponentPoints || 0;
   }
 
-  return {
-    homePoints: trackedSummary.opponentPoints || 0,
-    awayPoints: trackedSummary.points,
-  };
+  if (trackedTeamId === homeTeamId) {
+    return { homePoints: trackedPoints, awayPoints: opponentPoints };
+  }
+
+  return { homePoints: opponentPoints, awayPoints: trackedPoints };
 }
 
 function getLeagueGameSnapshotForTeam(game, leagueTeamId) {

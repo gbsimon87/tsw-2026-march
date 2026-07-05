@@ -348,6 +348,38 @@ function buildGameSummary(game) {
   };
 }
 
+// OPT-008: compute the denormalised {home, away} final score for either
+// tracking mode. For one_sided games the tracked team is "home" and the
+// opponent is "away", matching how buildGameSummary maps teamPoints/opponentPoints.
+function computeGameFinalScore(game) {
+  if (game.trackingMode === 'dual_team') {
+    const summary = summarizeEventsBySide(game.events);
+    return { home: summary.home.points, away: summary.away.points };
+  }
+  const summary = summarizeEvents(game.events);
+  return { home: summary.points, away: summary.opponentPoints || 0 };
+}
+
+// OPT-008: keep the denormalised eventCount in lockstep with the events array.
+function syncGameEventCount(game) {
+  game.eventCount = Array.isArray(game.events) ? game.events.length : 0;
+}
+
+// OPT-008: refresh finalScore for a game that is (or is being) completed.
+function syncGameFinalScore(game) {
+  game.finalScore = computeGameFinalScore(game);
+}
+
+// OPT-008: call after any event-array mutation. eventCount tracks the array
+// length on every save; finalScore is only refreshed for already-completed
+// games (in-progress games get their score frozen at finish time).
+function syncGameDenormalizedAfterEventChange(game) {
+  syncGameEventCount(game);
+  if (game.status === 'completed') {
+    syncGameFinalScore(game);
+  }
+}
+
 function buildBoxScoreForSide(game, team, side) {
   const basePlayers = getTeamPlayers(team, { includeInactivePlayers: true });
   const map = new Map(
@@ -1254,6 +1286,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     );
     recalculateCurrentLineup(game);
     clearAiSummaryAfterCompletedLeagueEdit(game);
+    syncGameDenormalizedAfterEventChange(game);
     await saveGame(game);
     return getGameForUser(userId, gameId);
   }
@@ -1325,6 +1358,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
+  syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
 }
@@ -1368,6 +1402,7 @@ async function removeEventForUser(userId, gameId, eventId) {
   event.deleteOne();
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
+  syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
 }
@@ -1387,6 +1422,7 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (patch.videoTimestamp !== undefined) event.videoTimestamp = patch.videoTimestamp ?? undefined;
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
+  syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
   return getGameForUser(userId, gameId);
 }
@@ -1419,6 +1455,9 @@ async function finishGameForUser(userId, gameId) {
 
   game.status = 'completed';
   game.completedAt = new Date();
+  // OPT-008: freeze the final score + event count on completion.
+  syncGameFinalScore(game);
+  syncGameEventCount(game);
   await saveGame(game);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
@@ -1459,6 +1498,7 @@ module.exports = {
   finishGameForUser,
   computeBoxScore,
   buildGameSummary,
+  computeGameFinalScore,
   canAccessStandaloneDualGame,
   canEditStandaloneDualGame,
   canAccessGame,

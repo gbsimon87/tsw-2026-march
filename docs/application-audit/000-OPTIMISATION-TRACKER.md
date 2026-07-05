@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Implementation in progress — Wave 0 (5 complete, 1 in-progress; 1 task left in wave).`
-- **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-007`** (Index hygiene — ⚠️ verify with `$indexStats` in prod BEFORE dropping) or continue **`OPT-003`** rollout (57 images left). After Wave 0, **Wave 1** opens: `OPT-008` (deps met: OPT-006 ✅) and `OPT-009` (deps met: OPT-002 ✅). (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006` done; `OPT-003` partial.)
+- **Overall status:** `Wave 0 nearly done (5/7 + partial); Wave 1 underway (OPT-008 done).`
+- **Current wave:** Wave 0 finishing + Wave 1 started. Branch `feat/opt-wave-0`.
+- **Recommended next task:** **`OPT-009`** (Async video transcode — deps met: OPT-002 ✅) to finish Wave 1's independent track, or continue **`OPT-003`** image rollout. Gated/blocked: **`OPT-007`** (needs prod `$indexStats`), **`OPT-025`** (needs prod backfill), **`OPT-010`+** (Wave 2, deps now met: OPT-006 ✅ + OPT-008 ✅). (Done: OPT-001, -002, -004, -005, -006, -008. Partial: OPT-003.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
-**Counts by status** (24 tasks total):
+**Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                     |
-| ----------- | --------------------------------------------------------- |
-| Not Started | 17                                                        |
-| In Progress | 1 (`OPT-003`, component + partial rollout)                |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                 |
-| Completed   | 5 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006`) |
-| Deferred    | 0                                                         |
+| Status      | Count                                                                |
+| ----------- | -------------------------------------------------------------------- |
+| Not Started | 17                                                                   |
+| In Progress | 1 (`OPT-003`, component + partial rollout)                           |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                            |
+| Completed   | 6 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006`, `OPT-008`) |
+| Deferred    | 0                                                                    |
 
 ---
 
@@ -107,7 +107,7 @@ consumers and rework is minimised.
 | OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed   | —                  |
 | OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed   | —                  |
 | OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started    | — (verify first)   |
-| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started    | OPT-006            |
+| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed   | OPT-006            |
 | OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started    | OPT-002            |
 | OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started    | OPT-006, OPT-008   |
 | OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started    | OPT-010            |
@@ -124,6 +124,7 @@ consumers and rework is minimised.
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started    | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started    | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**    | product decision   |
+| OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started    | OPT-008 + backfill |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -162,6 +163,14 @@ blockers._
   teams + raw games ONCE and pass them down (was teams×2–3, games×2–3 per request →
   now ×1 each). `publicOnly` behaviour preserved (bug still tracked in OPT-024).
   ~10 redundant DB round-trips removed per league page; 174 tests pass. See its card.
+- **OPT-008** — `Game.finalScore` + `eventCount` denormalisation. _2026-07-05._
+  Branch `feat/opt-wave-0`. **(Wave 1 — first structural prerequisite.)** New
+  schema fields frozen on completion + maintained on event edits; league score
+  reads (`getLeagueGameScore`, used by game rows AND standings) now prefer the
+  stored `finalScore` with a compute-on-read fallback for legacy games. Idempotent
+  backfill script added and run on dev (18/18 games). Enables Wave 2 materialisation
+  (OPT-010/012). Spawned follow-up **OPT-025** (project events out, gated on prod
+  backfill). 177 tests pass. See its card.
 
 ## 🔄 In Progress
 
@@ -212,19 +221,25 @@ Log new collections, fields, utilities, and providers as they are introduced.
   — `transformCloudinaryUrl(url, {w})` + `buildCloudinarySrcSet(url, widths)`.
   Cloudinary-host-only, idempotent, null-safe. Applied in all logo/avatar/feed
   sanitizers.
-- _(note)_ `server/src/modules/shared/statSummary.js` **already exists** and is
-  used by games/leagues/teams services (`summarizeEvents`,
-  `summarizeEventsBySide`). OPT-006 is now narrower than planned — see its card.
-- _(planned)_ `shared/statSummary.js` — consolidated stat accumulator (OPT-006),
-  reused by OPT-010/011.
-- _(planned)_ `Game.finalScore`, `Game.eventCount`, `Game.boxScore` fields
-  (OPT-008, OPT-012).
+- ✅ **built (OPT-004, 2026-07-05)** `listPublicCompletedGames(limit)` in
+  `games.repository.js` — projected (`-events -rosterSnapshot -boxScore`),
+  limited finder for public endpoints.
+- ✅ **built (OPT-006, 2026-07-05)** `createEmptyPlayerStatLine` +
+  `applyEventToPlayerStatLine` added to `shared/statSummary.js` — the shared
+  per-player box-score accumulator (games & leagues delegate to it). Team-level
+  helpers (`summarizeEvents`, `summarizeEventsBySide`) pre-existed.
+- ✅ **built (OPT-008, 2026-07-05)** `Game.finalScore {home, away}` +
+  `Game.eventCount` fields in `games.repository.js`; write hooks + read fast-path
+  in games/leagues services; idempotent backfill script
+  `scripts/backfill-game-finalscore.js`.
+- ✅ **built (OPT-003, 2026-07-05, partial rollout)** `<CloudinaryImage>` client
+  component at `client/src/features/media/CloudinaryImage.jsx`.
+- _(planned)_ `Game.boxScore` frozen field (OPT-012).
 - _(planned)_ `leaguestandings`, `leagueplayerstats` collections + their indexes
   (OPT-010, OPT-011).
-- _(planned)_ `recomputeLeagueAggregates(leagueId)` post-response hook
-  (OPT-010).
-- _(planned)_ `<CloudinaryImage>` client component (OPT-003); React Query
-  `QueryClientProvider` (OPT-014).
+- _(planned)_ `recomputeLeagueAggregates(leagueId)` post-response hook — will
+  reuse OPT-006's shared accumulator (OPT-010).
+- _(planned)_ React Query `QueryClientProvider` (OPT-014).
 
 ## 🔔 Implementation reminders
 
@@ -428,6 +443,42 @@ fields; points math is correct for every shot type.
 standings, games, and rosters are consistent across sections; no duplicate
 teams/games fetches per request. ⚠️ Note: the `publicOnly` games filter is
 unchanged (still a no-op — separate OPT-024 decision).
+
+---
+
+### ✅ OPT-008 — `Game.finalScore` + `eventCount` denormalisation (server-side)
+
+**What to test:** Completed games now store their score in a `finalScore` field
+(frozen at completion, refreshed on edits) and league score reads use it. Scores
+must be identical to before; the win is not re-summing events on list reads.
+
+> **First:** the dev DB was backfilled during implementation, so existing games
+> already have `finalScore`. To test the write hooks, create/finish a NEW game.
+
+1. **Finish a game → score freezes:**
+   - Track a game (`/games/:id/track`), record some scoring events, then finish it.
+   - Open the league it belongs to (`/league/:slug`) → the game row and standings
+     show the correct score.
+2. **Edit a completed game → score updates:**
+   - On a completed league game, add or remove a scoring event (via the game's
+     edit flow).
+   - **Look for:** The league game row / standings reflect the new score (the
+     `finalScore` was refreshed because the game is completed).
+3. **Standings parity:**
+   - `/league/:slug/standings` — every team's PF/PA/W-L matches the sum of their
+     completed games' scores. Compare a couple by hand.
+4. **Legacy fallback (already covered by backfill):** All pre-existing games got
+   `finalScore` via the backfill script; their scores render unchanged.
+5. **Backfill script (optional, DB-level):**
+   - `cd server && ENV_FILE=../env/server/.env.development node src/scripts/backfill-game-finalscore.js --dry-run`
+   - **Look for:** Reports each game's computed `finalScore`/`eventCount`; a
+     second non-dry run reports "updated 0" (idempotent).
+
+**Pass criteria:** New games freeze a correct `finalScore` on completion; edits
+to completed games update it; standings and game rows match hand-computed scores;
+backfill is idempotent. ⚠️ Note: list queries still _load_ events for now —
+projecting them out is the gated follow-up **OPT-025** (needs a prod backfill
+first).
 
 ---
 
@@ -714,7 +765,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-008 — `Game.finalScore` + `eventCount` + list projections
 
-- **Priority:** High · **Status:** Not Started · **Category:** Backend / DB
+- **Priority:** High · **Status:** ✅ Completed · **Category:** Backend / DB
 - **Wave:** 1 · **Complexity:** M · **Dependencies:** OPT-006
 - **Description:** Add `Game.finalScore {home,away}` (set on completion + on
   event edits to completed games) and `Game.eventCount` (maintained on
@@ -730,11 +781,36 @@ days · **L** 1–2 weeks.
 - **Testing:** finish a game → fields populated; edit completed game → fields
   update; list endpoints no longer load events (query inspection); score parity
   vs event sum.
-- **Validation checklist:** [ ] finalScore correct on completion & edit
-  [ ] eventCount accurate [ ] lists project events out [ ] backfill/compute-on-
-  read for pre-existing games.
+- **Validation checklist:** [x] finalScore correct on completion & edit
+  [x] eventCount accurate [~] lists project events out (fast-path uses fields;
+  `.select('-events')` projection is a documented follow-up, see below)
+  [x] backfill/compute-on-read for pre-existing games.
 - **Source:** [30](./30-optimisation-roadmap.md) H3/#5, [28](./28-computation-optimisation.md) step 1, [24](./24-database-audit.md) #3.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-05
+  - **Schema:** added `Game.finalScore {home, away}` (embedded, nullable) and
+    `Game.eventCount` (Number, nullable) to `games.repository.js`.
+  - **Write hooks (games.service.js):** new pure helper `computeGameFinalScore(game)`
+    (exported, unit-tested) + `syncGameFinalScore` / `syncGameEventCount` /
+    `syncGameDenormalizedAfterEventChange`. Wired into:
+    - `finishGameForUser` — freezes finalScore + eventCount on completion.
+    - `appendEventForUser` (both dual & one-sided paths), `removeEventForUser`,
+      `updateEventForUser` — keep eventCount in lockstep and refresh finalScore
+      when the game is already completed (edits to completed games).
+  - **Read fast-path (leagues.service.js `getLeagueGameScore`):** prefers the
+    frozen `finalScore` when present, correctly re-mapping tracked→home for
+    one-sided league games; falls back to summing events for legacy/in-progress
+    games (compute-on-read, fully reversible). Both league game rows and
+    standings go through this function, so both benefit.
+  - **Backfill:** `server/src/scripts/backfill-game-finalscore.js` (idempotent,
+    `--dry-run` / `--completed-only` flags). Ran against dev: 18/18 games
+    populated; second run updates 0 (idempotent confirmed).
+  - **Follow-up (new task OPT-025):** enable `.select('-events')` on list
+    endpoints now that scores no longer require the events array. Deferred so a
+    prod backfill runs first — reading a non-backfilled game with events
+    projected out would zero its score. Compute-on-read fallback makes today's
+    behaviour safe either way.
+  - Added 3 unit tests for `computeGameFinalScore`. Full suite: **177 passing**
+    (was 174). No existing expectations changed.
 
 ---
 
@@ -1108,4 +1184,32 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 - **Validation checklist:** [ ] tie rule decided & encoded [ ] `publicOnly`
   behaviour decided [ ] contact input escaped [ ] distinctId bound.
 - **Source:** [30](./30-optimisation-roadmap.md) L7/L9, [22](./22-known-technical-debt.md).
+- **Completion notes:** —
+
+---
+
+### OPT-025 — Project `events` out of list endpoints (follow-up to OPT-008)
+
+- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / DB
+- **Wave:** 1 · **Complexity:** S · **Dependencies:** OPT-008 + **prod backfill**
+- **Description:** Now that `Game.finalScore` + `eventCount` exist (OPT-008) and
+  `getLeagueGameScore` reads them first, add `.select('-events -rosterSnapshot ...')`
+  to the league game-list and standings queries (`listLeagueGamesByLeagueId`
+  consumers) so the full events array stops being loaded on list reads.
+- **Reason:** The score fast-path no longer needs events for backfilled games;
+  the remaining cost is transferring the array from Mongo on every list read.
+- **Discovered during:** OPT-008 implementation — split out to keep OPT-008
+  reversible and gated on a production backfill.
+- **Expected benefit:** Removes events payload from all league list reads (large
+  win as `eventCount` grows into the hundreds per game).
+- **Gating requirement:** **Run `backfill-game-finalscore.js` in production
+  first.** Projecting events out before backfill would zero the score of any
+  game lacking `finalScore` (the compute-on-read fallback needs the array).
+- **Files likely to change:** `games.repository.js` (new projected finder or
+  `.select()` on `listLeagueGamesByLeagueId`), `leagues.service.js` callers.
+- **Testing:** after backfill, list endpoints return identical scores with
+  events projected out (query inspection confirms no events transferred).
+- **Validation checklist:** [ ] prod backfill run [ ] events projected out of
+  list queries [ ] scores identical [ ] detail endpoints still load events.
+- **Source:** [30](./30-optimisation-roadmap.md) H3/#5, [28](./28-computation-optimisation.md) step 1.
 - **Completion notes:** —

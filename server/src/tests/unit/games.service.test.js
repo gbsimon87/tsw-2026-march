@@ -86,6 +86,7 @@ const {
   finishGameForUser,
   getGameForUser,
   setGameLineup,
+  computeGameFinalScore,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 
@@ -697,6 +698,41 @@ describe('games service lineups', () => {
       ])
     ).rejects.toMatchObject({
       statusCode: 400,
+    });
+  });
+});
+
+describe('computeGameFinalScore (OPT-008)', () => {
+  test('maps dual_team events to home/away points', () => {
+    const game = {
+      trackingMode: 'dual_team',
+      events: [
+        { teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { teamSide: 'home', statType: STAT_TYPES.FT_MADE },
+        { teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    };
+
+    expect(computeGameFinalScore(game)).toEqual({ home: 4, away: 2 });
+  });
+
+  test('maps one_sided events to tracked (home) vs opponent (away)', () => {
+    const game = {
+      trackingMode: 'one_sided',
+      events: [
+        { statType: STAT_TYPES.FG2_MADE },
+        { statType: STAT_TYPES.FG3_MADE },
+        { statType: STAT_TYPES.OPP_FG2_MADE },
+      ],
+    };
+
+    expect(computeGameFinalScore(game)).toEqual({ home: 5, away: 2 });
+  });
+
+  test('returns zeroes for a game with no events', () => {
+    expect(computeGameFinalScore({ trackingMode: 'one_sided', events: [] })).toEqual({
+      home: 0,
+      away: 0,
     });
   });
 });

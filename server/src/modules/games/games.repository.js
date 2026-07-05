@@ -184,6 +184,22 @@ const gameSchema = new mongoose.Schema(
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     awayRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     events: { type: [shotEventSchema], default: [] },
+    // OPT-008: denormalised score + event count so list endpoints don't have to
+    // load and sum the full events array. finalScore is frozen on completion and
+    // refreshed on edits to completed games; eventCount is maintained on
+    // append/delete. Both are null/absent for pre-existing games (compute-on-read
+    // fallback covers those until backfilled).
+    finalScore: {
+      type: new mongoose.Schema(
+        {
+          home: { type: Number, default: 0 },
+          away: { type: Number, default: 0 },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    eventCount: { type: Number, default: null },
     aiSummary: { type: aiSummarySchema, default: null },
     aiSummaryGenerationLockId: { type: String, default: null, index: true },
     aiSummaryGenerationLockedAt: { type: Date, default: null },

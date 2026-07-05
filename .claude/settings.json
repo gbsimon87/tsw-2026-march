@@ -65,7 +65,10 @@
       "Bash(chmod +x /private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/verify_images.sh)",
       "Bash(/private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/verify_images.sh)",
       "Bash(chmod +x /private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/detailed_check.sh)",
-      "Bash(/private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/detailed_check.sh)"
+      "Bash(/private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/detailed_check.sh)",
+      "Bash(awk 'NR>=1150 && NR<=1420 && /saveGame\\\\\\(|await saveGame|insertEvent\\\\\\(|game.events|clearAiSummary/ {print NR\": \"$0}' modules/games/games.service.js)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-game-finalscore.js --dry-run)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-game-finalscore.js)"
     ],
     "additionalDirectories": ["/private/tmp"]
   }
