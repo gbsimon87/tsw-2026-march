@@ -61,7 +61,11 @@
       "mcp__plugin_mongodb_mongodb__collection-indexes",
       "mcp__plugin_mongodb_mongodb__count",
       "mcp__plugin_mongodb_mongodb__collection-storage-size",
-      "mcp__plugin_mongodb_mongodb__explain"
+      "mcp__plugin_mongodb_mongodb__explain",
+      "Bash(chmod +x /private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/verify_images.sh)",
+      "Bash(/private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/verify_images.sh)",
+      "Bash(chmod +x /private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/detailed_check.sh)",
+      "Bash(/private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/detailed_check.sh)"
     ],
     "additionalDirectories": ["/private/tmp"]
   }

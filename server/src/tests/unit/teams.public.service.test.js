@@ -9,7 +9,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
 
 jest.mock('../../modules/games/games.repository', () => ({
   listGamesByTeamId: jest.fn(),
-  listCompletedGames: jest.fn(),
+  listPublicCompletedGames: jest.fn(),
 }));
 
 jest.mock('../../modules/billing/billing.service', () => ({
@@ -45,7 +45,10 @@ jest.mock('mongoose', () => ({
 }));
 
 const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
-const { listGamesByTeamId, listCompletedGames } = require('../../modules/games/games.repository');
+const {
+  listGamesByTeamId,
+  listPublicCompletedGames,
+} = require('../../modules/games/games.repository');
 const {
   getPublicTeam,
   getPublicPlayer,
@@ -579,7 +582,7 @@ describe('teams public service', () => {
   });
 
   test('returns grouped related public games for an opponent slug', async () => {
-    listCompletedGames.mockResolvedValue([
+    listPublicCompletedGames.mockResolvedValue([
       {
         _id: 'g1',
         teamId: 'team-1',
@@ -628,7 +631,7 @@ describe('teams public service', () => {
   });
 
   test('returns 404 when no related public games exist for opponent slug', async () => {
-    listCompletedGames.mockResolvedValue([]);
+    listPublicCompletedGames.mockResolvedValue([]);
 
     await expect(getPublicOpponentBySlug('missing-team')).rejects.toMatchObject({
       statusCode: 404,
@@ -650,7 +653,7 @@ describe('teams public service', () => {
   });
 
   test('returns recent public explore games with one game per team', async () => {
-    listCompletedGames.mockResolvedValue([
+    listPublicCompletedGames.mockResolvedValue([
       {
         _id: 'g1',
         teamId: 'team-1',

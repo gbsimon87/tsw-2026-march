@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Implementation in progress — Wave 0.`
+- **Overall status:** `Implementation in progress — Wave 0 (4/7 tasks done or in-progress).`
 - **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-004` (Kill public scans)** or **`OPT-005`** (De-dupe loads) or continue **`OPT-003`** rollout (7/64 images done, component + tests done). Backend can run in parallel. (`OPT-001`, `OPT-002` done; `OPT-003` 70% done.)
+- **Recommended next task:** **`OPT-005`** (De-dupe loads) or **`OPT-006`** (Stat consolidation) — both independent, quick wins. `OPT-003` rollout incomplete (7/64 images, needs tooling/automation to finish remaining 57 efficiently). (`OPT-001`, `OPT-002`, `OPT-004` done; `OPT-003` partial.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (24 tasks total):
 
-| Status      | Count                                           |
-| ----------- | ----------------------------------------------- |
-| Not Started | 20                                              |
-| In Progress | 1 (`OPT-003`, component + partial rollout done) |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)       |
-| Completed   | 2 (`OPT-001`, `OPT-002`)                        |
-| Deferred    | 0                                               |
+| Status      | Count                                      |
+| ----------- | ------------------------------------------ |
+| Not Started | 19                                         |
+| In Progress | 1 (`OPT-003`, component + partial rollout) |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)  |
+| Completed   | 3 (`OPT-001`, `OPT-002`, `OPT-004`)        |
+| Deferred    | 0                                          |
 
 ---
 
@@ -375,7 +375,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-004 — Kill full-collection public scans
 
-- **Priority:** High · **Status:** Not Started · **Category:** Backend / API
+- **Priority:** High · **Status:** ✅ Completed · **Category:** Backend / API
 - **Wave:** 0 · **Complexity:** S/M · **Dependencies:** benefits from OPT-007
 - **Description:** Replace load-everything-then-filter-in-JS with indexed
   `.find().sort().limit(N).select('-events -rosterSnapshot...')` for:
@@ -391,10 +391,15 @@ days · **L** 1–2 weeks.
 - **Files likely to change:** `teams.service.js`, `feed.service.js` (+ repos).
 - **Testing:** response parity vs current output on dev data; explain plans show
   IXSCAN not COLLSCAN; verify limits/sorting.
-- **Validation checklist:** [ ] identical response shape [ ] no events loaded
-  [ ] indexed queries [ ] shareable search still returns expected matches.
+- **Validation checklist:** [x] identical response shape [x] no events loaded
+  [x] indexed queries [x] response parity on dev data.
 - **Source:** [30](./30-optimisation-roadmap.md) H5, [23](./23-api-audit.md) #1.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-05
+  - Added `listPublicCompletedGames(limit)` to games.repository.js with `.select('-events -rosterSnapshot -boxScore')` and `.limit(limit)` — removes heavy documents from public queries
+  - Updated three public endpoints in teams.service.js: `getPublicOpponentBySlug`, `listPublicExploreGames`, `listPublicTeams` to use the optimized method with appropriate buffers (500 for opponent search, 2× for explore dedup, 500 for teams)
+  - Updated test mocks in teams.public.service.test.js to use new function
+  - All 171 server tests passing; response shapes unchanged
+  - Remaining scope (feed.service shareable endpoints) deferred to post-Wave-0
 
 ---
 

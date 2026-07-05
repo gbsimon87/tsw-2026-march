@@ -14,7 +14,7 @@ const {
   listTeams,
   saveTeam,
 } = require('./teams.repository');
-const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
+const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 const {
   getBillingSummary,
@@ -544,7 +544,8 @@ async function getPublicPlayer(teamId, playerId) {
 
 async function getPublicOpponentBySlug(opponentSlug) {
   const targetSlug = slugifyOpponentName(opponentSlug);
-  const games = await listCompletedGames();
+  // OPT-004: Use optimized query with limit (larger buffer for filtering)
+  const games = await listPublicCompletedGames(500);
   const relatedGames = [];
 
   for (const game of games) {
@@ -599,7 +600,8 @@ async function getPublicOpponentBySlug(opponentSlug) {
 }
 
 async function listPublicExploreGames(limit = 10) {
-  const games = await listCompletedGames();
+  // OPT-004: Use optimized query (buffer for dedup: limit * 2 in case many games are from same team)
+  const games = await listPublicCompletedGames(limit * 2);
   const selectedGames = [];
   const seenTeamIds = new Set();
 
@@ -643,7 +645,8 @@ async function listPublicExploreGames(limit = 10) {
 
 async function listPublicTeams(limit = 6) {
   const teams = await listTeams();
-  const games = await listCompletedGames();
+  // OPT-004: Use optimized query (large buffer to find enough unique teams)
+  const games = await listPublicCompletedGames(500);
   const publicTeamIds = new Set(
     games.filter((game) => isGamePubliclyViewable(game)).map((game) => String(game.teamId))
   );

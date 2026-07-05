@@ -251,6 +251,18 @@ async function listCompletedGames() {
   });
 }
 
+// OPT-004: Optimized for public endpoints — no events, limited results
+async function listPublicCompletedGames(limit = 100) {
+  return Game.find({ status: 'completed' })
+    .select('-events -rosterSnapshot -boxScore')
+    .sort({
+      scheduledAt: -1,
+      completedAt: -1,
+      createdAt: -1,
+    })
+    .limit(limit);
+}
+
 async function listLeagueGamesByLeagueId(leagueId) {
   return Game.find({ gameContext: 'league', leagueId }).sort({
     scheduledAt: -1,
@@ -313,6 +325,7 @@ module.exports = {
   listGamesByStandaloneParticipantTeamId,
   listGamesByLeagueParticipantTeamId,
   listCompletedGames,
+  listPublicCompletedGames,
   listLeagueGamesByLeagueId,
   findGameByLeagueIdAndId,
   saveGame,
