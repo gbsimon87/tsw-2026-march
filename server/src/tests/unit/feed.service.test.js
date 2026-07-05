@@ -7,7 +7,9 @@ jest.mock('../../modules/feed/feed.repository', () => ({
 
 jest.mock('../../modules/feed/cloudinary.client', () => ({
   uploadImageBuffer: jest.fn(),
-  destroyImage: jest.fn(),
+  destroyImage: jest.fn(() => Promise.resolve({ result: 'ok' })),
+  uploadVideoBuffer: jest.fn(),
+  destroyVideo: jest.fn(() => Promise.resolve({ result: 'ok' })),
   isCloudinaryConfigured: jest.fn(() => true),
 }));
 
@@ -34,8 +36,17 @@ jest.mock('../../modules/teams/teams.service', () => ({
   getPublicTeam: jest.fn(),
 }));
 
-const { createPost, listPosts, findPostById } = require('../../modules/feed/feed.repository');
-const { uploadImageBuffer } = require('../../modules/feed/cloudinary.client');
+const {
+  createPost,
+  listPosts,
+  findPostById,
+  deletePostById,
+} = require('../../modules/feed/feed.repository');
+const {
+  uploadImageBuffer,
+  destroyImage,
+  destroyVideo,
+} = require('../../modules/feed/cloudinary.client');
 const { findUserById } = require('../../modules/auth/auth.repository');
 const { listCompletedGames } = require('../../modules/games/games.repository');
 const { getPublicGame } = require('../../modules/games/games.service');
@@ -191,6 +202,40 @@ describe('feed service', () => {
     await expect(service.deletePostForUser('other-user', 'post-1')).rejects.toMatchObject({
       statusCode: 403,
     });
+  });
+
+  test('awaits Cloudinary destroy when deleting an image post (OPT-009)', async () => {
+    findPostById.mockResolvedValue({
+      _id: 'post-1',
+      creatorUserId: 'owner-1',
+      type: 'image',
+      image: { publicId: 'tsw/feed/pic-1' },
+    });
+    deletePostById.mockResolvedValue(undefined);
+    destroyImage.mockResolvedValue({ result: 'ok' });
+
+    const result = await service.deletePostForUser('owner-1', 'post-1');
+
+    expect(deletePostById).toHaveBeenCalledWith('post-1');
+    expect(destroyImage).toHaveBeenCalledWith('tsw/feed/pic-1');
+    expect(result).toEqual({ deleted: true });
+  });
+
+  test('does not fail the delete when a video destroy errors (OPT-009)', async () => {
+    findPostById.mockResolvedValue({
+      _id: 'post-2',
+      creatorUserId: 'owner-1',
+      type: 'video',
+      video: { publicId: 'tsw/feed/clip-1' },
+    });
+    deletePostById.mockResolvedValue(undefined);
+    destroyVideo.mockRejectedValue(new Error('cloudinary down'));
+
+    // The destroy failure is logged, not thrown — delete still succeeds.
+    const result = await service.deletePostForUser('owner-1', 'post-2');
+
+    expect(destroyVideo).toHaveBeenCalledWith('tsw/feed/clip-1');
+    expect(result).toEqual({ deleted: true });
   });
 
   test('lists shareable entities', async () => {

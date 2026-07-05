@@ -21,6 +21,7 @@ const {
   destroyVideo,
 } = require('./cloudinary.client');
 const { env } = require('../../config/env');
+const { logger } = require('../../config/logger');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { findUserById } = require('../auth/auth.repository');
 const { findGameById, listCompletedGames } = require('../games/games.repository');
@@ -36,6 +37,40 @@ function cloudinaryThumbnailUrl(publicId, resourceType) {
   // Generate a JPEG thumbnail at the first second of the video.
   // f_auto lets Cloudinary serve WebP/AVIF to capable browsers (OPT-002 #4).
   return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,f_auto,q_auto/${publicId}.jpg`;
+}
+
+// OPT-009: on-the-fly optimised video delivery. With eager_async the eager MP4
+// may not exist yet at upload time, so we deliver the source through Cloudinary's
+// f_auto,q_auto,vc_auto pipeline — it transcodes on first request and serves the
+// best codec/quality for the client, and keeps working before AND after the eager
+// MP4 lands. Falls back to the raw secure_url if the cloud name is unavailable.
+function cloudinaryVideoPlaybackUrl(publicId, fallbackUrl) {
+  if (!publicId) return fallbackUrl ?? null;
+  const cloudName = env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName) return fallbackUrl ?? null;
+  return `https://res.cloudinary.com/${cloudName}/video/upload/f_auto,q_auto,vc_auto/${publicId}.mp4`;
+}
+
+// OPT-009: await Cloudinary destroys and log failures instead of firing and
+// forgetting (which silently leaked assets → quota creep). Returns true on
+// success, false on failure — callers decide whether a failure is fatal.
+async function destroyCloudinaryAsset(kind, publicId) {
+  if (!publicId) return true;
+  const destroy = kind === 'video' ? destroyVideo : destroyImage;
+  try {
+    const result = await destroy(publicId);
+    if (result && result.result && result.result !== 'ok' && result.result !== 'not found') {
+      logger.warn(
+        { kind, publicId, result: result.result },
+        'Cloudinary destroy did not return ok'
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error({ err: error, kind, publicId }, 'Cloudinary destroy failed');
+    return false;
+  }
 }
 
 function sanitizeCaption(value) {
@@ -387,15 +422,20 @@ async function createVideoPostForUser(userId, file, caption) {
   const upload = await uploadVideoBuffer(file);
 
   if (upload.duration != null && upload.duration > env.FEED_VIDEO_MAX_DURATION_SECONDS) {
-    destroyVideo(upload.public_id).catch(() => null);
+    // OPT-009: await the cleanup so a failed destroy is logged (not leaked).
+    await destroyCloudinaryAsset('video', upload.public_id);
     throw new ApiError(
       422,
       `Video must be ${env.FEED_VIDEO_MAX_DURATION_SECONDS} seconds or shorter`
     );
   }
 
-  // Prefer the eager MP4 URL for consistent playback, fall back to original
-  const playbackUrl = upload.eager?.[0]?.secure_url ?? upload.secure_url;
+  // OPT-009: with async eager transcode the eager MP4 usually isn't ready yet,
+  // so deliver via the on-the-fly f_auto,q_auto,vc_auto pipeline (works before &
+  // after the eager MP4 lands). Prefer the eager URL if it's already present.
+  const playbackUrl =
+    upload.eager?.[0]?.secure_url ??
+    cloudinaryVideoPlaybackUrl(upload.public_id, upload.secure_url);
   const thumbnailUrl = cloudinaryThumbnailUrl(upload.public_id, upload.resource_type);
 
   const post = await createPost({
@@ -488,12 +528,15 @@ async function deletePostForUser(userId, postId) {
 
   await deletePostById(postId);
 
+  // OPT-009: await the asset cleanup and log any failure. The post row is
+  // already gone, so a failed destroy is logged (surfacing the orphan) rather
+  // than failing the delete — but it is no longer silently swallowed.
   if (post.type === 'image' && post.image?.publicId) {
-    destroyImage(post.image.publicId).catch(() => null);
+    await destroyCloudinaryAsset('image', post.image.publicId);
   }
 
   if (post.type === 'video' && post.video?.publicId) {
-    destroyVideo(post.video.publicId).catch(() => null);
+    await destroyCloudinaryAsset('video', post.video.publicId);
   }
 
   return { deleted: true };

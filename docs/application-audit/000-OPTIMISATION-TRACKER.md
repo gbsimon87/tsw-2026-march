@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 nearly done (5/7 + partial); Wave 1 underway (OPT-008 done).`
-- **Current wave:** Wave 0 finishing + Wave 1 started. Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-009`** (Async video transcode — deps met: OPT-002 ✅) to finish Wave 1's independent track, or continue **`OPT-003`** image rollout. Gated/blocked: **`OPT-007`** (needs prod `$indexStats`), **`OPT-025`** (needs prod backfill), **`OPT-010`+** (Wave 2, deps now met: OPT-006 ✅ + OPT-008 ✅). (Done: OPT-001, -002, -004, -005, -006, -008. Partial: OPT-003.)
+- **Overall status:** `Wave 0 nearly done (5/7 + partial); Wave 1 complete (OPT-008, OPT-009).`
+- **Current wave:** Wave 1 done → **Wave 2 open**. Branch `feat/opt-wave-0`.
+- **Recommended next task:** **`OPT-010`** (`leaguestandings` materialisation — the big Wave 2 structural fix; deps now met: OPT-006 ✅ + OPT-008 ✅) or continue **`OPT-003`** image rollout. Gated/blocked: **`OPT-007`** (needs prod `$indexStats`), **`OPT-025`** (needs prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001, -002, -004, -005, -006, -008, -009. Partial: OPT-003.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                |
-| ----------- | -------------------------------------------------------------------- |
-| Not Started | 17                                                                   |
-| In Progress | 1 (`OPT-003`, component + partial rollout)                           |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                            |
-| Completed   | 6 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006`, `OPT-008`) |
-| Deferred    | 0                                                                    |
+| Status      | Count                                                                           |
+| ----------- | ------------------------------------------------------------------------------- |
+| Not Started | 16                                                                              |
+| In Progress | 1 (`OPT-003`, component + partial rollout)                                      |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                       |
+| Completed   | 7 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006`, `OPT-008`, `OPT-009`) |
+| Deferred    | 0                                                                               |
 
 ---
 
@@ -108,7 +108,7 @@ consumers and rework is minimised.
 | OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed   | —                  |
 | OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started    | — (verify first)   |
 | OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed   | OPT-006            |
-| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started    | OPT-002            |
+| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed   | OPT-002            |
 | OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started    | OPT-006, OPT-008   |
 | OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started    | OPT-010            |
 | OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started    | OPT-008            |
@@ -171,6 +171,12 @@ blockers._
   backfill script added and run on dev (18/18 games). Enables Wave 2 materialisation
   (OPT-010/012). Spawned follow-up **OPT-025** (project events out, gated on prod
   backfill). 177 tests pass. See its card.
+- **OPT-009** — Async video transcode + video delivery hygiene. _2026-07-05._
+  Branch `feat/opt-wave-0`. **(Wave 1 complete.)** `eager_async: true` so video
+  uploads return immediately; new `cloudinaryVideoPlaybackUrl` delivers
+  `f_auto,q_auto,vc_auto` on-the-fly (works before & after the eager MP4 lands);
+  new `destroyCloudinaryAsset` awaits + logs destroys (was 3× fire-and-forget →
+  silent asset leaks). 179 tests pass. See its card.
 
 ## 🔄 In Progress
 
@@ -479,6 +485,41 @@ to completed games update it; standings and game rows match hand-computed scores
 backfill is idempotent. ⚠️ Note: list queries still _load_ events for now —
 projecting them out is the gated follow-up **OPT-025** (needs a prod backfill
 first).
+
+---
+
+### ✅ OPT-009 — Async video transcode + delivery hygiene (server-side)
+
+**What to test:** Feed video uploads return faster (async transcode), videos play
+via optimised delivery, and asset deletions are awaited + logged.
+
+> Requires Cloudinary configured (a real `CLOUDINARY_*` env). If not configured,
+> video upload throws "Cloudinary is not configured" — that's expected.
+
+1. **Non-blocking upload:** Create a feed video post (feed composer → attach a
+   video → post).
+   - **Look for:** The upload request returns promptly (doesn't hang for the full
+     transcode duration). Post appears in the feed.
+2. **Playback works immediately:** Play the newly-posted video.
+   - **Look for:** It plays right after upload (before the eager MP4 would have
+     finished). In DevTools → Network → Media, the video URL contains
+     `/video/upload/f_auto,q_auto,vc_auto/` (on-the-fly optimised delivery).
+3. **Thumbnail:** The feed card's video thumbnail loads (URL contains
+   `so_1,f_auto,q_auto`).
+4. **Delete awaits cleanup:** Delete your video post.
+   - **Look for:** Deletion succeeds. In the **server logs**, a failed Cloudinary
+     destroy is now logged as an error/warn — no longer silently swallowed. On
+     success, no error is logged.
+5. **Over-duration rejection:** Upload a video longer than
+   `FEED_VIDEO_MAX_DURATION_SECONDS`.
+   - **Look for:** 422 error; the just-uploaded asset is cleaned up (awaited), and
+     any cleanup failure is logged.
+
+**Pass criteria:** Uploads return without waiting for transcode; videos play via
+`f_auto,q_auto,vc_auto` before and after the eager MP4 exists; post deletes await
+their Cloudinary destroy and log failures instead of leaking assets. ⚠️ Note:
+moving logos/avatars out of the shared `tsw/feed` folder was deferred (data
+migration, out of scope) — see the card.
 
 ---
 
@@ -816,7 +857,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-009 — Async video transcode + video delivery hygiene
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / media
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend / media
 - **Wave:** 1 · **Complexity:** S · **Dependencies:** OPT-002
 - **Description:** Set `eager_async:true` (`cloudinary.client.js:61-62`) with a
   status-check/notification fallback (play original or on-the-fly `f_auto` until
@@ -832,10 +873,27 @@ days · **L** 1–2 weeks.
   cleanup call sites.
 - **Testing:** upload a video → response returns fast, playback works before &
   after eager completes; delete → destroy awaited and logged.
-- **Validation checklist:** [ ] non-blocking upload [ ] playback fallback works
-  [ ] destroys awaited/logged [ ] video delivered with `f_auto`.
+- **Validation checklist:** [x] non-blocking upload [x] playback fallback works
+  [x] destroys awaited/logged [x] video delivered with `f_auto`.
 - **Source:** [30](./30-optimisation-roadmap.md) H2/M4, [26](./26-cloudinary-optimisation.md) §Video/API.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-05
+  - **Non-blocking upload:** `cloudinary.client.js` `uploadVideoBuffer` now sets
+    `eager_async: true` (was `false`) — the upload response returns as soon as the
+    original is stored instead of blocking for the full MP4 transcode.
+  - **Playback fallback (works before & after the eager MP4 lands):** new
+    `cloudinaryVideoPlaybackUrl(publicId, fallback)` delivers via the on-the-fly
+    `f_auto,q_auto,vc_auto` pipeline. `createVideoPostForUser` prefers an
+    already-present eager URL, else uses this optimised on-the-fly URL.
+  - **Awaited + logged destroys:** new `destroyCloudinaryAsset(kind, publicId)`
+    helper awaits the destroy and logs failures via pino (was 3× fire-and-forget
+    `.catch(() => null)` → silent asset leaks). Applied to the
+    over-duration-cleanup path (fatal) and both delete-post paths (logged,
+    non-fatal since the row is already gone).
+  - **Deferred (noted, not done):** moving logos/avatars out of the shared
+    `tsw/feed` folder — folder reorganisation is a data-migration concern, out of
+    scope for this delivery-hygiene task. Captured here for a future cleanup.
+  - Added 2 unit tests (awaited image destroy; video-destroy failure doesn't fail
+    the delete). Full suite: **179 passing** (was 177).
 
 ---
 
