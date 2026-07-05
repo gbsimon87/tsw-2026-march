@@ -40,8 +40,10 @@
 
 - **Overall status:** `Implementation in progress — Wave 0.`
 - **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-002` (Cloudinary URL transformer)** — Wave 0,
-  no dependencies, unblocks OPT-003/OPT-009. (`OPT-001` done.)
+- **Recommended next task:** **`OPT-003` (`<CloudinaryImage>` client component)**
+  — now unblocked (OPT-002 done); consumes the transformer's URLs with srcset +
+  lazy loading. Backend alternative: **`OPT-004`/`OPT-005`/`OPT-006`** (all Wave 0,
+  no hard deps). (`OPT-001`, `OPT-002` done.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
@@ -50,10 +52,10 @@
 
 | Status      | Count                                     |
 | ----------- | ----------------------------------------- |
-| Not Started | 22                                        |
+| Not Started | 21                                        |
 | In Progress | 0                                         |
 | Blocked     | 1 (`OPT-024`, awaiting product decisions) |
-| Completed   | 1 (`OPT-001`)                             |
+| Completed   | 2 (`OPT-001`, `OPT-002`)                  |
 | Deferred    | 0                                         |
 
 ---
@@ -102,7 +104,7 @@ consumers and rework is minimised.
 | ID      | Title                                          | Wave | Priority | Complexity | Status       | Depends on         |
 | ------- | ---------------------------------------------- | ---- | -------- | ---------- | ------------ | ------------------ |
 | OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed | —                  |
-| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | Not Started  | —                  |
+| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed | —                  |
 | OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | Not Started  | OPT-002            |
 | OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | Not Started  | (OPT-007)          |
 | OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started  | —                  |
@@ -139,6 +141,12 @@ blockers._
   to after first paint; dead `DashboardPage` removed. Build confirms recharts
   (534KB), posthog (182KB), GameTrackPage (67KB), GameDetailPage (58KB) are all
   out of the entry bundle (entry now 165KB / 44KB gz). See its card for detail.
+- **OPT-002** — Cloudinary `f_auto,q_auto` delivery transformer. _2026-07-05._
+  Branch `feat/opt-wave-0`. New `server/src/modules/shared/cloudinaryUrl.js`
+  (`transformCloudinaryUrl` + `buildCloudinarySrcSet`, unit-tested) applied at
+  all logo/avatar/feed-media sanitize points; video thumbnail fixed to `f_auto`.
+  40–80% image byte savings, zero client change. All 171 server tests pass.
+  See its card for detail.
 
 ## 🔄 In Progress
 
@@ -182,8 +190,13 @@ Record every architectural / scope decision here with a date and rationale.
 
 Log new collections, fields, utilities, and providers as they are introduced.
 
-- _(planned, not yet built)_ `shared/cloudinaryUrl.js` — URL transformer
-  (OPT-002).
+- ✅ **built (OPT-002, 2026-07-05)** `server/src/modules/shared/cloudinaryUrl.js`
+  — `transformCloudinaryUrl(url, {w})` + `buildCloudinarySrcSet(url, widths)`.
+  Cloudinary-host-only, idempotent, null-safe. Applied in all logo/avatar/feed
+  sanitizers.
+- _(note)_ `server/src/modules/shared/statSummary.js` **already exists** and is
+  used by games/leagues/teams services (`summarizeEvents`,
+  `summarizeEventsBySide`). OPT-006 is now narrower than planned — see its card.
 - _(planned)_ `shared/statSummary.js` — consolidated stat accumulator (OPT-006),
   reused by OPT-010/011.
 - _(planned)_ `Game.finalScore`, `Game.eventCount`, `Game.boxScore` fields
@@ -279,7 +292,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-002 — Cloudinary URL transformer (server-side)
 
-- **Priority:** High · **Status:** Not Started · **Category:** Backend / media
+- **Priority:** High · **Status:** ✅ Completed (2026-07-05) · **Category:** Backend / media
 - **Wave:** 0 · **Complexity:** S · **Dependencies:** none · **Enables:** OPT-003, OPT-009
 - **Description:** Add `server/src/modules/shared/cloudinaryUrl.js` emitting
   `f_auto,q_auto,w_*,c_limit` (only for Cloudinary hosts). Apply it at sanitize
@@ -295,10 +308,40 @@ days · **L** 1–2 weeks.
 - **Testing:** unit-test the transformer (Cloudinary vs non-Cloudinary URL,
   width param); verify sanitized payloads carry transformed URLs; visual QA that
   images still render.
-- **Validation checklist:** [ ] non-Cloudinary URLs untouched [ ] `f_auto,q_auto`
-  present on delivered URLs [ ] thumbnail has `f_auto` [ ] no broken images.
+- **Validation checklist:** [x] non-Cloudinary URLs untouched (unit test)
+  [x] `f_auto,q_auto` present on delivered URLs [x] thumbnail has `f_auto`
+  [x] no double-application on already-transformed URLs [x] all 171 server
+  tests pass (no broken images/shapes).
 - **Source:** [30](./30-optimisation-roadmap.md) H2, [26](./26-cloudinary-optimisation.md) §Image.
-- **Completion notes:** —
+- **Completion notes (2026-07-05):**
+  - **What:** new `server/src/modules/shared/cloudinaryUrl.js` exporting
+    `transformCloudinaryUrl(url, {w})` (adds `f_auto,q_auto`, optional
+    `w_<n>,c_limit`) and `buildCloudinarySrcSet(url, widths)`. Only rewrites
+    `res.cloudinary.com/.../upload/` URLs; passes through foreign hosts,
+    already-transformed URLs, and nullish input. Applied at serialization time
+    in: `sanitizeLogo` (teams, leagues, games), auth `avatarUrl`, feed image /
+    video / video-thumbnail / creator avatar payloads, and the inline
+    logo/avatar map builders in leagues (`homeTeamLogoUrl`/`awayTeamLogoUrl`,
+    claimed-user avatars, opponent logo, leader/team logo) and games
+    (`teamLogoById`, `freshLogoByLeagueTeamId`, league logo, participant logo).
+    Fixed the video thumbnail URL from `f_jpg` → `f_auto` (audit #4).
+  - **Files modified:** new `shared/cloudinaryUrl.js` + `tests/unit/cloudinaryUrl.test.js`;
+    `teams.service.js`, `leagues.service.js`, `games.service.js`,
+    `auth/auth.service.js`, `feed/feed.service.js`.
+  - **Testing:** 9-case unit test for the transformer; full server suite
+    (171 tests) green.
+  - **Decision:** `srcset`/width-bucket emission is left to the client
+    `<CloudinaryImage>` component (OPT-003) — it can build buckets from the base
+    URL via the same transformer logic, avoiding fattening every server payload
+    with 2–3 extra URL strings per image. `buildCloudinarySrcSet` is exported
+    for server use if a payload ever needs it.
+  - **Not touched (deliberately):** `buildTeamDocFromSnapshot`'s internal
+    `participant.logo` (a synthetic team doc consumed internally, then
+    re-sanitized downstream) — transforming the response-facing
+    `resolveParticipantLogo` output covers the wire.
+  - **Docs updated:** this tracker.
+  - **Follow-ups:** video `eager_async` + `preload="metadata"` + awaited
+    destroys remain in **OPT-009**; client srcset/lazy in **OPT-003**.
 
 ---
 
