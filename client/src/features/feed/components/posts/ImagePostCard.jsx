@@ -1,4 +1,4 @@
-import CloudinaryImage from '../../media/CloudinaryImage';
+import CloudinaryImage from '../../../media/CloudinaryImage';
 
 export function ImagePostCard({ image, caption }) {
   return (
