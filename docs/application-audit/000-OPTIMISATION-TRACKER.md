@@ -227,6 +227,135 @@ Log new collections, fields, utilities, and providers as they are introduced.
 
 ---
 
+## 🧪 Manual testing guide (per completed task)
+
+> **How to run the app:** `pnpm dev` from repo root (starts client on
+> `http://localhost:5173` and server on `http://localhost:4000`). Open Chrome
+> DevTools before testing (Cmd+Opt+I). Use the **Network** tab (filter by JS or
+> Img) and the **Console** tab (watch for errors) throughout.
+
+### ✅ OPT-001 — Route code splitting + chunking
+
+**What to test:** Routes now load as separate JS chunks on demand instead of
+one giant bundle.
+
+1. Open DevTools → **Network** tab → filter by **JS**. Check "Disable cache".
+2. Navigate to `http://localhost:5173/` (the feed/home).
+   - **Look for:** A small set of JS files loads (entry ~44KB gzipped). You
+     should NOT see `recharts`, `posthog`, or a huge `GameTrackPage` chunk yet.
+3. Navigate to a **game detail** page (`/games/:id` — open any game from the
+   feed or a league).
+   - **Look for:** A NEW chunk loads on-demand (the recharts chunk ~534KB and
+     the GameDetailPage chunk appear only NOW, not on first load).
+4. Navigate to **pricing** (`/pricing`).
+   - **Look for:** The stripe-js chunk loads only here.
+5. Navigate to a **game tracking** page (`/games/:id/track` on a game you own).
+   - **Look for:** The large GameTrackPage chunk loads only now; brief loader
+     (SportsLoader) may flash — that's the Suspense boundary working.
+6. **Console:** No errors. **PostHog:** analytics init happens after first
+   paint (you can confirm the posthog chunk loads slightly after the page
+   renders, not blocking it).
+
+**Pass criteria:** Entry bundle is small; heavy libraries load only on the
+routes that use them; no console errors; all routes still render.
+
+---
+
+### ✅ OPT-002 — Cloudinary delivery optimization (server-side URLs)
+
+**What to test:** Image URLs served by the API now carry `f_auto,q_auto`
+(auto-format + auto-quality) so Cloudinary delivers WebP/AVIF at optimal size.
+
+1. Open DevTools → **Network** tab → filter by **Img**.
+2. Navigate to any page with team/league logos or avatars, e.g.:
+   - Home (`/`) — featured teams & leagues logos
+   - A public league page (`/league/:slug`)
+   - The feed (`/`) — post images and creator avatars
+3. Click any loaded image request and inspect its **URL** (Request URL in
+   Headers).
+   - **Look for:** The URL contains `/upload/f_auto,q_auto/` (or
+     `f_auto,q_auto,w_...` if width was applied). Example:
+     `res.cloudinary.com/.../upload/f_auto,q_auto/v123/tsw/...`
+4. Check the **Response Headers** of an image → `content-type`.
+   - **Look for:** `image/webp` or `image/avif` in a modern browser (proof
+     `f_auto` is negotiating a better format than the original PNG/JPG).
+5. Compare a logo's transferred **Size** (Network column) — should be notably
+   smaller than the raw asset.
+6. **Feed videos:** Open a post with video. Inspect the thumbnail URL — should
+   use `f_auto` (not the old `f_jpg`).
+
+**Pass criteria:** Cloudinary image URLs include `f_auto,q_auto`;
+non-Cloudinary images (static assets, placeholders) are untouched; images still
+display correctly everywhere.
+
+---
+
+### 🔄 OPT-003 — CloudinaryImage component (partial: 7/64 images)
+
+**What to test:** The new `<CloudinaryImage>` component adds lazy loading,
+explicit dimensions (no layout shift), and responsive `srcset` on migrated
+images.
+
+**Migrated so far — test these specific spots:**
+
+1. **Home page** (`/`):
+   - Featured leagues list (league logos, 40×40)
+   - Featured teams list (team logos, 48×48)
+   - The three audience section images (hero-sized, 600×288)
+2. **League game cards** — visible on league pages / anywhere `LeagueGameCard`
+   renders (team logos, 36×36).
+3. **League standings** (`/league/:slug/standings`) — team logos in the table
+   (24×24).
+4. **Feed image posts** (`/`) — full-width post images.
+
+**For each spot, in DevTools:**
+
+- **Elements** tab → inspect the `<img>` → confirm it has `loading="lazy"`
+  (except above-the-fold), `decoding="async"`, and explicit `width`/`height`
+  attributes.
+- For feed image posts (Cloudinary), confirm a `srcset` attribute with multiple
+  widths (320w, 640w, 1024w) and a `sizes` attribute.
+- **Network** tab: scroll down the feed — lazy images should load only as they
+  approach the viewport (not all upfront).
+- **Performance/visual:** No layout jump as images load (dimensions reserve
+  space → no CLS).
+
+**Pass criteria:** Migrated images lazy-load, reserve space (no shift), and
+feed images request a responsively-sized source. ⚠️ **Note:** 57 images are NOT
+yet migrated — most game/team/admin pages still use plain `<img>`. That's
+expected; full rollout is pending.
+
+---
+
+### ✅ OPT-004 — Kill full-collection public scans (server-side)
+
+**What to test:** Public endpoints no longer load ALL completed games with
+their (heavy) events arrays — they use limited, projected queries.
+
+> This is a **backend** change with no visual difference. Test via the API
+> responses and by confirming the pages that consume these endpoints still work.
+
+1. **Explore/home:** Navigate to `/` — the "Featured Teams" and public games
+   sections are powered by `listPublicExploreGames` / `listPublicTeams`.
+   - **Look for:** Sections populate correctly with teams and recent games.
+2. **Opponent page:** Navigate to a public opponent page (`/opponents/:slug` —
+   reachable from a public team's game list).
+   - **Look for:** Related games list renders; correct opponent name and game
+     count.
+3. **Verify the payload is slimmer (optional, DevTools → Network → XHR):**
+   - Find the request to `/api/v1/public/teams/explore` (or `/public/teams`,
+     `/public/opponents/:slug`).
+   - Inspect the JSON **Response** → confirm games in the response do NOT
+     include a giant `events` array (only summary fields: id, title, opponent,
+     scheduledAt, teamPoints, team).
+   - **Response size** should be small even as the dataset grows.
+
+**Pass criteria:** All public/explore pages render identical content to before;
+API responses exclude `events`/`rosterSnapshot`/`boxScore`; response shape
+unchanged for the client.
+
+---
+
 ## 🗂️ Task detail cards
 
 Each card follows the standard structure. Complexity: **S** ≤1 day · **M** 2–4
