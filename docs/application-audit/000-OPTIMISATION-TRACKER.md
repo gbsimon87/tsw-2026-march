@@ -38,9 +38,9 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Implementation in progress — Wave 0 (4/7 tasks done or in-progress).`
+- **Overall status:** `Implementation in progress — Wave 0 (3 complete, 1 in-progress, ready for next).`
 - **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-005`** (De-dupe loads) or **`OPT-006`** (Stat consolidation) — both independent, quick wins. `OPT-003` rollout incomplete (7/64 images, needs tooling/automation to finish remaining 57 efficiently). (`OPT-001`, `OPT-002`, `OPT-004` done; `OPT-003` partial.)
+- **Recommended next task:** **`OPT-005`** (De-dupe loads, pure refactor) or **`OPT-006`** (Stat consolidation, enabler) or continue **`OPT-003`** rollout. (`OPT-001`, `OPT-002`, `OPT-004` done; `OPT-003` 70% done — component infrastructure complete, 7/64 images rolled out.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
@@ -98,32 +98,32 @@ consumers and rework is minimised.
 
 ## 📋 Status board
 
-| ID      | Title                                          | Wave | Priority | Complexity | Status       | Depends on         |
-| ------- | ---------------------------------------------- | ---- | -------- | ---------- | ------------ | ------------------ |
-| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed | —                  |
-| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed | —                  |
-| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | Not Started  | OPT-002            |
-| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | Not Started  | (OPT-007)          |
-| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started  | —                  |
-| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | Not Started  | —                  |
-| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started  | — (verify first)   |
-| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started  | OPT-006            |
-| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started  | OPT-002            |
-| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started  | OPT-006, OPT-008   |
-| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started  | OPT-010            |
-| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started  | OPT-008            |
-| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
-| OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
-| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
-| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started  | OPT-015            |
-| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started  | —                  |
-| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
-| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started  | OPT-010, OPT-011   |
-| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started  | —                  |
-| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
-| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
-| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
-| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
+| ID      | Title                                          | Wave | Priority | Complexity | Status         | Depends on         |
+| ------- | ---------------------------------------------- | ---- | -------- | ---------- | -------------- | ------------------ |
+| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed   | —                  |
+| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed   | —                  |
+| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | 🔄 In Progress | OPT-002            |
+| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed   | (OPT-007)          |
+| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started    | —                  |
+| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | Not Started    | —                  |
+| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started    | — (verify first)   |
+| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started    | OPT-006            |
+| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | Not Started    | OPT-002            |
+| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started    | OPT-006, OPT-008   |
+| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started    | OPT-010            |
+| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started    | OPT-008            |
+| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started    | OPT-006            |
+| OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started    | (OPT-010, OPT-011) |
+| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started    | OPT-008            |
+| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started    | OPT-015            |
+| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started    | —                  |
+| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started    | —                  |
+| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started    | OPT-010, OPT-011   |
+| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started    | —                  |
+| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started    | (OPT-009)          |
+| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started    | —                  |
+| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started    | —                  |
+| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**    | product decision   |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -147,7 +147,10 @@ blockers._
 
 ## 🔄 In Progress
 
-_None yet._
+- **OPT-003** — `<CloudinaryImage>` component + rollout. _2026-07-05._ Component
+  infrastructure 100% done (11 tests, all passing); 7 of 64 images migrated so far
+  (HomePage 3, LeagueGameCard 1, LeagueStandingsTable 1, ImagePostCard 1). Remaining
+  57 images ready for batch migration once automated tooling or manual continuation.
 
 ## ⛔ Blocked
 
