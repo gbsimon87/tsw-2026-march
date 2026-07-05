@@ -510,11 +510,16 @@ async function buildLeagueViewerContext(userId, league) {
 async function getLeagueForUser(userId, leagueId) {
   const league = await assertLeagueViewer(userId, leagueId);
 
-  const [teams, standings, games, viewerContext] = await Promise.all([
+  // OPT-005: fetch teams + raw games ONCE, then pass down to the standings and
+  // games-row builders instead of letting each re-query (was teams×3, games×2).
+  const [teams, rawGames, viewerContext] = await Promise.all([
     listLeagueTeams(league._id),
-    getLeagueStandings(league._id),
-    listLeagueGames(league._id),
+    listLeagueGamesByLeagueId(league._id),
     buildLeagueViewerContext(userId, league),
+  ]);
+  const [standings, games] = await Promise.all([
+    getLeagueStandings(league._id, { teams, games: rawGames }),
+    listLeagueGames(league._id, { teams, games: rawGames }),
   ]);
   const canViewAllTeamManagers =
     viewerContext.viewerRole === 'owner' || viewerContext.viewerRole === 'league_manager';
@@ -549,10 +554,16 @@ async function getLeagueForUser(userId, leagueId) {
 
 async function getPublicLeagueBySlug(slug) {
   const league = await assertLeagueVisible(slug, { bySlug: true });
-  const [teams, standings, games] = await Promise.all([
+  // OPT-005: fetch teams + raw games ONCE, then pass down (was teams×3, games×2).
+  // NOTE: publicOnly is preserved as-is; listLeagueGames currently ignores it
+  // (tracked separately in OPT-024). This refactor does not change that behaviour.
+  const [teams, rawGames] = await Promise.all([
     listLeagueTeams(league._id),
-    getLeagueStandings(league._id),
-    listLeagueGames(league._id, { publicOnly: true }),
+    listLeagueGamesByLeagueId(league._id),
+  ]);
+  const [standings, games] = await Promise.all([
+    getLeagueStandings(league._id, { teams, games: rawGames }),
+    listLeagueGames(league._id, { publicOnly: true, teams, games: rawGames }),
   ]);
 
   return sanitizeLeague(league, {
@@ -661,16 +672,20 @@ async function listTeamsForLeagueViewer(userId, leagueId) {
 async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
   const access = await getLeagueTeamAccess(userId, leagueId, leagueTeamId);
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
-  const [players, members, joinRequests, standings, games] = await Promise.all([
+  // OPT-005: load league teams + raw games once, reuse for both standings and
+  // the games rows (was teams×3, games×2 for this endpoint).
+  const canManage =
+    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager';
+  const [players, members, joinRequests, leagueTeams, rawGames] = await Promise.all([
     listLeaguePlayers(team._id),
-    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager'
-      ? listLeagueTeamMembers(team._id)
-      : Promise.resolve([]),
-    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager'
-      ? listLeagueJoinRequests(team._id)
-      : Promise.resolve([]),
-    getLeagueStandings(leagueId),
-    listLeagueGames(leagueId),
+    canManage ? listLeagueTeamMembers(team._id) : Promise.resolve([]),
+    canManage ? listLeagueJoinRequests(team._id) : Promise.resolve([]),
+    listLeagueTeams(leagueId),
+    listLeagueGamesByLeagueId(leagueId),
+  ]);
+  const [standings, games] = await Promise.all([
+    getLeagueStandings(leagueId, { teams: leagueTeams, games: rawGames }),
+    listLeagueGames(leagueId, { teams: leagueTeams, games: rawGames }),
   ]);
   const usersById = await buildUsersMap([
     ...players.map((player) => player.claimedByUserId),
@@ -714,11 +729,16 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
     throw new ApiError(404, 'League team not found');
   }
 
-  const [players, games, rawGames, standings] = await Promise.all([
+  // OPT-005: load league teams + raw games once; derive game rows, raw games,
+  // and standings from the same data (was teams×2, games×3).
+  const [players, leagueTeams, rawGames] = await Promise.all([
     listLeaguePlayers(team._id),
-    listLeagueGames(league._id),
+    listLeagueTeams(league._id),
     listLeagueGamesByLeagueId(league._id),
-    getLeagueStandings(league._id),
+  ]);
+  const [games, standings] = await Promise.all([
+    listLeagueGames(league._id, { teams: leagueTeams, games: rawGames }),
+    getLeagueStandings(league._id, { teams: leagueTeams, games: rawGames }),
   ]);
   const usersById = await buildUsersMap(players.map((p) => p.claimedByUserId));
   const teamGames = games.filter(
@@ -1638,18 +1658,30 @@ function buildLeagueTeamPlayerStats(games, leagueTeamId, currentPlayers = []) {
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-async function listLeagueGames(leagueId) {
-  const games = await listLeagueGamesByLeagueId(leagueId);
-  const teams = await listLeagueTeams(leagueId);
+// OPT-005: accepts optional pre-fetched teams/games so callers that already
+// loaded them (league detail compositions) don't re-query. Falls back to
+// loading when not provided — behaviour is identical either way.
+async function listLeagueGames(
+  leagueId,
+  // publicOnly is accepted but intentionally unused (see OPT-024) — kept in the
+  // signature so existing callers behave exactly as before.
+  { teams: prefetchedTeams, games: prefetchedGames } = {}
+) {
+  const games = prefetchedGames ?? (await listLeagueGamesByLeagueId(leagueId));
+  const teams = prefetchedTeams ?? (await listLeagueTeams(leagueId));
   const byId = new Map(teams.map((team) => [String(team._id), team]));
 
   return games.map((game) => createLeagueGameRow(game, byId));
 }
 
-async function getLeagueStandings(leagueId) {
+// OPT-005: same pre-fetch escape hatch as listLeagueGames.
+async function getLeagueStandings(
+  leagueId,
+  { teams: prefetchedTeams, games: prefetchedGames } = {}
+) {
   const [teams, games] = await Promise.all([
-    listLeagueTeams(leagueId),
-    listLeagueGamesByLeagueId(leagueId),
+    prefetchedTeams ?? listLeagueTeams(leagueId),
+    prefetchedGames ?? listLeagueGamesByLeagueId(leagueId),
   ]);
   const rows = new Map(
     teams.map((team) => [

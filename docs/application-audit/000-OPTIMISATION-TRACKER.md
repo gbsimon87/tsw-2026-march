@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Implementation in progress — Wave 0 (4 complete, 1 in-progress; 2 tasks left in wave).`
+- **Overall status:** `Implementation in progress — Wave 0 (5 complete, 1 in-progress; 1 task left in wave).`
 - **Current wave:** Wave 0 (Foundations & quick wins). Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-005`** (De-dupe league loads, pure refactor) or **`OPT-007`** (Index hygiene — verify with `$indexStats` first) or continue **`OPT-003`** rollout. (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-006` done; `OPT-003` partial — 7/64 images.)
+- **Recommended next task:** **`OPT-007`** (Index hygiene — ⚠️ verify with `$indexStats` in prod BEFORE dropping) or continue **`OPT-003`** rollout (57 images left). After Wave 0, **Wave 1** opens: `OPT-008` (deps met: OPT-006 ✅) and `OPT-009` (deps met: OPT-002 ✅). (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006` done; `OPT-003` partial.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (24 tasks total):
 
-| Status      | Count                                          |
-| ----------- | ---------------------------------------------- |
-| Not Started | 18                                             |
-| In Progress | 1 (`OPT-003`, component + partial rollout)     |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)      |
-| Completed   | 4 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-006`) |
-| Deferred    | 0                                              |
+| Status      | Count                                                     |
+| ----------- | --------------------------------------------------------- |
+| Not Started | 17                                                        |
+| In Progress | 1 (`OPT-003`, component + partial rollout)                |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                 |
+| Completed   | 5 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006`) |
+| Deferred    | 0                                                         |
 
 ---
 
@@ -104,7 +104,7 @@ consumers and rework is minimised.
 | OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed   | —                  |
 | OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | 🔄 In Progress | OPT-002            |
 | OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed   | (OPT-007)          |
-| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | Not Started    | —                  |
+| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed   | —                  |
 | OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed   | —                  |
 | OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started    | — (verify first)   |
 | OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | Not Started    | OPT-006            |
@@ -156,6 +156,12 @@ blockers._
   inline duplicates) now delegate to the shared implementation. Single source of
   truth for OPT-010/011 materialisation to reuse. 174 tests pass (parity confirmed).
   See its card for detail.
+- **OPT-005** — De-duplicate intra-request league loads. _2026-07-05._ Branch
+  `feat/opt-wave-0`. `getLeagueStandings` and `listLeagueGames` gained an optional
+  `{teams, games}` pre-fetch escape hatch; 4 league-detail compositions now load
+  teams + raw games ONCE and pass them down (was teams×2–3, games×2–3 per request →
+  now ×1 each). `publicOnly` behaviour preserved (bug still tracked in OPT-024).
+  ~10 redundant DB round-trips removed per league page; 174 tests pass. See its card.
 
 ## 🔄 In Progress
 
@@ -395,6 +401,36 @@ fields; points math is correct for every shot type.
 
 ---
 
+### ✅ OPT-005 — De-duplicate intra-request league loads (server-side)
+
+**What to test:** League pages now fetch teams/games once per request instead of
+2–3×. Pure refactor — pages must render identically; the win is fewer DB queries.
+
+1. **Public league page** (`/league/:slug`):
+   - **Look for:** Teams list, standings table, and games list all render
+     correctly and consistently (same teams appear in all three sections).
+2. **Public league team page** (`/league/:slug/team/:teamSlug`):
+   - **Look for:** Roster, team games, player stats, and the team's standings
+     position all render; numbers match the league page.
+3. **Authenticated league view** (log in as a league owner/member → open your
+   league dashboard):
+   - **Look for:** Teams, standings, games, and (for managers) team-manager
+     info all load correctly.
+4. **Authenticated league team view** (open a specific team within your league):
+   - **Look for:** Roster, members/join-requests (if manager), standings, and
+     games render.
+5. **Optional — confirm fewer queries (server logs):** With the server running,
+   watch the pino query logs (or add MongoDB profiler) while loading a league
+   page. You should see roughly **one** `leagueteams` find and **one**
+   `games` find per request, not three and two.
+
+**Pass criteria:** Every league/team page renders identical content to before;
+standings, games, and rosters are consistent across sections; no duplicate
+teams/games fetches per request. ⚠️ Note: the `publicOnly` games filter is
+unchanged (still a no-op — separate OPT-024 decision).
+
+---
+
 ## 🗂️ Task detail cards
 
 Each card follows the standard structure. Complexity: **S** ≤1 day · **M** 2–4
@@ -576,7 +612,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-005 — De-duplicate intra-request league loads
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / refactor
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend / refactor
 - **Wave:** 0 · **Complexity:** S · **Dependencies:** none
 - **Description:** In league detail compositions, fetch teams/games **once** and
   pass down instead of re-querying inside each helper
@@ -589,10 +625,26 @@ days · **L** 1–2 weeks.
   no API change.
 - **Files likely to change:** `leagues.service.js`, `games.service.js`.
 - **Testing:** response parity; query-count instrumentation before/after.
-- **Validation checklist:** [ ] identical responses [ ] teams/games fetched once
-  [ ] no behaviour change.
+- **Validation checklist:** [x] identical responses [x] teams/games fetched once
+  [x] no behaviour change.
 - **Source:** [30](./30-optimisation-roadmap.md) M2, [23](./23-api-audit.md) #7.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-05
+  - Added an optional pre-fetch escape hatch to `getLeagueStandings(leagueId, {teams, games})`
+    and `listLeagueGames(leagueId, {teams, games})` — when the caller already has
+    teams/raw-games loaded, they're reused; otherwise the functions load as before
+    (identical behaviour, fully backward-compatible).
+  - Refactored **4 league-detail compositions** to fetch `listLeagueTeams` +
+    `listLeagueGamesByLeagueId` ONCE, then pass down:
+    - `getLeagueForUser` — was teams×3, games×2 → now teams×1, games×1
+    - `getPublicLeagueBySlug` — was teams×3, games×2 → now teams×1, games×1
+    - `getLeagueTeamForUser` — was teams×3, games×2 → now teams×1, games×1
+    - `getPublicLeagueTeamBySlug` — was teams×2, games×3 → now teams×1, games×1
+  - `getPublicLeaguePlayer` path (line ~991) already fetched once — left as-is.
+  - **`publicOnly` behaviour preserved exactly:** `listLeagueGames` still accepts
+    (and still ignores) the `publicOnly` flag — that pre-existing bug is tracked
+    separately in **OPT-024** and was intentionally NOT changed here.
+  - Net: ~10 redundant DB round-trips removed per league page load. All 174
+    server tests pass; no response shape changed; eslint clean.
 
 ---
 
