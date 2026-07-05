@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const POSITION_OPTIONS = ['', 'PG', 'SG', 'SF', 'PF', 'C'];
 
@@ -89,9 +90,13 @@ export function LeagueRosterTable({
                 <tr key={player.id} className="border-t border-slate-200">
                   <td className="px-3 py-2 font-medium text-slate-900">
                     <div className="flex items-center gap-2">
-                      <img
+                      <CloudinaryImage
                         src={playerPlaceholder}
                         alt=""
+                        width={24}
+                        height={24}
+                        loading="lazy"
+                        decoding="async"
                         className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                       />
                       {isEditing ? (
@@ -118,7 +123,6 @@ export function LeagueRosterTable({
                               cancelEditing();
                             }
                           }}
-                          autoFocus
                         />
                       ) : getPlayerHref ? (
                         <Link

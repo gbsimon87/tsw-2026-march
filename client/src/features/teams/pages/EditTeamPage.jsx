@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { teamsApi } from '../api/teamsApi';
 
 const POSITION_OPTIONS = ['', 'PG', 'SG', 'SF', 'PF', 'C'];
@@ -311,9 +312,15 @@ export function EditTeamPage() {
 
           <div className="grid gap-6 md:grid-cols-[220px,1fr]">
             <div className="space-y-3">
-              <img
+              <CloudinaryImage
                 src={logoUrl}
                 alt={`${team?.name || 'Team'} logo`}
+                width={160}
+                height={160}
+                loading="lazy"
+                decoding="async"
+                srcSetWidths={[160, 320, 640]}
+                sizes="160px"
                 className="h-40 w-40 rounded-full border border-slate-200 bg-slate-50 object-cover"
               />
               <label className="block">

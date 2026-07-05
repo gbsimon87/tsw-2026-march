@@ -60,4 +60,5 @@ const CloudinaryImage = forwardRef(
 
 CloudinaryImage.displayName = 'CloudinaryImage';
 
+export { CloudinaryImage };
 export default CloudinaryImage;

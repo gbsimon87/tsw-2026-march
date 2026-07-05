@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 export function AdminNewLeaguePage() {
   const navigate = useNavigate();
@@ -98,9 +99,13 @@ export function AdminNewLeaguePage() {
           <span className="mb-1 block text-sm text-slate-700">Logo (optional)</span>
           <div className="flex flex-wrap items-center gap-3">
             {logoFile ? (
-              <img
+              <CloudinaryImage
                 src={URL.createObjectURL(logoFile)}
                 alt="Logo preview"
+                width={56}
+                height={56}
+                loading="lazy"
+                decoding="async"
                 className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover"
               />
             ) : null}

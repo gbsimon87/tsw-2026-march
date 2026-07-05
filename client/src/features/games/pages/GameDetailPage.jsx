@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { useAuth } from '../../../app/store/AuthContext';
 import { trackEvent } from '../../analytics/trackEvent';
 import { Tabs } from '../../../components/Tabs';
@@ -635,9 +636,15 @@ export function GameDetailPage() {
       <div className="overflow-x-auto rounded border bg-white">
         <div className="flex items-center gap-2 border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
           {isDualTeam ? (
-            <img
+            <CloudinaryImage
               src={participants?.home?.logo?.url || teamPlaceholder}
               alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 rounded-full border border-slate-200 bg-white object-cover"
             />
           ) : null}
@@ -653,9 +660,15 @@ export function GameDetailPage() {
       {isDualTeam && statsView.secondaryRows ? (
         <div className="overflow-x-auto rounded border bg-white">
           <div className="flex items-center gap-2 border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
-            <img
+            <CloudinaryImage
               src={participants?.away?.logo?.url || teamPlaceholder}
               alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 rounded-full border border-slate-200 bg-white object-cover"
             />
             Box Score: {statsView.secondaryLabel}

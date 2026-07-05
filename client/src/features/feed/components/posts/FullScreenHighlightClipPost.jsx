@@ -1,6 +1,7 @@
 import { extractYouTubeVideoId } from '../../../games/youtube';
 import { STAT_LABELS } from '../../../games/constants';
 import { useYouTubeAutoplay } from '../../hooks/useYouTubeAutoplay';
+import CloudinaryImage from '../../../media/CloudinaryImage';
 
 export function FullScreenHighlightClipPost({ highlightClip }) {
   const { videoUrl, videoTimestamp, statType, playerName } = highlightClip;
@@ -23,9 +24,11 @@ export function FullScreenHighlightClipPost({ highlightClip }) {
       {videoId ? (
         <>
           {/* Thumbnail visible while iframe lazy-loads */}
-          <img
+          <CloudinaryImage
             src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
             alt=""
+            width={640}
+            height={360}
             className="absolute inset-0 h-full w-full object-cover"
           />
           {/*

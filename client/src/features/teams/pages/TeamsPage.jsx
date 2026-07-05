@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { teamsApi } from '../api/teamsApi';
 
 export function TeamsPage() {
@@ -137,9 +138,15 @@ export function TeamsPage() {
                 className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2"
               >
                 <div className="flex items-center gap-3">
-                  <img
+                  <CloudinaryImage
                     src={team.logo?.url || placeholderLogo}
                     alt={`${team.name || 'Team'} logo`}
+                    width={48}
+                    height={48}
+                    loading="lazy"
+                    decoding="async"
+                    srcSetWidths={[48, 96, 144]}
+                    sizes="48px"
                     className="h-12 w-12 rounded-full border border-slate-200 bg-white object-cover"
                   />
                   <div>

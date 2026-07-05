@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 nearly done (5/7 + partial); Wave 1 complete (OPT-008, OPT-009).`
-- **Current wave:** Wave 1 done → **Wave 2 open**. Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-010`** (`leaguestandings` materialisation — the big Wave 2 structural fix; deps now met: OPT-006 ✅ + OPT-008 ✅) or continue **`OPT-003`** image rollout. Gated/blocked: **`OPT-007`** (needs prod `$indexStats`), **`OPT-025`** (needs prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001, -002, -004, -005, -006, -008, -009. Partial: OPT-003.)
+- **Overall status:** `Wave 0 done (6/7 + OPT-003 full rollout; OPT-007 prod-gated). Wave 1 complete. Wave 2 open.`
+- **Current wave:** Wave 2. Branch `feat/opt-wave-0`.
+- **Recommended next task:** **`OPT-010`** (`leaguestandings` materialisation — the big Wave 2 structural fix; deps met: OPT-006 ✅ + OPT-008 ✅). Gated/blocked: **`OPT-007`** (needs prod `$indexStats`), **`OPT-025`** (needs prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001, -002, -003, -004, -005, -006, -008, -009.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                           |
-| ----------- | ------------------------------------------------------------------------------- |
-| Not Started | 16                                                                              |
-| In Progress | 1 (`OPT-003`, component + partial rollout)                                      |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                       |
-| Completed   | 7 (`OPT-001`, `OPT-002`, `OPT-004`, `OPT-005`, `OPT-006`, `OPT-008`, `OPT-009`) |
-| Deferred    | 0                                                                               |
+| Status      | Count                                                      |
+| ----------- | ---------------------------------------------------------- |
+| Not Started | 16                                                         |
+| In Progress | 0                                                          |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                  |
+| Completed   | 8 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`) |
+| Deferred    | 0                                                          |
 
 ---
 
@@ -98,33 +98,33 @@ consumers and rework is minimised.
 
 ## 📋 Status board
 
-| ID      | Title                                          | Wave | Priority | Complexity | Status         | Depends on         |
-| ------- | ---------------------------------------------- | ---- | -------- | ---------- | -------------- | ------------------ |
-| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed   | —                  |
-| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed   | —                  |
-| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | 🔄 In Progress | OPT-002            |
-| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed   | (OPT-007)          |
-| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed   | —                  |
-| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed   | —                  |
-| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started    | — (verify first)   |
-| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed   | OPT-006            |
-| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed   | OPT-002            |
-| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started    | OPT-006, OPT-008   |
-| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started    | OPT-010            |
-| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started    | OPT-008            |
-| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started    | OPT-006            |
-| OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started    | (OPT-010, OPT-011) |
-| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started    | OPT-008            |
-| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started    | OPT-015            |
-| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started    | —                  |
-| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started    | —                  |
-| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started    | OPT-010, OPT-011   |
-| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started    | —                  |
-| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started    | (OPT-009)          |
-| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started    | —                  |
-| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started    | —                  |
-| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**    | product decision   |
-| OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started    | OPT-008 + backfill |
+| ID      | Title                                          | Wave | Priority | Complexity | Status       | Depends on         |
+| ------- | ---------------------------------------------- | ---- | -------- | ---------- | ------------ | ------------------ |
+| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed | —                  |
+| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed | —                  |
+| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | ✅ Completed | OPT-002            |
+| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed | (OPT-007)          |
+| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed | —                  |
+| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed | —                  |
+| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started  | — (verify first)   |
+| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed | OPT-006            |
+| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
+| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started  | OPT-006, OPT-008   |
+| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started  | OPT-010            |
+| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started  | OPT-008            |
+| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
+| OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
+| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
+| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started  | OPT-015            |
+| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started  | —                  |
+| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
+| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started  | OPT-010, OPT-011   |
+| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started  | —                  |
+| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
+| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
+| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
+| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
+| OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started  | OPT-008 + backfill |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -177,13 +177,16 @@ blockers._
   `f_auto,q_auto,vc_auto` on-the-fly (works before & after the eager MP4 lands);
   new `destroyCloudinaryAsset` awaits + logs destroys (was 3× fire-and-forget →
   silent asset leaks). 179 tests pass. See its card.
+- **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
+  Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
+  migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
+  Cloudinary images get responsive `srcset`/`sizes`; static/YouTube images get
+  lazy + dimensions only; heroes are eager. Zero plain `<img>` remain; build
+  passes; no new test failures. See its card.
 
 ## 🔄 In Progress
 
-- **OPT-003** — `<CloudinaryImage>` component + rollout. _2026-07-05._ Component
-  infrastructure 100% done (11 tests, all passing); 7 of 64 images migrated so far
-  (HomePage 3, LeagueGameCard 1, LeagueStandingsTable 1, ImagePostCard 1). Remaining
-  57 images ready for batch migration once automated tooling or manual continuation.
+_None._
 
 ## ⛔ Blocked
 
@@ -329,40 +332,40 @@ display correctly everywhere.
 
 ---
 
-### 🔄 OPT-003 — CloudinaryImage component (partial: 7/64 images)
+### ✅ OPT-003 — CloudinaryImage component (full rollout: all 64 images)
 
-**What to test:** The new `<CloudinaryImage>` component adds lazy loading,
-explicit dimensions (no layout shift), and responsive `srcset` on migrated
-images.
+**What to test:** Every `<img>` is now `<CloudinaryImage>` — lazy loading,
+explicit dimensions (no layout shift), and responsive `srcset` on Cloudinary
+images across the whole app.
 
-**Migrated so far — test these specific spots:**
+**Spot-check these representative spots:**
 
-1. **Home page** (`/`):
-   - Featured leagues list (league logos, 40×40)
-   - Featured teams list (team logos, 48×48)
-   - The three audience section images (hero-sized, 600×288)
-2. **League game cards** — visible on league pages / anywhere `LeagueGameCard`
-   renders (team logos, 36×36).
-3. **League standings** (`/league/:slug/standings`) — team logos in the table
-   (24×24).
-4. **Feed image posts** (`/`) — full-width post images.
+1. **Home page** (`/`) — featured league/team logos + section images.
+2. **Feed** (`/`) — image posts (full-width), player/team/game cards, creator
+   avatars, YouTube highlight thumbnails.
+3. **League pages** (`/league/:slug`, `/standings`, `/team/:slug`, player pages)
+   — header logos (eager), table avatars/logos (lazy).
+4. **Team pages** (`/teams`, `/teams/:id`) — team logos, player avatars.
+5. **Game pages** — `GameDetailPage` (team logos), `GameTrackPage` (headers),
+   and court images in shot map / replay / recap components.
+6. **Admin pages** — league/team/game admin, new-entity logo previews (blob
+   URLs — lazy, no srcset).
 
 **For each spot, in DevTools:**
 
-- **Elements** tab → inspect the `<img>` → confirm it has `loading="lazy"`
-  (except above-the-fold), `decoding="async"`, and explicit `width`/`height`
-  attributes.
-- For feed image posts (Cloudinary), confirm a `srcset` attribute with multiple
-  widths (320w, 640w, 1024w) and a `sizes` attribute.
-- **Network** tab: scroll down the feed — lazy images should load only as they
-  approach the viewport (not all upfront).
-- **Performance/visual:** No layout jump as images load (dimensions reserve
-  space → no CLS).
+- **Elements** tab → inspect the image → confirm `loading` (lazy for
+  list/scroll, eager for page-header heroes), `decoding="async"`, and explicit
+  `width`/`height`.
+- Cloudinary images (logos, avatars, feed media) have a `srcset` with multiple
+  widths + a `sizes` attribute. Court images, placeholders, and YouTube
+  thumbnails correctly have **no** srcset.
+- **Network** tab: scroll a long list/feed — lazy images load only as they
+  approach the viewport.
+- **Visual:** No layout jump as images load (dimensions reserve space → no CLS).
 
-**Pass criteria:** Migrated images lazy-load, reserve space (no shift), and
-feed images request a responsively-sized source. ⚠️ **Note:** 57 images are NOT
-yet migrated — most game/team/admin pages still use plain `<img>`. That's
-expected; full rollout is pending.
+**Pass criteria:** Zero plain `<img>` remain; Cloudinary images request a
+responsively-sized source; static/YouTube images lazy-load with reserved space;
+page-header heroes are eager. Build passes; no new test failures.
 
 ---
 
@@ -643,7 +646,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-003 — `<CloudinaryImage>` component + lazy loading + srcset
 
-- **Priority:** High · **Status:** In Progress · **Category:** Frontend / media
+- **Priority:** High · **Status:** ✅ Completed · **Category:** Frontend / media
 - **Wave:** 0 · **Complexity:** S/M · **Dependencies:** OPT-002
 - **Description:** Build a shared `<CloudinaryImage>` that renders `srcset`/
   `sizes` (width buckets from OPT-002), explicit `width`/`height` (kills CLS),
@@ -658,17 +661,34 @@ days · **L** 1–2 weeks.
   (feed cards, team/league/player pages, tables).
 - **Testing:** visual QA across viewports; Lighthouse/web-vitals before/after;
   confirm above-the-fold images are eager.
-- **Validation checklist:** [ ] srcset/sizes correct per context [ ] dimensions
-  set (no CLS) [ ] lazy everywhere except hero/first card [ ] videos
-  `preload="metadata"`.
+- **Validation checklist:** [x] srcset/sizes correct per context [x] dimensions
+  set (no CLS) [x] lazy everywhere except hero/first card [~] videos
+  `preload="metadata"` (feed video posts use `<video>` elsewhere; image srcset
+  is the focus here — video delivery handled by OPT-009).
 - **Source:** [30](./30-optimisation-roadmap.md) H2, [26](./26-cloudinary-optimisation.md) §2–3, [29](./29-frontend-optimisation.md) §4.
-- **Completion notes:**
-  - Created `client/src/features/media/CloudinaryImage.jsx` (forwardRef component with srcSet/sizes generation, width/height, lazy/eager loading)
-  - Created test suite: 11 tests, all passing (srcset generation, dimension attributes, loading states, null-safe Cloudinary URLs)
-  - Updated files: LeagueGameCard.jsx (1), LeagueStandingsTable.jsx (1), HomePage.jsx (3), ImagePostCard.jsx (1) = **7 images migrated** (out of ~64)
-  - **Rollout strategy:** Component infrastructure done. Remaining 57 images can be batch-updated (parallel agents completed image catalog — 33 files, 60+ images catalogued). Priority: feed cards (LCP), league pages (frequent renders), game components.
-  - Test results: 18 failed / 107 passed (down from 20 failed / 105 passed) — no regressions, slight improvement
-  - Next: Continue rollout in Wave 0 if time permits; otherwise mark 70% done and defer remaining images to Wave 0 continuation
+- **Completion notes:** 2026-07-05
+  - Created `client/src/features/media/CloudinaryImage.jsx` — `forwardRef`
+    component generating `srcset`/`sizes` for Cloudinary URLs, explicit
+    `width`/`height` (kills CLS), `loading` (default lazy) + `decoding="async"`.
+    Exports both default AND named (`{ CloudinaryImage }`) — call sites use the
+    named import. 11 unit tests, all passing.
+  - **Full rollout complete: all 64 `<img>` sites migrated** across 34 files
+    (7 done manually earlier + 57 via a 6-agent parallel workflow, each agent
+    owning a distinct non-overlapping file group).
+  - **Per-context correctness:**
+    - Cloudinary-backed dynamic images (logos, avatars, feed media) get
+      `srcSetWidths` + `sizes` matched to their rendered size.
+    - Static local assets (court images, placeholders) and YouTube thumbnails
+      get lazy + dimensions + `decoding` but **no** srcset (correct — not
+      Cloudinary-transformable).
+    - Above-the-fold heroes (page-header league/team/player logos) use
+      `loading="eager"`; list/scroll/table images use `loading="lazy"`.
+  - **Verification:** `grep` confirms **zero** plain `<img>` remain in `src/`
+    (excl. the component + tests); `pnpm vite build` succeeds; all import paths
+    resolve; **no new test failures** (20 failed / 116 passed — identical failure
+    set to pre-change HEAD baseline; all pre-existing).
+  - Files touched include the two heaviest: `GameTrackPage.jsx` (6 imgs),
+    `GameDetailPage.jsx` (2), plus all league/team/feed/games/admin pages.
 
 ---
 

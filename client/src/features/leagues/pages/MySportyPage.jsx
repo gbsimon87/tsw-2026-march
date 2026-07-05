@@ -8,14 +8,21 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 function ProfileCard({ profile, avatarUrl }) {
   const inner = (
     <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-sm">
       <div className="flex items-center gap-3">
-        <img
+        <CloudinaryImage
           src={avatarUrl || playerPlaceholder}
           alt=""
+          width={48}
+          height={48}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[48, 96, 144]}
+          sizes="48px"
           className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 bg-white object-cover"
         />
         <div className="min-w-0">
@@ -38,9 +45,15 @@ function ProfileCard({ profile, avatarUrl }) {
       <div className="space-y-2 border-t border-slate-100 pt-4">
         {profile.team && (
           <div className="flex items-center gap-2 text-sm">
-            <img
+            <CloudinaryImage
               src={profile.team.logo?.url || teamPlaceholder}
               alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
             />
             <span className="truncate font-medium text-slate-700">{profile.team.name}</span>
@@ -48,9 +61,15 @@ function ProfileCard({ profile, avatarUrl }) {
         )}
         {profile.league && (
           <div className="flex items-center gap-2 text-sm">
-            <img
+            <CloudinaryImage
               src={getLeagueHeaderImage(profile.league)}
               alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
             />
             <span className="truncate text-slate-500">{profile.league.name}</span>
@@ -140,9 +159,15 @@ export function MySportyPage() {
             />
             {user?.avatarUrl ? (
               <>
-                <img
+                <CloudinaryImage
                   src={user.avatarUrl}
                   alt=""
+                  width={64}
+                  height={64}
+                  loading="lazy"
+                  decoding="async"
+                  srcSetWidths={[64, 128, 256]}
+                  sizes="64px"
                   className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
                 />
                 <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">

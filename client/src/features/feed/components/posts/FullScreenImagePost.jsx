@@ -1,5 +1,16 @@
+import CloudinaryImage from '../../../media/CloudinaryImage';
+
 export function FullScreenImagePost({ image }) {
   return (
-    <img src={image.url} alt="Feed post" className="h-full w-full object-cover" loading="lazy" />
+    <CloudinaryImage
+      src={image.url}
+      alt="Feed post"
+      width={640}
+      height={640}
+      className="h-full w-full object-cover"
+      loading="eager"
+      srcSetWidths={[320, 640, 1080]}
+      sizes="100vw"
+    />
   );
 }

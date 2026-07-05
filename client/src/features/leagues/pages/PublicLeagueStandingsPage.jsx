@@ -6,6 +6,7 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 export function PublicLeagueStandingsPage() {
   const { leagueSlug } = useParams();
@@ -46,9 +47,15 @@ export function PublicLeagueStandingsPage() {
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.`}
         media={
-          <img
+          <CloudinaryImage
             src={getLeagueHeaderImage(league)}
             alt={`${league.name} logo`}
+            width={64}
+            height={64}
+            loading="eager"
+            decoding="async"
+            srcSetWidths={[64, 128, 192]}
+            sizes="64px"
             className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
         }

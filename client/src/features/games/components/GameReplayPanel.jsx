@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
 import { StatsTable } from '../../teams/components/StatsTable';
 import gameConstants from '../constants';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
 
@@ -329,7 +330,15 @@ export function GameReplayPanel({
           </div>
 
           <div className="relative mx-auto w-full max-w-[420px]" data-testid="replay-shot-map">
-            <img src={courtImage} alt="Replay court" className="block w-full" />
+            <CloudinaryImage
+              src={courtImage}
+              alt="Replay court"
+              width={420}
+              height={760}
+              loading="lazy"
+              decoding="async"
+              className="block w-full"
+            />
             {visibleEvents.map((event, index) => {
               const active = index === currentIndex;
               const made = isMade(event.statType);

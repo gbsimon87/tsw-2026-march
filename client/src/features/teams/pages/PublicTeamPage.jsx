@@ -7,6 +7,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { TeamCardPost } from '../../feed/components/posts/TeamCardPost';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 import { buildTeamCardPreview } from '../shareCardPayloads';
@@ -394,9 +395,15 @@ export function PublicTeamPage() {
         eyebrow="Public Team Page"
         title={data.team.name}
         media={
-          <img
+          <CloudinaryImage
             src={data.team.logo?.url || placeholderLogo}
             alt={`${data.team.name} logo`}
+            width={80}
+            height={80}
+            loading="eager"
+            decoding="async"
+            srcSetWidths={[80, 160, 320]}
+            sizes="80px"
             className="h-20 w-20 rounded-full border border-slate-200 bg-white object-cover"
           />
         }

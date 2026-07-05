@@ -12,6 +12,7 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 function formatPercentage(value) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '--';
@@ -32,9 +33,15 @@ const LEADERS_COLUMNS = [
     sortable: false,
     render: (row) => (
       <span className="flex items-center gap-2">
-        <img
+        <CloudinaryImage
           src={row.avatarUrl || playerPlaceholder}
           alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[24, 48, 72]}
+          sizes="24px"
           className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
         {row.teamSlug && row.leaguePlayerId ? (
@@ -64,9 +71,15 @@ const LEADERS_COLUMNS = [
     sortable: false,
     render: (row) => (
       <span className="flex items-center gap-1.5">
-        <img
+        <CloudinaryImage
           src={row.teamLogoUrl || teamPlaceholder}
           alt=""
+          width={20}
+          height={20}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[20, 40, 60]}
+          sizes="20px"
           className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
         <span className="text-slate-600">{row.teamName || '—'}</span>
@@ -199,9 +212,15 @@ export function PublicLeaguePage() {
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} • Public league standings and game results.`}
         media={
-          <img
+          <CloudinaryImage
             src={getLeagueHeaderImage(league)}
             alt={`${league.name} logo`}
+            width={64}
+            height={64}
+            loading="eager"
+            decoding="async"
+            srcSetWidths={[64, 128, 192]}
+            sizes="64px"
             className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
         }
