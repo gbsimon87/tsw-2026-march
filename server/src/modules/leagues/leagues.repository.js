@@ -166,6 +166,53 @@ const leagueStandingsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// OPT-011: materialised per-player league aggregates. One doc per
+// (leagueId, leagueTeamId, leaguePlayerId) — raw accumulated totals only
+// (gamesCount + the OPT-006 player-stat-line fields). Per-game ppg/fantasy/DPOY
+// scores are derived at READ time from these raw totals (roadmap: "keeps
+// weight-tuning without recompute"), so tuning a formula never requires a
+// recompute pass — only the raw box-score totals are persisted here.
+const leaguePlayerStatsSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: true,
+      index: true,
+    },
+    leaguePlayerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeaguePlayer',
+      required: true,
+      index: true,
+    },
+    displayName: { type: String, default: null },
+    gamesCount: { type: Number, default: 0 },
+    ftm: { type: Number, default: 0 },
+    fta: { type: Number, default: 0 },
+    fg2m: { type: Number, default: 0 },
+    fg2a: { type: Number, default: 0 },
+    fg3m: { type: Number, default: 0 },
+    fg3a: { type: Number, default: 0 },
+    ast: { type: Number, default: 0 },
+    oreb: { type: Number, default: 0 },
+    dreb: { type: Number, default: 0 },
+    reb: { type: Number, default: 0 },
+    stl: { type: Number, default: 0 },
+    blk: { type: Number, default: 0 },
+    tov: { type: Number, default: 0 },
+    foul: { type: Number, default: 0 },
+    points: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+leaguePlayerStatsSchema.index(
+  { leagueId: 1, leagueTeamId: 1, leaguePlayerId: 1 },
+  { unique: true }
+);
+
 const League = mongoose.models.League || mongoose.model('League', leagueSchema);
 const LeagueTeam = mongoose.models.LeagueTeam || mongoose.model('LeagueTeam', leagueTeamSchema);
 const LeaguePlayer =
@@ -178,6 +225,8 @@ const LeagueManager =
   mongoose.models.LeagueManager || mongoose.model('LeagueManager', leagueManagerSchema);
 const LeagueStandings =
   mongoose.models.LeagueStandings || mongoose.model('LeagueStandings', leagueStandingsSchema);
+const LeaguePlayerStats =
+  mongoose.models.LeaguePlayerStats || mongoose.model('LeaguePlayerStats', leaguePlayerStatsSchema);
 
 function createLeague(input) {
   return League.create(input);
@@ -363,6 +412,29 @@ function deleteLeagueStandings(leagueId) {
   return LeagueStandings.deleteOne({ leagueId });
 }
 
+// OPT-011: materialised per-player league stats read/write.
+function listLeaguePlayerStats(leagueId) {
+  return LeaguePlayerStats.find({ leagueId }).lean();
+}
+
+// Full replace: delete every row for the league, then insert the fresh set.
+// Simpler and just as correct as diffing, and this only ever runs on the
+// post-response recompute path (never blocks a request).
+async function replaceLeaguePlayerStats(leagueId, rows) {
+  await LeaguePlayerStats.deleteMany({ leagueId });
+  if (rows.length === 0) {
+    return [];
+  }
+  return LeaguePlayerStats.insertMany(
+    rows.map((row) => ({ ...row, leagueId })),
+    { ordered: false }
+  );
+}
+
+function deleteLeaguePlayerStats(leagueId) {
+  return LeaguePlayerStats.deleteMany({ leagueId });
+}
+
 module.exports = {
   League,
   LeagueTeam,
@@ -374,6 +446,10 @@ module.exports = {
   findLeagueStandings,
   upsertLeagueStandings,
   deleteLeagueStandings,
+  LeaguePlayerStats,
+  listLeaguePlayerStats,
+  replaceLeaguePlayerStats,
+  deleteLeaguePlayerStats,
   createLeague,
   listLeaguesByOwner,
   listPublicLeagues,

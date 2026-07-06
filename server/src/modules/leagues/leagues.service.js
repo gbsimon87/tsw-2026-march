@@ -50,6 +50,8 @@ const {
   saveLeagueManager,
   findLeagueStandings,
   upsertLeagueStandings,
+  listLeaguePlayerStats,
+  replaceLeaguePlayerStats,
 } = require('./leagues.repository');
 const { findUserByEmail, findUserById } = require('../auth/auth.repository');
 const { listLeagueGamesByLeagueId } = require('../games/games.repository');
@@ -1805,6 +1807,123 @@ async function getLeagueStandings(leagueId, prefetch = {}) {
   return rows;
 }
 
+// OPT-011: pure live compute for per-player RAW totals across every team in the
+// league (gamesCount + the OPT-006 player-stat-line fields). This is the single
+// source of truth both the materialised write path AND any live fallback use.
+// Deliberately returns raw totals only — ppg/fantasy/DPOY scores are derived at
+// read time (see deriveLeaguePlayerScores) so tuning those formulas never
+// requires a recompute.
+async function computeLeaguePlayerStats(
+  leagueId,
+  { teams: prefetchedTeams, games: prefetchedGames } = {}
+) {
+  const [teams, games] = await Promise.all([
+    prefetchedTeams ?? listLeagueTeams(leagueId),
+    prefetchedGames ?? listLeagueGamesByLeagueId(leagueId),
+  ]);
+  const completedGames = games.filter((g) => g.status === 'completed');
+
+  const rowsByKey = new Map();
+
+  for (const team of teams) {
+    const leagueTeamId = String(team._id);
+
+    for (const game of completedGames) {
+      const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
+      if (!rosterSnapshot.length) continue;
+
+      for (const snapshotPlayer of rosterSnapshot) {
+        const leaguePlayerId = String(snapshotPlayer.leaguePlayerId || snapshotPlayer._id);
+        const key = `${leagueTeamId}:${leaguePlayerId}`;
+        if (!rowsByKey.has(key)) {
+          rowsByKey.set(key, {
+            leagueTeamId,
+            leaguePlayerId,
+            ...createEmptyPlayerStatLine(leaguePlayerId, snapshotPlayer.displayName),
+            gamesCount: 0,
+          });
+        }
+        rowsByKey.get(key).gamesCount += 1;
+      }
+
+      for (const event of game.events || []) {
+        if (!event.playerId || !eventFilter(event)) continue;
+        const snapshotPlayer = rosterSnapshot.find((p) => String(p._id) === String(event.playerId));
+        if (!snapshotPlayer) continue;
+        const leaguePlayerId = String(snapshotPlayer.leaguePlayerId || event.playerId);
+        const key = `${leagueTeamId}:${leaguePlayerId}`;
+        const row = rowsByKey.get(key);
+        if (row) {
+          applyEventToPlayerStatLine(row, event.statType);
+        }
+      }
+    }
+  }
+
+  return Array.from(rowsByKey.values()).filter((row) => row.gamesCount > 0);
+}
+
+// OPT-011: derive the tunable, weight-dependent scores (ppg/fantasy/DPOY etc.)
+// from a raw materialised (or live-computed) row. Kept separate from the
+// persisted data on purpose — changing these formulas needs no recompute.
+function deriveLeaguePlayerScores(row) {
+  const { gamesCount, ...stats } = row;
+  const ppg = stats.points / gamesCount;
+  const rpg = stats.reb / gamesCount;
+  const apg = stats.ast / gamesCount;
+  const spg = stats.stl / gamesCount;
+  const bpg = (stats.blk || 0) / gamesCount;
+  const topg = stats.tov / gamesCount;
+  const fgMade = (stats.fg2m || 0) + (stats.fg3m || 0);
+  const fgAttempted = (stats.fg2a || 0) + (stats.fg3a || 0);
+  const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 2 + bpg * 2 + topg * -1;
+  const defensiveScore = rpg * 1.2 + spg * 3 + bpg * 3 + topg * -1;
+
+  return {
+    ppg,
+    rpg,
+    apg,
+    spg,
+    bpg,
+    topg,
+    fgMade,
+    fgAttempted,
+    fgPercentage: fgAttempted > 0 ? fgMade / fgAttempted : null,
+    fantasyScore,
+    defensiveScore,
+  };
+}
+
+// OPT-011: materialised league-WIDE player stats read (all teams — used by
+// leaders/DPOY, the O(T×G×E×R) unauthenticated hot path the roadmap flagged).
+// getPublicLeagueTeamBySlug's team-scoped stats intentionally stay on live
+// compute (buildLeagueTeamPlayerStats) — it's already scoped to one team's
+// games (cheap) and includes zero-game roster players, a shape materialising
+// here would either drop or require a roster-change recompute trigger for.
+async function getLeaguePlayerStats(leagueId, prefetch = {}) {
+  if (prefetch.teams || prefetch.games) {
+    return computeLeaguePlayerStats(leagueId, prefetch);
+  }
+
+  const materialised = await listLeaguePlayerStats(leagueId);
+  if (materialised.length > 0) {
+    return materialised;
+  }
+
+  const rows = await computeLeaguePlayerStats(leagueId);
+  if (rows.length > 0) {
+    try {
+      await replaceLeaguePlayerStats(leagueId, rows);
+    } catch (error) {
+      logger.warn(
+        { err: error, leagueId: String(leagueId) },
+        'Player stats backfill persist failed'
+      );
+    }
+  }
+  return rows;
+}
+
 // OPT-010: recompute + persist all materialised league aggregates. Today that is
 // standings; OPT-011 will extend this to player stats. Reuses the live compute
 // (which reuses OPT-006's shared accumulator) so materialised == live by
@@ -1819,14 +1938,31 @@ async function recomputeLeagueAggregates(leagueId) {
   }
 
   const work = (async () => {
-    const rows = await computeLeagueStandings(leagueId);
-    await upsertLeagueStandings(leagueId, rows);
-    return rows;
+    // OPT-011: fetch teams/games once, reuse for both standings and player
+    // stats — avoids doubling the DB reads this recompute pass needs.
+    const [teams, games] = await Promise.all([
+      listLeagueTeams(leagueId),
+      listLeagueGamesByLeagueId(leagueId),
+    ]);
+    const prefetch = { teams, games };
+
+    const [standingsRows, playerStatsRows] = await Promise.all([
+      computeLeagueStandings(leagueId, prefetch),
+      computeLeaguePlayerStats(leagueId, prefetch),
+    ]);
+
+    await Promise.all([
+      upsertLeagueStandings(leagueId, standingsRows),
+      replaceLeaguePlayerStats(leagueId, playerStatsRows),
+    ]);
+
+    return { standingsRows, playerStatsRows };
   })();
 
   recomputeInFlight.set(key, work);
   try {
-    return await work;
+    const result = await work;
+    return result.standingsRows;
   } finally {
     recomputeInFlight.delete(key);
   }
@@ -2043,9 +2179,11 @@ async function canEditCompletedLeagueGame(userId, game) {
 
 async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
   const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
-  const [teams, games] = await Promise.all([
+  // OPT-011: raw per-player totals come from the materialised read (indexed
+  // find, self-backfilling) instead of replaying every team's games/events.
+  const [teams, playerStatRows] = await Promise.all([
     listLeagueTeams(league._id),
-    listLeagueGamesByLeagueId(league._id),
+    getLeaguePlayerStats(league._id),
   ]);
   const allPlayers = (
     await Promise.all(teams.map((team) => listLeaguePlayers(team._id).catch(() => [])))
@@ -2066,84 +2204,25 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
       },
     ])
   );
-
   const teamsById = new Map(teams.map((t) => [String(t._id), t]));
-  const playerMap = new Map();
 
-  const completedGames = games.filter((g) => g.status === 'completed');
-
-  for (const team of teams) {
-    const teamId = String(team._id);
-
-    for (const game of completedGames) {
-      const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
-      if (!rosterSnapshot.length) continue;
-
-      for (const snapshotPlayer of rosterSnapshot) {
-        const key = String(snapshotPlayer.leaguePlayerId || snapshotPlayer._id);
-        if (!playerMap.has(key)) {
-          playerMap.set(key, {
-            leaguePlayerId: key,
-            displayName: snapshotPlayer.displayName,
-            teamId,
-            gamesCount: 0,
-            stats: emptyStats(key, snapshotPlayer.displayName),
-          });
-        }
-        playerMap.get(key).gamesCount += 1;
-      }
-
-      for (const event of game.events || []) {
-        if (!event.playerId || !eventFilter(event)) continue;
-        const snapshotPlayer = rosterSnapshot.find((p) => String(p._id) === String(event.playerId));
-        if (!snapshotPlayer) continue;
-        const key = String(snapshotPlayer.leaguePlayerId || event.playerId);
-        if (playerMap.has(key)) {
-          applyEventToLine(playerMap.get(key).stats, event.statType);
-        }
-      }
-    }
-  }
-
-  const allLeaders = Array.from(playerMap.values())
-    .filter((entry) => entry.gamesCount > 0)
-    .map((entry) => {
-      const { stats, gamesCount } = entry;
-      const ppg = stats.points / gamesCount;
-      const rpg = stats.reb / gamesCount;
-      const apg = stats.ast / gamesCount;
-      const spg = stats.stl / gamesCount;
-      const bpg = (stats.blk || 0) / gamesCount;
-      const topg = stats.tov / gamesCount;
-      const fgMade = (stats.fg2m || 0) + (stats.fg3m || 0);
-      const fgAttempted = (stats.fg2a || 0) + (stats.fg3a || 0);
-      const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 2 + bpg * 2 + topg * -1;
-      const defensiveScore = rpg * 1.2 + spg * 3 + bpg * 3 + topg * -1;
-      const team = teamsById.get(entry.teamId);
-      const currentPlayer = currentPlayersById.get(entry.leaguePlayerId);
-      return {
-        leaguePlayerId: entry.leaguePlayerId,
-        displayName: currentPlayer?.displayName || entry.displayName,
-        jerseyNumber: currentPlayer?.jerseyNumber ?? null,
-        position: currentPlayer?.position ?? null,
-        avatarUrl: currentPlayer?.avatarUrl || null,
-        teamName: team?.name || null,
-        teamSlug: team?.slug || null,
-        teamLogoUrl: transformCloudinaryUrl(team?.logo?.url || null),
-        gamesCount,
-        ppg,
-        rpg,
-        apg,
-        spg,
-        bpg,
-        topg,
-        fgMade,
-        fgAttempted,
-        fgPercentage: fgAttempted > 0 ? fgMade / fgAttempted : null,
-        fantasyScore,
-        defensiveScore,
-      };
-    });
+  const allLeaders = playerStatRows.map((row) => {
+    const scores = deriveLeaguePlayerScores(row);
+    const team = teamsById.get(row.leagueTeamId);
+    const currentPlayer = currentPlayersById.get(row.leaguePlayerId);
+    return {
+      leaguePlayerId: row.leaguePlayerId,
+      displayName: currentPlayer?.displayName || row.displayName,
+      jerseyNumber: currentPlayer?.jerseyNumber ?? null,
+      position: currentPlayer?.position ?? null,
+      avatarUrl: currentPlayer?.avatarUrl || null,
+      teamName: team?.name || null,
+      teamSlug: team?.slug || null,
+      teamLogoUrl: transformCloudinaryUrl(team?.logo?.url || null),
+      gamesCount: row.gamesCount,
+      ...scores,
+    };
+  });
 
   const leaders = allLeaders.sort((a, b) => b.fantasyScore - a.fantasyScore).slice(0, limit);
   const dpoyLeaders = [...allLeaders]
@@ -2188,6 +2267,9 @@ module.exports = {
   listLeagueGames,
   getLeagueStandings,
   computeLeagueStandings,
+  computeLeaguePlayerStats,
+  deriveLeaguePlayerScores,
+  getLeaguePlayerStats,
   recomputeLeagueAggregates,
   scheduleLeagueAggregateRecompute,
   getLeagueContextForGame,

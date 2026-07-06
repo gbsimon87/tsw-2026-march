@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 underway (OPT-010 done).`
-- **Current wave:** Wave 2. Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-011`** (`leagueplayerstats` materialisation — extends the OPT-010 recompute hook; deps met: OPT-010 ✅) or **`OPT-012`** (frozen `Game.boxScore`; deps met: OPT-008 ✅) or **`OPT-013`** (team season summaries; deps met: OPT-006 ✅). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008, 009, 010.)
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 underway (OPT-010, OPT-011 done).`
+- **Current wave:** Wave 2. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
+- **Recommended next task:** **`OPT-012`** (frozen `Game.boxScore`; deps met: OPT-008 ✅) or **`OPT-013`** (team season summaries; deps met: OPT-006 ✅) — the last two Wave 2 tasks. Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–011.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                             |
-| ----------- | ----------------------------------------------------------------- |
-| Not Started | 15                                                                |
-| In Progress | 0                                                                 |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                         |
-| Completed   | 9 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`) |
-| Deferred    | 0                                                                 |
+| Status      | Count                                                                     |
+| ----------- | ------------------------------------------------------------------------- |
+| Not Started | 14                                                                        |
+| In Progress | 0                                                                         |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                 |
+| Completed   | 10 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`) |
+| Deferred    | 0                                                                         |
 
 ---
 
@@ -110,7 +110,7 @@ consumers and rework is minimised.
 | OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed | OPT-006            |
 | OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
 | OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
-| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started  | OPT-010            |
+| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | ✅ Completed | OPT-010            |
 | OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started  | OPT-008            |
 | OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
 | OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
@@ -186,6 +186,16 @@ blockers._
   (`setImmediate`) from all game + league-team write triggers. Idempotent
   backfill script run on dev — 2/2 leagues, zero parity mismatches. Reversible
   (delete collection → compute-on-miss). 183 tests pass. See its card.
+- **OPT-011** — `leagueplayerstats` materialisation. _2026-07-06._ Branch `dev`.
+  **(Wave 2 continues.)** New `leagueplayerstats` collection (raw totals only —
+  full-replace write); `computeLeaguePlayerStats` (source of truth, reuses
+  OPT-006) + `deriveLeaguePlayerScores` keeps ppg/fantasy/DPOY formulas at READ
+  time (no recompute needed to tune weights); `getPublicLeagueLeaders` now reads
+  materialised rows instead of replaying every team's games/events (the
+  O(T×G×E×R) hot path). `recomputeLeagueAggregates` extended to persist both
+  aggregates from one teams/games fetch. Team-page stats deliberately left on
+  live compute (scope decision, see Decisions log). Backfill run on dev — 48 +
+  12 rows, zero parity mismatches on both leagues. 188 tests pass. See its card.
 - **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
   Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
   migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
@@ -230,6 +240,19 @@ Record every architectural / scope decision here with a date and rationale.
 - **2026-07-04 — Index drops gated on verification.** No prod index drop
   (OPT-007) until `$indexStats` shows a verification window of zero ops on the
   candidate ([19](./19-indexing-strategy.md) §Process).
+- **2026-07-06 — Team-page player stats stay on live compute.** Considered
+  materialising `getPublicLeagueTeamBySlug`'s per-team stats (`buildLeagueTeamPlayerStats`)
+  as part of OPT-011 alongside leaders, but its output includes zero-game roster
+  players (a shape difference from the leaders aggregate) and is already scoped
+  to one team's games (cheap). Materialising it would need either dropping those
+  rows or adding a roster-change recompute trigger — not worth it for an
+  already-cheap read. Only the league-wide leaders/DPOY path (the actual
+  O(T×G×E×R) hot path) was materialised.
+- **2026-07-06 — HEAD moved from `feat/opt-wave-0` to `dev` mid-session.** All
+  OPT-001–009 commits are on `feat/opt-wave-0`; OPT-010 onward landed on `dev`
+  (which was fast-forwarded/even with `feat/opt-wave-0` at that point — linear
+  history, no divergence, no lost work). Future sessions: check `git log
+--oneline -5` to see which branch has the latest tracker-referenced commits.
 
 ## 🏗️ Architecture changes log
 
@@ -261,7 +284,12 @@ Log new collections, fields, utilities, and providers as they are introduced.
   `scheduleLeagueAggregateRecompute` post-response hook (reuses OPT-006's shared
   accumulator via `computeLeagueStandings`). OPT-011 will extend it to player
   stats.
-- _(planned)_ `leagueplayerstats` collection + indexes (OPT-011).
+- ✅ **built (OPT-011, 2026-07-06)** `leagueplayerstats` collection
+  (`{leagueId, leagueTeamId, leaguePlayerId} compound-unique+indexed`, raw
+  stat-line fields + `gamesCount`, timestamps) + `listLeaguePlayerStats` /
+  `replaceLeaguePlayerStats` / `deleteLeaguePlayerStats` in
+  `leagues.repository.js`. `recomputeLeagueAggregates` (OPT-010) extended to
+  persist this alongside standings from one teams/games fetch.
 - _(planned)_ React Query `QueryClientProvider` (OPT-014).
 
 ## 🔔 Implementation reminders
@@ -586,6 +614,41 @@ create/rename/archive team) results in updated standings within a moment (steps
 2–5 — new behaviour); no errors logged anywhere (step 6); dropping the
 collection degrades gracefully to live compute (step 7). Recompute never blocks
 the triggering request (fires after the response).
+
+---
+
+### ✅ OPT-011 — `leagueplayerstats` materialisation (server-side)
+
+**What to test:** League leaders/DPOY now come from a pre-computed
+`leagueplayerstats` collection instead of replaying every team's games+events.
+The numbers must be identical; the same OPT-010 recompute triggers keep it fresh.
+
+1. **Leaders render correctly** (materialised read — regression check):
+   - Open the leaders/leaderboard view for **We Ball Saturday** and
+     **Dev Test League** — top scorers, PPG, and DPOY ordering should look
+     right and match what you saw before this task.
+2. **Finish/edit/delete a game → leaders update** (same triggers as OPT-010,
+   now also refreshing player stats):
+   - Track + finish a league game with a few scoring events for a player.
+   - Reload the leaders view shortly after — that player's PPG/stats should
+     reflect the new game.
+3. **Team page still shows correct player stats** (unchanged — deliberately
+   left on live compute, see the card's scope decision):
+   - `/league/:slug/team/:teamSlug` — per-player stat rows still render,
+     including players with zero games played (materialising would have
+     dropped those; confirm they're still there).
+4. **No errors:** watch server logs while doing 2 — no `Player stats backfill
+persist failed` or `Post-response league aggregate recompute failed` lines.
+5. **Compute-on-miss fallback (reversible):** dropping the `leagueplayerstats`
+   collection still serves correct leaders (computed live and re-persisted on
+   first read). Optional DB check:
+   `node src/scripts/backfill-league-standings.js --dry-run` (with `ENV_FILE`)
+   now also reports player-stat row counts.
+
+**Pass criteria:** Leaders/DPOY match previous live-computed values exactly;
+they update after game changes within a moment; team-page stats (incl.
+zero-game players) are unaffected; no errors logged; dropping the collection
+degrades gracefully.
 
 ---
 
@@ -1041,7 +1104,7 @@ timestamps}`) + `findLeagueStandings` / `upsertLeagueStandings` /
 
 ### OPT-011 — `leagueplayerstats` materialisation
 
-- **Priority:** High · **Status:** Not Started · **Category:** Backend / structural
+- **Priority:** High · **Status:** ✅ Completed · **Category:** Backend / structural
 - **Wave:** 2 · **Complexity:** L · **Dependencies:** OPT-010
 - **Description:** Add `leagueplayerstats` (`{leagueId, leagueTeamId,
 leaguePlayerId compound-unique, gamesCount, pts, reb, ast, stl, blk, tov,
@@ -1057,10 +1120,50 @@ fg2m/a, fg3m/a, ftm/a, updatedAt}`), updated by the same
   `leagues.service.js` (`:1647-2089` read paths + recompute).
 - **Testing:** parity tests per player; recompute correctness on completion/edit;
   leader ordering matches live compute.
-- **Validation checklist:** [ ] per-player parity [ ] leaders/DPOY/fantasy match
-  [ ] scoring stays read-time [ ] backfill on miss.
+- **Validation checklist:** [x] per-player parity [x] leaders/DPOY/fantasy match
+  [x] scoring stays read-time [x] backfill on miss.
 - **Source:** [30](./30-optimisation-roadmap.md) H3, [28](./28-computation-optimisation.md) step 3.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06
+  - **Collection:** `leagueplayerstats` schema (`{leagueId, leagueTeamId,
+leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
+    `gamesCount` + `displayName`, timestamps) in `leagues.repository.js`. Write
+    path is a **full replace** per league (`deleteMany` + `insertMany`) — simpler
+    and just as correct as diffing since it only runs post-response.
+  - **Pure compute:** `computeLeaguePlayerStats(leagueId, {teams, games})` — same
+    shape/dependency pattern as `computeLeagueStandings`; iterates every team ×
+    completed game × roster snapshot × event, accumulating via OPT-006's
+    `createEmptyPlayerStatLine`/`applyEventToPlayerStatLine`. Returns **raw
+    totals only** (no ppg/fantasy/DPOY).
+  - **Scoring stays read-time (as the roadmap required):** new
+    `deriveLeaguePlayerScores(row)` computes ppg/rpg/apg/spg/bpg/topg/fg%/
+    fantasyScore/defensiveScore from a raw row — kept deliberately separate from
+    the persisted data, so tuning those formulas needs **no recompute**.
+  - **Read paths:**
+    - `getLeaguePlayerStats(leagueId)` — league-wide materialised read
+      (indexed find) + compute-on-miss self-backfill. Wired into
+      `getPublicLeagueLeaders`, which now derives leaders/DPOY from these rows
+      instead of replaying every team's games/events (the O(T×G×E×R) hot path
+      the roadmap flagged).
+    - **Scope decision:** `getPublicLeagueTeamBySlug`'s team-scoped stats
+      (`buildLeagueTeamPlayerStats`) intentionally **stay on live compute** —
+      already scoped to one team's games (cheap), and its output includes
+      zero-game roster players, a shape materialising would either drop or need
+      a roster-change recompute trigger for. Removed the unused
+      `getLeagueTeamPlayerStats`/`listLeaguePlayerStatsByTeam` scaffolding I
+      built for this before deciding against it (no dead code left behind).
+    - Player detail page (`getPublicLeaguePlayerBySlug`) also stays live —
+      it needs per-game rows for its history/highlights UI, which can't be
+      usefully aggregated into one row.
+  - **Recompute hook extended:** `recomputeLeagueAggregates` now fetches
+    teams/games **once** and computes+persists standings AND player stats from
+    that single fetch (no doubled reads). Same triggers as OPT-010 — no new
+    wiring needed.
+  - **Backfill:** extended `scripts/backfill-league-standings.js` to also
+    recompute + parity-check player stats. Ran on dev: **We Ball Saturday** (48
+    rows) and **Dev Test League** (12 rows) — **zero parity mismatches** on
+    both standings and player stats.
+  - Added 5 unit tests (raw accumulation, score derivation, materialised
+    hit/miss, single-fetch recompute). Full suite: **188 passing** (was 183).
 
 ---
 

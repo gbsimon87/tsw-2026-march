@@ -30,6 +30,8 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   saveLeagueJoinRequest: jest.fn(),
   findLeagueStandings: jest.fn(),
   upsertLeagueStandings: jest.fn(),
+  listLeaguePlayerStats: jest.fn(),
+  replaceLeaguePlayerStats: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -53,13 +55,19 @@ const {
   listLeaguePlayers,
   findLeagueStandings,
   upsertLeagueStandings,
+  listLeaguePlayerStats,
+  replaceLeaguePlayerStats,
 } = require('../../modules/leagues/leagues.repository');
 const { listLeagueGamesByLeagueId } = require('../../modules/games/games.repository');
+const { STAT_TYPES, TEAM_SIDES } = require('../../modules/shared/stats.constants');
 const {
   getLeagueRosterSnapshotForTeam,
   listTeamsForLeagueViewer,
   getLeagueStandings,
   computeLeagueStandings,
+  computeLeaguePlayerStats,
+  deriveLeaguePlayerScores,
+  getLeaguePlayerStats,
   recomputeLeagueAggregates,
 } = require('../../modules/leagues/leagues.service');
 
@@ -251,5 +259,129 @@ describe('league standings materialisation (OPT-010)', () => {
     // 8-8 tie: home wins per current tie rule.
     expect(result[0]).toMatchObject({ teamId: 'team-a', wins: 1 });
     expect(result[1]).toMatchObject({ teamId: 'team-b', losses: 1 });
+  });
+});
+
+describe('league player stats materialisation (OPT-011)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // One completed dual_team game. Home roster: player-1 (2 made 3s + 1 made FT
+  // = 7 pts, 1 game). Away roster: player-2 (1 made 2 = 2 pts, 1 game).
+  function seedTeamsAndGames() {
+    listLeagueTeams.mockResolvedValue([
+      buildLeagueTeam('team-a', 'Alpha'),
+      buildLeagueTeam('team-b', 'Bravo'),
+    ]);
+    listLeagueGamesByLeagueId.mockResolvedValue([
+      {
+        _id: 'g1',
+        status: 'completed',
+        trackingMode: 'dual_team',
+        homeLeagueTeamId: 'team-a',
+        awayLeagueTeamId: 'team-b',
+        trackedLeagueTeamId: 'team-a',
+        homeRosterSnapshot: [{ _id: 'p1', leaguePlayerId: 'lp1', displayName: 'Alex' }],
+        awayRosterSnapshot: [{ _id: 'p2', leaguePlayerId: 'lp2', displayName: 'Sam' }],
+        events: [
+          { teamSide: TEAM_SIDES.HOME, playerId: 'p1', statType: STAT_TYPES.FG3_MADE },
+          { teamSide: TEAM_SIDES.HOME, playerId: 'p1', statType: STAT_TYPES.FG3_MADE },
+          { teamSide: TEAM_SIDES.HOME, playerId: 'p1', statType: STAT_TYPES.FT_MADE },
+          { teamSide: TEAM_SIDES.AWAY, playerId: 'p2', statType: STAT_TYPES.FG2_MADE },
+        ],
+      },
+    ]);
+  }
+
+  test('computeLeaguePlayerStats accumulates raw per-player totals across teams', async () => {
+    seedTeamsAndGames();
+
+    const rows = await computeLeaguePlayerStats('league-1');
+
+    expect(rows).toHaveLength(2);
+    const alex = rows.find((r) => r.leaguePlayerId === 'lp1');
+    const sam = rows.find((r) => r.leaguePlayerId === 'lp2');
+    expect(alex).toMatchObject({
+      leagueTeamId: 'team-a',
+      gamesCount: 1,
+      fg3m: 2,
+      fg3a: 2,
+      ftm: 1,
+      fta: 1,
+      points: 7,
+    });
+    expect(sam).toMatchObject({
+      leagueTeamId: 'team-b',
+      gamesCount: 1,
+      fg2m: 1,
+      fg2a: 1,
+      points: 2,
+    });
+  });
+
+  test('deriveLeaguePlayerScores computes ppg/fantasy/DPOY from raw totals', () => {
+    const row = {
+      gamesCount: 2,
+      points: 20,
+      reb: 10,
+      ast: 4,
+      stl: 2,
+      blk: 1,
+      tov: 3,
+      fg2m: 4,
+      fg2a: 8,
+      fg3m: 2,
+      fg3a: 4,
+    };
+
+    const scores = deriveLeaguePlayerScores(row);
+
+    expect(scores.ppg).toBe(10);
+    expect(scores.rpg).toBe(5);
+    expect(scores.apg).toBe(2);
+    expect(scores.fgMade).toBe(6);
+    expect(scores.fgAttempted).toBe(12);
+    expect(scores.fgPercentage).toBe(0.5);
+    // fantasy = ppg*1 + rpg*1.2 + apg*1.5 + spg*2 + bpg*2 + topg*-1
+    expect(scores.fantasyScore).toBeCloseTo(10 + 5 * 1.2 + 2 * 1.5 + 1 * 2 + 0.5 * 2 - 1.5);
+  });
+
+  test('getLeaguePlayerStats returns materialised rows on a hit (no live compute)', async () => {
+    const storedRows = [{ leaguePlayerId: 'lp1', gamesCount: 3 }];
+    listLeaguePlayerStats.mockResolvedValue(storedRows);
+
+    const result = await getLeaguePlayerStats('league-1');
+
+    expect(result).toBe(storedRows);
+    expect(listLeagueGamesByLeagueId).not.toHaveBeenCalled();
+    expect(replaceLeaguePlayerStats).not.toHaveBeenCalled();
+  });
+
+  test('getLeaguePlayerStats computes + persists on a miss (self-backfill)', async () => {
+    listLeaguePlayerStats.mockResolvedValue([]);
+    replaceLeaguePlayerStats.mockResolvedValue([]);
+    seedTeamsAndGames();
+
+    const result = await getLeaguePlayerStats('league-1');
+
+    expect(replaceLeaguePlayerStats).toHaveBeenCalledWith('league-1', result);
+    expect(result).toHaveLength(2);
+  });
+
+  test('recomputeLeagueAggregates persists both standings and player stats from one fetch', async () => {
+    seedTeamsAndGames();
+    upsertLeagueStandings.mockResolvedValue({});
+    replaceLeaguePlayerStats.mockResolvedValue([]);
+
+    await recomputeLeagueAggregates('league-1');
+
+    // Teams/games fetched once (not once per aggregate).
+    expect(listLeagueTeams).toHaveBeenCalledTimes(1);
+    expect(listLeagueGamesByLeagueId).toHaveBeenCalledTimes(1);
+    expect(upsertLeagueStandings).toHaveBeenCalledTimes(1);
+    expect(replaceLeaguePlayerStats).toHaveBeenCalledTimes(1);
+    const [, persistedPlayerRows] = replaceLeaguePlayerStats.mock.calls[0];
+    expect(persistedPlayerRows).toHaveLength(2);
   });
 });
