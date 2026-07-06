@@ -1,7 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { FeedPage } from './FeedPage';
+
+function withQueryClient(children) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
 
 const apiMocks = vi.hoisted(() => ({
   listFeed: vi.fn(),
@@ -72,12 +78,14 @@ describe('FeedPage', () => {
     authMocks.useAuth.mockReturnValue({ user: null });
 
     render(
-      <MemoryRouter initialEntries={['/pulse']}>
-        <Routes>
-          <Route path="/pulse" element={<FeedPage />} />
-          <Route path="/login" element={<div>Login page</div>} />
-        </Routes>
-      </MemoryRouter>
+      withQueryClient(
+        <MemoryRouter initialEntries={['/pulse']}>
+          <Routes>
+            <Route path="/pulse" element={<FeedPage />} />
+            <Route path="/login" element={<div>Login page</div>} />
+          </Routes>
+        </MemoryRouter>
+      )
     );
 
     await waitFor(() => {
@@ -103,9 +111,11 @@ describe('FeedPage', () => {
     apiMocks.deletePost.mockResolvedValue({ deleted: true });
 
     render(
-      <MemoryRouter>
-        <FeedPage />
-      </MemoryRouter>
+      withQueryClient(
+        <MemoryRouter>
+          <FeedPage />
+        </MemoryRouter>
+      )
     );
 
     await waitFor(() => {
@@ -130,9 +140,11 @@ describe('FeedPage', () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
 
     render(
-      <MemoryRouter initialEntries={['/pulse?compose=1']}>
-        <FeedPage />
-      </MemoryRouter>
+      withQueryClient(
+        <MemoryRouter initialEntries={['/pulse?compose=1']}>
+          <FeedPage />
+        </MemoryRouter>
+      )
     );
 
     await waitFor(() => {

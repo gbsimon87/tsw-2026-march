@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
+import { usePublicLeague } from '../hooks/usePublicLeague';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
@@ -166,25 +167,25 @@ const DPOY_COLUMNS = [
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
-  const [league, setLeague] = useState(null);
-  const [leaders, setLeaders] = useState([]);
-  const [dpoyLeaders, setDpoyLeaders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const {
+    data: league,
+    isLoading: isLeagueLoading,
+    isError: isLeagueError,
+  } = usePublicLeague(leagueSlug);
+  const {
+    data: leadersData,
+    isLoading: isLeadersLoading,
+    isError: isLeadersError,
+  } = useQuery({
+    queryKey: ['publicLeagueLeaders', leagueSlug],
+    queryFn: () => leaguesApi.getPublicLeagueLeaders(leagueSlug),
+    enabled: Boolean(leagueSlug),
+  });
 
-  useEffect(() => {
-    Promise.all([
-      leaguesApi.getPublicBySlug(leagueSlug),
-      leaguesApi.getPublicLeagueLeaders(leagueSlug),
-    ])
-      .then(([leagueResponse, leadersResponse]) => {
-        setLeague(leagueResponse.league);
-        setLeaders(leadersResponse.leaders || []);
-        setDpoyLeaders(leadersResponse.dpoyLeaders || []);
-      })
-      .catch((loadError) => setError(loadError.message || 'Failed to load league'))
-      .finally(() => setIsLoading(false));
-  }, [leagueSlug]);
+  const leaders = leadersData?.leaders || [];
+  const dpoyLeaders = leadersData?.dpoyLeaders || [];
+  const isLoading = isLeagueLoading || isLeadersLoading;
+  const error = isLeagueError || isLeadersError ? 'Failed to load league' : '';
 
   useDocumentMeta({
     title: league ? `${league.name} — League Standings & Games` : undefined,

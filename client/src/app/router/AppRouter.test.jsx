@@ -1,7 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AppRouter } from './AppRouter';
+
+function renderWithProviders(children) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>);
+}
 
 const authMocks = vi.hoisted(() => ({
   useAuth: vi.fn(() => ({ user: null, isLoading: false })),
@@ -68,7 +74,7 @@ describe('AppRouter', () => {
   test('redirects logged-out users from root to The Pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/']}>
         <AppRouter />
         <LocationProbe />
@@ -83,7 +89,7 @@ describe('AppRouter', () => {
   test('redirects logged-in users from root to The Pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/']}>
         <AppRouter />
         <LocationProbe />
@@ -98,7 +104,7 @@ describe('AppRouter', () => {
   test('renders the Discover page at /home regardless of auth state', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/home']}>
         <AppRouter />
         <LocationProbe />
@@ -115,7 +121,7 @@ describe('AppRouter', () => {
   test('renders pricing page in development so league checkout is reachable', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/pricing']}>
         <AppRouter />
         <LocationProbe />
@@ -132,7 +138,7 @@ describe('AppRouter', () => {
   test('redirects legacy /leagues/new to pricing instead of the creation form', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/leagues/new']}>
         <AppRouter />
         <LocationProbe />
@@ -147,7 +153,7 @@ describe('AppRouter', () => {
   test('renders not found page for unknown routes instead of redirecting home', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/some-nonexistent-page']}>
         <AppRouter />
         <LocationProbe />
@@ -164,7 +170,7 @@ describe('AppRouter', () => {
   test('redirects legacy /feed path to /pulse', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/feed']}>
         <AppRouter />
         <LocationProbe />
@@ -179,7 +185,7 @@ describe('AppRouter', () => {
   test('logged-out pulse fab routes to login with compose redirect', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/pulse']}>
         <AppRouter />
         <LocationProbe />

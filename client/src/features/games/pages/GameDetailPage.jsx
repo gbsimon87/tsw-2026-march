@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
@@ -389,8 +390,6 @@ export function GameDetailPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [feedPostState, setFeedPostState] = useState('');
@@ -403,13 +402,22 @@ export function GameDetailPage() {
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
 
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['game', gameId],
+    queryFn: () => gamesApi.getById(gameId),
+    enabled: Boolean(gameId),
+  });
+
   useEffect(() => {
-    gamesApi
-      .getById(gameId)
-      .then(setData)
-      .catch((loadError) => setError(loadError.message || 'Failed to load game'))
-      .finally(() => setIsLoading(false));
-  }, [gameId]);
+    if (isError) {
+      setError(queryError?.message || 'Failed to load game');
+    }
+  }, [isError, queryError]);
 
   useEffect(() => {
     if (!data) {

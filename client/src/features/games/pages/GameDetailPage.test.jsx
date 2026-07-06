@@ -1,7 +1,13 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameDetailPage } from './GameDetailPage';
+
+function renderWithProviders(children) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>);
+}
 
 const apiMocks = vi.hoisted(() => ({
   getById: vi.fn(),
@@ -292,7 +298,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-1']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -523,7 +529,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-1']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -618,7 +624,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-2']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -726,7 +732,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/league-game-1']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -846,7 +852,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-3']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -901,7 +907,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-summary-video']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -958,7 +964,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-summary-no-video']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -1011,7 +1017,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-no-summary']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />
@@ -1116,7 +1122,7 @@ describe('GameDetailPage', () => {
       },
     });
 
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={['/games/game-1?print=1']}>
         <Routes>
           <Route path="/games/:gameId" element={<GameDetailPage />} />

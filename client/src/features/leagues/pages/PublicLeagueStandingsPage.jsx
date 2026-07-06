@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
@@ -7,23 +7,28 @@ import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { usePublicLeague } from '../hooks/usePublicLeague';
 
 export function PublicLeagueStandingsPage() {
   const { leagueSlug } = useParams();
-  const [league, setLeague] = useState(null);
-  const [standings, setStandings] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const {
+    data: league,
+    isLoading: isLeagueLoading,
+    isError: isLeagueError,
+  } = usePublicLeague(leagueSlug);
+  const {
+    data: standingsData,
+    isLoading: isStandingsLoading,
+    isError: isStandingsError,
+  } = useQuery({
+    queryKey: ['publicLeagueStandings', leagueSlug],
+    queryFn: () => leaguesApi.getPublicStandings(leagueSlug),
+    enabled: Boolean(leagueSlug),
+  });
 
-  useEffect(() => {
-    Promise.all([leaguesApi.getPublicBySlug(leagueSlug), leaguesApi.getPublicStandings(leagueSlug)])
-      .then(([leagueResponse, standingsResponse]) => {
-        setLeague(leagueResponse.league);
-        setStandings(standingsResponse.standings || []);
-      })
-      .catch((loadError) => setError(loadError.message || 'Failed to load standings'))
-      .finally(() => setIsLoading(false));
-  }, [leagueSlug]);
+  const standings = standingsData?.standings || [];
+  const isLoading = isLeagueLoading || isStandingsLoading;
+  const error = isLeagueError || isStandingsError ? 'Failed to load standings' : '';
 
   if (isLoading) {
     return <SportsLoader label="Loading standings" fullPage />;
