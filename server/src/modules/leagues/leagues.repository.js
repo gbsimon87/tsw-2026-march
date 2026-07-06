@@ -147,6 +147,25 @@ const leagueManagerSchema = new mongoose.Schema(
 
 leagueManagerSchema.index({ leagueId: 1, userId: 1, status: 1 });
 
+// OPT-010: materialised league standings. One doc per league; `rows` is the
+// pre-computed standings array (same shape the live compute returns). Read path
+// is an indexed findOne; write path is the recompute hook. Kept deliberately
+// loose (Mixed rows) so the compute code stays the single source of truth for
+// the row shape.
+const leagueStandingsSchema = new mongoose.Schema(
+  {
+    leagueId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'League',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    rows: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  },
+  { timestamps: true }
+);
+
 const League = mongoose.models.League || mongoose.model('League', leagueSchema);
 const LeagueTeam = mongoose.models.LeagueTeam || mongoose.model('LeagueTeam', leagueTeamSchema);
 const LeaguePlayer =
@@ -157,6 +176,8 @@ const LeagueJoinRequest =
   mongoose.models.LeagueJoinRequest || mongoose.model('LeagueJoinRequest', leagueJoinRequestSchema);
 const LeagueManager =
   mongoose.models.LeagueManager || mongoose.model('LeagueManager', leagueManagerSchema);
+const LeagueStandings =
+  mongoose.models.LeagueStandings || mongoose.model('LeagueStandings', leagueStandingsSchema);
 
 function createLeague(input) {
   return League.create(input);
@@ -325,6 +346,23 @@ function saveLeagueManager(manager) {
   return manager.save();
 }
 
+// OPT-010: materialised standings read/write.
+function findLeagueStandings(leagueId) {
+  return LeagueStandings.findOne({ leagueId });
+}
+
+function upsertLeagueStandings(leagueId, rows) {
+  return LeagueStandings.findOneAndUpdate(
+    { leagueId },
+    { $set: { rows } },
+    { new: true, upsert: true }
+  );
+}
+
+function deleteLeagueStandings(leagueId) {
+  return LeagueStandings.deleteOne({ leagueId });
+}
+
 module.exports = {
   League,
   LeagueTeam,
@@ -332,6 +370,10 @@ module.exports = {
   LeagueTeamMember,
   LeagueManager,
   LeagueJoinRequest,
+  LeagueStandings,
+  findLeagueStandings,
+  upsertLeagueStandings,
+  deleteLeagueStandings,
   createLeague,
   listLeaguesByOwner,
   listPublicLeagues,

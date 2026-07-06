@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (6/7 + OPT-003 full rollout; OPT-007 prod-gated). Wave 1 complete. Wave 2 open.`
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 underway (OPT-010 done).`
 - **Current wave:** Wave 2. Branch `feat/opt-wave-0`.
-- **Recommended next task:** **`OPT-010`** (`leaguestandings` materialisation — the big Wave 2 structural fix; deps met: OPT-006 ✅ + OPT-008 ✅). Gated/blocked: **`OPT-007`** (needs prod `$indexStats`), **`OPT-025`** (needs prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001, -002, -003, -004, -005, -006, -008, -009.)
+- **Recommended next task:** **`OPT-011`** (`leagueplayerstats` materialisation — extends the OPT-010 recompute hook; deps met: OPT-010 ✅) or **`OPT-012`** (frozen `Game.boxScore`; deps met: OPT-008 ✅) or **`OPT-013`** (team season summaries; deps met: OPT-006 ✅). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008, 009, 010.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                      |
-| ----------- | ---------------------------------------------------------- |
-| Not Started | 16                                                         |
-| In Progress | 0                                                          |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                  |
-| Completed   | 8 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`) |
-| Deferred    | 0                                                          |
+| Status      | Count                                                             |
+| ----------- | ----------------------------------------------------------------- |
+| Not Started | 15                                                                |
+| In Progress | 0                                                                 |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                         |
+| Completed   | 9 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`) |
+| Deferred    | 0                                                                 |
 
 ---
 
@@ -109,7 +109,7 @@ consumers and rework is minimised.
 | OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started  | — (verify first)   |
 | OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed | OPT-006            |
 | OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
-| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | Not Started  | OPT-006, OPT-008   |
+| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
 | OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | Not Started  | OPT-010            |
 | OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started  | OPT-008            |
 | OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
@@ -177,6 +177,15 @@ blockers._
   `f_auto,q_auto,vc_auto` on-the-fly (works before & after the eager MP4 lands);
   new `destroyCloudinaryAsset` awaits + logs destroys (was 3× fire-and-forget →
   silent asset leaks). 179 tests pass. See its card.
+- **OPT-010** — `leaguestandings` materialisation + recompute hook. _2026-07-06._
+  Branch `feat/opt-wave-0`. **(Wave 2 — the top scaling fix.)** New
+  `leaguestandings` collection; live compute renamed `computeLeagueStandings`
+  (source of truth, reuses OPT-006/008); `getLeagueStandings` now an indexed
+  materialised read with **compute-on-miss self-backfill**;
+  `recomputeLeagueAggregates` (in-flight-guarded) fired post-response
+  (`setImmediate`) from all game + league-team write triggers. Idempotent
+  backfill script run on dev — 2/2 leagues, zero parity mismatches. Reversible
+  (delete collection → compute-on-miss). 183 tests pass. See its card.
 - **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
   Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
   migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
@@ -244,10 +253,15 @@ Log new collections, fields, utilities, and providers as they are introduced.
 - ✅ **built (OPT-003, 2026-07-05, partial rollout)** `<CloudinaryImage>` client
   component at `client/src/features/media/CloudinaryImage.jsx`.
 - _(planned)_ `Game.boxScore` frozen field (OPT-012).
-- _(planned)_ `leaguestandings`, `leagueplayerstats` collections + their indexes
-  (OPT-010, OPT-011).
-- _(planned)_ `recomputeLeagueAggregates(leagueId)` post-response hook — will
-  reuse OPT-006's shared accumulator (OPT-010).
+- ✅ **built (OPT-010, 2026-07-06)** `leaguestandings` collection
+  (`{leagueId unique+indexed, rows, timestamps}`) + `findLeagueStandings` /
+  `upsertLeagueStandings` / `deleteLeagueStandings` in `leagues.repository.js`;
+  backfill script `scripts/backfill-league-standings.js`.
+- ✅ **built (OPT-010, 2026-07-06)** `recomputeLeagueAggregates(leagueId)` +
+  `scheduleLeagueAggregateRecompute` post-response hook (reuses OPT-006's shared
+  accumulator via `computeLeagueStandings`). OPT-011 will extend it to player
+  stats.
+- _(planned)_ `leagueplayerstats` collection + indexes (OPT-011).
 - _(planned)_ React Query `QueryClientProvider` (OPT-014).
 
 ## 🔔 Implementation reminders
@@ -523,6 +537,45 @@ via optimised delivery, and asset deletions are awaited + logged.
 their Cloudinary destroy and log failures instead of leaking assets. ⚠️ Note:
 moving logos/avatars out of the shared `tsw/feed` folder was deferred (data
 migration, out of scope) — see the card.
+
+---
+
+### ✅ OPT-010 — `leaguestandings` materialisation (server-side)
+
+**What to test:** League standings now come from a pre-computed `leaguestandings`
+collection instead of being recomputed from all games+events on every read. The
+numbers must be identical; recomputes fire automatically after game/team changes.
+
+> The dev DB was backfilled during implementation. To test the recompute
+> triggers, change a game/team and confirm standings update within ~a second.
+
+1. **Standings render correctly** (materialised read):
+   - `/league/:slug/standings` and the standings block on `/league/:slug` — W-L,
+     PF, PA, +/- and ordering look right.
+2. **Finish a game → standings update:**
+   - Track + finish a league game. Reload the standings shortly after.
+   - **Look for:** The teams' records/points reflect the new result (the
+     post-response recompute persisted fresh rows).
+3. **Edit a completed game → standings update:**
+   - Add/remove a scoring event on a completed league game; reload standings →
+     they reflect the change.
+4. **Delete a completed game → standings update:**
+   - Delete a completed league game; reload standings → that game no longer
+     counts.
+5. **Rename / add / archive a team → standings update:**
+   - Rename a league team → its name updates in the standings row.
+   - Add a team → a new zeroed row appears; archive → row set changes.
+6. **Compute-on-miss fallback (reversible):** If the `leaguestandings` collection
+   is ever empty/dropped, standings still render correctly (computed live and
+   re-persisted on first read). Optional DB check:
+   `node src/scripts/backfill-league-standings.js --dry-run` (with `ENV_FILE`)
+   prints each league's standings and flags any parity mismatch.
+
+**Pass criteria:** Standings match the previous live-computed values exactly;
+every write trigger (finish/edit/delete game, create/rename/archive team) results
+in updated standings within a moment; dropping the collection degrades gracefully
+to live compute. Recompute never blocks the triggering request (fires after the
+response).
 
 ---
 
@@ -919,7 +972,7 @@ days · **L** 1–2 weeks.
 
 ### OPT-010 — `leaguestandings` materialisation + recompute hook
 
-- **Priority:** High · **Status:** Not Started · **Category:** Backend / structural
+- **Priority:** High · **Status:** ✅ Completed · **Category:** Backend / structural
 - **Wave:** 2 · **Complexity:** L · **Dependencies:** OPT-006, OPT-008
 - **Description:** Add a `leaguestandings` collection (`{leagueId unique, rows:[…],
 updatedAt}`). Add `recomputeLeagueAggregates(leagueId)` that **reuses the
@@ -938,11 +991,41 @@ updatedAt}`). Add `recomputeLeagueAggregates(leagueId)` that **reuses the
 - **Testing:** **parity tests** materialised vs live compute; recompute fires on
   each trigger; fallback populates on miss; staleness window acceptable
   (seconds).
-- **Validation checklist:** [ ] materialised == live on all dev leagues
-  [ ] all write triggers recompute [ ] compute-on-miss backfills [ ] recompute
-  is post-response, guarded [ ] reversible (live path intact).
+- **Validation checklist:** [x] materialised == live on all dev leagues
+  [x] all write triggers recompute [x] compute-on-miss backfills [x] recompute
+  is post-response, guarded [x] reversible (live path intact).
 - **Source:** [30](./30-optimisation-roadmap.md) H3, [28](./28-computation-optimisation.md) step 2, [24](./24-database-audit.md) §Proposed collections.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06
+  - **Collection:** `leaguestandings` schema (`{leagueId unique+indexed, rows:[Mixed],
+timestamps}`) + `findLeagueStandings` / `upsertLeagueStandings` /
+    `deleteLeagueStandings` in `leagues.repository.js`.
+  - **Compute source of truth:** renamed the old live `getLeagueStandings` to
+    `computeLeagueStandings` (reuses OPT-006's shared accumulator via
+    `getLeagueGameScore` → OPT-008's `finalScore`).
+  - **Read path:** new `getLeagueStandings` serves materialised rows via indexed
+    `findOne`; on a miss it computes live, persists, and returns
+    (**self-backfilling**). When a caller passes pre-fetched teams/games
+    (league-detail compositions from OPT-005), it computes directly from that
+    in-hand data (no staleness within a request).
+  - **Recompute hook:** `recomputeLeagueAggregates(leagueId)` (per-league
+    in-flight guard to coalesce overlapping triggers) + fire-after-response
+    `scheduleLeagueAggregateRecompute` (`setImmediate`, errors logged not thrown).
+  - **Triggers wired:** `finishGameForUser`, `deleteGameForUser`, and all three
+    event mutators (append/remove/update, guarded on `status === 'completed'`) in
+    games.service; `createLeagueTeamForLeague`, `updateLeagueTeamForLeague`
+    (rename), `archiveLeagueTeamForLeague` in leagues.service. _(No `reopenGame`
+    function exists in the codebase — completion is one-way today, so that
+    roadmap trigger is N/A.)_
+  - **Reversibility:** deleting the collection makes every read fall back to
+    compute-on-miss; the live path is fully intact.
+  - **Backfill:** `scripts/backfill-league-standings.js` (idempotent, `--dry-run`
+    with a parity report). Ran on dev: 2/2 leagues persisted, **zero parity
+    mismatches**; collection confirmed created (2 docs).
+  - Added 4 unit tests (materialised hit skips compute; miss backfills+persists;
+    recompute == live parity; pre-fetch bypasses materialised read). Full suite:
+    **183 passing** (was 179).
+  - **Circular-import check:** games.service requires leagues.service (not vice
+    versa — leagues.service only requires games.**repository**), so no cycle.
 
 ---
 

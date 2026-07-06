@@ -30,6 +30,7 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
+  scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 
 jest.mock('mongoose', () => ({

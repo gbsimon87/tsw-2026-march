@@ -32,6 +32,7 @@ const {
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
   canFinalizeLeagueGame,
+  scheduleLeagueAggregateRecompute,
 } = require('../leagues/leagues.service');
 const { findLeagueTeamById, findLeagueById } = require('../leagues/leagues.repository');
 
@@ -166,6 +167,16 @@ function sanitizeAiSummary(summary) {
 function clearAiSummaryAfterCompletedLeagueEdit(game) {
   if (game.gameContext === 'league' && game.status === 'completed' && game.aiSummary?.text) {
     game.aiSummary = null;
+  }
+}
+
+// OPT-010: after a league game's result changes, schedule a post-response
+// recompute of that league's materialised aggregates (standings). No-op for
+// standalone games. Only completed games affect standings, but we also trigger
+// on delete/finish where the completed set changes.
+function scheduleLeagueRecomputeForGame(game) {
+  if (game.gameContext === 'league' && game.leagueId) {
+    scheduleLeagueAggregateRecompute(game.leagueId);
   }
 }
 
@@ -1288,6 +1299,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     clearAiSummaryAfterCompletedLeagueEdit(game);
     syncGameDenormalizedAfterEventChange(game);
     await saveGame(game);
+    // OPT-010: editing a completed league game's events changes standings.
+    if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
     return getGameForUser(userId, gameId);
   }
 
@@ -1360,6 +1373,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
+  // OPT-010: editing a completed league game's events changes standings.
+  if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
   return getGameForUser(userId, gameId);
 }
 
@@ -1404,6 +1419,8 @@ async function removeEventForUser(userId, gameId, eventId) {
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
+  // OPT-010: editing a completed league game's events changes standings.
+  if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
   return getGameForUser(userId, gameId);
 }
 
@@ -1424,6 +1441,8 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
+  // OPT-010: editing a completed league game's events changes standings.
+  if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
   return getGameForUser(userId, gameId);
 }
 
@@ -1437,7 +1456,16 @@ async function deleteGameForUser(userId, gameId) {
     }
   }
 
+  // OPT-010: capture context before deletion, then recompute standings after
+  // the row is gone (deleting a completed league game changes standings).
+  const wasLeagueGame = game.gameContext === 'league';
+  const leagueId = game.leagueId;
+
   await game.deleteOne();
+
+  if (wasLeagueGame) {
+    scheduleLeagueAggregateRecompute(leagueId);
+  }
 }
 
 async function finishGameForUser(userId, gameId) {
@@ -1459,6 +1487,10 @@ async function finishGameForUser(userId, gameId) {
   syncGameFinalScore(game);
   syncGameEventCount(game);
   await saveGame(game);
+
+  // OPT-010: a newly completed league game changes standings. Scheduled here
+  // (before the AI-summary branch's early returns) so it fires on every path.
+  scheduleLeagueRecomputeForGame(game);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
     const summaryLockId = randomUUID();

@@ -48,9 +48,12 @@ const {
   listLeagueManagersByLeague,
   listLeaguesByManager,
   saveLeagueManager,
+  findLeagueStandings,
+  upsertLeagueStandings,
 } = require('./leagues.repository');
 const { findUserByEmail, findUserById } = require('../auth/auth.repository');
 const { listLeagueGamesByLeagueId } = require('../games/games.repository');
+const { logger } = require('../../config/logger');
 const {
   uploadImageBuffer,
   destroyImage,
@@ -642,6 +645,8 @@ async function createLeagueTeamForLeague(userId, leagueId, payload) {
     status: 'active',
   });
 
+  // OPT-010: a new team adds a (zeroed) standings row.
+  scheduleLeagueAggregateRecompute(leagueId);
   return sanitizeLeagueTeam(leagueTeam);
 }
 
@@ -1039,6 +1044,8 @@ async function updateLeagueTeamForLeague(userId, leagueId, leagueTeamId, payload
   }
 
   await saveLeagueTeam(team);
+  // OPT-010: team rename changes the teamName in standings rows.
+  scheduleLeagueAggregateRecompute(leagueId);
   return sanitizeLeagueTeam(team);
 }
 
@@ -1051,6 +1058,8 @@ async function archiveLeagueTeamForLeague(userId, leagueId, leagueTeamId) {
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
   team.status = 'archived';
   await saveLeagueTeam(team);
+  // OPT-010: archiving changes the standings row set.
+  scheduleLeagueAggregateRecompute(leagueId);
   return sanitizeLeagueTeam(team);
 }
 
@@ -1688,8 +1697,10 @@ async function listLeagueGames(
   return games.map((game) => createLeagueGameRow(game, byId));
 }
 
-// OPT-005: same pre-fetch escape hatch as listLeagueGames.
-async function getLeagueStandings(
+// OPT-010: the pure LIVE standings compute (the source of truth). Renamed from
+// getLeagueStandings; the public getLeagueStandings is now a materialised read
+// that falls back to this. OPT-005: same pre-fetch escape hatch as listLeagueGames.
+async function computeLeagueStandings(
   leagueId,
   { teams: prefetchedTeams, games: prefetchedGames } = {}
 ) {
@@ -1763,6 +1774,76 @@ async function getLeagueStandings(
     if (b.pointDiff !== a.pointDiff) return b.pointDiff - a.pointDiff;
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
     return a.teamName.localeCompare(b.teamName);
+  });
+}
+
+// OPT-010: materialised standings read. Serves the pre-computed rows from
+// `leaguestandings`; on a miss (new league, never-recomputed, or after a manual
+// wipe) it computes live, persists, and returns — self-backfilling and fully
+// reversible (deleting the collection just makes every read compute-on-miss).
+// When the caller passes pre-fetched teams/games (league-detail compositions) we
+// skip the materialised read and compute directly from that in-hand data, since
+// it's already loaded and avoids any staleness within a single request.
+async function getLeagueStandings(leagueId, prefetch = {}) {
+  if (prefetch.teams || prefetch.games) {
+    return computeLeagueStandings(leagueId, prefetch);
+  }
+
+  const materialised = await findLeagueStandings(leagueId);
+  if (materialised && Array.isArray(materialised.rows)) {
+    return materialised.rows;
+  }
+
+  const rows = await computeLeagueStandings(leagueId);
+  try {
+    await upsertLeagueStandings(leagueId, rows);
+  } catch (error) {
+    // Persisting the backfill is best-effort — the computed rows are still
+    // correct to return even if the write races/fails.
+    logger.warn({ err: error, leagueId: String(leagueId) }, 'Standings backfill persist failed');
+  }
+  return rows;
+}
+
+// OPT-010: recompute + persist all materialised league aggregates. Today that is
+// standings; OPT-011 will extend this to player stats. Reuses the live compute
+// (which reuses OPT-006's shared accumulator) so materialised == live by
+// construction. Guarded by a per-league in-flight map so overlapping triggers
+// (e.g. finish + immediate edit) coalesce instead of racing.
+const recomputeInFlight = new Map();
+
+async function recomputeLeagueAggregates(leagueId) {
+  const key = String(leagueId);
+  if (recomputeInFlight.has(key)) {
+    return recomputeInFlight.get(key);
+  }
+
+  const work = (async () => {
+    const rows = await computeLeagueStandings(leagueId);
+    await upsertLeagueStandings(leagueId, rows);
+    return rows;
+  })();
+
+  recomputeInFlight.set(key, work);
+  try {
+    return await work;
+  } finally {
+    recomputeInFlight.delete(key);
+  }
+}
+
+// OPT-010: fire a recompute AFTER the response, never blocking the request that
+// triggered it. Failures are logged, not thrown (the live-compute fallback keeps
+// reads correct even if a recompute is missed).
+function scheduleLeagueAggregateRecompute(leagueId) {
+  if (!leagueId) return;
+  setImmediate(() => {
+    recomputeLeagueAggregates(leagueId).catch((error) => {
+      logger.error(
+        { err: error, leagueId: String(leagueId) },
+        'Post-response league aggregate recompute failed'
+      );
+    });
   });
 }
 
@@ -2106,6 +2187,9 @@ module.exports = {
   unclaimLeaguePlayer,
   listLeagueGames,
   getLeagueStandings,
+  computeLeagueStandings,
+  recomputeLeagueAggregates,
+  scheduleLeagueAggregateRecompute,
   getLeagueContextForGame,
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,

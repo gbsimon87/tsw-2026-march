@@ -41,6 +41,7 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   canManageLeagueGame: jest.fn(() => false),
   canFinalizeLeagueGame: jest.fn(() => false),
   canEditCompletedLeagueGame: jest.fn(() => false),
+  scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
