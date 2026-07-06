@@ -16,6 +16,10 @@ jest.mock('../../modules/teams/teams.service', () => ({
   scheduleTeamSeasonSummaryRecompute: jest.fn(),
 }));
 
+jest.mock('../../modules/feed/feed.service', () => ({
+  refreshGameCardPostsForGame: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('../../modules/billing/billing.service', () => ({
   getBillingSummary: jest.fn(() => ({
     plan: 'free',
@@ -94,6 +98,13 @@ const {
   computeGameFinalScore,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
+
+// The post-response schedulers (scheduleLeagueRecomputeForGame,
+// scheduleTeamSummaryRecomputeForGame, scheduleFeedCardRefreshForGame) fire
+// via setImmediate — flush pending immediates after every test so they run
+// (and hit their mocks) before Jest tears down the module registry, instead
+// of firing into a torn-down environment after the test file finishes.
+afterEach(() => new Promise((resolve) => setImmediate(resolve)));
 
 function buildPlayers(players) {
   const list = players.map((player) => ({ ...player }));

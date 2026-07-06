@@ -6,6 +6,8 @@ const {
   findPostById,
   deletePostById,
   findPostByHighlightEventId,
+  updatePostCardSnapshot,
+  listGameCardPostsByGameId,
 } = require('./feed.repository');
 const {
   createGameCardPostSchema,
@@ -23,7 +25,7 @@ const {
 const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
-const { findUserById } = require('../auth/auth.repository');
+const { findUserById, findUsersByIds } = require('../auth/auth.repository');
 const { findGameById, listCompletedGames } = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const { findLeaguePlayerById } = require('../leagues/leagues.repository');
@@ -137,93 +139,143 @@ async function resolveVideoPayload(post) {
   };
 }
 
-async function resolveGameCardPayload(post) {
+// OPT-017: pure builders for each card's denormalised display shape, given the
+// full public-pipeline payload. Called both at post-creation time (to snapshot
+// into the Post doc) and as the live-compute fallback when a snapshot is
+// missing/stale — one source of truth for the shape either way.
+function buildGameCardSnapshot(payload) {
+  const isDualTeam = payload.game.trackingMode === 'dual_team';
+  return {
+    gameId: payload.game.id,
+    gameUrl: `/games/${payload.game.id}`,
+    teamId: payload.team?.id ?? null,
+    teamName: isDualTeam
+      ? `${payload.participants?.home?.displayName || 'Home'} vs ${payload.participants?.away?.displayName || 'Away'}`
+      : (payload.team?.name ?? null),
+    teamLogo: isDualTeam
+      ? (payload.participants?.home?.logo ?? null)
+      : (payload.team?.logo ?? null),
+    teamColors: payload.team?.colors ?? [],
+    opponent: isDualTeam ? null : payload.game.opponent,
+  };
+}
+
+function buildPlayerCardSnapshot(payload) {
+  const playerImage = payload.player.image ?? null;
+  const teamLogo = payload.team.logo ?? null;
+  const imageFallback = playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder';
+
+  return {
+    teamId: payload.team.id,
+    teamName: payload.team.name,
+    playerId: payload.player.id,
+    playerName: payload.player.displayName,
+    jerseyNumber: payload.player.jerseyNumber ?? null,
+    playerImage,
+    teamLogo,
+    teamColors: payload.team.colors ?? [],
+    imageFallback,
+    summary: {
+      gamesCount: payload.summary.gamesCount,
+      pointsPerGame: payload.summary.pointsPerGame,
+      reboundsPerGame: payload.summary.reboundsPerGame,
+      assistsPerGame: payload.summary.assistsPerGame,
+    },
+    playerUrl: `/teams/${payload.team.id}/players/${payload.player.id}`,
+  };
+}
+
+function buildTeamCardSnapshot(payload) {
+  return {
+    teamId: payload.team.id,
+    teamName: payload.team.name,
+    teamLogo: payload.team.logo ?? null,
+    teamColors: payload.team.colors ?? [],
+    summary: {
+      gamesCount: payload.summary.gamesCount,
+      points: payload.summary.points,
+      fg2: payload.summary.fg2,
+      fg3: payload.summary.fg3,
+      ft: payload.summary.ft,
+    },
+    teamUrl: `/teams/${payload.team.id}`,
+  };
+}
+
+// OPT-017: resolve a card's display snapshot, preferring the denormalised
+// `cardSnapshot` (indexed doc field, no extra queries). On a miss (older posts
+// created before this field existed) falls back to the live pipeline and
+// persists the result — self-backfilling, same pattern as the OPT-010/011/013
+// materialisations. `refresh: true` forces a live re-resolve + re-persist
+// (the "slim refresh path for stale cards").
+async function resolveGameCardPayload(post, { refresh = false } = {}) {
+  if (!refresh && post.gameCard.cardSnapshot) {
+    return { image: null, gameCard: post.gameCard.cardSnapshot, playerCard: null, teamCard: null };
+  }
+
   let payload;
   try {
     payload = await getPublicGame(String(post.gameCard.gameId));
   } catch {
     return { image: null, gameCard: null, playerCard: null, teamCard: null };
   }
-  const isDualTeam = payload.game.trackingMode === 'dual_team';
-
-  return {
-    image: null,
-    gameCard: {
-      gameId: payload.game.id,
-      gameUrl: `/games/${payload.game.id}`,
-      teamId: payload.team?.id ?? null,
-      teamName: isDualTeam
-        ? `${payload.participants?.home?.displayName || 'Home'} vs ${payload.participants?.away?.displayName || 'Away'}`
-        : (payload.team?.name ?? null),
-      teamLogo: isDualTeam
-        ? (payload.participants?.home?.logo ?? null)
-        : (payload.team?.logo ?? null),
-      teamColors: payload.team?.colors ?? [],
-      opponent: isDualTeam ? null : payload.game.opponent,
-      participants: isDualTeam ? payload.participants : null,
-      recap: payload.recap,
-    },
-    playerCard: null,
-    teamCard: null,
-  };
+  const snapshot = buildGameCardSnapshot(payload);
+  persistCardSnapshot(post, 'gameCard', snapshot);
+  return { image: null, gameCard: snapshot, playerCard: null, teamCard: null };
 }
 
-async function resolvePlayerCardPayload(post) {
+async function resolvePlayerCardPayload(post, { refresh = false } = {}) {
+  if (!refresh && post.playerCard.cardSnapshot) {
+    return {
+      image: null,
+      gameCard: null,
+      playerCard: post.playerCard.cardSnapshot,
+      teamCard: null,
+    };
+  }
+
   const payload = await getPublicPlayer(
     String(post.playerCard.teamId),
     String(post.playerCard.playerId)
   );
-  const playerImage = payload.player.image ?? null;
-  const teamLogo = payload.team.logo ?? null;
-  const imageFallback = playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder';
-
-  return {
-    image: null,
-    gameCard: null,
-    playerCard: {
-      teamId: payload.team.id,
-      teamName: payload.team.name,
-      playerId: payload.player.id,
-      playerName: payload.player.displayName,
-      jerseyNumber: payload.player.jerseyNumber ?? null,
-      playerImage,
-      teamLogo,
-      teamColors: payload.team.colors ?? [],
-      imageFallback,
-      summary: {
-        gamesCount: payload.summary.gamesCount,
-        pointsPerGame: payload.summary.pointsPerGame,
-        reboundsPerGame: payload.summary.reboundsPerGame,
-        assistsPerGame: payload.summary.assistsPerGame,
-      },
-      playerUrl: `/teams/${payload.team.id}/players/${payload.player.id}`,
-    },
-    teamCard: null,
-  };
+  const snapshot = buildPlayerCardSnapshot(payload);
+  persistCardSnapshot(post, 'playerCard', snapshot);
+  return { image: null, gameCard: null, playerCard: snapshot, teamCard: null };
 }
 
-async function resolveTeamCardPayload(post) {
-  const payload = await getPublicTeam(String(post.teamCard.teamId));
+async function resolveTeamCardPayload(post, { refresh = false } = {}) {
+  if (!refresh && post.teamCard.cardSnapshot) {
+    return { image: null, gameCard: null, playerCard: null, teamCard: post.teamCard.cardSnapshot };
+  }
 
-  return {
-    image: null,
-    gameCard: null,
-    playerCard: null,
-    teamCard: {
-      teamId: payload.team.id,
-      teamName: payload.team.name,
-      teamLogo: payload.team.logo ?? null,
-      teamColors: payload.team.colors ?? [],
-      summary: {
-        gamesCount: payload.summary.gamesCount,
-        points: payload.summary.points,
-        fg2: payload.summary.fg2,
-        fg3: payload.summary.fg3,
-        ft: payload.summary.ft,
-      },
-      teamUrl: `/teams/${payload.team.id}`,
-    },
-  };
+  const payload = await getPublicTeam(String(post.teamCard.teamId));
+  const snapshot = buildTeamCardSnapshot(payload);
+  persistCardSnapshot(post, 'teamCard', snapshot);
+  return { image: null, gameCard: null, playerCard: null, teamCard: snapshot };
+}
+
+// OPT-017: best-effort, non-blocking persist of a computed snapshot back onto
+// the Post doc so the NEXT read hits the fast path. Never awaited by callers —
+// a failed persist just means the next read re-resolves live again (identical
+// to a permanent miss), so it's safe to fire-and-forget with logging.
+function persistCardSnapshot(post, cardField, snapshot) {
+  updatePostCardSnapshot(post._id, cardField, snapshot).catch((error) => {
+    logger.warn(
+      { err: error, postId: String(post._id), cardField },
+      'Feed card snapshot persist failed'
+    );
+  });
+}
+
+// OPT-017: the slim refresh path for stale cards. A game_card's snapshot is
+// taken once and never touched again by the read path — if the underlying
+// game's score changes after being shared (finish, or an edit to a completed
+// game), the shared card would show a stale score forever without this.
+// Intended to be called from games.service.js's existing completion/edit
+// triggers (post-response, non-blocking — matches the OPT-010/012/013 shape).
+async function refreshGameCardPostsForGame(gameId) {
+  const posts = await listGameCardPostsByGameId(gameId);
+  await Promise.all(posts.map((post) => resolveGameCardPayload(post, { refresh: true })));
 }
 
 const YOUTUBE_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
@@ -299,8 +351,12 @@ async function resolvePostPayload(post) {
   throw new ApiError(400, 'Unsupported post type');
 }
 
-async function sanitizePost(post, viewerUserId = null) {
-  const creator = await findUserById(post.creatorUserId);
+// OPT-017: accepts an optional pre-fetched `creator` so batch hydration
+// (listFeedPosts) can resolve every post's creator with one `$in` query
+// instead of one `findUserById` per post. Single-post call sites (create,
+// delete) omit it and get the original one-query-per-call behaviour.
+async function sanitizePost(post, viewerUserId = null, { creator: prefetchedCreator } = {}) {
+  const creator = prefetchedCreator ?? (await findUserById(post.creatorUserId));
   if (!creator) {
     return null;
   }
@@ -331,12 +387,26 @@ async function listFeedPosts(viewerUserId, options = {}) {
     ensureObjectId(options.cursor, 'cursor');
   }
   const rawPosts = await listPosts({ limit: limit + 10, cursor: options.cursor || null });
+
+  // OPT-017: batch every post's creator with one $in instead of one
+  // findUserById per post (was the single biggest query multiplier on this
+  // page — one extra round-trip per post regardless of type).
+  const creatorsById = new Map(
+    (await findUsersByIds(rawPosts.map((post) => post.creatorUserId))).map((user) => [
+      String(user._id),
+      user,
+    ])
+  );
+
   const resolved = [];
   let lastResolvedRaw = null;
   let hitLimit = false;
 
   for (const post of rawPosts) {
-    const sanitized = await sanitizePost(post, viewerUserId);
+    const creator = creatorsById.get(String(post.creatorUserId));
+    const sanitized = creator
+      ? await sanitizePost(post, viewerUserId, { creator })
+      : await sanitizePost(post, viewerUserId);
     if (sanitized) {
       resolved.push(sanitized);
       lastResolvedRaw = post;
@@ -489,7 +559,10 @@ async function createPlayerCardPostForUser(userId, input) {
   ensureObjectId(payload.teamId, 'team id');
   ensureObjectId(payload.playerId, 'player id');
 
-  await getPublicPlayer(payload.teamId, payload.playerId);
+  // OPT-017: this pipeline call is also the source for the denormalised
+  // snapshot below — reused instead of discarded and re-resolved a moment
+  // later inside sanitizePost.
+  const publicPayload = await getPublicPlayer(payload.teamId, payload.playerId);
 
   const post = await createPost({
     creatorUserId: userId,
@@ -498,6 +571,7 @@ async function createPlayerCardPostForUser(userId, input) {
     playerCard: {
       teamId: payload.teamId,
       playerId: payload.playerId,
+      cardSnapshot: buildPlayerCardSnapshot(publicPayload),
     },
   });
 
@@ -508,7 +582,7 @@ async function createTeamCardPostForUser(userId, input) {
   const payload = createTeamCardPostSchema.parse(input);
   ensureObjectId(payload.teamId, 'team id');
 
-  await getPublicTeam(payload.teamId);
+  const publicPayload = await getPublicTeam(payload.teamId);
 
   const post = await createPost({
     creatorUserId: userId,
@@ -516,6 +590,7 @@ async function createTeamCardPostForUser(userId, input) {
     caption: sanitizeCaption(payload.caption),
     teamCard: {
       teamId: payload.teamId,
+      cardSnapshot: buildTeamCardSnapshot(publicPayload),
     },
   });
 
@@ -706,4 +781,5 @@ module.exports = {
   listShareablePlayers,
   listShareableTeams,
   sanitizePost,
+  refreshGameCardPostsForGame,
 };

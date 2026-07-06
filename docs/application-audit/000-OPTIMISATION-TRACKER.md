@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified (2026-07-06: 4 bugs found+fixed, see Verification log).`
-- **Current wave:** Wave 2 done → **Wave 3 open** (client cache + contract changes). Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
-- **Recommended next task:** **`OPT-014`** (React Query on the client — deps: stronger after OPT-010/011 ✅✅) or **`OPT-015`** (slim event-append hot path — deps: OPT-008 ✅). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–013.)
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified (2026-07-06: 4 bugs found+fixed, see Verification log). Wave 3 underway (OPT-017 done).`
+- **Current wave:** Wave 3. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
+- **Recommended next task:** **`OPT-015`** (slim event-append hot path — deps: OPT-008 ✅, coordinate with OPT-016) — do this before OPT-016 (which depends on it). **`OPT-014`** (React Query) is independent and can go anytime. Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–013, 017.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                                   |
-| ----------- | --------------------------------------------------------------------------------------- |
-| Not Started | 12                                                                                      |
-| In Progress | 0                                                                                       |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                               |
-| Completed   | 12 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`) |
-| Deferred    | 0                                                                                       |
+| Status      | Count                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| Not Started | 11                                                                                             |
+| In Progress | 0                                                                                              |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                      |
+| Completed   | 13 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `017`) |
+| Deferred    | 0                                                                                              |
 
 ---
 
@@ -116,7 +116,7 @@ consumers and rework is minimised.
 | OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
 | OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
 | OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started  | OPT-015            |
-| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | Not Started  | —                  |
+| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
 | OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
 | OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started  | OPT-010, OPT-011   |
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started  | —                  |
@@ -218,6 +218,20 @@ blockers._
     `teams.service.js`. Backfill run on dev — 2/2 teams, zero parity mismatches;
     confirmed `getPublicTeam` serves materialised data end-to-end. 197 tests pass.
     See its card.
+- **OPT-017** — Feed hydration batching + card denormalisation. _2026-07-06._
+  Branch `dev`. **(Wave 3 begins.)** Creators batched with one `$in`
+  (`findUsersByIds`) instead of one query per post. New `cardSnapshot` field on
+  `gameCard`/`playerCard`/`teamCard` denormalises display data at creation time
+  (reusing pipeline calls that were previously discarded); reads serve the
+  snapshot directly (zero extra queries) with a compute-on-miss self-backfill
+  fallback for pre-existing posts. New `refreshGameCardPostsForGame` (the "slim
+  refresh path") wired into the existing OPT-010/012/013 game-completion
+  triggers, fixing a real staleness bug (a card shared mid-game would show a
+  frozen score forever). Verified on real dev data: byte-identical card content
+  vs. the old live compute; a fully-warm feed read dropped to **3 real data
+  queries** total. Also fixed a latent test-hygiene gap (unflushed
+  `setImmediate` callbacks) this task's new scheduler exposed. 206 tests pass.
+  See its card.
 - **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
   Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
   migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
@@ -295,6 +309,21 @@ Record every architectural / scope decision here with a date and rationale.
   trigger helper instead of a top-level import — `leagues.service.js` already
   does this for its billing-service import. Reach for this pattern whenever two
   service modules need each other.
+- **2026-07-06 — `deletePostsByGameId` left as dead code (not wired) during
+  OPT-017.** This repository function (delete a game's shared cards on game
+  deletion) pre-dates this session and has never been called from anywhere.
+  OPT-017's scope is card _staleness_ (score/name drift while the game and
+  post both still exist), not deletion cleanup — a different concern. Left
+  untouched; flag if a future task wants to wire it up.
+- **2026-07-06 — test files must flush `setImmediate` after mutating calls.**
+  `games.service.test.js` never flushed pending immediates, so the
+  OPT-010/013 post-response schedulers were firing into a torn-down Jest
+  module registry after each test — silently harmless for those two (mocked
+  as synchronous no-ops) until OPT-017's `scheduleFeedCardRefreshForGame`
+  exposed it loudly (`TypeError` on a torn-down import). Fixed with a
+  top-level `afterEach(() => new Promise(r => setImmediate(r)))`. Any new test
+  file that calls `finishGameForUser`/the event mutators/`deleteGameForUser`
+  needs the same flush — it's the pattern to copy.
 
 ## 🔎 Verification log
 
@@ -410,6 +439,11 @@ Log new collections, fields, utilities, and providers as they are introduced.
   `replaceLeaguePlayerStats` / `deleteLeaguePlayerStats` in
   `leagues.repository.js`. `recomputeLeagueAggregates` (OPT-010) extended to
   persist this alongside standings from one teams/games fetch.
+- ✅ **built (OPT-017, 2026-07-06)** `findUsersByIds` (`$in` batch) in
+  `auth.repository.js`; `cardSnapshot` field on the `gameCard`/`playerCard`/
+  `teamCard` sub-schemas in `feed.repository.js` + `updatePostCardSnapshot`/
+  `listGameCardPostsByGameId`; `buildGameCardSnapshot`/`buildPlayerCardSnapshot`/
+  `buildTeamCardSnapshot` + `refreshGameCardPostsForGame` in `feed.service.js`.
 - _(planned)_ React Query `QueryClientProvider` (OPT-014).
 
 ## 🔔 Implementation reminders
@@ -857,6 +891,46 @@ failed` lines.
 exactly; they update after finish/edit/delete on standalone one-sided games
 within a moment; dual-team standalone games are unaffected; no errors logged;
 dropping the collection degrades gracefully.
+
+---
+
+### ✅ OPT-017 — Feed hydration batching + card denormalisation (server-side)
+
+**What to test:** The feed page now resolves each post's creator with one
+batched query and serves game/player/team card content from a stored
+snapshot instead of re-running the full public pipeline on every read. Card
+content must be identical; the win is fewer DB round-trips per feed page.
+
+1. **Feed renders correctly** (regression — should be unchanged):
+   - Open the feed (`/`) and scroll through all post types — images, videos,
+     game cards, player cards, team cards, highlight clips. Names, logos,
+     scores, and stats should look right and match what you saw before this
+     task.
+2. **Existing cards self-backfill on first read:** the dev DB has real cards
+   from before this task — the first time you load the feed after this
+   change, their snapshot gets computed once and persisted; subsequent loads
+   don't re-resolve them. No visible difference, just fewer queries after the
+   first load.
+3. **New cards snapshot at creation:** post a new player or team card (via the
+   feed composer) → it should appear immediately with correct data (this
+   exercises the creation-time snapshot path, not the read-time fallback).
+4. **Stale-card refresh on game completion:**
+   - Post a game card for a game that's still **in progress**.
+   - Finish that game (or edit a completed game's events).
+   - Reload the feed → the game card's score should now reflect the finished/
+     edited game, not the stale in-progress state at share time.
+5. **No errors** in server logs while doing 3–4 — no `Feed card snapshot
+persist failed` or `Post-response feed card refresh failed` lines.
+6. **Deleted-game cards degrade gracefully:** if a game_card references a game
+   that no longer exists (deleted), that card should render as if the post
+   were skipped (same behaviour as before this task) — not an error.
+
+**Pass criteria:** All card content matches pre-change output exactly; new
+cards snapshot correctly at creation; a game card's score updates after the
+game finishes/is edited; deleted-game cards degrade the same way as before; no
+errors logged. Optional DB check: inspect `db.posts.find({type: {$in:
+['game_card','player_card','team_card']}})` — cards should accumulate a
+non-null `cardSnapshot` as they're read.
 
 ---
 
@@ -1597,7 +1671,7 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
 
 ### OPT-017 — Feed hydration batching + card denormalisation
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / feed
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend / feed
 - **Wave:** 3 · **Complexity:** M · **Dependencies:** none (pairs with OPT-014)
 - **Description:** Batch post creators with one `$in` (now, S); denormalise card
   display data (title, names, logos, score) into the Post doc at creation (M) so
@@ -1609,10 +1683,61 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
 - **Files likely to change:** `feed.service.js`, `feed.repository.js`.
 - **Testing:** query-count per feed page before/after; card content parity; stale
   card refresh path works.
-- **Validation checklist:** [ ] `$in` creator batch [ ] card data denormalised at
-  write [ ] refresh path for stale [ ] card content unchanged.
+- **Validation checklist:** [x] `$in` creator batch [x] card data denormalised at
+  write [x] refresh path for stale [x] card content unchanged.
 - **Source:** [30](./30-optimisation-roadmap.md) M3, [23](./23-api-audit.md) #3.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06
+  - **Creator batching (S):** `findUsersByIds` (`$in`) in `auth.repository.js`;
+    `listFeedPosts` resolves every post's creator with **one** query instead of
+    one `findUserById` per post. `sanitizePost` accepts an optional prefetched
+    `creator` — single-post call sites (create/delete) are unchanged.
+  - **Card denormalisation (M):** added `cardSnapshot` (Mixed) to
+    `gameCard`/`playerCard`/`teamCard` sub-schemas. Extracted pure
+    `buildGameCardSnapshot`/`buildPlayerCardSnapshot`/`buildTeamCardSnapshot`
+    builders from the old inline resolvers — same source of truth, now callable
+    from both creation and hydration.
+    - `createPlayerCardPostForUser`/`createTeamCardPostForUser` already called
+      the full public pipeline for validation and were **discarding the
+      result** — now reused to snapshot at creation (no extra query added).
+    - `createGameCardPostForUser` doesn't call the pipeline at creation (only a
+      cheap `findGameById` viewability check) — its card self-backfills on
+      first read instead, same miss-path as the others.
+    - Read path (`resolve*CardPayload`): serves `cardSnapshot` directly when
+      present (**zero extra queries**); on a miss, resolves live and persists
+      via a fire-and-forget `persistCardSnapshot` (failures logged, never
+      block the response) — self-backfilling, matches OPT-010/011/013.
+    - **Dropped `gameCard.recap`/`gameCard.participants` from the snapshot** —
+      grepped the client and confirmed neither field is rendered by any feed
+      card component; no point denormalising unused data.
+  - **Slim refresh path for stale cards:** `refreshGameCardPostsForGame(gameId)`
+    (`listGameCardPostsByGameId` + force-refresh every match) wired into
+    `games.service.js`'s existing OPT-010/012/013 trigger points
+    (`finishGameForUser`, and the 3 completed-game event mutators) via a lazy
+    `require` (avoids a cycle — `feed.service.js` already requires
+    `games.service.js` for `getPublicGame`/`canAccessGame`). Fixes a real bug
+    class: a game_card shared mid-game would otherwise show a stale score
+    forever once the game finished. **`deleteGameForUser` intentionally left
+    untouched** — the pre-existing `deletePostsByGameId` repository function is
+    dead code (never wired to any caller before this task), and wiring it is a
+    separate concern from card _staleness_ (this task's actual scope); noted,
+    not fixed.
+  - **Verified on real dev data:** feed hydration for 17 real posts produces
+    byte-identical card content to the pre-change live compute (spot-checked a
+    team card); query-count instrumentation on a fully-warm feed showed **3
+    real data queries** (`posts.find` + `users.find` + one `games.findOne` for
+    a since-deleted game's card, correctly falling through with no snapshot
+    persisted) — down from the per-post pipeline calls the old code made.
+    9/10 existing dev cards self-backfilled their snapshot on first read; the
+    10th (referencing a deleted game) correctly stayed unsnapshotted.
+  - Added 5 unit tests (creator batching, snapshot-hit, snapshot-miss +
+    self-backfill, creation-time snapshot, force-refresh). Also found and fixed
+    a **latent test-hygiene gap**: `games.service.test.js` never flushed
+    pending `setImmediate` callbacks, so the OPT-010/013 post-response
+    schedulers were firing into a torn-down Jest module registry after each
+    test finished — silently harmless for those two (their mocked functions
+    are synchronous no-ops) but this task's `scheduleFeedCardRefreshForGame`
+    exposed it loudly. Fixed with a top-level `afterEach` that flushes pending
+    immediates. Full suite: **206 passing** (was 201).
 
 ---
 

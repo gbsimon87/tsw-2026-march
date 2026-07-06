@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
 const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
+const { logger } = require('../../config/logger');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
   createGame,
@@ -195,6 +196,25 @@ function scheduleTeamSummaryRecomputeForGame(game) {
     const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
     scheduleTeamSeasonSummaryRecompute(game.teamId);
   }
+}
+
+// OPT-017: after a game's result changes, refresh any shared feed cards that
+// snapshot its score — otherwise a card posted before the game finished (or
+// edited afterwards) shows a stale score forever. Post-response, non-blocking,
+// errors logged not thrown (same shape as the other recompute schedulers).
+// Lazy require to avoid a cycle — feed.service.js requires games.service.js
+// for getPublicGame/canAccessGame.
+function scheduleFeedCardRefreshForGame(gameId) {
+  if (!gameId) return;
+  setImmediate(() => {
+    const { refreshGameCardPostsForGame } = require('../feed/feed.service');
+    refreshGameCardPostsForGame(gameId).catch((error) => {
+      logger.error(
+        { err: error, gameId: String(gameId) },
+        'Post-response feed card refresh failed'
+      );
+    });
+  });
 }
 
 function sanitizeGame(game, options = {}) {
@@ -1422,6 +1442,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     // OPT-013: editing a completed standalone game's events changes its team's
     // season summary.
     scheduleTeamSummaryRecomputeForGame(game);
+    // OPT-017: any shared feed card for this game shows a now-stale score.
+    scheduleFeedCardRefreshForGame(game._id);
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
@@ -1475,6 +1497,8 @@ async function removeEventForUser(userId, gameId, eventId) {
     // OPT-013: editing a completed standalone game's events changes its team's
     // season summary.
     scheduleTeamSummaryRecomputeForGame(game);
+    // OPT-017: any shared feed card for this game shows a now-stale score.
+    scheduleFeedCardRefreshForGame(game._id);
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
@@ -1504,6 +1528,8 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
     // OPT-013: editing a completed standalone game's events changes its team's
     // season summary.
     scheduleTeamSummaryRecomputeForGame(game);
+    // OPT-017: any shared feed card for this game shows a now-stale score.
+    scheduleFeedCardRefreshForGame(game._id);
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
@@ -1571,11 +1597,13 @@ async function finishGameForUser(userId, gameId) {
 
   await saveGame(game);
 
-  // OPT-010/013: a newly completed game changes its league's standings or its
-  // standalone team's season summary. Scheduled here (before the AI-summary
-  // branch's early returns) so it fires on every path.
+  // OPT-010/013/017: a newly completed game changes its league's standings,
+  // its standalone team's season summary, and any shared feed card's score.
+  // Scheduled here (before the AI-summary branch's early returns) so it fires
+  // on every path.
   scheduleLeagueRecomputeForGame(game);
   scheduleTeamSummaryRecomputeForGame(game);
+  scheduleFeedCardRefreshForGame(game._id);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
     const summaryLockId = randomUUID();
