@@ -603,6 +603,119 @@ describe('games service finish summaries', () => {
   });
 });
 
+describe('games service frozen box score (OPT-012)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  test('finishGameForUser freezes boxScore and gameSummary on completion', async () => {
+    const game = buildDualLeagueGame({
+      aiSummary: { text: 'Already have one.', source: 'ai', generatedAt: new Date() },
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await finishGameForUser('user-1', 'game-1');
+
+    expect(game.status).toBe('completed');
+    expect(game.boxScore).toEqual({
+      home: expect.objectContaining({ players: expect.any(Array) }),
+      away: expect.objectContaining({ players: expect.any(Array) }),
+    });
+    expect(game.gameSummary).toEqual(
+      expect.objectContaining({ homePoints: 3, awayPoints: 2, teamPoints: 3, opponentPoints: 2 })
+    );
+  });
+
+  test('getGameForUser serves the frozen boxScore/gameSummary for a completed game', async () => {
+    const frozenBoxScore = { home: { players: [], totals: {} }, away: { players: [], totals: {} } };
+    const frozenSummary = { homePoints: 99, awayPoints: 1, teamPoints: 99, opponentPoints: 1 };
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: frozenBoxScore,
+      gameSummary: frozenSummary,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      // Live events would compute a totally different score than the frozen
+      // summary above — proves the frozen data is served, not recomputed.
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
+    });
+
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(result.boxScore).toBe(frozenBoxScore);
+    expect(result.gameSummary).toBe(frozenSummary);
+  });
+
+  test('getGameForUser falls back to live compute when no frozen data exists', async () => {
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: null,
+      gameSummary: null,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE }],
+    });
+
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(result.gameSummary).toEqual(
+      expect.objectContaining({ homePoints: 3, teamPoints: 3, awayPoints: 0 })
+    );
+  });
+
+  test('appendEventForUser refreezes boxScore after editing a completed game', async () => {
+    const homePlayers = [
+      buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+      buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      buildLeagueSnapshotPlayer('home-snap-3', 'Home Three'),
+      buildLeagueSnapshotPlayer('home-snap-4', 'Home Four'),
+      buildLeagueSnapshotPlayer('home-snap-5', 'Home Five'),
+    ];
+    const awayPlayers = [
+      buildLeagueSnapshotPlayer('away-snap-1', 'Away One'),
+      buildLeagueSnapshotPlayer('away-snap-2', 'Away Two'),
+      buildLeagueSnapshotPlayer('away-snap-3', 'Away Three'),
+      buildLeagueSnapshotPlayer('away-snap-4', 'Away Four'),
+      buildLeagueSnapshotPlayer('away-snap-5', 'Away Five'),
+    ];
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: { home: { players: [], totals: { points: 0 } }, away: { players: [], totals: {} } },
+      gameSummary: { homePoints: 0, awayPoints: 0, teamPoints: 0, opponentPoints: 0 },
+      homeRosterSnapshot: homePlayers,
+      awayRosterSnapshot: awayPlayers,
+      homeCurrentLineupPlayerIds: homePlayers.map((player) => player._id),
+      awayCurrentLineupPlayerIds: awayPlayers.map((player) => player._id),
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    canEditCompletedLeagueGame.mockResolvedValue(true);
+
+    await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG3_MADE,
+    });
+
+    // The stale frozen summary (all zeroes) must have been refreshed.
+    expect(game.gameSummary.homePoints).toBe(3);
+  });
+});
+
 describe('games service lineups', () => {
   beforeEach(() => {
     jest.clearAllMocks();

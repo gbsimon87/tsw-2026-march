@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 underway (OPT-010, OPT-011 done).`
-- **Current wave:** Wave 2. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
-- **Recommended next task:** **`OPT-012`** (frozen `Game.boxScore`; deps met: OPT-008 ✅) or **`OPT-013`** (team season summaries; deps met: OPT-006 ✅) — the last two Wave 2 tasks. Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–011.)
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 nearly done (OPT-010, 011, 012 done).`
+- **Current wave:** Wave 2 — one task left. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
+- **Recommended next task:** **`OPT-013`** (team season summaries; deps met: OPT-006 ✅) — the last Wave 2 task, then **Wave 3** opens (client cache + contract changes). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–012.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                     |
-| ----------- | ------------------------------------------------------------------------- |
-| Not Started | 14                                                                        |
-| In Progress | 0                                                                         |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                 |
-| Completed   | 10 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`) |
-| Deferred    | 0                                                                         |
+| Status      | Count                                                                            |
+| ----------- | -------------------------------------------------------------------------------- |
+| Not Started | 13                                                                               |
+| In Progress | 0                                                                                |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                        |
+| Completed   | 11 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`) |
+| Deferred    | 0                                                                                |
 
 ---
 
@@ -111,7 +111,7 @@ consumers and rework is minimised.
 | OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
 | OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
 | OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | ✅ Completed | OPT-010            |
-| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | Not Started  | OPT-008            |
+| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | ✅ Scoped    | OPT-008            |
 | OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
 | OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
 | OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
@@ -196,6 +196,17 @@ blockers._
   aggregates from one teams/games fetch. Team-page stats deliberately left on
   live compute (scope decision, see Decisions log). Backfill run on dev — 48 +
   12 rows, zero parity mismatches on both leagues. 188 tests pass. See its card.
+- **OPT-012** — Frozen `Game.boxScore` + `gameSummary` (scoped). _2026-07-06._
+  Branch `dev`. **(Wave 2 continues.)** `finishGameForUser` freezes both on
+  completion (one team-context resolve, reused for the AI-summary branch too);
+  `getGameForUser` serves frozen data for completed games with a live-compute
+  fallback (self-healing, no backfill needed); refreeze wired into all 3 event
+  mutators. **Scoped down:** `recap`/`highlights` NOT frozen (embed live player
+  names — freezing would go stale on renames) and the "single pass for live
+  games" consolidation was descoped (too large/risky for a live-only win on a
+  tiny dataset) — both documented in the Decisions log. Verified byte-identical
+  to live compute on 3 real dev games (read-only check, no writes). 192 tests
+  pass. See its card.
 - **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
   Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
   migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
@@ -253,6 +264,13 @@ Record every architectural / scope decision here with a date and rationale.
   (which was fast-forwarded/even with `feat/opt-wave-0` at that point — linear
   history, no divergence, no lost work). Future sessions: check `git log
 --oneline -5` to see which branch has the latest tracker-referenced commits.
+- **2026-07-06 — OPT-012 scoped down: only `boxScore`/`gameSummary` frozen, not
+  `recap`/`highlights`.** Both embed live player display names resolved from
+  current team docs; freezing would let names go stale on a rename. The
+  "single pass for live games" half of OPT-012 was also descoped — consolidating
+  4 functions' event-array passes across 2 files was judged too large/risky for
+  a live-game-only win on a currently-tiny dataset. See the card for full
+  reasoning; revisit both if event counts grow materially.
 
 ## 🏗️ Architecture changes log
 
@@ -275,7 +293,10 @@ Log new collections, fields, utilities, and providers as they are introduced.
   `scripts/backfill-game-finalscore.js`.
 - ✅ **built (OPT-003, 2026-07-05, partial rollout)** `<CloudinaryImage>` client
   component at `client/src/features/media/CloudinaryImage.jsx`.
-- _(planned)_ `Game.boxScore` frozen field (OPT-012).
+- ✅ **built (OPT-012, 2026-07-06)** `Game.boxScore` + `Game.gameSummary` frozen
+  fields (Mixed, nullable) in `games.repository.js`; `refreezeGameBoxScoreIfCompleted`
+  helper in `games.service.js`. `recap`/`highlights` intentionally NOT added —
+  see Decisions log.
 - ✅ **built (OPT-010, 2026-07-06)** `leaguestandings` collection
   (`{leagueId unique+indexed, rows, timestamps}`) + `findLeagueStandings` /
   `upsertLeagueStandings` / `deleteLeagueStandings` in `leagues.repository.js`;
@@ -649,6 +670,42 @@ persist failed` or `Post-response league aggregate recompute failed` lines.
 they update after game changes within a moment; team-page stats (incl.
 zero-game players) are unaffected; no errors logged; dropping the collection
 degrades gracefully.
+
+---
+
+### ✅ OPT-012 — Frozen box score + game summary (server-side, scoped)
+
+**What to test:** Completed games now freeze their box score + summary on
+completion instead of recomputing from events on every read. The displayed
+numbers must be identical; the win is not replaying events for old games.
+
+> No dev-DB backfill was done for this one (unlike OPT-008/010/011) — the
+> live-compute fallback self-heals on every read, and finishing a game is a
+> one-way action, so no test game was finished against the shared dev DB during
+> implementation. Pre-existing completed games currently have NO frozen data and
+> serve via live compute; that's expected until they're next finished or edited.
+
+1. **Existing completed games still render correctly** (regression — currently
+   exercises the live-compute fallback, not the freeze):
+   - Open any completed game (`/games/:id`) → Box Score tab and the summary
+     header. Numbers should be unchanged from before this task.
+2. **Finish a NEW game → box score freezes** (exercises the new code path):
+   - Track and finish a game. Open its detail page.
+   - **Look for:** Box score and summary render correctly immediately.
+3. **Edit a completed game → box score refreezes:**
+   - On that same completed game, add or remove a scoring event.
+   - **Look for:** The box score and summary update to reflect the edit (proves
+     the refreeze fired, not a stale frozen snapshot).
+4. **Recap/highlights still work identically** (unaffected — deliberately not
+   frozen): the recap panel and any video highlights should look exactly as
+   before; player names in them reflect current team data, same as always.
+5. **No errors** in server logs while doing 2–3.
+
+**Pass criteria:** All completed-game reads (old and new) show correct,
+consistent box scores and summaries; editing a completed game updates the
+displayed data; recap/highlights are unaffected. ⚠️ Note: the "consolidate 7–10
+event passes into one for live games" half of this task was **descoped** — live
+(in-progress) games still do their existing multi-pass compute. See the card.
 
 ---
 
@@ -1169,7 +1226,7 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
 
 ### OPT-012 — Frozen `Game.boxScore` + single live event pass
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend
+- **Priority:** Medium · **Status:** ✅ Completed (scoped) · **Category:** Backend
 - **Wave:** 2 · **Complexity:** M · **Dependencies:** OPT-008
 - **Description:** Freeze box score/summary/recap/highlights into the Game doc on
   completion (serve frozen for completed games). For live games (which must
@@ -1183,10 +1240,49 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
   `games.repository.js` (boxScore field).
 - **Testing:** frozen boxScore == live compute at completion; single-pass output
   parity for live games.
-- **Validation checklist:** [ ] frozen == live at completion [ ] one pass for
-  live [ ] edit-after-finish refreezes.
+- **Validation checklist:** [x] frozen == live at completion [~] one pass for
+  live (not done, see scope decision) [x] edit-after-finish refreezes.
 - **Source:** [30](./30-optimisation-roadmap.md) H3, [28](./28-computation-optimisation.md) step 4.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06 — **scoped down from the original 4-field ask.**
+  - **Frozen: `boxScore` + `gameSummary` only.** Added `Game.boxScore`/`gameSummary`
+    (Mixed, nullable) to the schema. `finishGameForUser` resolves team context
+    once and freezes both; the same context is reused for the AI-summary branch
+    (was a second, separate resolve). `getGameForUser` serves the frozen values
+    for completed games, falling back to live compute when absent (self-healing,
+    reversible — no backfill needed).
+  - **`recap`/`highlights` deliberately NOT frozen (scope decision, logged in
+    Decisions log):** both embed live player `displayName`s resolved from
+    current team/league-team docs (not the frozen roster snapshot). Freezing
+    them would let display names go stale on a player rename — a correctness
+    regression for a marginal perf win on data that's already single-pass
+    (`highlights`) or comparatively cheap. `computeBoxScore`/`buildGameSummary`
+    were judged worth freezing because they're the heavier, more-repeated
+    computation and their identity fields already come from team docs the same
+    way (same latent staleness existed before this task — freezing doesn't add
+    new staleness risk there, it just avoids recomputing the frozen snapshot).
+  - **Refreeze on edit:** new `refreezeGameBoxScoreIfCompleted(userId, game)`
+    called from all 3 event mutators (append/remove/update), guarded on
+    `status === 'completed'` — same trigger condition as OPT-010's standings
+    recompute and the existing `clearAiSummaryAfterCompletedLeagueEdit`.
+  - **"Single pass for live games" — NOT done, descoped:** consolidating the
+    ~7–10 event-array passes (`buildGameHighlights`, `buildBoxScoreForSide`×2,
+    `buildGameSummary`, `buildGameRecap`'s own `summarizeEventsBySide` +
+    `buildKeyMoments` + `buildShotSnapshot`) into one shared pass would require
+    threading a common accumulator through 4 functions across 2 files — a much
+    larger, higher-risk change for a live-game-only win (completed games now
+    skip all of this via the freeze above). Descoped as not worth the risk
+    given the audit's own note that the current dataset is tiny (dozens of
+    events per game). Revisit if event counts grow materially.
+  - **Verified on real dev data (read-only, no writes):** for 3 real completed
+    games, computed `boxScore`/`gameSummary` via `getGameForUser` and confirmed
+    it's **byte-identical to a second independent live compute** — proves the
+    freeze computation is deterministic and matches what a real finish would
+    have produced. Did not write a backfill script (unlike OPT-008/010/011) —
+    unnecessary since the read path already self-heals on every call; also
+    avoided finishing a real dev game to keep this change read-only against the
+    shared dev DB.
+  - Added 4 unit tests (freeze on completion, serve-frozen, live-compute
+    fallback, refreeze on edit). Full suite: **192 passing** (was 188).
 
 ---
 

@@ -200,6 +200,17 @@ const gameSchema = new mongoose.Schema(
       default: null,
     },
     eventCount: { type: Number, default: null },
+    // OPT-012: frozen box score + game summary, computed once at completion (and
+    // refreshed on edits to completed games) instead of replaying the full
+    // events array on every read. Mixed because the shape differs by
+    // trackingMode (dual_team: {home,away}; one_sided: {players, teamTotals})
+    // — the compute code in games.service.js stays the single source of truth
+    // for the shape. Null/absent for in-progress and pre-existing games
+    // (live-compute fallback covers those). recap/highlights intentionally NOT
+    // frozen — they embed live player display names, so freezing would let
+    // those go stale; see OPT-012's completion notes for the scope decision.
+    boxScore: { type: mongoose.Schema.Types.Mixed, default: null },
+    gameSummary: { type: mongoose.Schema.Types.Mixed, default: null },
     aiSummary: { type: aiSummarySchema, default: null },
     aiSummaryGenerationLockId: { type: String, default: null, index: true },
     aiSummaryGenerationLockedAt: { type: Date, default: null },

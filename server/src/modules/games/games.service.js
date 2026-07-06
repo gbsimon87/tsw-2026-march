@@ -391,6 +391,21 @@ function syncGameDenormalizedAfterEventChange(game) {
   }
 }
 
+// OPT-012: refreeze boxScore + gameSummary after an edit to an already-completed
+// game. Requires resolving team context (async), so this is a separate step
+// from the sync helpers above — call it after the edit's own save. Only
+// touches the fields it owns; the caller is responsible for saving.
+async function refreezeGameBoxScoreIfCompleted(userId, game) {
+  if (game.status !== 'completed') return;
+  const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
+  game.boxScore =
+    game.trackingMode === 'dual_team'
+      ? computeBoxScore(game, null, { participants })
+      : computeBoxScore(game, teamDoc);
+  game.gameSummary = buildGameSummary(game);
+  await saveGame(game);
+}
+
 function buildBoxScoreForSide(game, team, side) {
   const basePlayers = getTeamPlayers(team, { includeInactivePlayers: true });
   const map = new Map(
@@ -1042,11 +1057,18 @@ async function getGameForUser(userId, gameId) {
     userId,
     game
   );
+  // OPT-012: serve the frozen box score/summary for completed games instead of
+  // replaying the events array on every read. Falls back to live compute when
+  // absent (in-progress games, or completed games from before this field
+  // existed — reversible, self-correcting on the next finish/edit).
   const boxScore =
-    game.trackingMode === 'dual_team'
-      ? computeBoxScore(game, null, { participants })
-      : computeBoxScore(game, teamDoc);
-  const gameSummary = buildGameSummary(game);
+    game.status === 'completed' && game.boxScore
+      ? game.boxScore
+      : game.trackingMode === 'dual_team'
+        ? computeBoxScore(game, null, { participants })
+        : computeBoxScore(game, teamDoc);
+  const gameSummary =
+    game.status === 'completed' && game.gameSummary ? game.gameSummary : buildGameSummary(game);
   const canEditCompleted = game.status === 'completed' ? Boolean(userId) : false;
 
   // Fetch fresh logos for dual-team games so uploads after game creation are reflected
@@ -1299,8 +1321,12 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     clearAiSummaryAfterCompletedLeagueEdit(game);
     syncGameDenormalizedAfterEventChange(game);
     await saveGame(game);
-    // OPT-010: editing a completed league game's events changes standings.
-    if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
+    if (game.status === 'completed') {
+      // OPT-010: editing a completed league game's events changes standings.
+      scheduleLeagueRecomputeForGame(game);
+      // OPT-012: refreeze the box score/summary to match the edited events.
+      await refreezeGameBoxScoreIfCompleted(userId, game);
+    }
     return getGameForUser(userId, gameId);
   }
 
@@ -1373,8 +1399,12 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
-  // OPT-010: editing a completed league game's events changes standings.
-  if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
+  if (game.status === 'completed') {
+    // OPT-010: editing a completed league game's events changes standings.
+    scheduleLeagueRecomputeForGame(game);
+    // OPT-012: refreeze the box score/summary to match the edited events.
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
   return getGameForUser(userId, gameId);
 }
 
@@ -1419,8 +1449,12 @@ async function removeEventForUser(userId, gameId, eventId) {
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
-  // OPT-010: editing a completed league game's events changes standings.
-  if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
+  if (game.status === 'completed') {
+    // OPT-010: editing a completed league game's events changes standings.
+    scheduleLeagueRecomputeForGame(game);
+    // OPT-012: refreeze the box score/summary to match the edited events.
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
   return getGameForUser(userId, gameId);
 }
 
@@ -1441,8 +1475,12 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
   await saveGame(game);
-  // OPT-010: editing a completed league game's events changes standings.
-  if (game.status === 'completed') scheduleLeagueRecomputeForGame(game);
+  if (game.status === 'completed') {
+    // OPT-010: editing a completed league game's events changes standings.
+    scheduleLeagueRecomputeForGame(game);
+    // OPT-012: refreeze the box score/summary to match the edited events.
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
   return getGameForUser(userId, gameId);
 }
 
@@ -1486,6 +1524,17 @@ async function finishGameForUser(userId, gameId) {
   // OPT-008: freeze the final score + event count on completion.
   syncGameFinalScore(game);
   syncGameEventCount(game);
+
+  // OPT-012: freeze box score + game summary on completion (one team-context
+  // resolve, reused below for the AI summary too if this is a league game).
+  const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
+  const boxScore =
+    game.trackingMode === 'dual_team'
+      ? computeBoxScore(game, null, { participants })
+      : computeBoxScore(game, teamDoc);
+  game.boxScore = boxScore;
+  game.gameSummary = buildGameSummary(game);
+
   await saveGame(game);
 
   // OPT-010: a newly completed league game changes standings. Scheduled here
@@ -1499,11 +1548,6 @@ async function finishGameForUser(userId, gameId) {
       return getGameForUser(userId, gameId);
     }
 
-    const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
-    const boxScore =
-      game.trackingMode === 'dual_team'
-        ? computeBoxScore(game, null, { participants })
-        : computeBoxScore(game, teamDoc);
     const recap = buildGameRecap(
       game,
       game.trackingMode === 'dual_team' ? participants : teamDoc,
