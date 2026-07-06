@@ -197,4 +197,56 @@ describe('public teams routes', () => {
 
     expect(response.statusCode).toBe(401);
   });
+
+  // OPT-019: anonymous public GETs are cacheable; authed requests must not be.
+  test('sets public Cache-Control on an anonymous public GET', async () => {
+    teamsService.listPublicExploreGames.mockResolvedValue([]);
+
+    const app = createApp();
+    const response = await request(app).get('/api/v1/public/teams/explore');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe(
+      'public, max-age=30, stale-while-revalidate=300'
+    );
+    expect(response.headers.vary).toContain('Cookie');
+  });
+
+  // OPT-019 security: a cacheable anonymous response must carry NO Set-Cookie,
+  // otherwise a shared cache could store and replay one visitor's CSRF token.
+  test('does not emit any Set-Cookie on a cacheable anonymous public GET', async () => {
+    teamsService.listPublicExploreGames.mockResolvedValue([]);
+
+    const app = createApp();
+    const response = await request(app).get('/api/v1/public/teams/explore');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+
+  // A visitor who already holds a CSRF secret still gets normal handling (the
+  // skip only applies to first-touch fully-anonymous requests).
+  test('still refreshes the CSRF token when a _csrfSecret cookie is already present', async () => {
+    teamsService.listPublicExploreGames.mockResolvedValue([]);
+
+    const app = createApp();
+    const response = await request(app)
+      .get('/api/v1/public/teams/explore')
+      .set('Cookie', '_csrfSecret=existing-secret');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-csrf-token']).toBeTruthy();
+  });
+
+  test('does not publicly cache a public GET carrying an access-token cookie', async () => {
+    teamsService.listPublicExploreGames.mockResolvedValue([]);
+
+    const app = createApp();
+    const response = await request(app)
+      .get('/api/v1/public/teams/explore')
+      .set('Cookie', 'accessToken=some-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-cache');
+  });
 });

@@ -46,22 +46,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified (2026-07-06: 4 bugs found+fixed, see Verification log). Wave 3 done — all 4 tasks complete (OPT-014, OPT-015, OPT-016 scoped, OPT-017 done). Wave 4 not started.`
-- **Current wave:** Wave 3 complete. Wave 4 (broaden caching/pagination) is next. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
-- **Recommended next task:** Wave 4 — **`OPT-019`** (HTTP `Cache-Control` on anonymous public GETs) is a good next pick: dep on OPT-010/011 (done), independent of the other Wave 4 items. ⚠️ Two open scope gaps carried forward from Wave 3, both need real browser verification before a future session should close them further: **`OPT-016`** (GameTrackPage panel extraction/optimistic updates) and **`OPT-014`** (~20 pages not yet migrated to React Query, notably `GameTrackPage` itself — see its card for the "OPT-014b" follow-up list). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–017.) 🛑 **Nothing from this session is committed yet — see standing instruction at the top of this file.**
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified. Wave 3 done (OPT-014/015/016 scoped, 017 done). Wave 4 underway — OPT-019 done.`
+- **Current wave:** Wave 4 (broaden caching/pagination) — OPT-019 done; OPT-018, OPT-020, OPT-021 remain. Branch `dev`.
+- **Recommended next task:** **`OPT-020`** (move blocking integrations off the request path — AI summary lock TTL, async Resend, atomic webhook idempotency): backend, self-contained, no browser needed, and it fixes a real correctness risk (non-atomic webhook idempotency). Then **`OPT-018`** (pagination). ⚠️ Two open scope gaps from Wave 3 need real browser verification before closing: **`OPT-016`** (GameTrackPage decomposition) and **`OPT-014`** (~20 pages not yet migrated; "OPT-014b" follow-up). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–017, 019.) 🛑 **OPT-019 not committed yet — see standing instruction at the top of this file.**
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                                                               |
-| ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| Not Started | 8                                                                                                                   |
-| In Progress | 0                                                                                                                   |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                           |
-| Completed   | 16 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`) |
-| Deferred    | 0                                                                                                                   |
+| Status      | Count                                                                                                                      |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Not Started | 7                                                                                                                          |
+| In Progress | 0                                                                                                                          |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                  |
+| Completed   | 17 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `019`) |
+| Deferred    | 0                                                                                                                          |
 
 ---
 
@@ -126,7 +126,7 @@ consumers and rework is minimised.
 | OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | ✅ Scoped    | OPT-015            |
 | OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
 | OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
-| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | Not Started  | OPT-010, OPT-011   |
+| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started  | —                  |
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
@@ -141,6 +141,19 @@ blockers._
 
 ## ✅ Completed
 
+- **OPT-019** — HTTP caching for anonymous public GETs. _2026-07-06._ Branch
+  `dev` (uncommitted — standing instruction). New `publicCache.middleware.js`
+  sets `Cache-Control: public, max-age=30, stale-while-revalidate=300` +
+  `Vary: Cookie, Authorization` on anonymous GET/HEAD to the 3 public routers
+  and the one anon-readable game route; `private, no-cache` when any auth
+  token (cookie or Bearer) is present — load-bearing, since league public-
+  player and public game detail personalise on `req.auth`. Express weak ETags
+  give anon conditional revalidation for free. **Security fix found in
+  passing:** the global CSRF middleware stamped a `Set-Cookie` on every
+  response including these cacheable ones (a shared cache could replay one
+  visitor's CSRF token); `attachCsrfToken` now skips emission on first-touch
+  anonymous cacheable requests. 6 unit + 4 integration assertions;
+  27 suites / 222 server tests pass; lint clean. See card + Decisions log.
 - **OPT-001** — Route-level code splitting + chunking. _2026-07-05._ Branch
   `feat/opt-wave-0`. Every route now lazy-loads as its own chunk; recharts,
   posthog-js and stripe-js are isolated `manualChunks`; PostHog init deferred
@@ -317,6 +330,18 @@ _None yet._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-06 — OPT-019: CSRF token not emitted on anonymous cacheable GETs.**
+  Making public GETs cacheable exposed that the global `attachCsrfToken`
+  stamps a `Set-Cookie` on every response — unsafe for a shared cache to
+  store (it could replay one visitor's CSRF token to all). User was asked
+  how to resolve and chose **"most secure without breaking anything."** We
+  skip CSRF token emission for first-touch anonymous cacheable requests
+  (rather than stripping `Set-Cookie` in the cache layer, which is surprising,
+  or leaving it and only browser-caching). Safe because CSRF tokens are only
+  verified on non-safe methods (never anonymous-safe), the client refreshes
+  its token from the next non-public response header, and the Origin-header
+  fallback still guards cross-site mutations. Guarded by `!req.cookies._csrfSecret`
+  so returning users with existing CSRF state are unaffected.
 - **2026-07-04 — Redis deferred.** No Redis until one of: multi-instance rate
   limiting, a job queue, or cross-instance cache coherence becomes real. DB
   materialisation + React Query + HTTP caching cover current needs
@@ -581,6 +606,11 @@ Log new collections, fields, utilities, and providers as they are introduced.
   shared `usePublicLeague(leagueSlug)` hook in
   `client/src/features/leagues/hooks/usePublicLeague.js`. **Scoped** — see
   OPT-014's card for the ~20-page remaining-migration list.
+- ✅ **built (OPT-019, 2026-07-06)** `server/src/middleware/publicCache.middleware.js`
+  (`publicCacheMiddleware` + `isPubliclyCacheableRequest` predicate). Applied
+  in `routes/index.js` (3 public routers) and `games.routes.js` (public game
+  detail). `csrf.middleware.js` now imports the predicate to skip CSRF
+  `Set-Cookie` on anonymous cacheable responses.
 
 ## 🔔 Implementation reminders
 
@@ -1195,6 +1225,40 @@ zero behavioral change.
 public pages) were **not** migrated — see the OPT-014 card for the full list
 and reasons. Nothing in this task has been committed yet; it's still in the
 working tree pending your manual testing and go-ahead.
+
+---
+
+### ✅ OPT-019 — HTTP caching for anonymous public GETs (backend)
+
+**What to test:** Cache headers on public API responses, verified in DevTools
+Network tab (or `curl -I`). This is a backend header change — there should be
+**no visible UI difference**; the payoff is browsers/CDNs revalidating instead
+of refetching public data.
+
+1. **Anonymous public GET is cacheable.** While **logged out**, load a public
+   league or team page and inspect the API response (e.g.
+   `GET /api/v1/public/teams/explore`, `/api/v1/public/leagues/:slug`). The
+   response should carry `Cache-Control: public, max-age=30,
+stale-while-revalidate=300` and `Vary: Cookie, Authorization`.
+2. **No CSRF cookie on those responses (security).** On that same anonymous
+   public GET, confirm there is **no `Set-Cookie` header** for `XSRF-TOKEN` /
+   `_csrfSecret`. (You can still use the site normally — the token gets set on
+   your next non-public request like login.)
+3. **Authed requests are NOT publicly cached.** While **logged in**, hit the
+   same public endpoint (or the public game detail `GET /api/v1/games/:id`) —
+   the response should now say `Cache-Control: private, no-cache`, not
+   `public`.
+4. **Mutations still work (CSRF not broken).** Log in and perform any
+   state-changing action (create/edit a team, post to the feed, start/finish a
+   game). These must still succeed — confirming the CSRF-cookie skip didn't
+   break the token handshake.
+5. **Completed game detail revalidates.** Load a completed game's public detail
+   twice while logged out; the second request may come back `304 Not Modified`
+   (weak ETag) — data unchanged, no re-download.
+
+**Pass criteria:** public headers present only when anonymous; `private,
+no-cache` when authed; no `Set-Cookie` on cacheable anon responses; all
+mutations still work; no UI change anywhere.
 
 ---
 
@@ -2253,7 +2317,7 @@ again.")` — a clear, retryable conflict instead of the previous silent
 
 ### OPT-019 — HTTP caching for anonymous public GETs
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / caching
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend / caching
 - **Wave:** 4 · **Complexity:** S · **Dependencies:** OPT-010, OPT-011
 - **Description:** Add `Cache-Control: public, max-age=30,
 stale-while-revalidate=300` on the public routers (which never personalise);
@@ -2265,10 +2329,55 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 - **Files likely to change:** public routers / a small caching middleware.
 - **Testing:** headers present on public GETs, absent when authed; cached content
   is post-materialisation (correct).
-- **Validation checklist:** [ ] headers on public routes only [ ] no caching of
-  authed responses [ ] ETag on completed game detail.
+- **Validation checklist:** [x] headers on public routes only [x] no caching of
+  authed responses [x] ETag on completed game detail (Express weak ETags,
+  active — verified not disabled) [x] **security:** no `Set-Cookie` on
+  cacheable anonymous responses (CSRF interaction found + fixed).
 - **Source:** [30](./30-optimisation-roadmap.md) M8, [27](./27-caching-opportunities.md).
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06
+  - **New `publicCache.middleware.js`** — sets
+    `Cache-Control: public, max-age=30, stale-while-revalidate=300` +
+    `Vary: Cookie, Authorization` on **anonymous** safe-method (GET/HEAD)
+    requests, and `private, no-cache` otherwise. `hasAuthToken` checks both
+    the `accessToken` cookie and a `Bearer` header. Applied on the 3 public
+    routers (`/public/opponents`, `/public/leagues`, `/public/teams`) in
+    `routes/index.js`, plus the one anonymously-readable game route
+    (`GET /games/:gameId`, which runs `optionalAuthMiddleware`) in
+    `games.routes.js`.
+  - **Why "only when anonymous" is load-bearing, not cosmetic:** two public
+    handlers genuinely personalise on `req.auth` — league public-player
+    (`getPublicPlayer` passes `req.auth?.userId`) and the public game detail
+    (`getPublicGame` → `canEditCompletedGame`/owner fields). `publicLeagues`
+    even mounts `optionalAuthMiddleware` router-wide. So a blanket
+    `public` cache would have let a shared cache serve one signed-in
+    viewer's personalised body to everyone. The middleware emits public
+    headers **only** when no auth token is present.
+  - **ETag:** Express's default weak ETags on JSON are active (confirmed not
+    disabled in `app.js`), giving anonymous viewers conditional revalidation
+    on completed-game detail for free — no custom ETag code needed.
+  - **🔒 Security fix found during implementation — CSRF `Set-Cookie` vs
+    shared caches.** `attachCsrfToken` runs globally and stamped a fresh
+    `XSRF-TOKEN` `Set-Cookie` on **every** response, including the now-
+    cacheable anonymous public GETs. A shared/CDN cache storing a response
+    with `Set-Cookie` could replay one visitor's CSRF token to every
+    subsequent visitor (and many CDNs refuse to cache `Set-Cookie`
+    responses at all, silently killing the benefit). **Fix:**
+    `attachCsrfToken` now skips token emission for a first-touch anonymous
+    cacheable request (shared `isPubliclyCacheableRequest` predicate, and
+    only when no `_csrfSecret` cookie already exists). Safe because a CSRF
+    token is only ever _verified_ on non-safe methods (never anonymous-safe),
+    and the client refreshes its token from the `x-csrf-token` response
+    header of its next non-public request (login/me/etc.); the Origin-header
+    fallback in `csrfProtection` still covers cross-site mutations.
+    (User was consulted on the approach and chose "most secure without
+    breaking anything" — see Decisions log.)
+  - **Tests:** `publicCache.middleware.test.js` (6 unit tests — all branches:
+    anon GET/HEAD cache, cookie/Bearer skip, POST skip, non-Bearer-auth
+    treated anon); integration assertions added to `public-teams.test.js`
+    (public header present on anon; `private, no-cache` when cookied; **no
+    `Set-Cookie` on cacheable anon**; CSRF still refreshed when `_csrfSecret`
+    already present). Full server suite **27 suites / 222 tests pass**; lint
+    clean. Not committed (per standing instruction).
 
 ---
 

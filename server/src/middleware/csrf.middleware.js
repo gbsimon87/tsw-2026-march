@@ -2,6 +2,7 @@ const Tokens = require('csrf');
 const { csrfSecretCookieOptions, csrfTokenCookieOptions } = require('../config/cookie');
 const { ApiError } = require('../utils/apiError');
 const { env } = require('../config/env');
+const { isPubliclyCacheableRequest } = require('./publicCache.middleware');
 
 const tokens = new Tokens();
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -19,6 +20,20 @@ function getOrCreateSecret(req, res) {
 }
 
 function attachCsrfToken(req, res, next) {
+  // OPT-019: an anonymous safe-method request may be served from a shared
+  // cache. Emitting a per-request CSRF Set-Cookie on such a response would let
+  // a CDN cache and replay one visitor's token to everyone — and a CSRF token
+  // is only ever *needed* on a state-changing (non-safe) request, which is
+  // never anonymous-safe. So we skip token emission entirely here. The client
+  // refreshes its token from the response header of its next non-public
+  // request (login/me/etc.), and the Origin-header fallback in csrfProtection
+  // still covers cross-site mutations. This keeps public GETs Set-Cookie-free
+  // and therefore genuinely CDN-cacheable.
+  if (isPubliclyCacheableRequest(req) && !req.cookies._csrfSecret) {
+    next();
+    return;
+  }
+
   const secret = getOrCreateSecret(req, res);
   const token = tokens.create(secret);
   res.cookie('XSRF-TOKEN', token, csrfTokenCookieOptions());
