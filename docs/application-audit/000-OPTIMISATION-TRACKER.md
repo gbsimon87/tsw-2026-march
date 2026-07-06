@@ -546,36 +546,46 @@ migration, out of scope) — see the card.
 collection instead of being recomputed from all games+events on every read. The
 numbers must be identical; recomputes fire automatically after game/team changes.
 
-> The dev DB was backfilled during implementation. To test the recompute
+> The dev DB was backfilled during implementation (both dev leagues — **We Ball
+> Saturday** and **Dev Test League** — were verified with **zero parity
+> mismatches** between materialised and live compute). To test the recompute
 > triggers, change a game/team and confirm standings update within ~a second.
 
-1. **Standings render correctly** (materialised read):
-   - `/league/:slug/standings` and the standings block on `/league/:slug` — W-L,
-     PF, PA, +/- and ordering look right.
-2. **Finish a game → standings update:**
-   - Track + finish a league game. Reload the standings shortly after.
+1. **Standings render correctly** (materialised read — regression check, should
+   be unchanged from before this task):
+   - `/league/:slug/standings` for **We Ball Saturday** and **Dev Test League**
+     — W-L, PF, PA, +/- and ordering look right.
+   - The standings block on the league overview page `/league/:slug`.
+   - A specific team page `/league/:slug/team/:teamSlug` — its rank/record is
+     consistent with the standings page.
+2. **Finish a game → standings update** (exercises a new code path):
+   - Track + finish a new league game. Reload the standings shortly after.
    - **Look for:** The teams' records/points reflect the new result (the
      post-response recompute persisted fresh rows).
-3. **Edit a completed game → standings update:**
+3. **Edit a completed game → standings update** (new code path):
    - Add/remove a scoring event on a completed league game; reload standings →
      they reflect the change.
-4. **Delete a completed game → standings update:**
+4. **Delete a completed game → standings update** (new code path):
    - Delete a completed league game; reload standings → that game no longer
      counts.
-5. **Rename / add / archive a team → standings update:**
+5. **Rename / add / archive a team → standings update** (new code path):
    - Rename a league team → its name updates in the standings row.
    - Add a team → a new zeroed row appears; archive → row set changes.
-6. **Compute-on-miss fallback (reversible):** If the `leaguestandings` collection
+6. **No errors:** while doing 2–5, watch the browser console AND the `pnpm dev`
+   server logs — no client errors, and no `Cloudinary destroy failed` /
+   `Post-response league aggregate recompute failed` log lines.
+7. **Compute-on-miss fallback (reversible):** If the `leaguestandings` collection
    is ever empty/dropped, standings still render correctly (computed live and
    re-persisted on first read). Optional DB check:
    `node src/scripts/backfill-league-standings.js --dry-run` (with `ENV_FILE`)
    prints each league's standings and flags any parity mismatch.
 
-**Pass criteria:** Standings match the previous live-computed values exactly;
-every write trigger (finish/edit/delete game, create/rename/archive team) results
-in updated standings within a moment; dropping the collection degrades gracefully
-to live compute. Recompute never blocks the triggering request (fires after the
-response).
+**Pass criteria:** Standings match the previous live-computed values exactly
+(steps 1 — regression); every write trigger (finish/edit/delete game,
+create/rename/archive team) results in updated standings within a moment (steps
+2–5 — new behaviour); no errors logged anywhere (step 6); dropping the
+collection degrades gracefully to live compute (step 7). Recompute never blocks
+the triggering request (fires after the response).
 
 ---
 
