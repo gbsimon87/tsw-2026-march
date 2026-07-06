@@ -38,7 +38,7 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 COMPLETE.`
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified (2026-07-06: 4 bugs found+fixed, see Verification log).`
 - **Current wave:** Wave 2 done → **Wave 3 open** (client cache + contract changes). Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
 - **Recommended next task:** **`OPT-014`** (React Query on the client — deps: stronger after OPT-010/011 ✅✅) or **`OPT-015`** (slim event-append hot path — deps: OPT-008 ✅). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–013.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
@@ -295,6 +295,75 @@ Record every architectural / scope decision here with a date and rationale.
   trigger helper instead of a top-level import — `leagues.service.js` already
   does this for its billing-service import. Reach for this pattern whenever two
   service modules need each other.
+
+## 🔎 Verification log
+
+Post-completion adversarial verification passes. Each entry lists what was
+audited, what was found, and what was corrected.
+
+### 2026-07-06 — Waves 1–2 full verification (OPT-008, 009, 010, 011, 012, 013)
+
+Method: adversarial re-review of every Wave 1/2 change — hunting the riskiest
+seams (type mismatches on materialised reads, async-readiness assumptions,
+missing recompute triggers, concurrency races) — verified against **real dev
+data**, not just mocks. Result: **4 real bugs found and fixed, 1 limitation
+documented, 2 tasks fully clean.** All fixes have regression tests; suite went
+197 → **201 passing**. All parity/backfill checks re-run clean afterwards.
+
+- **✅ OPT-008 — clean, live-confirmed.** Backfill re-run scanned 20 games
+  (2 more than at implementation time — the user finished 2 games via the UI
+  in between) and updated 0: the write hooks populated `finalScore`/`eventCount`
+  correctly for the live-finished games. Idempotency re-confirmed.
+- **🐛 OPT-011 — HIGH: leaders lost identity fields on the materialised path.**
+  `listLeaguePlayerStats` returns `.lean()` docs whose `leagueTeamId`/
+  `leaguePlayerId` are **ObjectIds**, but `getPublicLeagueLeaders`' lookup Maps
+  are keyed by **strings** → on every materialised read (i.e. the normal case
+  after OPT-011), `teamName`, `teamSlug`, `jerseyNumber`, `position`, and
+  `avatarUrl` were all `null`; only `displayName` survived via its stored
+  fallback — which is exactly why the original spot-check (displayName + ppg
+  only) missed it. **Fixed** by normalising both ids with `String()` before the
+  lookups; confirmed on dev (`Demi James / 94 Truck / #99 / PG` now resolves);
+  regression test simulates the ObjectId shape so it can't recur.
+- **🐛 OPT-009 — MEDIUM: still-processing eager URL could be persisted.** With
+  `eager_async: true` Cloudinary still returns the (deterministic) derived URL
+  in the response but with `status: 'processing'`; requesting it mid-transcode
+  returns **423 Locked**, and the post URL is stored permanently — so uploads
+  during the transcode window would have persisted a broken playback URL,
+  defeating the task's own goal. **Fixed**: the eager URL is only used when
+  `status !== 'processing'`; otherwise the on-the-fly `f_auto,q_auto,vc_auto`
+  URL is stored (works before AND after the eager MP4 lands). 2 regression
+  tests (processing → on-the-fly; ready → eager).
+- **🐛 OPT-013 — MEDIUM: roster mutations didn't refresh the summary.** The
+  materialised season summary embeds per-player rows (names, positions, zeroed
+  rows for every roster player), but only game triggers were wired — a player
+  rename/add/deactivate used to appear immediately (live compute) and now went
+  stale until the next game event. **Fixed**: `addPlayerToTeam`,
+  `updatePlayerOnTeam`, `deactivatePlayerOnTeam` now schedule the recompute.
+- **🐛 OPT-010/011/013 — LOW (race): in-flight coalescing could drop the
+  latest write.** A trigger landing while a recompute was mid-flight joined the
+  existing promise — which had already read its data **before** that write —
+  so the second change was never materialised (and compute-on-miss can't
+  rescue it because the doc exists). **Fixed** in both recompute hooks
+  (`recomputeLeagueAggregates`, `recomputeTeamSeasonSummary`) with a dirty-flag:
+  a mid-flight trigger marks the entry dirty and exactly one follow-up pass
+  runs when the current one finishes. Concurrency regression test added.
+- **✅ OPT-012 — clean, live-confirmed.** A game finished via the UI after
+  OPT-012 landed has all three frozen artefacts (`finalScore`, `gameSummary`,
+  `boxScore`) and they are **mutually consistent** (0–2 across all three,
+  written by two independent code paths); pre-freeze completed games correctly
+  serve via the live-compute fallback.
+- **📌 OPT-013 — documented limitation (not fixed):** `isGamePubliclyViewable`
+  is time-dependent (a completed game with a future `scheduledAt` is excluded
+  until that time passes). When the time passes, no trigger fires, so the
+  materialised summary stays stale until the next roster/game write. Extreme
+  edge case (a completed-but-future-scheduled game is already odd data);
+  fixing it would need a timer/TTL. Revisit only if it ever bites.
+
+Re-verification after fixes: `backfill-game-finalscore` (20 scanned/0 updated),
+`backfill-league-standings` (2 leagues, 5+2 standings rows, 48+12 player rows,
+zero parity flags), `backfill-team-season-summaries` (2 teams, zero parity
+flags), leaders identity fields resolve on the materialised path, 201/201
+tests, eslint clean.
 
 ## 🏗️ Architecture changes log
 
@@ -678,6 +747,11 @@ The numbers must be identical; the same OPT-010 recompute triggers keep it fresh
    - Open the leaders/leaderboard view for **We Ball Saturday** and
      **Dev Test League** — top scorers, PPG, and DPOY ordering should look
      right and match what you saw before this task.
+   - **Specifically check the identity fields**: each leader row shows its
+     **team name, team logo, jersey number, position, and avatar** — these are
+     exactly the fields the 2026-07-06 verification bug nulled on the
+     materialised path (see the Verification log), so confirm they're
+     populated, not blank.
 2. **Finish/edit/delete a game → leaders update** (same triggers as OPT-010,
    now also refreshing player stats):
    - Track + finish a league game with a few scoring events for a player.
@@ -1174,6 +1248,13 @@ days · **L** 1–2 weeks.
     scope for this delivery-hygiene task. Captured here for a future cleanup.
   - Added 2 unit tests (awaited image destroy; video-destroy failure doesn't fail
     the delete). Full suite: **179 passing** (was 177).
+  - **⚠️ Verification fix (2026-07-06):** the original playback-URL selection
+    trusted `upload.eager[0].secure_url` unconditionally — but with
+    `eager_async` that URL arrives with `status:'processing'` and 423s until
+    the transcode finishes, and it would have been stored permanently. Now the
+    eager URL is only used when actually ready; otherwise the on-the-fly
+    `f_auto,q_auto,vc_auto` URL is stored. +2 regression tests. See the
+    Verification log.
 
 ---
 
@@ -1233,6 +1314,12 @@ timestamps}`) + `findLeagueStandings` / `upsertLeagueStandings` /
     **183 passing** (was 179).
   - **Circular-import check:** games.service requires leagues.service (not vice
     versa — leagues.service only requires games.**repository**), so no cycle.
+  - **⚠️ Verification fix (2026-07-06):** the in-flight guard originally
+    coalesced a mid-flight trigger into the running promise — which had read
+    its data _before_ the triggering write, so that write could go
+    unmaterialised. Now a dirty-flag re-runs the recompute exactly once after
+    the in-flight pass. +1 concurrency regression test. See the Verification
+    log.
 
 ---
 
@@ -1298,6 +1385,14 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
     both standings and player stats.
   - Added 5 unit tests (raw accumulation, score derivation, materialised
     hit/miss, single-fetch recompute). Full suite: **188 passing** (was 183).
+  - **🐛 Verification fix (2026-07-06, HIGH):** on the materialised path,
+    `getPublicLeagueLeaders` fed **ObjectId** ids (from `.lean()` rows) into
+    Maps keyed by **strings**, silently nulling `teamName`/`teamSlug`/
+    `jerseyNumber`/`position`/`avatarUrl` on every leaders read. Only
+    `displayName` survived (stored fallback) — which is why the original
+    spot-check missed it. Fixed with `String()` normalisation; regression test
+    simulates the ObjectId shape; re-verified on dev (team names/jerseys/
+    positions now resolve). See the Verification log.
 
 ---
 
@@ -1416,6 +1511,16 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
     `getPublicTeam` serves the materialised values end-to-end on real data.
   - Added 5 unit tests (materialised hit/miss, parity, prefetch-on-miss,
     `getPublicTeam` integration). Full suite: **197 passing** (was 192).
+  - **⚠️ Verification fix (2026-07-06):** the materialised summary embeds
+    per-player rows (names, positions, a zeroed row per roster player), but
+    only game triggers were originally wired — roster mutations went stale.
+    `addPlayerToTeam`/`updatePlayerOnTeam`/`deactivatePlayerOnTeam` now
+    schedule the recompute. Also received the shared dirty-flag fix for the
+    in-flight guard. **Documented limitation** (not fixed):
+    `isGamePubliclyViewable` is time-dependent — a completed game with a
+    future `scheduledAt` becomes includable when that time passes, with no
+    trigger; stale until the next roster/game write. Extreme edge case. See
+    the Verification log.
 
 ---
 

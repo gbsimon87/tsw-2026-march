@@ -433,9 +433,15 @@ async function createVideoPostForUser(userId, file, caption) {
   // OPT-009: with async eager transcode the eager MP4 usually isn't ready yet,
   // so deliver via the on-the-fly f_auto,q_auto,vc_auto pipeline (works before &
   // after the eager MP4 lands). Prefer the eager URL if it's already present.
-  const playbackUrl =
-    upload.eager?.[0]?.secure_url ??
-    cloudinaryVideoPlaybackUrl(upload.public_id, upload.secure_url);
+  // The stored URL is permanent, and with eager_async the response's eager
+  // entry still carries the (deterministic) derived URL but with
+  // status:'processing' — requesting it mid-transcode 423s. Only trust the
+  // eager URL when it's actually ready (verification fix, 2026-07-06).
+  const eagerEntry = upload.eager?.[0];
+  const eagerReady = Boolean(eagerEntry?.secure_url) && eagerEntry.status !== 'processing';
+  const playbackUrl = eagerReady
+    ? eagerEntry.secure_url
+    : cloudinaryVideoPlaybackUrl(upload.public_id, upload.secure_url);
   const thumbnailUrl = cloudinaryThumbnailUrl(upload.public_id, upload.resource_type);
 
   const post = await createPost({

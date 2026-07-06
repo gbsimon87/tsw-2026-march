@@ -1933,11 +1933,18 @@ const recomputeInFlight = new Map();
 
 async function recomputeLeagueAggregates(leagueId) {
   const key = String(leagueId);
-  if (recomputeInFlight.has(key)) {
-    return recomputeInFlight.get(key);
+  const inFlight = recomputeInFlight.get(key);
+  if (inFlight) {
+    // A recompute is mid-flight and read its data BEFORE the write that
+    // triggered this call — coalescing alone would drop that write. Mark the
+    // entry dirty so one follow-up pass runs when the current one finishes
+    // (verification fix, 2026-07-06).
+    inFlight.dirty = true;
+    return inFlight.promise;
   }
 
-  const work = (async () => {
+  const entry = { dirty: false };
+  entry.promise = (async () => {
     // OPT-011: fetch teams/games once, reuse for both standings and player
     // stats — avoids doubling the DB reads this recompute pass needs.
     const [teams, games] = await Promise.all([
@@ -1959,12 +1966,21 @@ async function recomputeLeagueAggregates(leagueId) {
     return { standingsRows, playerStatsRows };
   })();
 
-  recomputeInFlight.set(key, work);
+  recomputeInFlight.set(key, entry);
   try {
-    const result = await work;
+    const result = await entry.promise;
     return result.standingsRows;
   } finally {
     recomputeInFlight.delete(key);
+    if (entry.dirty) {
+      // Re-run once to pick up writes that landed mid-flight.
+      recomputeLeagueAggregates(leagueId).catch((error) => {
+        logger.error(
+          { err: error, leagueId: String(leagueId) },
+          'Dirty-flag league aggregate recompute failed'
+        );
+      });
+    }
   }
 }
 
@@ -2208,10 +2224,16 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
 
   const allLeaders = playerStatRows.map((row) => {
     const scores = deriveLeaguePlayerScores(row);
-    const team = teamsById.get(row.leagueTeamId);
-    const currentPlayer = currentPlayersById.get(row.leaguePlayerId);
+    // Materialised rows come back from Mongo (.lean()) with ObjectId ids while
+    // live-computed rows carry strings — normalise before the Map lookups, or
+    // teamName/jersey/avatar silently null out on the materialised path
+    // (verification bug found 2026-07-06).
+    const leagueTeamId = String(row.leagueTeamId);
+    const leaguePlayerId = String(row.leaguePlayerId);
+    const team = teamsById.get(leagueTeamId);
+    const currentPlayer = currentPlayersById.get(leaguePlayerId);
     return {
-      leaguePlayerId: row.leaguePlayerId,
+      leaguePlayerId,
       displayName: currentPlayer?.displayName || row.displayName,
       jerseyNumber: currentPlayer?.jerseyNumber ?? null,
       position: currentPlayer?.position ?? null,

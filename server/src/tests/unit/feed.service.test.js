@@ -44,6 +44,7 @@ const {
 } = require('../../modules/feed/feed.repository');
 const {
   uploadImageBuffer,
+  uploadVideoBuffer,
   destroyImage,
   destroyVideo,
 } = require('../../modules/feed/cloudinary.client');
@@ -103,6 +104,74 @@ describe('feed service', () => {
     expect(uploadImageBuffer).toHaveBeenCalled();
     expect(result.type).toBe('image');
     expect(result.canDelete).toBe(true);
+  });
+
+  test('does not store a still-processing async eager video URL (OPT-009 regression)', async () => {
+    // With eager_async, Cloudinary returns the derived URL with
+    // status:'processing' — requesting it mid-transcode 423s, so it must not
+    // be persisted as the playback URL.
+    uploadVideoBuffer.mockResolvedValue({
+      secure_url: 'https://res.cloudinary.com/demo/video/upload/original.mov',
+      public_id: 'tsw/feed/clip-1',
+      resource_type: 'video',
+      width: 1280,
+      height: 720,
+      duration: 12,
+      eager: [
+        {
+          secure_url: 'https://res.cloudinary.com/demo/video/upload/eager-not-ready.mp4',
+          status: 'processing',
+          batch_id: 'batch-1',
+        },
+      ],
+    });
+    createPost.mockImplementation(async (input) => ({
+      _id: 'post-v1',
+      createdAt: new Date('2026-03-10T00:00:00.000Z'),
+      ...input,
+    }));
+    findUserById.mockResolvedValue({ _id: 'user-1', name: 'Alex' });
+
+    await service.createVideoPostForUser(
+      'user-1',
+      { size: 1024, mimetype: 'video/mp4', buffer: Buffer.from('x') },
+      null
+    );
+
+    const persistedVideo = createPost.mock.calls[0][0].video;
+    expect(persistedVideo.url).not.toContain('eager-not-ready');
+    // No CLOUDINARY_CLOUD_NAME in the test env, so the on-the-fly builder
+    // falls back to the original upload URL.
+    expect(persistedVideo.url).toBe('https://res.cloudinary.com/demo/video/upload/original.mov');
+  });
+
+  test('uses the eager video URL when the transcode is already complete', async () => {
+    uploadVideoBuffer.mockResolvedValue({
+      secure_url: 'https://res.cloudinary.com/demo/video/upload/original.mov',
+      public_id: 'tsw/feed/clip-2',
+      resource_type: 'video',
+      duration: 12,
+      eager: [
+        // Synchronous/completed eager entries carry no 'processing' status.
+        { secure_url: 'https://res.cloudinary.com/demo/video/upload/eager-ready.mp4' },
+      ],
+    });
+    createPost.mockImplementation(async (input) => ({
+      _id: 'post-v2',
+      createdAt: new Date('2026-03-10T00:00:00.000Z'),
+      ...input,
+    }));
+    findUserById.mockResolvedValue({ _id: 'user-1', name: 'Alex' });
+
+    await service.createVideoPostForUser(
+      'user-1',
+      { size: 1024, mimetype: 'video/mp4', buffer: Buffer.from('x') },
+      null
+    );
+
+    expect(createPost.mock.calls[0][0].video.url).toBe(
+      'https://res.cloudinary.com/demo/video/upload/eager-ready.mp4'
+    );
   });
 
   test('lists feed newest-first and skips broken references', async () => {

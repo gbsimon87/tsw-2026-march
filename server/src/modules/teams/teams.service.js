@@ -358,11 +358,17 @@ const recomputeTeamSummaryInFlight = new Map();
 
 async function recomputeTeamSeasonSummary(teamId) {
   const key = String(teamId);
-  if (recomputeTeamSummaryInFlight.has(key)) {
-    return recomputeTeamSummaryInFlight.get(key);
+  const inFlight = recomputeTeamSummaryInFlight.get(key);
+  if (inFlight) {
+    // Same dirty-flag pattern as recomputeLeagueAggregates: a mid-flight pass
+    // read its data before the write that triggered this call, so coalescing
+    // alone would drop it — re-run once after (verification fix, 2026-07-06).
+    inFlight.dirty = true;
+    return inFlight.promise;
   }
 
-  const work = (async () => {
+  const entry = { dirty: false };
+  entry.promise = (async () => {
     const summary = await computeTeamSeasonSummary(teamId);
     if (summary) {
       await upsertTeamSeasonSummary(teamId, summary);
@@ -370,11 +376,19 @@ async function recomputeTeamSeasonSummary(teamId) {
     return summary;
   })();
 
-  recomputeTeamSummaryInFlight.set(key, work);
+  recomputeTeamSummaryInFlight.set(key, entry);
   try {
-    return await work;
+    return await entry.promise;
   } finally {
     recomputeTeamSummaryInFlight.delete(key);
+    if (entry.dirty) {
+      recomputeTeamSeasonSummary(teamId).catch((error) => {
+        logger.error(
+          { err: error, teamId: String(teamId) },
+          'Dirty-flag team season summary recompute failed'
+        );
+      });
+    }
   }
 }
 
@@ -881,6 +895,9 @@ async function addPlayerToTeam(userId, teamId, payload) {
   });
 
   await saveTeam(team);
+  // OPT-013: the materialised season summary embeds a (zeroed) row per roster
+  // player, so roster changes must refresh it (verification fix, 2026-07-06).
+  scheduleTeamSeasonSummaryRecompute(team._id);
   return sanitizeTeam(team);
 }
 
@@ -924,6 +941,8 @@ async function updatePlayerOnTeam(userId, teamId, playerId, payload) {
   }
 
   await saveTeam(team);
+  // OPT-013: renames/position changes are embedded in the materialised summary.
+  scheduleTeamSeasonSummaryRecompute(team._id);
   return sanitizeTeam(team);
 }
 
@@ -940,6 +959,8 @@ async function deactivatePlayerOnTeam(userId, teamId, playerId) {
 
   player.isActive = false;
   await saveTeam(team);
+  // OPT-013: roster changes must refresh the materialised season summary.
+  scheduleTeamSeasonSummaryRecompute(team._id);
   return sanitizeTeam(team);
 }
 

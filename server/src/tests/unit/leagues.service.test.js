@@ -51,6 +51,7 @@ jest.mock('../../modules/feed/cloudinary.client', () => ({
 
 const {
   findLeagueById,
+  findLeagueBySlug,
   listLeagueTeams,
   listLeaguePlayers,
   findLeagueStandings,
@@ -68,6 +69,7 @@ const {
   computeLeaguePlayerStats,
   deriveLeaguePlayerScores,
   getLeaguePlayerStats,
+  getPublicLeagueLeaders,
   recomputeLeagueAggregates,
 } = require('../../modules/leagues/leagues.service');
 
@@ -383,5 +385,99 @@ describe('league player stats materialisation (OPT-011)', () => {
     expect(replaceLeaguePlayerStats).toHaveBeenCalledTimes(1);
     const [, persistedPlayerRows] = replaceLeaguePlayerStats.mock.calls[0];
     expect(persistedPlayerRows).toHaveLength(2);
+  });
+
+  test('a recompute triggered mid-flight re-runs once afterwards (dirty flag)', async () => {
+    upsertLeagueStandings.mockResolvedValue({});
+    replaceLeaguePlayerStats.mockResolvedValue([]);
+    listLeagueGamesByLeagueId.mockResolvedValue([]);
+
+    // Block the FIRST pass on its teams fetch so a second trigger can land
+    // mid-flight; subsequent fetches resolve immediately.
+    const teams = [buildLeagueTeam('team-a', 'Alpha')];
+    let releaseFirst;
+    listLeagueTeams
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () => resolve(teams);
+          })
+      )
+      .mockResolvedValue(teams);
+
+    const first = recomputeLeagueAggregates('league-1');
+    // Second trigger while the first is still reading — must not be dropped.
+    const second = recomputeLeagueAggregates('league-1');
+    releaseFirst();
+    await Promise.all([first, second]);
+    // Let the dirty re-run (scheduled in the finally block) complete.
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // One persist from the first pass + one from the dirty re-run.
+    expect(upsertLeagueStandings).toHaveBeenCalledTimes(2);
+    expect(replaceLeaguePlayerStats).toHaveBeenCalledTimes(2);
+  });
+
+  test('leaders resolve team/player identity from materialised rows with ObjectId ids (regression)', async () => {
+    // Materialised rows come back from .lean() with ObjectId (non-string) ids.
+    // Simulate that shape: objects whose only string form is via toString().
+    const objectId = (value) => ({ toString: () => value });
+
+    findLeagueBySlug.mockResolvedValue({
+      _id: 'league-1',
+      slug: 'test-league',
+      isPublic: true,
+      status: 'active',
+    });
+    listLeagueTeams.mockResolvedValue([buildLeagueTeam('team-a', 'Alpha')]);
+    listLeaguePlayers.mockResolvedValue([
+      {
+        _id: 'p-current',
+        leaguePlayerId: 'lp1',
+        displayName: 'Alex Current',
+        jerseyNumber: 9,
+        position: 'PG',
+        claimedByUserId: null,
+        isActive: true,
+      },
+    ]);
+    listLeaguePlayerStats.mockResolvedValue([
+      {
+        leagueTeamId: objectId('team-a'),
+        leaguePlayerId: objectId('lp1'),
+        displayName: 'Alex Stored',
+        gamesCount: 1,
+        points: 10,
+        reb: 2,
+        ast: 1,
+        stl: 0,
+        blk: 0,
+        tov: 0,
+        foul: 0,
+        ftm: 0,
+        fta: 0,
+        fg2m: 5,
+        fg2a: 6,
+        fg3m: 0,
+        fg3a: 0,
+        oreb: 1,
+        dreb: 1,
+      },
+    ]);
+
+    const { leaders } = await getPublicLeagueLeaders('test-league', 5);
+
+    expect(leaders).toHaveLength(1);
+    // Before the 2026-07-06 fix these were all null on the materialised path
+    // because Map lookups keyed by strings were fed ObjectIds.
+    expect(leaders[0]).toMatchObject({
+      leaguePlayerId: 'lp1',
+      displayName: 'Alex Current',
+      jerseyNumber: 9,
+      position: 'PG',
+      teamName: 'Alpha',
+      teamSlug: 'alpha',
+    });
   });
 });
