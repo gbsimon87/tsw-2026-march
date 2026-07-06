@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -241,7 +242,14 @@ function findLeaguesByOwner(ownerUserId) {
   return listLeaguesByOwner(ownerUserId);
 }
 
-function listPublicLeagues() {
+function listPublicLeagues({ limit, cursor } = {}) {
+  // OPT-018: single-source list → clean keyset pagination when a limit is
+  // supplied. Without one, returns every public league (legacy behaviour).
+  if (limit) {
+    return League.find(applyIdCursor({ isPublic: true, status: 'active' }, cursor))
+      .sort({ _id: -1 })
+      .limit(limit + 1);
+  }
   return League.find({ isPublic: true, status: 'active' }).sort({ createdAt: -1 });
 }
 

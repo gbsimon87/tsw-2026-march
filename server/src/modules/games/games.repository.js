@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { STAT_TYPES, SHOT_ZONE_IDS, TEAM_SIDES } = require('../shared/stats.constants');
+const { applyIdCursor } = require('../../utils/pagination');
 
 const participantSchema = new mongoose.Schema(
   {
@@ -250,6 +251,16 @@ async function listGamesByOwner(ownerUserId, filter = {}) {
 
   if (filter.status) {
     query.status = filter.status;
+  }
+
+  // OPT-018: keyset pagination. When a limit is supplied, page on `_id` desc
+  // (same newest-first order as before) and over-fetch by one so the service
+  // can derive nextCursor. No limit → legacy unbounded behaviour (internal
+  // callers that need every row).
+  if (filter.limit) {
+    return Game.find(applyIdCursor(query, filter.cursor))
+      .sort({ _id: -1 })
+      .limit(filter.limit + 1);
   }
 
   return Game.find(query).sort({ createdAt: -1 });

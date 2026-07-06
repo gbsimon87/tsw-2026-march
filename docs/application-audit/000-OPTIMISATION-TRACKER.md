@@ -46,22 +46,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified. Wave 3 done (OPT-014/015/016 scoped, 017 done). Wave 4 underway — OPT-019, OPT-020 done.`
-- **Current wave:** Wave 4 (broaden caching/pagination) — OPT-019 + OPT-020 done; OPT-018, OPT-021 remain. Branch `dev`.
-- **Recommended next task:** **`OPT-018`** (pagination everywhere — cursor/limit on the remaining unbounded list endpoints + client). Larger (backend + client) and the client side pairs well with OPT-014's React Query. **`OPT-021`** (feed windowing) is the other Wave 4 item but is frontend-rendering work needing live browser verification (same constraint as OPT-016), and is Low priority. ⚠️ Open scope gaps needing browser verification before closing: **`OPT-016`** (GameTrackPage decomposition) and **`OPT-014`** (~20 pages not yet migrated; "OPT-014b"). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–017, 019, 020.) 🛑 **OPT-019 + OPT-020 not committed yet — see standing instruction at the top of this file.**
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified. Wave 3 done (OPT-014/015/016 scoped, 017 done). Wave 4 nearly done — OPT-018 (backend), OPT-019, OPT-020 done; only OPT-021 remains.`
+- **Current wave:** Wave 4 (broaden caching/pagination) — OPT-018 (backend) + OPT-019 + OPT-020 done; **OPT-021 remains**. Branch `dev`.
+- **Recommended next task:** **`OPT-021`** (feed windowing + video unmount + throttled scroll) — the last Wave 4 item. ⚠️ It's frontend-rendering work needing live browser verification (same constraint as OPT-016), and is **Low** priority — consider whether it's worth doing now vs. deferring with the other browser-gated frontend work. Open scope gaps needing browser verification: **`OPT-016`** (GameTrackPage decomposition), **`OPT-014b`** (~20 pages not yet migrated to React Query), **`OPT-018` client** (infinite-scroll/virtualisation — backend is done + backward-compatible). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–020.) 🛑 **OPT-018 not committed yet — see standing instruction at the top of this file.**
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                                                                             |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Not Started | 6                                                                                                                                 |
-| In Progress | 0                                                                                                                                 |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                         |
-| Completed   | 18 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `019`, `020`) |
-| Deferred    | 0                                                                                                                                 |
+| Status      | Count                                                                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Not Started | 5                                                                                                                                        |
+| In Progress | 0                                                                                                                                        |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                                |
+| Completed   | 19 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `018`, `019`, `020`) |
+| Deferred    | 0                                                                                                                                        |
 
 ---
 
@@ -125,7 +125,7 @@ consumers and rework is minimised.
 | OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | ✅ Scoped    | OPT-008            |
 | OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | ✅ Scoped    | OPT-015            |
 | OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
-| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
+| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | ✅ Backend   | —                  |
 | OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
@@ -141,6 +141,19 @@ blockers._
 
 ## ✅ Completed
 
+- **OPT-018** — Pagination everywhere (backend; client deferred). _2026-07-07._
+  Branch `dev` (uncommitted). Added shared keyset-cursor helpers
+  (`utils/pagination.js`) + shared zod query validation
+  (`shared/pagination.validation.js`), and applied real `_id`-desc cursor
+  pagination to the clean single-source lists: `GET /games`, `GET /teams`,
+  `GET /public/leagues` — each now returns its existing array key **plus**
+  `nextCursor` (backward-compatible; clients unchanged). The owner `GET
+/leagues` list merges 3 sources in memory so it gets validation only (keyset
+  N/A — deferred). Repo functions paginate only when a `limit` is passed, so
+  internal callers stay unbounded. No-dup/no-drop proven in unit tests and
+  **verified against real dev MongoDB**. 30 suites / 242 tests; lint clean.
+  Client infinite-scroll/virtualisation deferred to a follow-up. See card +
+  Decisions log.
 - **OPT-020** — Move blocking integrations off the request path. _2026-07-06._
   Branch `dev` (uncommitted). Three sub-items: **(a)** league AI summary now
   generated post-response (`setImmediate` in `games.service.js`), with a
@@ -342,6 +355,21 @@ _None yet._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-07 — OPT-018: backend-complete + client backward-compat (client
+  paging deferred).** Chosen with the user. All paginated list endpoints keep
+  their existing top-level array key and simply add `nextCursor`, so the current
+  client pages keep working untouched while the backend gains a bounded default
+  limit + keyset cursor. Client infinite-scroll / virtualisation (and upgrading
+  the already-React-Query public league pages to `useInfiniteQuery`) is a
+  follow-up, grouped with the other browser-gated frontend work (OPT-014b,
+  OPT-016) — the dataset is tiny today so the default limit is invisible.
+- **2026-07-07 — OPT-018: `GET /leagues` (owner) gets validation only, not
+  keyset.** That list is a 3-source in-memory union (owned + member + managed),
+  deduped and re-sorted, so a single-collection `_id` cursor can't page it
+  correctly. It's a per-user handful of leagues, not a scaling surface — params
+  are validated and it returns `nextCursor: null` for contract consistency.
+  Correct paging would need an offset/merged strategy; deferred. Public leagues,
+  `/games`, and `/teams` are single-source and got real keyset pagination.
 - **2026-07-06 — OPT-020: webhook idempotency made atomic; league-create race
   left as a documented deferral.** The 4 team + 2 league update handlers now
   claim each Stripe event with a single gated `findOneAndUpdate`
@@ -669,6 +697,15 @@ lockId)`. `games.service.js`: new `scheduleGameSummaryGeneration` (post-
   `sendTemplateEmailAsync` (fire-and-forget); `sendVerificationEmail`/
   `sendPasswordResetEmail` now fire-and-forget. Callers `auth.service.js`
   (password reset) and `contact.routes.js` no longer await Resend.
+- ✅ **built (OPT-018, 2026-07-07)** `server/src/utils/pagination.js`
+  (`applyIdCursor`, `buildCursorPage`, `DEFAULT_PAGE_LIMIT=20`,
+  `MAX_PAGE_LIMIT=50`) and `server/src/modules/shared/pagination.validation.js`
+  (`paginationQueryShape`, `paginationQuerySchema`). Consumed by games/teams/
+  leagues repositories (optional `{limit,cursor}` → keyset find), services
+  (`buildCursorPage` → `{ items…, nextCursor }`) and controllers
+  (`schema.parse(req.query)`). Response contract: existing array key +
+  `nextCursor` added. `listGamesByOwner`, `listTeamsByOwner`,
+  `listPublicLeagues` paginate only when a `limit` is supplied.
 
 ## 🔔 Implementation reminders
 
@@ -1352,6 +1389,36 @@ failed` — you should NOT see it on a normal success.
 **Pass criteria:** finishing a league game is snappy; a failed AI generation
 never errors the finish and can be retried; reset/contact never fail on email
 latency; duplicate webhooks apply exactly once.
+
+---
+
+### ✅ OPT-018 — Pagination (backend; client backward-compat)
+
+**What to test:** The list endpoints now cap results and expose a cursor, but
+the response keeps its existing shape plus `nextCursor`, so **the app should
+look and behave exactly as before**. Verify in DevTools Network / `curl`.
+
+1. **Lists still render unchanged.** Log in and open the Games, Teams, and
+   Leagues pages, plus a public league listing. Everything should display as
+   before (with the tiny dataset, nothing is truncated).
+2. **Response shape adds `nextCursor`.** Inspect `GET /api/v1/games`,
+   `/api/v1/teams`, `/api/v1/public/leagues`. Each response now includes a
+   `nextCursor` field (likely `null` given the small dataset) alongside the
+   existing `games`/`teams`/`leagues` array. Nothing else changed.
+3. **`limit` + `cursor` work (if you want to exercise paging).** Append
+   `?limit=1` to `GET /api/v1/games` — you get 1 game and a non-null
+   `nextCursor`. Then `?limit=1&cursor=<that value>` returns the next game.
+   Walking the cursor should never repeat or skip a game.
+4. **Bad params are rejected (400).** `?limit=0`, `?limit=999`, or
+   `?cursor=notanid` should return a 400 validation error, not a 500 or a
+   silent full list.
+5. **Owner leagues list.** `GET /api/v1/leagues` returns `nextCursor: null`
+   by design (it merges your owned + member + managed leagues) — this is
+   expected, not a bug.
+
+**Pass criteria:** all list pages look identical to before; responses carry
+`nextCursor`; `limit`/`cursor` page cleanly with no dupes/drops; invalid params
+return 400.
 
 ---
 
@@ -2388,7 +2455,7 @@ again.")` — a clear, retryable conflict instead of the previous silent
 
 ### OPT-018 — Pagination everywhere
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend + client
+- **Priority:** Medium · **Status:** ✅ Completed (backend; client deferred) · **Category:** Backend + client
 - **Wave:** 4 · **Complexity:** M · **Dependencies:** none (feeds OPT-014)
 - **Description:** Add `limit`/cursor to `GET /games`, `/teams`, `/leagues`,
   league games/standings rows, and public lists — copying the feed's keyset
@@ -2401,10 +2468,58 @@ again.")` — a clear, retryable conflict instead of the previous silent
   client list pages + API modules.
 - **Testing:** cursor paging correctness; client loads pages; validation rejects
   bad params.
-- **Validation checklist:** [ ] keyset cursor on all lists [ ] client paginates
-  [ ] query validation added [ ] no dropped/duplicated items across pages.
+- **Validation checklist:** [x] keyset cursor on the clean single-source lists
+  (`/games`, `/teams`, `/public/leagues`) [~] client paginates (deferred — see
+  notes; responses are backward-compatible so nothing breaks) [x] query
+  validation added (shared zod schema) [x] no dropped/duplicated items across
+  pages (unit-proven + verified against real dev Mongo).
 - **Source:** [30](./30-optimisation-roadmap.md) M6, [23](./23-api-audit.md) #9/#10.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-07 — **scope: backend-complete + client
+  backward-compat** (chosen with the user; client infinite-scroll/virtualisation
+  deferred to a follow-up, like OPT-014b).
+  - **Shared helpers.** New `utils/pagination.js` (`applyIdCursor` — merges a
+    non-mutating `_id: {$lt: cursor}` clause; `buildCursorPage(rows, limit)` —
+    trims an over-fetched `limit+1` batch and derives `nextCursor`;
+    `DEFAULT_PAGE_LIMIT=20`, `MAX_PAGE_LIMIT=50`) and
+    `modules/shared/pagination.validation.js` (`paginationQueryShape` /
+    `paginationQuerySchema` — `cursor` = 24-hex ObjectId, `limit` coerced,
+    bounded, defaulted). Pattern: repo does `find(applyIdCursor(q, cursor))
+.sort({_id:-1}).limit(limit+1)`; service calls `buildCursorPage`; controller
+    `schema.parse(req.query)`.
+  - **Endpoints paginated (keyset on `_id` desc):** `GET /games`
+    (`listGamesForUser` → `{ games, nextCursor }`, filters teamId/status
+    validated too), `GET /teams` (`listTeamsForUser` → `{ teams, nextCursor }`),
+    `GET /public/leagues` (`listPublicLeagues` → `{ leagues, nextCursor }`,
+    base query paged then only the page is enriched with teams). All keep their
+    existing top-level key so non-paginating clients are unaffected; `nextCursor`
+    is added alongside. Repo functions paginate **only when `limit` is
+    supplied** — internal callers (billing `syncOwnerPlan`, feed shareable
+    lookups) omit it and still get every row.
+  - **`GET /leagues` (owner list) — validation only, keyset intentionally NOT
+    applied.** This list merges three sources (owned + member + managed
+    leagues), dedupes, and re-sorts in memory, so a single-collection `_id`
+    cursor can't page across the union correctly. It's a per-user handful of
+    leagues (not a scaling-cliff surface); params are validated and it returns
+    `nextCursor: null` for a consistent contract. Proper paging here would need
+    an offset/merged strategy — deferred (see Decisions log).
+  - **Not separately paginated:** the public **teams** surface (`/public/teams/
+explore`) already runs through the pre-bounded `listPublicCompletedGames(100)`
+    (OPT-004); the league **games/teams/standings** sub-lists are embedded in
+    composite league-detail responses (bounded by league size) rather than being
+    standalone list endpoints — restructuring those composites is out of scope.
+  - **Client:** unchanged. The three owner list pages (Games/Teams/Leagues) +
+    PublicTeamPage still read the array key and ignore `nextCursor`; the public
+    league pages already use React Query (post-OPT-014) and can upgrade to
+    `useInfiniteQuery` in the client follow-up. With the tiny current dataset,
+    the default limit (20/50) is invisible; the cursor is there for when it
+    matters.
+  - **Tests:** new `pagination.test.js` (helper mechanics incl. a full
+    page-through proving **no dup / no drop / exact order**, + schema
+    validation), 2 service-level pagination tests, updated the opponent test for
+    the new `{ games, nextCursor }` shape. Full server suite **30 suites / 242
+    tests**; lint clean. **Verified against real dev MongoDB**: paged an owner's
+    8 games at limit=2 → all 8 walked in exact order, zero dupes/drops,
+    terminated correctly. Not committed (per standing instruction).
 
 ---
 

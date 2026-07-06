@@ -11,6 +11,7 @@ const {
 } = require('./leagues.validation');
 const leaguesService = require('./leagues.service');
 const { ApiError } = require('../../utils/apiError');
+const { paginationQuerySchema } = require('../shared/pagination.validation');
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -29,8 +30,11 @@ async function create(req, res) {
 
 async function list(req, res) {
   const userId = requireAuthUserId(req);
-  const leagues = await leaguesService.listLeaguesForUser(userId);
-  res.status(200).json({ leagues });
+  // OPT-018: params validated for a consistent contract; this list merges
+  // owned+member+managed leagues so it returns nextCursor:null (see service).
+  paginationQuerySchema.parse(req.query);
+  const { leagues, nextCursor } = await leaguesService.listLeaguesForUser(userId);
+  res.status(200).json({ leagues, nextCursor });
 }
 
 async function getMyProfiles(req, res) {
@@ -40,8 +44,10 @@ async function getMyProfiles(req, res) {
 }
 
 async function listPublic(req, res) {
-  const leagues = await leaguesService.listPublicLeagues();
-  res.status(200).json({ leagues });
+  // OPT-018: single-source public list → real keyset pagination.
+  const options = paginationQuerySchema.parse(req.query);
+  const { leagues, nextCursor } = await leaguesService.listPublicLeagues(options);
+  res.status(200).json({ leagues, nextCursor });
 }
 
 async function getById(req, res) {

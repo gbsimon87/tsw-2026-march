@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { buildCursorPage } = require('../../utils/pagination');
 const {
   summarizeEvents,
   createEmptyTeamStatSummary,
@@ -540,9 +541,13 @@ async function createTeamForUser(userId, payload) {
   return sanitizeTeam(team);
 }
 
-async function listTeamsForUser(userId) {
-  const teams = await listTeamsByOwner(userId);
-  return teams.map(sanitizeTeam);
+async function listTeamsForUser(userId, options = {}) {
+  const rawTeams = await listTeamsByOwner(userId, options);
+  // OPT-018: split the over-fetched page + derive nextCursor when paginating.
+  const { items, nextCursor } = options.limit
+    ? buildCursorPage(rawTeams, options.limit)
+    : { items: rawTeams, nextCursor: null };
+  return { teams: items.map(sanitizeTeam), nextCursor };
 }
 
 async function getTeamForUser(userId, teamId) {

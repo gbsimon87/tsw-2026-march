@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { buildCursorPage } = require('../../utils/pagination');
 const { findSharedEventIds } = require('../feed/feed.repository');
 const { env } = require('../../config/env');
 const {
@@ -467,21 +468,35 @@ async function listLeaguesForUser(userId) {
     sortedLeagues.map((league) => buildLeagueViewerContext(userId, league))
   );
 
-  return sortedLeagues.map((league, index) =>
+  const sanitized = sortedLeagues.map((league, index) =>
     sanitizeLeague(league, { includeViewerContext: viewerContexts[index] })
   );
+
+  // OPT-018: this list MERGES three sources (owned + member + managed leagues),
+  // dedupes, and re-sorts in memory — a single-collection `_id` keyset cursor
+  // would be incorrect here (it can't page across the union). A user belongs to
+  // a handful of leagues, so it's not a scaling-cliff surface; keyset paging is
+  // intentionally NOT applied. nextCursor is always null so the response shape
+  // stays consistent with the other paginated lists. (Deferred, see tracker.)
+  return { leagues: sanitized, nextCursor: null };
 }
 
-async function listPublicLeagues() {
-  const leagues = await listPublicLeaguesRepo();
+async function listPublicLeagues(options = {}) {
+  const rawLeagues = await listPublicLeaguesRepo(options);
+  // OPT-018: split the over-fetched page + derive nextCursor when paginating,
+  // then enrich only the page's leagues with their teams.
+  const { items: leagues, nextCursor } = options.limit
+    ? buildCursorPage(rawLeagues, options.limit)
+    : { items: rawLeagues, nextCursor: null };
   const teamsPerLeague = await Promise.all(leagues.map((league) => listLeagueTeams(league._id)));
-  return leagues.map((league, i) =>
+  const sanitized = leagues.map((league, i) =>
     sanitizeLeague(league, {
       includeTeams: teamsPerLeague[i]
         .filter((team) => team.status === 'active')
         .map((team) => sanitizeLeagueTeam(team)),
     })
   );
+  return { leagues: sanitized, nextCursor };
 }
 
 async function buildLeagueViewerContext(userId, league) {

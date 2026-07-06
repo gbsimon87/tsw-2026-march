@@ -6,6 +6,7 @@ const {
 } = require('./teams.validation');
 const teamsService = require('./teams.service');
 const { ApiError } = require('../../utils/apiError');
+const { paginationQuerySchema } = require('../shared/pagination.validation');
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -24,8 +25,10 @@ async function create(req, res) {
 
 async function list(req, res) {
   const userId = requireAuthUserId(req);
-  const teams = await teamsService.listTeamsForUser(userId);
-  res.status(200).json({ teams });
+  // OPT-018: validated cursor/limit; response keeps `teams` + adds nextCursor.
+  const options = paginationQuerySchema.parse(req.query);
+  const { teams, nextCursor } = await teamsService.listTeamsForUser(userId, options);
+  res.status(200).json({ teams, nextCursor });
 }
 
 async function getById(req, res) {

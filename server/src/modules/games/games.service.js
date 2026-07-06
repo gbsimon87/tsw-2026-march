@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
 const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
+const { buildCursorPage } = require('../../utils/pagination');
 const { logger } = require('../../config/logger');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
@@ -1050,7 +1051,14 @@ async function createGameForUser(userId, payload) {
 }
 
 async function listGamesForUser(userId, filter = {}) {
-  const games = await listGamesByOwner(userId, filter);
+  const rawGames = await listGamesByOwner(userId, filter);
+
+  // OPT-018: when the caller paginates, the repo over-fetched by one — split
+  // into a bounded page + nextCursor before mapping (buildCursorPage reads the
+  // raw docs' `_id`, which the mapped output no longer exposes).
+  const { items: games, nextCursor } = filter.limit
+    ? buildCursorPage(rawGames, filter.limit)
+    : { items: rawGames, nextCursor: null };
 
   const standaloneTeamIds = new Set();
   const leagueTeamIds = new Set();
@@ -1089,7 +1097,7 @@ async function listGamesForUser(userId, filter = {}) {
     };
   }
 
-  return games.map((game) => {
+  const mappedGames = games.map((game) => {
     const { homeLogoUrl, awayLogoUrl } = resolveLogoUrl(game);
     return {
       id: String(game._id),
@@ -1114,6 +1122,8 @@ async function listGamesForUser(userId, filter = {}) {
       awayLogoUrl,
     };
   });
+
+  return { games: mappedGames, nextCursor };
 }
 
 async function updateGameForUser(userId, gameId, payload) {

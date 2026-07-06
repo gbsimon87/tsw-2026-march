@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
+const { paginationQueryShape } = require('../shared/pagination.validation');
 
 function isSupportedYouTubeUrl(value) {
   try {
@@ -220,6 +221,13 @@ const updateEventSchema = z.object({
   videoTimestamp: z.number().min(0).nullable().optional(),
 });
 
+// OPT-018: query validation for the paginated GET /games list.
+const listGamesSchema = z.object({
+  ...paginationQueryShape,
+  teamId: z.string().min(1).optional(),
+  status: z.enum(['in_progress', 'completed']).optional(),
+});
+
 module.exports = {
   createGameSchema,
   updateGameSchema,
@@ -227,4 +235,5 @@ module.exports = {
   setLineupSchema,
   statTypeSchema,
   updateEventSchema,
+  listGamesSchema,
 };

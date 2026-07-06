@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -92,7 +93,14 @@ async function createTeam(input) {
   return Team.create(input);
 }
 
-async function listTeamsByOwner(ownerUserId) {
+async function listTeamsByOwner(ownerUserId, { limit, cursor } = {}) {
+  // OPT-018: paginate only when a limit is supplied (the /teams endpoint);
+  // internal callers omit it and get every team, unchanged.
+  if (limit) {
+    return Team.find(applyIdCursor({ ownerUserId }, cursor))
+      .sort({ _id: -1 })
+      .limit(limit + 1);
+  }
   return Team.find({ ownerUserId }).sort({ createdAt: -1 });
 }
 
