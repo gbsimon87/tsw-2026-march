@@ -46,9 +46,9 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified. Wave 3 done (OPT-014/015/016 scoped, 017 done). Wave 4 nearly done — OPT-018 (backend), OPT-019, OPT-020 done; only OPT-021 remains.`
-- **Current wave:** Wave 4 (broaden caching/pagination) — OPT-018 (backend) + OPT-019 + OPT-020 done; **OPT-021 remains**. Branch `dev`.
-- **Recommended next task:** **`OPT-021`** (feed windowing + video unmount + throttled scroll) — the last Wave 4 item. ⚠️ It's frontend-rendering work needing live browser verification (same constraint as OPT-016), and is **Low** priority — consider whether it's worth doing now vs. deferring with the other browser-gated frontend work. Open scope gaps needing browser verification: **`OPT-016`** (GameTrackPage decomposition), **`OPT-014b`** (~20 pages not yet migrated to React Query), **`OPT-018` client** (infinite-scroll/virtualisation — backend is done + backward-compatible). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–020.) 🛑 **OPT-018 not committed yet — see standing instruction at the top of this file.**
+- **Overall status:** `All server-side + safe frontend optimisation work is DONE and committed (OPT-001–006, 008–020). Everything remaining is either browser-gated frontend work (needs a session with live browser testing) or prod-data-gated. No unblocked backend work left.`
+- **Current wave:** Wave 4 complete on the backend (OPT-018 backend + OPT-019 + OPT-020 all committed on `dev`). Wave 5 (OPT-022/023 hygiene/ops) is the next _codeable_ work; OPT-021 is deferred (browser-gated). Branch `dev`.
+- **Recommended next task (for a session WITH live browser testing):** the batched frontend follow-up — **`OPT-021`** (feed windowing + video unmount + throttled scroll), **`OPT-016`** (GameTrackPage decomposition, full scope), **`OPT-014b`** (~20 pages not yet migrated to React Query), and **`OPT-018` client** (infinite-scroll/virtualisation — backend done + backward-compatible). All four share the same blocker: they change client rendering and can't be safely verified without clicking through the UI. **Recommended next task (for a normal session):** **`OPT-022`** or **`OPT-023`** (Wave 5 backend hygiene/ops — safe, self-contained). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done + committed: OPT-001–006, 008–020.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
@@ -57,11 +57,11 @@
 
 | Status      | Count                                                                                                                                    |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Not Started | 5                                                                                                                                        |
+| Not Started | 4 (`007`_, `022`, `023`, `025`_ — \*=gated)                                                                                              |
 | In Progress | 0                                                                                                                                        |
 | Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                                |
 | Completed   | 19 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `018`, `019`, `020`) |
-| Deferred    | 0                                                                                                                                        |
+| Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log)                                                              |
 
 ---
 
@@ -128,7 +128,7 @@ consumers and rework is minimised.
 | OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | ✅ Backend   | —                  |
 | OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
-| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
+| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
@@ -347,7 +347,12 @@ _None._
 
 ## ⏸️ Deferred
 
-_None yet._
+- **OPT-021** — Feed windowing + video unmount + throttled scroll. _Deferred
+  2026-07-07._ Low priority, and it changes client feed rendering so it can't be
+  safely verified without live browser testing. Batched with the other
+  browser-gated frontend work (OPT-016 full scope, OPT-014b, OPT-018 client) for
+  a future session that has real browser verification. See Decisions log
+  (2026-07-07).
 
 ---
 
@@ -355,6 +360,19 @@ _None yet._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-07 — All remaining frontend-rendering work batched + deferred to a
+  browser-testing session.** OPT-021 (feed windowing/video unmount/throttled
+  scroll) was the last Wave 4 item; the user chose to defer it rather than ship
+  it blind. It joins the other work that changes client rendering and can't be
+  verified without clicking through the live UI: **OPT-016** (GameTrackPage
+  full decomposition), **OPT-014b** (~20 pages still to migrate to React Query),
+  and **OPT-018 client** (infinite-scroll/virtualisation). These are grouped as
+  a single future frontend session with real browser testing. All backend +
+  safe frontend work (OPT-001–006, 008–020) is done and committed; nothing
+  unblocked-and-codeable remains except Wave 5 backend hygiene/ops
+  (OPT-022/023). Rationale: the project has consistently scoped down rather than
+  ship UI changes it can't verify (see OPT-016, OPT-014 notes) — deferring
+  keeps that discipline.
 - **2026-07-07 — OPT-018: backend-complete + client backward-compat (client
   paging deferred).** Chosen with the user. All paginated list endpoints keep
   their existing top-level array key and simply add `nextCursor`, so the current
@@ -2662,8 +2680,12 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 
 ### OPT-021 — Feed windowing + video unmount + throttled scroll
 
-- **Priority:** Low · **Status:** Not Started · **Category:** Frontend / rendering
+- **Priority:** Low · **Status:** ⏸️ Deferred (browser-gated) · **Category:** Frontend / rendering
 - **Wave:** 4 · **Complexity:** M · **Dependencies:** pairs with OPT-009
+- **Deferral note (2026-07-07):** changes client feed rendering; can't be
+  verified without live browser testing. Batched with OPT-016 (full scope),
+  OPT-014b, and OPT-018 client for a future browser-testing session. See the
+  Deferred section + Decisions log.
 - **Description:** Window the feed list (keep ±2 slides mounted on mobile snap
   feed; virtualise desktop) so off-screen `<video>` elements unmount; throttle
   the mobile onScroll near-end check (or use the existing IntersectionObserver);
