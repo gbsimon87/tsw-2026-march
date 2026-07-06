@@ -217,6 +217,21 @@ function scheduleFeedCardRefreshForGame(gameId) {
   });
 }
 
+// OPT-015: save an event mutation, translating Mongoose's optimistic-
+// concurrency VersionError (thrown when another request saved this doc after
+// it was loaded here — the classic co-tracker race) into a clear, retryable
+// 409 instead of either a confusing 500 or a silent last-write-wins clobber.
+async function saveGameEventMutation(game) {
+  try {
+    await saveGame(game);
+  } catch (error) {
+    if (error.name === 'VersionError') {
+      throw new ApiError(409, 'This game was updated by someone else. Reload and try again.');
+    }
+    throw error;
+  }
+}
+
 function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
@@ -1088,6 +1103,47 @@ async function updateGameForUser(userId, gameId, payload) {
   return getGameForUser(userId, gameId);
 }
 
+// OPT-015: the slim response for the event-append/edit hot path. Returns only
+// the fields GameTrackPage actually reads after a tracked stat (game, lineups,
+// boxScore, gameSummary) — not recap/highlights/team/participants/league/
+// teamEntitlements/aiSummary, which don't change per-event and the client's
+// setData((current) => ({ ...current, ...response })) merge leaves untouched
+// from the initial full load. Works off the ALREADY-SAVED in-memory `game`
+// and the `context` the caller already resolved before mutating it (team/
+// participant docs are unaffected by an event mutation) — no second DB
+// round-trip the way returning getGameForUser(userId, gameId) would need.
+function buildSlimGameEventDelta(userId, game, context) {
+  const { teamDoc, participants } = context;
+  const boxScore =
+    game.status === 'completed' && game.boxScore
+      ? game.boxScore
+      : game.trackingMode === 'dual_team'
+        ? computeBoxScore(game, null, { participants })
+        : computeBoxScore(game, teamDoc);
+  const gameSummary =
+    game.status === 'completed' && game.gameSummary ? game.gameSummary : buildGameSummary(game);
+
+  return {
+    game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
+    lineups:
+      game.trackingMode === 'dual_team'
+        ? {
+            home: {
+              startingPlayerIds: (game.homeStartingLineupPlayerIds || []).map(String),
+              currentPlayerIds: (game.homeCurrentLineupPlayerIds || []).map(String),
+            },
+            away: {
+              startingPlayerIds: (game.awayStartingLineupPlayerIds || []).map(String),
+              currentPlayerIds: (game.awayCurrentLineupPlayerIds || []).map(String),
+            },
+          }
+        : null,
+    boxScore,
+    gameSummary,
+    canEditCompletedGame: game.status === 'completed' ? Boolean(userId) : false,
+  };
+}
+
 async function getGameForUser(userId, gameId) {
   const game = await assertGameAccess(userId, gameId);
   const { team, opponentTeam, teamDoc, participants, league } = await resolveGameTeamContext(
@@ -1357,14 +1413,18 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     recalculateCurrentLineup(game);
     clearAiSummaryAfterCompletedLeagueEdit(game);
     syncGameDenormalizedAfterEventChange(game);
-    await saveGame(game);
+    // OPT-015: rejects a stale concurrent write instead of silently
+    // clobbering another co-tracker's event.
+    await saveGameEventMutation(game);
     if (game.status === 'completed') {
       // OPT-010: editing a completed league game's events changes standings.
       scheduleLeagueRecomputeForGame(game);
       // OPT-012: refreeze the box score/summary to match the edited events.
       await refreezeGameBoxScoreIfCompleted(userId, game);
     }
-    return getGameForUser(userId, gameId);
+    // OPT-015: slim delta instead of the full getGameForUser response — see
+    // buildSlimGameEventDelta for what's included/excluded and why.
+    return buildSlimGameEventDelta(userId, game, context);
   }
 
   const { teamDoc } = context;
@@ -1435,7 +1495,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
-  await saveGame(game);
+  // OPT-015: rejects a stale concurrent write instead of silently clobbering
+  // another co-tracker's event.
+  await saveGameEventMutation(game);
   if (game.status === 'completed') {
     // OPT-010: editing a completed league game's events changes standings.
     scheduleLeagueRecomputeForGame(game);
@@ -1490,7 +1552,9 @@ async function removeEventForUser(userId, gameId, eventId) {
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
-  await saveGame(game);
+  // OPT-015: rejects a stale concurrent write instead of silently clobbering
+  // another co-tracker's event.
+  await saveGameEventMutation(game);
   if (game.status === 'completed') {
     // OPT-010: editing a completed league game's events changes standings.
     scheduleLeagueRecomputeForGame(game);
@@ -1502,7 +1566,9 @@ async function removeEventForUser(userId, gameId, eventId) {
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
-  return getGameForUser(userId, gameId);
+  // OPT-015: slim delta instead of the full getGameForUser response.
+  const context = await resolveGameTeamContext(userId, game);
+  return buildSlimGameEventDelta(userId, game, context);
 }
 
 async function updateEventForUser(userId, gameId, eventId, patch) {
@@ -1521,7 +1587,9 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
-  await saveGame(game);
+  // OPT-015: rejects a stale concurrent write instead of silently clobbering
+  // another co-tracker's event.
+  await saveGameEventMutation(game);
   if (game.status === 'completed') {
     // OPT-010: editing a completed league game's events changes standings.
     scheduleLeagueRecomputeForGame(game);
@@ -1533,7 +1601,9 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
-  return getGameForUser(userId, gameId);
+  // OPT-015: slim delta instead of the full getGameForUser response.
+  const context = await resolveGameTeamContext(userId, game);
+  return buildSlimGameEventDelta(userId, game, context);
 }
 
 async function deleteGameForUser(userId, gameId) {

@@ -92,6 +92,8 @@ const {
   computeBoxScore,
   createGameForUser,
   appendEventForUser,
+  removeEventForUser,
+  updateEventForUser,
   finishGameForUser,
   getGameForUser,
   setGameLineup,
@@ -109,6 +111,21 @@ afterEach(() => new Promise((resolve) => setImmediate(resolve)));
 function buildPlayers(players) {
   const list = players.map((player) => ({ ...player }));
   list.id = (playerId) => list.find((player) => String(player._id) === String(playerId)) || null;
+  return list;
+}
+
+// Mimics the subset of Mongoose's DocumentArray API the event mutators use:
+// events.id(eventId) to find a subdocument, and event.deleteOne() to remove it
+// from the parent array in place.
+function buildEvents(events) {
+  const list = events.map((event) => ({ ...event }));
+  list.id = (eventId) => list.find((event) => String(event._id) === String(eventId)) || null;
+  list.forEach((event) => {
+    event.deleteOne = () => {
+      const index = list.findIndex((e) => String(e._id) === String(event._id));
+      if (index >= 0) list.splice(index, 1);
+    };
+  });
   return list;
 }
 
@@ -720,7 +737,7 @@ describe('games service frozen box score (OPT-012)', () => {
     saveGame.mockResolvedValue(game);
     canEditCompletedLeagueGame.mockResolvedValue(true);
 
-    await appendEventForUser('user-1', 'game-1', {
+    const result = await appendEventForUser('user-1', 'game-1', {
       teamSide: 'home',
       playerId: 'home-snap-1',
       statType: STAT_TYPES.FG3_MADE,
@@ -728,6 +745,151 @@ describe('games service frozen box score (OPT-012)', () => {
 
     // The stale frozen summary (all zeroes) must have been refreshed.
     expect(game.gameSummary.homePoints).toBe(3);
+    expect(result.gameSummary.homePoints).toBe(3);
+  });
+});
+
+describe('games service event mutation contract (OPT-015)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  function buildSlimTestGame(overrides = {}) {
+    const homePlayers = [
+      buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+      buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      buildLeagueSnapshotPlayer('home-snap-3', 'Home Three'),
+      buildLeagueSnapshotPlayer('home-snap-4', 'Home Four'),
+      buildLeagueSnapshotPlayer('home-snap-5', 'Home Five'),
+    ];
+    const awayPlayers = [
+      buildLeagueSnapshotPlayer('away-snap-1', 'Away One'),
+      buildLeagueSnapshotPlayer('away-snap-2', 'Away Two'),
+      buildLeagueSnapshotPlayer('away-snap-3', 'Away Three'),
+      buildLeagueSnapshotPlayer('away-snap-4', 'Away Four'),
+      buildLeagueSnapshotPlayer('away-snap-5', 'Away Five'),
+    ];
+    return buildDualLeagueGame({
+      homeRosterSnapshot: homePlayers,
+      awayRosterSnapshot: awayPlayers,
+      homeCurrentLineupPlayerIds: homePlayers.map((player) => player._id),
+      awayCurrentLineupPlayerIds: awayPlayers.map((player) => player._id),
+      ...overrides,
+    });
+  }
+
+  test('appendEventForUser returns the slim delta shape, not the full game-detail response', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    // Present: what the tracker actually renders after a tracked stat.
+    expect(result).toHaveProperty('game');
+    expect(result).toHaveProperty('lineups');
+    expect(result).toHaveProperty('boxScore');
+    expect(result).toHaveProperty('gameSummary');
+    expect(result).toHaveProperty('canEditCompletedGame');
+    // Absent: recap/highlights/team context — unchanged per-event, and the
+    // client's merge (`{...current, ...response}`) leaves the initial-load
+    // values in place when these keys aren't present in the response.
+    expect(result).not.toHaveProperty('recap');
+    expect(result).not.toHaveProperty('highlights');
+    expect(result).not.toHaveProperty('team');
+    expect(result).not.toHaveProperty('opponentTeam');
+    expect(result).not.toHaveProperty('participants');
+    expect(result).not.toHaveProperty('league');
+    expect(result).not.toHaveProperty('teamEntitlements');
+    expect(result).not.toHaveProperty('aiSummary');
+    expect(result).not.toHaveProperty('replayFilters');
+  });
+
+  test('appendEventForUser does not re-fetch the game a second time (no extra findGameById)', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    // getGameForUser used to re-run assertGameAccess (a second findGameById)
+    // just to build the response from data already in memory post-save.
+    expect(findGameById).toHaveBeenCalledTimes(1);
+  });
+
+  test('a concurrent write on a stale doc is rejected with 409, not silently clobbered', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    const versionError = new Error('No matching document found');
+    versionError.name = 'VersionError';
+    saveGame.mockRejectedValue(versionError);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        teamSide: 'home',
+        playerId: 'home-snap-1',
+        statType: STAT_TYPES.FG2_MADE,
+      })
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test('a non-version save error still propagates as-is', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockRejectedValue(new Error('disk full'));
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        teamSide: 'home',
+        playerId: 'home-snap-1',
+        statType: STAT_TYPES.FG2_MADE,
+      })
+    ).rejects.toThrow('disk full');
+  });
+
+  test('removeEventForUser returns the slim delta shape', async () => {
+    const game = buildSlimTestGame({
+      events: buildEvents([
+        { _id: 'evt-1', teamSide: 'home', playerId: 'home-snap-1', statType: 'FG2_MADE' },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await removeEventForUser('user-1', 'game-1', 'evt-1');
+
+    expect(result).toHaveProperty('boxScore');
+    expect(result).toHaveProperty('gameSummary');
+    expect(result).not.toHaveProperty('recap');
+    expect(result).not.toHaveProperty('team');
+  });
+
+  test('updateEventForUser returns the slim delta shape', async () => {
+    const game = buildSlimTestGame({
+      events: buildEvents([
+        { _id: 'evt-1', teamSide: 'home', playerId: 'home-snap-1', statType: 'FG2_MADE' },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await updateEventForUser('user-1', 'game-1', 'evt-1', {
+      statType: 'FG3_MADE',
+    });
+
+    expect(result).toHaveProperty('boxScore');
+    expect(result).toHaveProperty('gameSummary');
+    expect(result).not.toHaveProperty('recap');
+    expect(result).not.toHaveProperty('team');
   });
 });
 

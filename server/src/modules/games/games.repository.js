@@ -215,7 +215,18 @@ const gameSchema = new mongoose.Schema(
     aiSummaryGenerationLockId: { type: String, default: null, index: true },
     aiSummaryGenerationLockedAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // OPT-015: reject a save whose loaded version no longer matches the
+    // stored version instead of silently clobbering a concurrent co-tracker's
+    // event. Mongoose checks `__v` on save() and throws VersionError if it
+    // was bumped by another write since this doc was loaded — this is the
+    // "updatedAt-based optimistic concurrency check" the task asks for
+    // (Mongoose's built-in version key is the standard idiom for exactly this
+    // and needs no hand-rolled findOneAndUpdate filter across every mutable
+    // field on this document).
+    optimisticConcurrency: true,
+  }
 );
 
 gameSchema.index({ ownerUserId: 1, teamId: 1, createdAt: -1 });

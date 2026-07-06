@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified (2026-07-06: 4 bugs found+fixed, see Verification log). Wave 3 underway (OPT-017 done).`
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified (2026-07-06: 4 bugs found+fixed, see Verification log). Wave 3 underway (OPT-015, OPT-017 done).`
 - **Current wave:** Wave 3. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
-- **Recommended next task:** **`OPT-015`** (slim event-append hot path — deps: OPT-008 ✅, coordinate with OPT-016) — do this before OPT-016 (which depends on it). **`OPT-014`** (React Query) is independent and can go anytime. Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–013, 017.)
+- **Recommended next task:** **`OPT-016`** (GameTrackPage decomposition — deps: OPT-015 ✅ now met) — the natural follow-on, wiring the client to consume the slim delta with optimistic updates. **`OPT-014`** (React Query) is independent and can go anytime. Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–013, 015, 017.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| Not Started | 11                                                                                             |
-| In Progress | 0                                                                                              |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                      |
-| Completed   | 13 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `017`) |
-| Deferred    | 0                                                                                              |
+| Status      | Count                                                                                                 |
+| ----------- | ----------------------------------------------------------------------------------------------------- |
+| Not Started | 10                                                                                                    |
+| In Progress | 0                                                                                                     |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                             |
+| Completed   | 14 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `015`, `017`) |
+| Deferred    | 0                                                                                                     |
 
 ---
 
@@ -114,7 +114,7 @@ consumers and rework is minimised.
 | OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | ✅ Scoped    | OPT-008            |
 | OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | ✅ Completed | OPT-006            |
 | OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
-| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
+| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | ✅ Scoped    | OPT-008            |
 | OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started  | OPT-015            |
 | OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
 | OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
@@ -232,6 +232,21 @@ blockers._
   queries** total. Also fixed a latent test-hygiene gap (unflushed
   `setImmediate` callbacks) this task's new scheduler exposed. 206 tests pass.
   See its card.
+- **OPT-015** — Slim event-append hot path (scoped). _2026-07-06._ Branch `dev`.
+  **(Sets up OPT-016.)** Enabled Mongoose's native `optimisticConcurrency:true`
+  on the Game schema — a co-tracker's stale save now throws `VersionError`,
+  translated to a clear `409` instead of silently clobbering another tracker's
+  event. Verified against **real MongoDB** (throwaway doc, cleaned up after).
+  New slim response (`game`/`lineups`/`boxScore`/`gameSummary`/
+  `canEditCompletedGame` only) replaces the full `getGameForUser` payload on
+  the 4 event mutators — confirmed via grep that `GameTrackPage.jsx` never
+  reads the dropped fields outside its initial load, so **no client changes
+  were needed** for correctness. Also eliminated a redundant second
+  `findGameById` the old code paid on every append. **`$push` intentionally
+  not implemented** — the business validation rules need the current state
+  loaded first, so a blind atomic push can't work; the version-checked
+  load→validate→save pattern is the correct mechanism for the actual goal
+  (no more clobbering). 212 tests pass. See its card.
 - **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
   Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
   migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
@@ -324,6 +339,18 @@ Record every architectural / scope decision here with a date and rationale.
   top-level `afterEach(() => new Promise(r => setImmediate(r)))`. Any new test
   file that calls `finishGameForUser`/the event mutators/`deleteGameForUser`
   needs the same flush — it's the pattern to copy.
+- **2026-07-06 — OPT-015's `$push` scoped to "version-checked load→save"
+  instead of a literal atomic push.** The append path's validation (lineup
+  state, substitution legality, active-roster checks) all need the game's
+  _current_ state loaded before deciding what to push — a blind
+  `Game.findOneAndUpdate({...}, {$push: ...})` can't run that validation
+  against data it never loaded. Mongoose's `optimisticConcurrency:true`
+  (version-key check on `.save()`) gets the actual goal — no silent
+  clobbering between co-trackers — without needing a lower-level atomic op
+  the business rules can't support blindly. True `$push`/`$position` is only
+  worth revisiting if profiling ever shows the full-doc save itself (distinct
+  from the race) is the bottleneck, which the roadmap's own "tiny dataset"
+  framing suggests is not the case today.
 
 ## 🔎 Verification log
 
@@ -444,6 +471,9 @@ Log new collections, fields, utilities, and providers as they are introduced.
   `teamCard` sub-schemas in `feed.repository.js` + `updatePostCardSnapshot`/
   `listGameCardPostsByGameId`; `buildGameCardSnapshot`/`buildPlayerCardSnapshot`/
   `buildTeamCardSnapshot` + `refreshGameCardPostsForGame` in `feed.service.js`.
+- ✅ **built (OPT-015, 2026-07-06)** `optimisticConcurrency: true` on the Game
+  schema (`games.repository.js`) — Mongoose's native version-key check;
+  `saveGameEventMutation` + `buildSlimGameEventDelta` in `games.service.js`.
 - _(planned)_ React Query `QueryClientProvider` (OPT-014).
 
 ## 🔔 Implementation reminders
@@ -931,6 +961,41 @@ game finishes/is edited; deleted-game cards degrade the same way as before; no
 errors logged. Optional DB check: inspect `db.posts.find({type: {$in:
 ['game_card','player_card','team_card']}})` — cards should accumulate a
 non-null `cardSnapshot` as they're read.
+
+---
+
+### ✅ OPT-015 — Slim event-append hot path (server-side, scoped)
+
+**What to test:** Tracking a game (append/remove/update an event) now returns a
+smaller response and rejects a stale concurrent save with a clear error
+instead of silently losing an event. The tracking UI itself should behave
+identically — this is a backend contract change the client already tolerates.
+
+1. **Tracking still works normally** (regression check — the primary thing to
+   verify):
+   - Open `/games/:id/track` for an in-progress game and record several stats
+     (makes, misses, assists, rebounds, substitutions). Score, box score, and
+     the recent-events list should all update correctly after each action.
+   - Undo/remove an event, edit an event — both should still work and update
+     the displayed score/stats.
+2. **Insert-before (retroactive event insert) still works:** if the tracker
+   supports inserting a missed event before an existing one, confirm it still
+   inserts at the right position and updates the score.
+3. **Co-tracker conflict surfaces clearly (new behaviour):** this needs two
+   sessions tracking the _same_ game concurrently — hard to trigger by hand
+   without a second device/browser profile logged in as a manager on the same
+   league game. If you can set that up: have both submit a stat at nearly the
+   same time. One should succeed normally; the other should show an error
+   message like "This game was updated by someone else. Reload and try
+   again." instead of the event silently vanishing. If you can't easily set
+   up two sessions, this is covered by the automated tests (a real-MongoDB
+   throwaway-document check was also run during implementation — see the
+   card's completion notes).
+4. **No errors** in server logs during 1–2.
+
+**Pass criteria:** Tracking flow (append, remove, update, insert-before) works
+identically to before; a genuine concurrent conflict returns a 409 with a
+clear message instead of a lost event; no errors logged otherwise.
 
 ---
 
@@ -1625,7 +1690,7 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
 
 ### OPT-015 — Slim event-append hot path
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / contract
+- **Priority:** Medium · **Status:** ✅ Completed (scoped) · **Category:** Backend / contract
 - **Wave:** 3 · **Complexity:** M · **Dependencies:** OPT-008 · **Coordinate with:** OPT-016
 - **Description:** `$push` the event instead of full-doc save (also fixes the
   lineup-clobber race); single stat pass instead of 7–10; return a **slim delta**
@@ -1640,10 +1705,66 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
   and `GameTrackPage.jsx` (consumes the new shape — do with OPT-016).
 - **Testing:** append updates score/stat correctly; concurrent appends don't
   clobber; tracker merges slim delta correctly.
-- **Validation checklist:** [ ] `$push` used [ ] single pass [ ] slim response
-  [ ] optimistic-concurrency rejects stale writes [ ] tracker handles new shape.
+- **Validation checklist:** [x] optimistic-concurrency rejects stale writes
+  [x] slim response [~] `$push` used (scoped — see notes) [~] single pass
+  (already ~2, not touched further) [x] tracker handles new shape (verified —
+  no client code changes needed, see notes).
 - **Source:** [30](./30-optimisation-roadmap.md) M1, [23](./23-api-audit.md) #4.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06
+  - **Concurrency safety (the "also fixes the lineup-clobber race" half):**
+    enabled Mongoose's native `optimisticConcurrency: true` on the Game schema
+    — `.save()` now checks the version key and throws `VersionError` if
+    another request saved the same doc since it was loaded here. New
+    `saveGameEventMutation(game)` wraps the four event-mutator saves (append
+    dual_team, append one_sided, remove, update) and translates that into
+    `ApiError(409, "This game was updated by someone else. Reload and try
+again.")` — a clear, retryable conflict instead of the previous silent
+    last-write-wins clobber. **Verified against real MongoDB**, not just
+    mocks: created a throwaway test document, saved two loaded copies
+    sequentially, and confirmed the second genuinely throws `VersionError` —
+    then deleted the throwaway doc (never touched real user data).
+  - **`$push` scoped down, not implemented as literally asked:** the append
+    path's business rules (lineup/substitution validation, "is this player
+    currently on the court", roster active-player checks) all need to read
+    the game's _current_ state before deciding what to push — a blind atomic
+    `$push` can't validate against data it hasn't loaded. The
+    optimistic-concurrency load→validate→mutate→save-with-version-check
+    pattern above **is** the correct/standard way to get race-safety here;
+    it achieves the task's actual goal (no more silent clobbering) without a
+    lower-level atomic op the validation logic can't support blindly. Revisit
+    true `$push`/`$position` only if profiling shows the full-doc save itself
+    (not the race) is the bottleneck.
+  - **Slim response:** new `buildSlimGameEventDelta(userId, game, context)`
+    returns only `game`, `lineups`, `boxScore`, `gameSummary`,
+    `canEditCompletedGame` — dropping `recap`, `highlights`, `team`,
+    `opponentTeam`, `participants`, `league`, `teamEntitlements`, `aiSummary`,
+    `replayFilters`. Confirmed via grep that `GameTrackPage.jsx` **never reads
+    any of the dropped fields** outside its initial-load effect, and its
+    `setData((current) => ({...current, ...response}))` merge leaves those
+    keys at their initial-load values when absent from a later response —
+    **zero client changes were needed** for this to work correctly today (full
+    rewiring is still OPT-016's job for the _optimistic-update_ half, but the
+    contract change itself is drop-in compatible).
+  - **Eliminated a redundant re-fetch:** the old code ended every mutator with
+    `return getGameForUser(userId, gameId)`, which re-ran `assertGameAccess`
+    (a second `findGameById`) just to rebuild the response from data already
+    in memory post-save. The slim builder works directly off the in-memory,
+    already-saved `game` + the `context` the caller resolved before mutating
+    (team/participant docs are unaffected by an event mutation, so reusing is
+    safe) — one DB read per append instead of two. `removeEventForUser`/
+    `updateEventForUser` didn't have `context` in scope before, so they still
+    resolve it once (same cost as before, just no _second_ `getGameForUser`
+    round-trip).
+  - **"Single pass instead of 7-10" — not touched further:** `computeBoxScore`
+    (2 passes: an event loop + one internal `summarizeEvents` call) was
+    already far better than "7-10" on this specific path _before_ this task —
+    that number describes `getGameForUser`'s full response (recap's own
+    `summarizeEventsBySide` + `buildKeyMoments` + `buildShotSnapshot`, on top
+    of box score), which the slim response above no longer runs at all on
+    the append path. No further consolidation attempted.
+  - Added 6 unit tests (slim shape assertions, no-double-fetch, 409 on
+    version conflict, non-version errors still propagate, remove/update slim
+    shape). Full suite: **212 passing** (was 206).
 
 ---
 
@@ -1715,11 +1836,11 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
     (`finishGameForUser`, and the 3 completed-game event mutators) via a lazy
     `require` (avoids a cycle — `feed.service.js` already requires
     `games.service.js` for `getPublicGame`/`canAccessGame`). Fixes a real bug
-    class: a game_card shared mid-game would otherwise show a stale score
+    class: a game*card shared mid-game would otherwise show a stale score
     forever once the game finished. **`deleteGameForUser` intentionally left
     untouched** — the pre-existing `deletePostsByGameId` repository function is
     dead code (never wired to any caller before this task), and wiring it is a
-    separate concern from card _staleness_ (this task's actual scope); noted,
+    separate concern from card \_staleness* (this task's actual scope); noted,
     not fixed.
   - **Verified on real dev data:** feed hydration for 17 real posts produces
     byte-identical card content to the pre-change live compute (spot-checked a
