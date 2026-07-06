@@ -38,22 +38,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 nearly done (OPT-010, 011, 012 done).`
-- **Current wave:** Wave 2 — one task left. Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
-- **Recommended next task:** **`OPT-013`** (team season summaries; deps met: OPT-006 ✅) — the last Wave 2 task, then **Wave 3** opens (client cache + contract changes). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–012.)
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Wave 1 complete. Wave 2 COMPLETE.`
+- **Current wave:** Wave 2 done → **Wave 3 open** (client cache + contract changes). Branch `dev` (see note in Decisions log re: `feat/opt-wave-0`).
+- **Recommended next task:** **`OPT-014`** (React Query on the client — deps: stronger after OPT-010/011 ✅✅) or **`OPT-015`** (slim event-append hot path — deps: OPT-008 ✅). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–013.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| Not Started | 13                                                                               |
-| In Progress | 0                                                                                |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                        |
-| Completed   | 11 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`) |
-| Deferred    | 0                                                                                |
+| Status      | Count                                                                                   |
+| ----------- | --------------------------------------------------------------------------------------- |
+| Not Started | 12                                                                                      |
+| In Progress | 0                                                                                       |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                               |
+| Completed   | 12 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`) |
+| Deferred    | 0                                                                                       |
 
 ---
 
@@ -112,7 +112,7 @@ consumers and rework is minimised.
 | OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
 | OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | ✅ Completed | OPT-010            |
 | OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | ✅ Scoped    | OPT-008            |
-| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | Not Started  | OPT-006            |
+| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | ✅ Completed | OPT-006            |
 | OPT-014 | React Query on the client                      | 3    | High     | M          | Not Started  | (OPT-010, OPT-011) |
 | OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | Not Started  | OPT-008            |
 | OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | Not Started  | OPT-015            |
@@ -207,6 +207,17 @@ blockers._
   tiny dataset) — both documented in the Decisions log. Verified byte-identical
   to live compute on 3 real dev games (read-only check, no writes). 192 tests
   pass. See its card.
+- **OPT-013** — Team season summaries (standalone teams). _2026-07-06._ Branch
+  `dev`. **(Wave 2 COMPLETE.)** New `teamseasonsummaries` collection; existing
+  `buildPublicTeamSummary` unchanged, now wrapped by `computeTeamSeasonSummary`
+  - a materialised `getTeamSeasonSummary` (indexed find, compute-on-miss
+    self-backfill) wired into `getPublicTeam`. Triggers scoped precisely to
+    one_sided standalone games (confirmed by tracing `buildPublicTeamSummary`'s
+    data source before wiring, since dual_team standalone games never appear in
+    it). Lazy `require` used in `games.service.js` to avoid a cycle with
+    `teams.service.js`. Backfill run on dev — 2/2 teams, zero parity mismatches;
+    confirmed `getPublicTeam` serves materialised data end-to-end. 197 tests pass.
+    See its card.
 - **OPT-003** — `<CloudinaryImage>` component + **full rollout**. _2026-07-05._
   Branch `feat/opt-wave-0`. Component built (11 tests) and **all 64 `<img>` sites
   migrated** across 34 files (7 manual + 57 via a 6-agent parallel workflow).
@@ -271,6 +282,19 @@ Record every architectural / scope decision here with a date and rationale.
   4 functions' event-array passes across 2 files was judged too large/risky for
   a live-game-only win on a currently-tiny dataset. See the card for full
   reasoning; revisit both if event counts grow materially.
+- **2026-07-06 — Materialised doc chosen over a 60s memory cache for OPT-013.**
+  The task description offered either. Went with the materialised-doc pattern
+  (matching OPT-010/011) for consistency, multi-instance correctness (a memory
+  cache wouldn't be shared across server processes), and because the
+  self-healing compute-on-miss fallback is already proven.
+- **2026-07-06 — Lazy `require` is the house pattern for avoiding service-layer
+  require cycles.** `teams.service.js` requires `games.service.js` (for
+  `computeBoxScore`); OPT-013 needed the reverse direction too
+  (`games.service.js` → `teams.service.js`, to schedule a team-summary
+  recompute on game completion). Used a function-body `require` inside the
+  trigger helper instead of a top-level import — `leagues.service.js` already
+  does this for its billing-service import. Reach for this pattern whenever two
+  service modules need each other.
 
 ## 🏗️ Architecture changes log
 
@@ -297,6 +321,12 @@ Log new collections, fields, utilities, and providers as they are introduced.
   fields (Mixed, nullable) in `games.repository.js`; `refreezeGameBoxScoreIfCompleted`
   helper in `games.service.js`. `recap`/`highlights` intentionally NOT added —
   see Decisions log.
+- ✅ **built (OPT-013, 2026-07-06)** `teamseasonsummaries` collection
+  (`{teamId unique+indexed, summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/
+  `upsertTeamSeasonSummary`/`deleteTeamSeasonSummary` in `teams.repository.js`;
+  `computeTeamSeasonSummary`/`getTeamSeasonSummary`/`recomputeTeamSeasonSummary`/
+  `scheduleTeamSeasonSummaryRecompute` in `teams.service.js`; backfill script
+  `scripts/backfill-team-season-summaries.js`.
 - ✅ **built (OPT-010, 2026-07-06)** `leaguestandings` collection
   (`{leagueId unique+indexed, rows, timestamps}`) + `findLeagueStandings` /
   `upsertLeagueStandings` / `deleteLeagueStandings` in `leagues.repository.js`;
@@ -706,6 +736,53 @@ consistent box scores and summaries; editing a completed game updates the
 displayed data; recap/highlights are unaffected. ⚠️ Note: the "consolidate 7–10
 event passes into one for live games" half of this task was **descoped** — live
 (in-progress) games still do their existing multi-pass compute. See the card.
+
+---
+
+### ✅ OPT-013 — Team season summaries (server-side)
+
+**What to test:** Standalone (non-league) team public pages now serve a
+pre-computed season summary instead of recomputing from every game+event on
+each view. Numbers must be identical; the win is not replaying events on
+every page load.
+
+> The dev DB was backfilled during implementation for the two standalone teams
+> (**Toronto Raptors**: 2 games/15 pts, **Milwaukee Bucks**: 0 games) — zero
+> parity mismatches confirmed against live compute.
+
+1. **Team page renders correctly** (materialised read — regression check):
+   - Open the public team page for a standalone team
+     (`/teams/:id` or wherever the public team page lives) — season summary
+     (games played, points, shooting %s, per-player stat rows) should look
+     right and match what you saw before this task.
+2. **Finish a standalone game → summary updates** (new code path):
+   - Track and finish a standalone (one-sided, non-league) game for that team
+     with a few scoring events.
+   - Reload the team page shortly after — the summary should reflect the new
+     game (gamesCount incremented, points/stats updated).
+3. **Edit a completed standalone game → summary updates:**
+   - Add/remove a scoring event on that completed game; reload the team page →
+     summary reflects the change.
+4. **Delete a completed standalone game → summary updates:**
+   - Delete it; reload the team page → that game no longer counts.
+5. **Dual-team standalone games are unaffected** (scope check — these were
+   never part of this summary, before or after this task):
+   - If you have a dual-team standalone game (two teams tracked against each
+     other, no league), confirm neither team's public page treats it any
+     differently than before.
+6. **No errors** in server logs while doing 2–4 — no `Team season summary
+backfill persist failed` or `Post-response team season summary recompute
+failed` lines.
+7. **Compute-on-miss fallback (reversible):** dropping the
+   `teamseasonsummaries` collection still serves a correct summary (computed
+   live and re-persisted on first read). Optional DB check:
+   `node src/scripts/backfill-team-season-summaries.js --dry-run` (with
+   `ENV_FILE`) reports each team's computed summary.
+
+**Pass criteria:** Season summaries match previous live-computed values
+exactly; they update after finish/edit/delete on standalone one-sided games
+within a moment; dual-team standalone games are unaffected; no errors logged;
+dropping the collection degrades gracefully.
 
 ---
 
@@ -1288,7 +1365,7 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
 
 ### OPT-013 — Team season summaries (standalone teams)
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend
 - **Wave:** 2 · **Complexity:** M · **Dependencies:** OPT-006
 - **Description:** Apply the materialise-on-write pattern to standalone
   (non-league) team season summaries (`teams.service.js:275-344`, O(G×E)) —
@@ -1297,10 +1374,48 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
 - **Expected benefit:** Team page read → find/cache instead of O(G×E).
 - **Files likely to change:** `teams.service.js`, `teams.repository.js`.
 - **Testing:** summary parity vs live compute; recompute on completion.
-- **Validation checklist:** [ ] parity [ ] recompute on completion [ ] fallback
+- **Validation checklist:** [x] parity [x] recompute on completion [x] fallback
   on miss.
 - **Source:** [30](./30-optimisation-roadmap.md) (H3 family), [28](./28-computation-optimisation.md) step 5.
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06
+  - **Collection:** `teamseasonsummaries` schema (`{teamId unique+indexed,
+summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary`/
+    `deleteTeamSeasonSummary` in `teams.repository.js`. Chose a materialised doc
+    over a 60s memory cache (the description's alternative) — matches the
+    OPT-010/011 pattern exactly, is correct across multiple server instances,
+    and self-heals the same way.
+  - **Pure compute:** `computeTeamSeasonSummary(teamId, {team, games})` fetches
+    its own data when not prefetched, then calls the existing
+    `buildPublicTeamSummary` (unchanged — it stays the single source of truth).
+  - **Read path:** `getTeamSeasonSummary(teamId, prefetch)` always checks the
+    materialised store first (indexed find); on a miss, uses `prefetch`
+    (team/games already loaded by the caller) to compute without a re-fetch,
+    then persists (self-backfilling). Wired into `getPublicTeam`, which already
+    loads `team`/`games` for its own response fields — passed through as the
+    miss-path optimisation.
+  - **Scope precisely matches "standalone teams" in the title:** the
+    materialisation only applies where `buildPublicTeamSummary`'s data source
+    (`listGamesByTeamId`, filtered by `game.teamId`) actually has data — **one_sided
+    standalone games only**. Dual_team standalone games are looked up via
+    `homeTeamId`/`awayTeamId` (`listGamesByStandaloneParticipantTeamId`) and
+    never populate `game.teamId`, so they don't appear in this summary at all
+    (pre-existing behaviour, unchanged) — confirmed by tracing the query before
+    wiring any triggers, to avoid firing a no-op recompute on the wrong games.
+  - **Triggers wired** (`games.service.js`, guarded on `gameContext ===
+'standalone' && trackingMode === 'one_sided'`): `finishGameForUser`,
+    `deleteGameForUser`, and all 3 event mutators (guarded on `status ===
+'completed'` for edits, same condition as OPT-010's league trigger).
+  - **Require-cycle avoided:** `teams.service.js` already requires
+    `games.service.js` (for `computeBoxScore`), so `games.service.js` requiring
+    `teams.service.js` at the top would create a cycle. Used a lazy
+    (function-body) `require`, the same pattern `leagues.service.js` already
+    uses for its billing-service import.
+  - **Backfill:** `scripts/backfill-team-season-summaries.js` (idempotent,
+    `--dry-run`). Ran on dev: 2/2 standalone teams (Toronto Raptors: 2 games/15
+    pts, Milwaukee Bucks: 0 games), **zero parity mismatches**; confirmed
+    `getPublicTeam` serves the materialised values end-to-end on real data.
+  - Added 5 unit tests (materialised hit/miss, parity, prefetch-on-miss,
+    `getPublicTeam` integration). Full suite: **197 passing** (was 192).
 
 ---
 

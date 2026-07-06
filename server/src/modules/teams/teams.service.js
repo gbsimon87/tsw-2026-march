@@ -13,9 +13,12 @@ const {
   findTeamById,
   listTeams,
   saveTeam,
+  findTeamSeasonSummary,
+  upsertTeamSeasonSummary,
 } = require('./teams.repository');
 const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
+const { logger } = require('../../config/logger');
 const {
   getBillingSummary,
   getTeamEntitlements,
@@ -304,6 +307,89 @@ function buildPublicTeamSummary(games, team) {
   };
 }
 
+// OPT-013: pure live compute — the source of truth both the materialised read
+// AND recompute hook reuse. Fetches its own games/team so it can be called from
+// a write-trigger context that doesn't already have them loaded.
+async function computeTeamSeasonSummary(
+  teamId,
+  { team: prefetchedTeam, games: prefetchedGames } = {}
+) {
+  const [team, games] = await Promise.all([
+    prefetchedTeam ?? findTeamById(teamId),
+    prefetchedGames ?? listGamesByTeamId(teamId),
+  ]);
+  if (!team) {
+    return null;
+  }
+  return buildPublicTeamSummary(games, team);
+}
+
+// OPT-013: materialised read. Serves the pre-computed summary from
+// `teamseasonsummaries`; on a miss it computes live, persists, and returns
+// (self-backfilling, reversible — mirrors OPT-010's getLeagueStandings).
+// Callers that already loaded team/games for other parts of their response
+// (e.g. getPublicTeam needs both regardless) can pass them via `prefetch` —
+// used ONLY on a miss, to skip a redundant re-fetch; the materialised check
+// itself always runs first so the O(G×E) compute is still avoided on a hit.
+async function getTeamSeasonSummary(teamId, prefetch = {}) {
+  const materialised = await findTeamSeasonSummary(teamId);
+  if (materialised && materialised.summary) {
+    return materialised.summary;
+  }
+
+  const summary = await computeTeamSeasonSummary(teamId, prefetch);
+  if (summary) {
+    try {
+      await upsertTeamSeasonSummary(teamId, summary);
+    } catch (error) {
+      logger.warn(
+        { err: error, teamId: String(teamId) },
+        'Team season summary backfill persist failed'
+      );
+    }
+  }
+  return summary;
+}
+
+// OPT-013: recompute + persist hook, fired post-response from game-completion
+// triggers on standalone (non-league) teams. Per-team in-flight guard coalesces
+// overlapping triggers, same pattern as OPT-010's recomputeLeagueAggregates.
+const recomputeTeamSummaryInFlight = new Map();
+
+async function recomputeTeamSeasonSummary(teamId) {
+  const key = String(teamId);
+  if (recomputeTeamSummaryInFlight.has(key)) {
+    return recomputeTeamSummaryInFlight.get(key);
+  }
+
+  const work = (async () => {
+    const summary = await computeTeamSeasonSummary(teamId);
+    if (summary) {
+      await upsertTeamSeasonSummary(teamId, summary);
+    }
+    return summary;
+  })();
+
+  recomputeTeamSummaryInFlight.set(key, work);
+  try {
+    return await work;
+  } finally {
+    recomputeTeamSummaryInFlight.delete(key);
+  }
+}
+
+function scheduleTeamSeasonSummaryRecompute(teamId) {
+  if (!teamId) return;
+  setImmediate(() => {
+    recomputeTeamSeasonSummary(teamId).catch((error) => {
+      logger.error(
+        { err: error, teamId: String(teamId) },
+        'Post-response team season summary recompute failed'
+      );
+    });
+  });
+}
+
 const HIGHLIGHT_STAT_TYPES = new Set([
   'FG2_MADE',
   'FG2_MISS',
@@ -500,7 +586,9 @@ async function getPublicTeam(teamId) {
       entitlements: getTeamEntitlements(team),
       players,
     },
-    summary: buildPublicTeamSummary(games, team),
+    // OPT-013: materialised read (indexed find); falls back to computing from
+    // the games/team already loaded above on a miss (no re-fetch needed).
+    summary: await getTeamSeasonSummary(team._id, { team, games }),
     games: games.map(sanitizePublicGame),
   };
 }
@@ -865,6 +953,10 @@ module.exports = {
   listPublicExploreGames,
   listPublicTeams,
   buildPublicTeamSummary,
+  computeTeamSeasonSummary,
+  getTeamSeasonSummary,
+  recomputeTeamSeasonSummary,
+  scheduleTeamSeasonSummaryRecompute,
   buildPublicPlayerGameRows,
   buildPublicPlayerSummary,
   slugifyOpponentName,

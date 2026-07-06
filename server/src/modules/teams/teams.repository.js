@@ -64,7 +64,28 @@ const teamSchema = new mongoose.Schema(
 
 teamSchema.index({ ownerUserId: 1, name: 1 });
 
+// OPT-013: materialised standalone-team season summary. One doc per team;
+// `summary` is the pre-computed object `buildPublicTeamSummary` returns
+// (gamesCount, stat totals, boxScore). Mixed because that compute function
+// stays the single source of truth for the shape. Read path is an indexed
+// findOne; write path is the recompute hook (mirrors OPT-010's leaguestandings).
+const teamSeasonSummarySchema = new mongoose.Schema(
+  {
+    teamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Team',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    summary: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { timestamps: true }
+);
+
 const Team = mongoose.models.Team || mongoose.model('Team', teamSchema);
+const TeamSeasonSummary =
+  mongoose.models.TeamSeasonSummary || mongoose.model('TeamSeasonSummary', teamSeasonSummarySchema);
 
 async function createTeam(input) {
   return Team.create(input);
@@ -90,6 +111,23 @@ async function saveTeam(team) {
   return team.save();
 }
 
+// OPT-013: materialised team season summary read/write.
+function findTeamSeasonSummary(teamId) {
+  return TeamSeasonSummary.findOne({ teamId });
+}
+
+function upsertTeamSeasonSummary(teamId, summary) {
+  return TeamSeasonSummary.findOneAndUpdate(
+    { teamId },
+    { $set: { summary } },
+    { new: true, upsert: true }
+  );
+}
+
+function deleteTeamSeasonSummary(teamId) {
+  return TeamSeasonSummary.deleteOne({ teamId });
+}
+
 module.exports = {
   Team,
   createTeam,
@@ -98,4 +136,8 @@ module.exports = {
   findTeamById,
   listTeams,
   saveTeam,
+  TeamSeasonSummary,
+  findTeamSeasonSummary,
+  upsertTeamSeasonSummary,
+  deleteTeamSeasonSummary,
 };

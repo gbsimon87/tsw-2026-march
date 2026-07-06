@@ -180,6 +180,23 @@ function scheduleLeagueRecomputeForGame(game) {
   }
 }
 
+// OPT-013: after a standalone one-sided game's result changes, schedule a
+// post-response recompute of that team's materialised season summary.
+// buildPublicTeamSummary (the compute this materialises) is scoped to
+// `listGamesByTeamId` (games.teamId), which only one_sided standalone games
+// populate — dual_team standalone games are looked up via homeTeamId/awayTeamId
+// (listGamesByStandaloneParticipantTeamId) and never appear in that summary, so
+// they're excluded here too. League games affect leaguestandings/
+// leagueplayerstats instead (scheduleLeagueRecomputeForGame). Required lazily
+// to avoid a require cycle — teams.service.js requires games.service.js for
+// computeBoxScore.
+function scheduleTeamSummaryRecomputeForGame(game) {
+  if (game.gameContext === 'standalone' && game.trackingMode === 'one_sided' && game.teamId) {
+    const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
+    scheduleTeamSeasonSummaryRecompute(game.teamId);
+  }
+}
+
 function sanitizeGame(game, options = {}) {
   return {
     id: String(game._id),
@@ -1402,6 +1419,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   if (game.status === 'completed') {
     // OPT-010: editing a completed league game's events changes standings.
     scheduleLeagueRecomputeForGame(game);
+    // OPT-013: editing a completed standalone game's events changes its team's
+    // season summary.
+    scheduleTeamSummaryRecomputeForGame(game);
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
@@ -1452,6 +1472,9 @@ async function removeEventForUser(userId, gameId, eventId) {
   if (game.status === 'completed') {
     // OPT-010: editing a completed league game's events changes standings.
     scheduleLeagueRecomputeForGame(game);
+    // OPT-013: editing a completed standalone game's events changes its team's
+    // season summary.
+    scheduleTeamSummaryRecomputeForGame(game);
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
@@ -1478,6 +1501,9 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (game.status === 'completed') {
     // OPT-010: editing a completed league game's events changes standings.
     scheduleLeagueRecomputeForGame(game);
+    // OPT-013: editing a completed standalone game's events changes its team's
+    // season summary.
+    scheduleTeamSummaryRecomputeForGame(game);
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
@@ -1494,15 +1520,23 @@ async function deleteGameForUser(userId, gameId) {
     }
   }
 
-  // OPT-010: capture context before deletion, then recompute standings after
-  // the row is gone (deleting a completed league game changes standings).
+  // OPT-010/013: capture context before deletion, then recompute the relevant
+  // materialised aggregate after the row is gone (deleting a completed game
+  // changes league standings or the team's season summary).
   const wasLeagueGame = game.gameContext === 'league';
   const leagueId = game.leagueId;
+  const isStandaloneOneSided =
+    game.gameContext === 'standalone' && game.trackingMode === 'one_sided';
+  const teamId = game.teamId;
 
   await game.deleteOne();
 
   if (wasLeagueGame) {
     scheduleLeagueAggregateRecompute(leagueId);
+  }
+  if (isStandaloneOneSided && teamId) {
+    const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
+    scheduleTeamSeasonSummaryRecompute(teamId);
   }
 }
 
@@ -1537,9 +1571,11 @@ async function finishGameForUser(userId, gameId) {
 
   await saveGame(game);
 
-  // OPT-010: a newly completed league game changes standings. Scheduled here
-  // (before the AI-summary branch's early returns) so it fires on every path.
+  // OPT-010/013: a newly completed game changes its league's standings or its
+  // standalone team's season summary. Scheduled here (before the AI-summary
+  // branch's early returns) so it fires on every path.
   scheduleLeagueRecomputeForGame(game);
+  scheduleTeamSummaryRecomputeForGame(game);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
     const summaryLockId = randomUUID();

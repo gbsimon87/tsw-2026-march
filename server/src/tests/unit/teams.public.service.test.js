@@ -5,6 +5,8 @@ jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamById: jest.fn(),
   listTeams: jest.fn(),
   saveTeam: jest.fn(),
+  findTeamSeasonSummary: jest.fn(),
+  upsertTeamSeasonSummary: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -44,7 +46,12 @@ jest.mock('mongoose', () => ({
   },
 }));
 
-const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
+const {
+  findTeamById,
+  listTeams,
+  findTeamSeasonSummary,
+  upsertTeamSeasonSummary,
+} = require('../../modules/teams/teams.repository');
 const {
   listGamesByTeamId,
   listPublicCompletedGames,
@@ -58,6 +65,9 @@ const {
   buildPublicPlayerSummary,
   buildPublicPlayerGameRows,
   slugifyOpponentName,
+  computeTeamSeasonSummary,
+  getTeamSeasonSummary,
+  recomputeTeamSeasonSummary,
 } = require('../../modules/teams/teams.service');
 
 describe('teams public service', () => {
@@ -719,5 +729,97 @@ describe('teams public service', () => {
         team: { id: 'team-2', name: 'TSW Red' },
       }),
     ]);
+  });
+});
+
+describe('team season summary materialisation (OPT-013)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function seedTeamAndGames() {
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [{ _id: 'p1', displayName: 'Alex', isActive: true }],
+    });
+    listGamesByTeamId.mockResolvedValue([
+      {
+        _id: 'g1',
+        title: 'vs Falcons',
+        status: 'completed',
+        scheduledAt: new Date('2026-03-10T00:00:00.000Z'),
+        events: [
+          { playerId: 'p1', statType: 'FG3_MADE' },
+          { playerId: 'p1', statType: 'FG3_MADE' },
+        ],
+      },
+    ]);
+  }
+
+  test('getTeamSeasonSummary returns materialised summary on a hit (no live compute)', async () => {
+    const storedSummary = { gamesCount: 5, points: 40 };
+    findTeamSeasonSummary.mockResolvedValue({ teamId: 'team-1', summary: storedSummary });
+
+    const result = await getTeamSeasonSummary('team-1');
+
+    expect(result).toBe(storedSummary);
+    expect(listGamesByTeamId).not.toHaveBeenCalled();
+    expect(upsertTeamSeasonSummary).not.toHaveBeenCalled();
+  });
+
+  test('getTeamSeasonSummary computes + persists on a miss (self-backfill)', async () => {
+    findTeamSeasonSummary.mockResolvedValue(null);
+    upsertTeamSeasonSummary.mockResolvedValue({});
+    seedTeamAndGames();
+
+    const result = await getTeamSeasonSummary('team-1');
+
+    expect(upsertTeamSeasonSummary).toHaveBeenCalledWith('team-1', result);
+    expect(result).toMatchObject({ gamesCount: 1, points: 6 });
+  });
+
+  test('materialised summary == live compute (parity)', async () => {
+    seedTeamAndGames();
+    const live = await computeTeamSeasonSummary('team-1');
+
+    findTeamSeasonSummary.mockResolvedValue(null);
+    upsertTeamSeasonSummary.mockResolvedValue({});
+    seedTeamAndGames();
+    const recomputed = await recomputeTeamSeasonSummary('team-1');
+
+    expect(recomputed).toEqual(live);
+    expect(upsertTeamSeasonSummary).toHaveBeenCalledWith('team-1', recomputed);
+  });
+
+  test('a miss uses prefetched team/games instead of re-fetching', async () => {
+    findTeamSeasonSummary.mockResolvedValue(null);
+    upsertTeamSeasonSummary.mockResolvedValue({});
+    const team = { _id: 'team-1', name: 'TSW Blue', players: [] };
+    const games = [{ _id: 'g1', status: 'completed', events: [] }];
+
+    await getTeamSeasonSummary('team-1', { team, games });
+
+    // Miss still checks the materialised store first, but the fallback compute
+    // uses the prefetched data — no re-fetch from the repository.
+    expect(findTeamSeasonSummary).toHaveBeenCalledTimes(1);
+    expect(findTeamById).not.toHaveBeenCalled();
+    expect(listGamesByTeamId).not.toHaveBeenCalled();
+  });
+
+  test('getPublicTeam serves the materialised summary when present', async () => {
+    const storedSummary = { gamesCount: 12, points: 100 };
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [],
+    });
+    listGamesByTeamId.mockResolvedValue([]);
+    findTeamSeasonSummary.mockResolvedValue({ teamId: 'team-1', summary: storedSummary });
+
+    const result = await getPublicTeam('team-1');
+
+    expect(result.summary).toBe(storedSummary);
+    expect(upsertTeamSeasonSummary).not.toHaveBeenCalled();
   });
 });

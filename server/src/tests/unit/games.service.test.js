@@ -12,6 +12,10 @@ jest.mock('../../modules/games/games.repository', () => ({
   saveGameSummary: jest.fn(),
 }));
 
+jest.mock('../../modules/teams/teams.service', () => ({
+  scheduleTeamSeasonSummaryRecompute: jest.fn(),
+}));
+
 jest.mock('../../modules/billing/billing.service', () => ({
   getBillingSummary: jest.fn(() => ({
     plan: 'free',
