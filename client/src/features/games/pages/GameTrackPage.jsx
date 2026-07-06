@@ -489,9 +489,16 @@ export function GameTrackPage() {
   const currentSideState = sideState[activeKey] || createEmptySideState();
   const team = data?.team || null;
   const teamId = data?.game?.teamId || null;
-  const lineupIds = isDualTeam
-    ? data?.lineups?.[activeSide]?.currentPlayerIds || []
-    : data?.game?.currentLineupPlayerIds || [];
+  // OPT-016: memoised — `|| []` was a fresh array every render whenever the
+  // lineup was empty, which alone defeated the onCourtPlayers/benchPlayers
+  // memoisation below (their deps never looked equal).
+  const lineupIds = useMemo(
+    () =>
+      isDualTeam
+        ? data?.lineups?.[activeSide]?.currentPlayerIds || []
+        : data?.game?.currentLineupPlayerIds || [],
+    [isDualTeam, data, activeSide]
+  );
   const players = useMemo(() => {
     if (isDualTeam) {
       return participantsBySide[activeSide]?.players || [];
@@ -514,8 +521,17 @@ export function GameTrackPage() {
     }
     return new Map(entries);
   }, [isDualTeam, participantsBySide, team]);
-  const onCourtPlayers = lineupIds.map((id) => playersById.get(id)).filter(Boolean);
-  const benchPlayers = players.filter((player) => !lineupIds.includes(player.id));
+  // OPT-016: memoised — these were recreated on every render (even ones that
+  // touch unrelated state like the shot picker or follow-up prompts), forcing
+  // every consumer to re-render and recompute derived data off a "new" array.
+  const onCourtPlayers = useMemo(
+    () => lineupIds.map((id) => playersById.get(id)).filter(Boolean),
+    [lineupIds, playersById]
+  );
+  const benchPlayers = useMemo(
+    () => players.filter((player) => !lineupIds.includes(player.id)),
+    [players, lineupIds]
+  );
   const otherSide = activeSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME;
   const playerSideMap = useMemo(() => {
     if (!isDualTeam) return new Map();
