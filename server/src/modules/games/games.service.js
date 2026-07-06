@@ -10,6 +10,7 @@ const {
   findGameById,
   saveGame,
   claimGameSummaryGeneration,
+  releaseGameSummaryLock,
   saveGameSummary,
 } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
@@ -214,6 +215,41 @@ function scheduleFeedCardRefreshForGame(gameId) {
         'Post-response feed card refresh failed'
       );
     });
+  });
+}
+
+// OPT-020: generate the league AI summary AFTER the finish response is sent.
+// OpenAI can take several seconds, so blocking the finish request on it made
+// finishing a game feel slow. The claim is atomic (with a stale-lock TTL) so
+// concurrent finishes don't double-generate; on failure the lock is released
+// so a later finish can retry immediately instead of waiting out the TTL.
+// `deps` is injectable purely so tests can drive this deterministically.
+function scheduleGameSummaryGeneration(game, { recap, boxScore }) {
+  setImmediate(async () => {
+    const summaryLockId = randomUUID();
+    let claimed = false;
+    try {
+      const claimedGame = await claimGameSummaryGeneration(game._id, summaryLockId);
+      if (!claimedGame) return; // another worker owns it, or it's already done
+      claimed = true;
+      const summary = await buildPersistedGameSummary(game, { recap, boxScore });
+      await saveGameSummary(game._id, summaryLockId, summary);
+    } catch (error) {
+      logger.error(
+        { err: error, gameId: String(game._id) },
+        'Post-response AI summary generation failed'
+      );
+      if (claimed) {
+        // Release so a subsequent finish/retry can re-claim without waiting for
+        // the lock TTL to expire.
+        await releaseGameSummaryLock(game._id, summaryLockId).catch((releaseError) => {
+          logger.error(
+            { err: releaseError, gameId: String(game._id) },
+            'Failed to release AI summary lock after generation error'
+          );
+        });
+      }
+    }
   });
 }
 
@@ -1676,19 +1712,15 @@ async function finishGameForUser(userId, gameId) {
   scheduleFeedCardRefreshForGame(game._id);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
-    const summaryLockId = randomUUID();
-    const claimedGame = await claimGameSummaryGeneration(game._id, summaryLockId);
-    if (!claimedGame) {
-      return getGameForUser(userId, gameId);
-    }
-
+    // OPT-020: generate the summary off the request path (see
+    // scheduleGameSummaryGeneration). The finish response no longer waits on
+    // OpenAI; the client picks up the summary on a later fetch once it lands.
     const recap = buildGameRecap(
       game,
       game.trackingMode === 'dual_team' ? participants : teamDoc,
       boxScore
     );
-    const summary = await buildPersistedGameSummary(game, { recap, boxScore });
-    await saveGameSummary(game._id, summaryLockId, summary);
+    scheduleGameSummaryGeneration(game, { recap, boxScore });
   }
 
   return getGameForUser(userId, gameId);

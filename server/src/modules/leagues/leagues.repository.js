@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -264,6 +265,13 @@ function saveLeague(league) {
   return league.save();
 }
 
+// OPT-020: atomically claim a Stripe webhook event for a league. Returns the
+// (updated) league if this caller won the claim, or null if the event was
+// already processed / the league wasn't found (via filter).
+function claimLeagueWebhookEvent(filter, eventId) {
+  return claimWebhookEvent(League, filter, eventId);
+}
+
 function createLeagueTeam(input) {
   return LeagueTeam.create(input);
 }
@@ -459,6 +467,7 @@ module.exports = {
   findLeagueBySlug,
   listLeaguesByIds,
   saveLeague,
+  claimLeagueWebhookEvent,
   createLeagueTeam,
   listLeagueTeams,
   findLeagueTeamById,

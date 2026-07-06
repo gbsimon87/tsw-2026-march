@@ -46,10 +46,28 @@ async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLab
   return { delivery: 'resend' };
 }
 
-async function sendVerificationEmail({ to, name, verifyUrl }) {
+// OPT-020: fire-and-forget send. Email delivery (Resend) is a third-party call
+// that must not block or fail the request that triggered it — a slow or failing
+// provider should degrade to "email didn't arrive", not "the whole request
+// errored". Scheduled with setImmediate so it runs after the response is on its
+// way; failures are logged, never thrown into the request path.
+function sendTemplateEmailAsync(payload) {
+  setImmediate(() => {
+    sendTemplateEmail(payload).catch((error) => {
+      logger.error(
+        { err: error, to: payload.to, fallbackLabel: payload.fallbackLabel },
+        'Async email delivery failed'
+      );
+    });
+  });
+}
+
+// OPT-020: transactional emails are dispatched fire-and-forget so a slow/failing
+// Resend call never delays or fails the auth request that triggered it.
+function sendVerificationEmail({ to, name, verifyUrl }) {
   const safeName = name || 'there';
 
-  await sendTemplateEmail({
+  sendTemplateEmailAsync({
     to,
     subject: 'Verify your email',
     text: `Hi ${safeName}, verify your email by visiting: ${verifyUrl}`,
@@ -58,10 +76,10 @@ async function sendVerificationEmail({ to, name, verifyUrl }) {
   });
 }
 
-async function sendPasswordResetEmail({ to, name, resetUrl }) {
+function sendPasswordResetEmail({ to, name, resetUrl }) {
   const safeName = name || 'there';
 
-  await sendTemplateEmail({
+  sendTemplateEmailAsync({
     to,
     subject: 'Reset your password',
     text: `Hi ${safeName}, reset your password by visiting: ${resetUrl}`,
@@ -72,6 +90,7 @@ async function sendPasswordResetEmail({ to, name, resetUrl }) {
 
 module.exports = {
   sendTemplateEmail,
+  sendTemplateEmailAsync,
   sendVerificationEmail,
   sendPasswordResetEmail,
 };

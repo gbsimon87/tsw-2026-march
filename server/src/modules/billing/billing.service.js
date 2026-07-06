@@ -3,9 +3,9 @@ const { ApiError } = require('../../utils/apiError');
 const {
   Team,
   findTeamByIdAndOwner,
-  findTeamById,
   listTeamsByOwner,
   saveTeam,
+  claimTeamWebhookEvent,
 } = require('../teams/teams.repository');
 const {
   League,
@@ -14,12 +14,12 @@ const {
   findLeagueByIdAndOwner,
   findLeaguesByOwner,
   saveLeague,
+  claimLeagueWebhookEvent,
 } = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
-const MAX_PROCESSED_WEBHOOK_EVENT_IDS = 25;
 
 // ─── Stripe client ────────────────────────────────────────────────────────────
 
@@ -121,31 +121,14 @@ function getBillingSummary(team) {
 }
 
 // ─── Webhook idempotency ──────────────────────────────────────────────────────
-
-function getProcessedWebhookEventIds(resource) {
-  return Array.isArray(resource.processedWebhookEventIds) ? resource.processedWebhookEventIds : [];
-}
-
-function hasProcessedWebhookEvent(resource, eventId) {
-  if (!eventId) return false;
-  return (
-    resource.lastWebhookEventId === eventId ||
-    getProcessedWebhookEventIds(resource).includes(eventId)
-  );
-}
-
-function markWebhookEventProcessed(resource, eventId) {
-  if (!eventId) return;
-  const processedIds = getProcessedWebhookEventIds(resource);
-  if (!processedIds.includes(eventId)) {
-    processedIds.push(eventId);
-  }
-  if (processedIds.length > MAX_PROCESSED_WEBHOOK_EVENT_IDS) {
-    processedIds.splice(0, processedIds.length - MAX_PROCESSED_WEBHOOK_EVENT_IDS);
-  }
-  resource.processedWebhookEventIds = processedIds;
-  resource.lastWebhookEventId = eventId;
-}
+//
+// OPT-020: idempotency is now enforced atomically at the DB layer via
+// `claimTeamWebhookEvent` / `claimLeagueWebhookEvent` (see
+// utils/webhookIdempotency.js). Each handler claims the event first; a null
+// result means the event was already processed (a Stripe duplicate) or the
+// resource wasn't found, so the handler returns without re-applying its effect.
+// This replaces the previous load→check-in-memory→save sequence, which had a
+// read-check-write race between concurrent deliveries of the same event.
 
 // ─── Sync owner plan ──────────────────────────────────────────────────────────
 
@@ -374,14 +357,13 @@ async function markTeamFromCheckoutSession(session, eventId) {
   const teamId = session.metadata?.teamId;
   if (!teamId) return;
 
-  const team = await findTeamById(teamId);
+  // OPT-020: atomic claim — null means duplicate event or missing team.
+  const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
-  if (hasProcessedWebhookEvent(team, eventId)) return;
 
   team.stripeCustomerId =
     typeof session.customer === 'string' ? session.customer : team.stripeCustomerId || null;
   team.billingEmail = session.customer_details?.email || team.billingEmail || null;
-  markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
@@ -390,12 +372,10 @@ async function updateTeamFromSubscription(subscription, eventId) {
   const teamId = subscription.metadata?.teamId;
   if (!teamId) return;
 
-  const team = await findTeamById(teamId);
+  const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
-  if (hasProcessedWebhookEvent(team, eventId)) return;
 
   applyTeamSubscriptionState(team, subscription);
-  markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
@@ -406,12 +386,10 @@ async function markTeamInvoiceFailure(invoice, eventId) {
     invoice.lines?.data?.[0]?.metadata?.teamId;
   if (!teamId) return;
 
-  const team = await findTeamById(teamId);
+  const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
-  if (hasProcessedWebhookEvent(team, eventId)) return;
 
   team.subscriptionStatus = 'past_due';
-  markWebhookEventProcessed(team, eventId);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
@@ -423,7 +401,13 @@ async function createLeagueFromCheckoutSession(session, eventId) {
   const billingInterval = session.metadata?.billingInterval || 'monthly';
   if (!ownerUserId) return;
 
-  // League is created here (post-checkout) to avoid chicken-and-egg problem
+  // League is created here (post-checkout) to avoid chicken-and-egg problem.
+  // OPT-020 note: idempotency for this *create* path is by-customer, not by
+  // event id — a duplicate checkout.session.completed for an already-created
+  // league is caught by this lookup. (The atomic claim-by-event-id used by the
+  // update handlers needs an existing doc; there is none here yet. A unique
+  // index on stripeCustomerId would fully close the concurrent-create race but
+  // is a prod-data-gated migration — deferred, same class as OPT-007.)
   const existingByCustomer = await League.findOne({
     stripeCustomerId: session.customer,
   });
@@ -453,12 +437,10 @@ async function updateLeagueFromSubscription(subscription, eventId) {
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
 
-  const league = await League.findOne({ stripeCustomerId: customerId });
+  const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
   if (!league) return;
-  if (hasProcessedWebhookEvent(league, eventId)) return;
 
   applyLeagueSubscriptionState(league, subscription);
-  markWebhookEventProcessed(league, eventId);
   await saveLeague(league);
 }
 
@@ -467,18 +449,17 @@ async function markLeagueInvoiceFailure(invoice, eventId) {
 
   if (!customerId) return;
 
-  const league = await League.findOne({ stripeCustomerId: customerId });
-  if (!league) return;
-
+  // resourceType comes from the invoice metadata, so it can be checked before
+  // touching the DB — only league invoices are handled here.
   const resourceType =
     invoice.parent?.subscription_details?.metadata?.resourceType ||
     invoice.lines?.data?.[0]?.metadata?.resourceType;
   if (resourceType !== 'league') return;
 
-  if (hasProcessedWebhookEvent(league, eventId)) return;
+  const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
+  if (!league) return;
 
   league.subscriptionStatus = 'past_due';
-  markWebhookEventProcessed(league, eventId);
   await saveLeague(league);
 }
 

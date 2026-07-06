@@ -46,22 +46,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified. Wave 3 done (OPT-014/015/016 scoped, 017 done). Wave 4 underway — OPT-019 done.`
-- **Current wave:** Wave 4 (broaden caching/pagination) — OPT-019 done; OPT-018, OPT-020, OPT-021 remain. Branch `dev`.
-- **Recommended next task:** **`OPT-020`** (move blocking integrations off the request path — AI summary lock TTL, async Resend, atomic webhook idempotency): backend, self-contained, no browser needed, and it fixes a real correctness risk (non-atomic webhook idempotency). Then **`OPT-018`** (pagination). ⚠️ Two open scope gaps from Wave 3 need real browser verification before closing: **`OPT-016`** (GameTrackPage decomposition) and **`OPT-014`** (~20 pages not yet migrated; "OPT-014b" follow-up). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–017, 019.) 🛑 **OPT-019 not committed yet — see standing instruction at the top of this file.**
+- **Overall status:** `Wave 0 done (minus prod-gated OPT-007). Waves 1–2 complete AND adversarially verified. Wave 3 done (OPT-014/015/016 scoped, 017 done). Wave 4 underway — OPT-019, OPT-020 done.`
+- **Current wave:** Wave 4 (broaden caching/pagination) — OPT-019 + OPT-020 done; OPT-018, OPT-021 remain. Branch `dev`.
+- **Recommended next task:** **`OPT-018`** (pagination everywhere — cursor/limit on the remaining unbounded list endpoints + client). Larger (backend + client) and the client side pairs well with OPT-014's React Query. **`OPT-021`** (feed windowing) is the other Wave 4 item but is frontend-rendering work needing live browser verification (same constraint as OPT-016), and is Low priority. ⚠️ Open scope gaps needing browser verification before closing: **`OPT-016`** (GameTrackPage decomposition) and **`OPT-014`** (~20 pages not yet migrated; "OPT-014b"). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–017, 019, 020.) 🛑 **OPT-019 + OPT-020 not committed yet — see standing instruction at the top of this file.**
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                                                                      |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Not Started | 7                                                                                                                          |
-| In Progress | 0                                                                                                                          |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                  |
-| Completed   | 17 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `019`) |
-| Deferred    | 0                                                                                                                          |
+| Status      | Count                                                                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Not Started | 6                                                                                                                                 |
+| In Progress | 0                                                                                                                                 |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                         |
+| Completed   | 18 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `019`, `020`) |
+| Deferred    | 0                                                                                                                                 |
 
 ---
 
@@ -127,7 +127,7 @@ consumers and rework is minimised.
 | OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
 | OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | Not Started  | —                  |
 | OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
-| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | Not Started  | —                  |
+| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | Not Started  | (OPT-009)          |
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
@@ -141,6 +141,18 @@ blockers._
 
 ## ✅ Completed
 
+- **OPT-020** — Move blocking integrations off the request path. _2026-07-06._
+  Branch `dev` (uncommitted). Three sub-items: **(a)** league AI summary now
+  generated post-response (`setImmediate` in `games.service.js`), with a
+  stale-lock **TTL** (2min) so a crashed/hung generation no longer wedges the
+  summary forever, and a `releaseGameSummaryLock` retry-on-failure path —
+  **verified against real dev MongoDB**; **(b)** transactional + contact
+  emails dispatched fire-and-forget (`sendTemplateEmailAsync`) so Resend can't
+  block/fail the request; **(c)** Stripe webhook idempotency made atomic via a
+  gated `findOneAndUpdate` (`$ne` filter + `$push`/`$slice`) in
+  `utils/webhookIdempotency.js`, replacing a read-check-write race that could
+  double-process a duplicate delivery. 29 suites / 228 server tests pass; lint
+  clean. See card + Decisions log.
 - **OPT-019** — HTTP caching for anonymous public GETs. _2026-07-06._ Branch
   `dev` (uncommitted — standing instruction). New `publicCache.middleware.js`
   sets `Cache-Control: public, max-age=30, stale-while-revalidate=300` +
@@ -330,6 +342,35 @@ _None yet._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-06 — OPT-020: webhook idempotency made atomic; league-create race
+  left as a documented deferral.** The 4 team + 2 league update handlers now
+  claim each Stripe event with a single gated `findOneAndUpdate`
+  (`processedWebhookEventIds: { $ne: eventId }` + `$push`/`$slice`), so the DB
+  enforces exactly-once even under concurrent duplicate deliveries — replacing
+  a load→check-in-memory→save race. The **create** path
+  (`createLeagueFromCheckoutSession`) can't use this (no existing doc to claim
+  against); its by-customer guard is unchanged. Fully closing its
+  concurrent-create race needs a **unique index on `stripeCustomerId`**, which
+  is a prod-data-gated migration (existing null/duplicate values could violate
+  it) — deferred to the same "verify against prod first" bucket as OPT-007,
+  noted in-code rather than done blind.
+- **2026-07-06 — OPT-020: AI summary generation moved fully post-response, with
+  a lock TTL.** `finishGameForUser` used to `await` the OpenAI call inline, so
+  finishing a league game blocked on a multi-second third-party call. It now
+  runs in a `setImmediate` after the response. This is safe because the finish
+  response never carried the summary text — the client already fetches it once
+  it lands. Added a 2-minute **stale-lock TTL** (a crash/hang between claim and
+  save previously wedged the summary forever, since the claim required
+  `lockId: null`) and a `releaseGameSummaryLock` so a failed generation frees
+  the lock for immediate retry. All lock transitions verified against real dev
+  MongoDB.
+- **2026-07-06 — OPT-020: emails are fire-and-forget, including password reset
+  and contact.** For password reset the token is persisted before the send, and
+  for contact the request's job is done once accepted — so neither should block
+  or fail on Resend latency. `sendTemplateEmailAsync` logs delivery failures
+  server-side but never throws into the request path. Trade-off accepted: a
+  failed send now surfaces only in logs, not to the user (matches the roadmap's
+  "email async / failure doesn't fail the request" directive).
 - **2026-07-06 — OPT-019: CSRF token not emitted on anonymous cacheable GETs.**
   Making public GETs cacheable exposed that the global `attachCsrfToken`
   stamps a `Set-Cookie` on every response — unsafe for a shared cache to
@@ -611,6 +652,23 @@ Log new collections, fields, utilities, and providers as they are introduced.
   in `routes/index.js` (3 public routers) and `games.routes.js` (public game
   detail). `csrf.middleware.js` now imports the predicate to skip CSRF
   `Set-Cookie` on anonymous cacheable responses.
+- ✅ **built (OPT-020, 2026-07-06)** `server/src/utils/webhookIdempotency.js`
+  (`claimWebhookEvent(Model, filter, eventId)` — atomic gated
+  `findOneAndUpdate` with `$push`/`$slice: -25`; `MAX_PROCESSED_WEBHOOK_EVENT_IDS`).
+  Exposed via `claimTeamWebhookEvent` (teams.repository) and
+  `claimLeagueWebhookEvent` (leagues.repository); `billing.service.js` webhook
+  handlers claim-first (old in-memory `hasProcessedWebhookEvent`/
+  `markWebhookEventProcessed` removed).
+- ✅ **changed (OPT-020, 2026-07-06)** `games.repository.js`:
+  `claimGameSummaryGeneration(gameId, lockId, now?)` now honours a stale-lock
+  TTL (`AI_SUMMARY_LOCK_TTL_MS = 2min`); new `releaseGameSummaryLock(gameId,
+lockId)`. `games.service.js`: new `scheduleGameSummaryGeneration` (post-
+  response `setImmediate`, retry-on-failure release); `finishGameForUser` no
+  longer awaits OpenAI.
+- ✅ **changed (OPT-020, 2026-07-06)** `email.service.js`: new
+  `sendTemplateEmailAsync` (fire-and-forget); `sendVerificationEmail`/
+  `sendPasswordResetEmail` now fire-and-forget. Callers `auth.service.js`
+  (password reset) and `contact.routes.js` no longer await Resend.
 
 ## 🔔 Implementation reminders
 
@@ -1259,6 +1317,41 @@ stale-while-revalidate=300` and `Vary: Cookie, Authorization`.
 **Pass criteria:** public headers present only when anonymous; `private,
 no-cache` when authed; no `Set-Cookie` on cacheable anon responses; all
 mutations still work; no UI change anywhere.
+
+---
+
+### ✅ OPT-020 — Blocking integrations off the request path (backend)
+
+**What to test:** Three independent backend behaviours. No visible UI change
+except that finishing a league game feels faster; the rest is observable in
+server logs / DB.
+
+1. **Finishing a league game returns immediately (AI summary is async).**
+   Track and finish a **league** game. The finish action should return right
+   away — it no longer waits several seconds for OpenAI. The AI recap appears a
+   moment later once the game detail is (re)loaded; it is `null` at first, then
+   populated. Watch the server log for `Post-response AI summary generation
+failed` — you should NOT see it on a normal success.
+2. **AI summary lock recovers from failure (retry).** If OpenAI is
+   misconfigured/unreachable, finishing still succeeds (no error to the user),
+   the failure is logged, and the lock is released — finishing/reloading again
+   re-attempts generation instead of being permanently stuck with no summary.
+   (Lock TTL + release were verified against real dev MongoDB; this is the
+   user-facing manifestation.)
+3. **Password reset + contact form don't block on email.** Trigger a password
+   reset and submit the contact form. Both should respond promptly even if
+   Resend is slow, and a delivery failure must NOT turn into a request error
+   (the response is still success; failures show only in the server log as
+   `Async email delivery failed`).
+4. **Stripe webhooks are idempotent (dev/stripe-cli).** If you have the Stripe
+   CLI, `stripe trigger` a subscription event (or resend the same event twice
+   from the dashboard). The team/league state should update once and the replay
+   should be a no-op — no double-application. (Enforced atomically in the DB
+   now; the integration test `13.10` also covers replay → 200 each time.)
+
+**Pass criteria:** finishing a league game is snappy; a failed AI generation
+never errors the finish and can be retried; reset/contact never fail on email
+latency; duplicate webhooks apply exactly once.
 
 ---
 
@@ -2383,7 +2476,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 
 ### OPT-020 — Move blocking integrations off the request path
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend
+- **Priority:** Medium · **Status:** ✅ Completed · **Category:** Backend
 - **Wave:** 4 · **Complexity:** S each · **Dependencies:** none
 - **Description:** AI summary → post-response with a lock **TTL** + retry-on-
   cleared (`games.service.js:1486-1505`); Resend sends async
@@ -2397,10 +2490,58 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   `billing.service.js`.
 - **Testing:** finish returns immediately, summary appears after; email failure
   doesn't fail the request; duplicate webhook is idempotent; lock expires.
-- **Validation checklist:** [ ] AI post-response + lock TTL [ ] email async
-  [ ] webhook `$addToSet` idempotent [ ] no request-path blocking.
+- **Validation checklist:** [x] AI post-response + lock TTL (+ retry-on-cleared)
+  [x] email async [x] webhook idempotent via atomic gated `$push`/`$slice`
+  [x] no request-path blocking.
 - **Source:** [30](./30-optimisation-roadmap.md) M4, [23](./23-api-audit.md), [09](./09-payment-webhooks.md).
-- **Completion notes:** —
+- **Completion notes:** 2026-07-06 — three independent sub-items:
+  - **(a) AI summary post-response + TTL + retry-on-cleared.**
+    `finishGameForUser` no longer `await`s `buildPersistedGameSummary`
+    (OpenAI, up to several seconds) — new `scheduleGameSummaryGeneration`
+    runs it in a `setImmediate` after the finish response is sent (the
+    finish response never carried the summary text anyway; the client
+    fetches it once it lands). `claimGameSummaryGeneration` now takes a
+    **stale-lock TTL** (`AI_SUMMARY_LOCK_TTL_MS = 2min`, injectable `now`):
+    a lock is claimable when unlocked OR `aiSummaryGenerationLockedAt` is
+    older than the TTL — fixing the previous permanent-stuck-lock bug (a
+    crash/hang between claim and save left the summary ungeneratable
+    forever, since the claim required `lockId: null`). New
+    `releaseGameSummaryLock(gameId, lockId)` clears the lock on generation
+    failure so a later finish retries immediately instead of waiting out
+    the TTL. **Verified against real dev MongoDB** (throwaway league game,
+    then deleted): fresh claim ok → re-claim while fresh BLOCKED →
+    re-claim after TTL ok → release-wrong-lock no-op → release-owned ok →
+    claim-after-release ok.
+  - **(b) Email async.** New `sendTemplateEmailAsync` (fire-and-forget via
+    `setImmediate`, logs failures, never throws into the request path).
+    `sendVerificationEmail`/`sendPasswordResetEmail` are now fire-and-forget;
+    `issuePasswordReset` (password reset) and the contact route no longer
+    `await` Resend — the reset token / contact record is already persisted,
+    so a slow/failing provider can't delay or fail the request.
+  - **(c) Webhook idempotency now atomic.** The previous
+    load→check-in-memory-array→save sequence had a read-check-write race:
+    two concurrent deliveries of the same Stripe event could both pass the
+    check and both apply the effect. New shared
+    `utils/webhookIdempotency.js#claimWebhookEvent` does a single
+    `findOneAndUpdate` gated on `processedWebhookEventIds: { $ne: eventId }`,
+    appending + bounding via `$push`/`$slice: -25` in the same atomic op —
+    the DB guarantees exactly one caller wins; a `null` result means
+    duplicate/not-found → skip. Exposed as `claimTeamWebhookEvent` /
+    `claimLeagueWebhookEvent` (repo layer, mockable); all 5 team/league
+    update handlers now claim-first. The removed in-memory helpers
+    (`hasProcessedWebhookEvent`/`markWebhookEventProcessed`) are gone. The
+    league _create_ path (`createLeagueFromCheckoutSession`) keeps its
+    by-customer guard — it has no existing doc to claim against; fully
+    closing its concurrent-create race needs a unique index on
+    `stripeCustomerId`, a prod-data-gated migration deferred (same class as
+    OPT-007), noted in-code.
+  - **Tests:** new `webhookIdempotency.test.js` (3), `email.service.test.js`
+    (2, incl. fire-and-forget + failure-doesn't-throw); billing unit tests
+    reworked to the atomic-claim flow; `games.service.test.js` finish tests
+    now flush the post-response scheduler + new retry-on-cleared test;
+    contact integration test switched to the async variant. Full server
+    suite **29 suites / 228 tests pass**; lint clean. Not committed (per
+    standing instruction).
 
 ---
 

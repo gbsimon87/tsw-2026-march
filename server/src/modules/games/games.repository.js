@@ -317,20 +317,50 @@ async function saveGame(game) {
   return game.save();
 }
 
-async function claimGameSummaryGeneration(gameId, lockId) {
+// OPT-020: a summary-generation lock is reclaimable once it's older than
+// AI_SUMMARY_LOCK_TTL_MS. Without a TTL, a process that crashed (or an OpenAI
+// call that hung) between claim and save would leave the lock set forever and
+// no later finish/retry could ever generate the summary. `now` is injectable
+// for deterministic tests.
+const AI_SUMMARY_LOCK_TTL_MS = 2 * 60 * 1000;
+
+async function claimGameSummaryGeneration(gameId, lockId, now = new Date()) {
+  const staleThreshold = new Date(now.getTime() - AI_SUMMARY_LOCK_TTL_MS);
   return Game.findOneAndUpdate(
     {
       _id: gameId,
       gameContext: 'league',
-      aiSummaryGenerationLockId: null,
-      $or: [{ aiSummary: null }, { 'aiSummary.text': null }, { 'aiSummary.text': '' }],
+      // Claimable when unlocked OR the existing lock has gone stale.
+      $and: [
+        {
+          $or: [
+            { aiSummaryGenerationLockId: null },
+            { aiSummaryGenerationLockedAt: null },
+            { aiSummaryGenerationLockedAt: { $lt: staleThreshold } },
+          ],
+        },
+        {
+          $or: [{ aiSummary: null }, { 'aiSummary.text': null }, { 'aiSummary.text': '' }],
+        },
+      ],
     },
     {
       $set: {
         aiSummaryGenerationLockId: lockId,
-        aiSummaryGenerationLockedAt: new Date(),
+        aiSummaryGenerationLockedAt: now,
       },
     },
+    { new: true }
+  );
+}
+
+// OPT-020: release the lock without writing a summary — used when generation
+// fails, so a later attempt can immediately re-claim instead of waiting out the
+// TTL. Gated on lockId so we only clear a lock we still own.
+async function releaseGameSummaryLock(gameId, lockId) {
+  return Game.findOneAndUpdate(
+    { _id: gameId, aiSummaryGenerationLockId: lockId },
+    { $set: { aiSummaryGenerationLockId: null, aiSummaryGenerationLockedAt: null } },
     { new: true }
   );
 }
@@ -368,5 +398,7 @@ module.exports = {
   findGameByLeagueIdAndId,
   saveGame,
   claimGameSummaryGeneration,
+  releaseGameSummaryLock,
   saveGameSummary,
+  AI_SUMMARY_LOCK_TTL_MS,
 };

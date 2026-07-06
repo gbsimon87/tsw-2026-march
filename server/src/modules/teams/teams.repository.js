@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -111,6 +112,14 @@ async function saveTeam(team) {
   return team.save();
 }
 
+// OPT-020: atomically claim a Stripe webhook event for a team. Returns the
+// (updated) team if this caller won the claim, or null if the event was
+// already processed / the team wasn't found. Callers apply their effect only
+// on a non-null result.
+function claimTeamWebhookEvent(teamId, eventId) {
+  return claimWebhookEvent(Team, { _id: teamId }, eventId);
+}
+
 // OPT-013: materialised team season summary read/write.
 function findTeamSeasonSummary(teamId) {
   return TeamSeasonSummary.findOne({ teamId });
@@ -136,6 +145,7 @@ module.exports = {
   findTeamById,
   listTeams,
   saveTeam,
+  claimTeamWebhookEvent,
   TeamSeasonSummary,
   findTeamSeasonSummary,
   upsertTeamSeasonSummary,

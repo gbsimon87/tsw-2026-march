@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../../utils/asyncHandler');
-const { sendTemplateEmail } = require('../../services/email.service');
+const { sendTemplateEmailAsync } = require('../../services/email.service');
 const { env } = require('../../config/env');
 const { ApiError } = require('../../utils/apiError');
 
@@ -53,7 +53,9 @@ contactRouter.post(
       .filter(Boolean)
       .join('\n');
 
-    await sendTemplateEmail({
+    // OPT-020: dispatch off the request path — a slow/failing Resend call must
+    // not hold the contact form open; failures are logged server-side.
+    sendTemplateEmailAsync({
       to: env.CONTACT_EMAIL,
       replyTo: email,
       subject: `Contact form: ${name} (${clubName})`,

@@ -9,6 +9,7 @@ jest.mock('../../modules/games/games.repository', () => ({
   findGameByIdAndOwner: jest.fn(),
   saveGame: jest.fn(),
   claimGameSummaryGeneration: jest.fn(),
+  releaseGameSummaryLock: jest.fn(),
   saveGameSummary: jest.fn(),
 }));
 
@@ -79,6 +80,7 @@ const {
   findGameById,
   saveGame,
   claimGameSummaryGeneration,
+  releaseGameSummaryLock,
   saveGameSummary,
 } = require('../../modules/games/games.repository');
 const { buildGameRecap } = require('../../modules/games/gameRecap.service');
@@ -107,6 +109,15 @@ const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 // (and hit their mocks) before Jest tears down the module registry, instead
 // of firing into a torn-down environment after the test file finishes.
 afterEach(() => new Promise((resolve) => setImmediate(resolve)));
+
+// OPT-020: the AI summary is generated inside a setImmediate (post-response).
+// Tests that assert on the generation must flush the immediate queue AND let
+// the async chain inside it settle. Two ticks: one to run the setImmediate
+// callback, and enough microtask draining for its awaited claim/build/save.
+async function flushAsyncScheduler() {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
 
 function buildPlayers(players) {
   const list = players.map((player) => ({ ...player }));
@@ -511,13 +522,20 @@ describe('games service finish summaries', () => {
 
     const result = await finishGameForUser('user-1', 'game-1');
 
+    // OPT-020: finish returns immediately without waiting on OpenAI — the
+    // summary is not yet generated when the response is produced.
+    expect(result).toBeDefined();
     expect(game.status).toBe('completed');
-    expect(game.aiSummary).toEqual(summary);
+    expect(saveGame).toHaveBeenCalledTimes(1);
+    expect(buildPersistedGameSummary).not.toHaveBeenCalled();
+
+    // Generation runs post-response; flush the scheduler and assert it landed.
+    await flushAsyncScheduler();
+
     expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
     expect(buildPersistedGameSummary).toHaveBeenCalledTimes(1);
     expect(saveGameSummary).toHaveBeenCalledTimes(1);
-    expect(saveGame).toHaveBeenCalledTimes(1);
-    expect(result.aiSummary).toEqual(expect.objectContaining({ text: summary.text, source: 'ai' }));
+    expect(game.aiSummary).toEqual(summary);
   });
 
   test('does not regenerate an existing league game summary', async () => {
@@ -554,10 +572,35 @@ describe('games service finish summaries', () => {
     claimGameSummaryGeneration.mockResolvedValue(null);
 
     await finishGameForUser('user-1', 'game-1');
+    await flushAsyncScheduler();
 
+    // The post-response scheduler attempted the claim but lost it → no build.
     expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
     expect(buildPersistedGameSummary).not.toHaveBeenCalled();
     expect(saveGameSummary).not.toHaveBeenCalled();
+  });
+
+  test('releases the summary lock when generation fails so a later finish can retry', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    claimGameSummaryGeneration.mockResolvedValue(game); // we win the claim
+    buildPersistedGameSummary.mockRejectedValue(new Error('openai down'));
+    releaseGameSummaryLock.mockResolvedValue(game);
+
+    // finish itself must not reject even though generation will fail post-response.
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    await flushAsyncScheduler();
+
+    expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
+    expect(buildPersistedGameSummary).toHaveBeenCalledTimes(1);
+    expect(saveGameSummary).not.toHaveBeenCalled();
+    // OPT-020 retry-on-cleared: the lock we claimed is released on failure.
+    expect(releaseGameSummaryLock).toHaveBeenCalledTimes(1);
   });
 
   test('does not generate summaries for standalone games', async () => {

@@ -1,15 +1,14 @@
 const request = require('supertest');
 const { createApp } = require('../../app');
-const { sendTemplateEmail } = require('../../services/email.service');
+const { sendTemplateEmailAsync } = require('../../services/email.service');
 
 jest.mock('../../services/email.service', () => ({
-  sendTemplateEmail: jest.fn(),
+  sendTemplateEmailAsync: jest.fn(),
 }));
 
 describe('contact routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    sendTemplateEmail.mockResolvedValue({ delivery: 'resend' });
   });
 
   test('sends a contact form email', async () => {
@@ -29,7 +28,8 @@ describe('contact routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
-    expect(sendTemplateEmail).toHaveBeenCalledWith(
+    // OPT-020: dispatched off the request path via the fire-and-forget variant.
+    expect(sendTemplateEmailAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         replyTo: 'local.test@example.com',
         fallbackLabel: 'contact_form',
@@ -54,6 +54,6 @@ describe('contact routes', () => {
       });
 
     expect(response.status).toBe(400);
-    expect(sendTemplateEmail).not.toHaveBeenCalled();
+    expect(sendTemplateEmailAsync).not.toHaveBeenCalled();
   });
 });

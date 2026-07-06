@@ -127,7 +127,9 @@ async function issuePasswordReset(user) {
     expiresAt: buildTokenExpiry('password_reset'),
   });
 
-  await sendPasswordResetEmail({
+  // OPT-020: fire-and-forget — the reset token is already persisted; delivery
+  // runs off the request path so Resend latency/failures don't block the caller.
+  sendPasswordResetEmail({
     to: user.email,
     name: user.name,
     resetUrl: buildClientUrl('/reset-password', rawToken),
