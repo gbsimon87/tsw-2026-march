@@ -46,22 +46,22 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `All server-side + safe frontend optimisation work is DONE and committed (OPT-001–006, 008–020). Everything remaining is either browser-gated frontend work (needs a session with live browser testing) or prod-data-gated. No unblocked backend work left.`
-- **Current wave:** Wave 4 complete on the backend (OPT-018 backend + OPT-019 + OPT-020 all committed on `dev`). Wave 5 (OPT-022/023 hygiene/ops) is the next _codeable_ work; OPT-021 is deferred (browser-gated). Branch `dev`.
-- **Recommended next task (for a session WITH live browser testing):** the batched frontend follow-up — **`OPT-021`** (feed windowing + video unmount + throttled scroll), **`OPT-016`** (GameTrackPage decomposition, full scope), **`OPT-014b`** (~20 pages not yet migrated to React Query), and **`OPT-018` client** (infinite-scroll/virtualisation — backend done + backward-compatible). All four share the same blocker: they change client rendering and can't be safely verified without clicking through the UI. **Recommended next task (for a normal session):** **`OPT-022`** or **`OPT-023`** (Wave 5 backend hygiene/ops — safe, self-contained). Gated/blocked: **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done + committed: OPT-001–006, 008–020.)
+- **Overall status:** `All server-side hygiene work is DONE (OPT-001–006, 008–020, 022). Everything remaining is either browser-gated frontend work (needs a session with live browser testing), prod-data-gated, or the one small OPT-023 ops task. Practically no unblocked+uncommitted backend work left after OPT-023.`
+- **Current wave:** Wave 5 underway — OPT-022 done (backend sub-items); **OPT-023 is the last fully-unblocked, codeable-without-a-browser task in the whole tracker.** OPT-021 is deferred (browser-gated). Branch `dev`.
+- **Recommended next task (for a normal session, no browser needed):** **`OPT-023`** (ops hardening — SIGTERM, DB-ping health check, connection pool sizing, pin Stripe `apiVersion`, login rate limiter). After that, the only remaining work is: **for a session WITH live browser testing** — the batched frontend follow-up (**`OPT-021`**, **`OPT-016`** full scope, **`OPT-014b`**, **`OPT-018` client**); **gated on external state** — **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–020, 022.) 🛑 **OPT-022 not committed yet — see standing instruction at the top of this file.**
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                                                                                    |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Not Started | 4 (`007`_, `022`, `023`, `025`_ — \*=gated)                                                                                              |
-| In Progress | 0                                                                                                                                        |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                                                                                |
-| Completed   | 19 (`001`, `002`, `003`, `004`, `005`, `006`, `008`, `009`, `010`, `011`, `012`, `013`, `014`, `015`, `016`, `017`, `018`, `019`, `020`) |
-| Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log)                                                              |
+| Status      | Count                                                                       |
+| ----------- | --------------------------------------------------------------------------- |
+| Not Started | 3 (`007` gated-prod, `023` unblocked, `025` gated-prod)                     |
+| In Progress | 0                                                                           |
+| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                   |
+| Completed   | 20 (`001`–`006`, `008`–`020`, `022`)                                        |
+| Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log) |
 
 ---
 
@@ -129,7 +129,7 @@ consumers and rework is minimised.
 | OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
-| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | Not Started  | —                  |
+| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Backend   | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
 | OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started  | OPT-008 + backfill |
@@ -141,8 +141,28 @@ blockers._
 
 ## ✅ Completed
 
+- **OPT-022** — Low-impact hygiene batch (backend sub-items; canvas-on-demand
+  deferred). _2026-07-07._ Branch `dev` (uncommitted). 5 independent sub-items,
+  each investigated rather than assumed: **(1) `participant.slug` schema fix —
+  a real bug, not just hygiene.** The field was always written at game
+  creation but never declared in the schema, so Mongoose silently dropped it
+  on every save; every dual-team league game read paid for a live
+  `findLeagueTeamById` lookup to reconstruct it. Fixed the schema, ran a new
+  idempotent backfill script against dev (20/20 games fixed, independently
+  re-verified persisted), and added a schema-regression test proven to fail
+  without the fix. **(2) Dead-code claims mostly didn't hold up** — the
+  "legacy checkout" and "email-verification" targets are both live,
+  intentional, tested code paths; **nothing was deleted**. `DashboardPage` was
+  already gone (OPT-001). No confidently-dead exports found. **(3) Canvas-on-
+  demand — deferred**, pure client rendering, batched with the other browser-
+  gated frontend work. **(4) `.lean()` added to 3 verified-safe queries**
+  (`listCompletedGames`, `listPublicCompletedGames`, `listLeaguesByIds`) after
+  tracing every caller individually; verified against real dev MongoDB.
+  **(5) No query-validation gap** — OPT-018 already covered every `req.query`
+  usage in the codebase. Full server suite **31 suites / 244 tests**; lint
+  clean. See card + Decisions log for full detail.
 - **OPT-018** — Pagination everywhere (backend; client deferred). _2026-07-07._
-  Branch `dev` (uncommitted). Added shared keyset-cursor helpers
+  Committed (`ebe1e20`) on `dev`. Added shared keyset-cursor helpers
   (`utils/pagination.js`) + shared zod query validation
   (`shared/pagination.validation.js`), and applied real `_id`-desc cursor
   pagination to the clean single-source lists: `GET /games`, `GET /teams`,
@@ -155,7 +175,7 @@ blockers._
   Client infinite-scroll/virtualisation deferred to a follow-up. See card +
   Decisions log.
 - **OPT-020** — Move blocking integrations off the request path. _2026-07-06._
-  Branch `dev` (uncommitted). Three sub-items: **(a)** league AI summary now
+  Committed (`1e095ba`) on `dev`. Three sub-items: **(a)** league AI summary now
   generated post-response (`setImmediate` in `games.service.js`), with a
   stale-lock **TTL** (2min) so a crashed/hung generation no longer wedges the
   summary forever, and a `releaseGameSummaryLock` retry-on-failure path —
@@ -166,8 +186,8 @@ blockers._
   `utils/webhookIdempotency.js`, replacing a read-check-write race that could
   double-process a duplicate delivery. 29 suites / 228 server tests pass; lint
   clean. See card + Decisions log.
-- **OPT-019** — HTTP caching for anonymous public GETs. _2026-07-06._ Branch
-  `dev` (uncommitted — standing instruction). New `publicCache.middleware.js`
+- **OPT-019** — HTTP caching for anonymous public GETs. _2026-07-06._
+  Committed (`20fac7f`) on `dev`. New `publicCache.middleware.js`
   sets `Cache-Control: public, max-age=30, stale-while-revalidate=300` +
   `Vary: Cookie, Authorization` on anonymous GET/HEAD to the 3 public routers
   and the one anon-readable game route; `private, no-cache` when any auth
@@ -309,8 +329,8 @@ blockers._
   without the change; full client suite unchanged; `eslint`
   `react-hooks/exhaustive-deps` clean; `vite build` succeeds, chunk size
   unchanged.
-- **OPT-014** — React Query on the client (scoped). _2026-07-06._ Branch `dev`
-  (uncommitted — see standing instruction). Added `@tanstack/react-query`;
+- **OPT-014** — React Query on the client (scoped). _2026-07-06._ Committed
+  (`6ae914d`) on `dev`. Added `@tanstack/react-query`;
   `QueryClientProvider` wired into `AppProviders.jsx`. Migrated 6 call sites:
   `AuthContext` (`['auth','me']`, preserves its stale-response race guard,
   mutations use `setQueryData`), `FeedPage` (`useInfiniteQuery(['feed'])`,
@@ -360,6 +380,17 @@ _None._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-07 — OPT-022: two of the card's "dead code" targets were investigated
+  and NOT removed — they're live.** The card assumed a "legacy checkout
+  endpoint" and an "email-verification path" were dead code to delete. Both
+  turned out to be intentional, tested, live code: the checkout route is
+  explicitly commented as a kept-for-backward-compatibility shim with its own
+  integration test; email verification is a fully wired route → controller →
+  service → client page flow reachable from the login form. Deleting either on
+  the card's say-so (without re-verifying) would have broken a payment
+  endpoint and an auth flow. Correcting a tracker card's assumption against
+  live code takes priority over completing every checkbox as originally
+  written — the card is now corrected rather than the code.
 - **2026-07-07 — All remaining frontend-rendering work batched + deferred to a
   browser-testing session.** OPT-021 (feed windowing/video unmount/throttled
   scroll) was the last Wave 4 item; the user chose to defer it rather than ship
@@ -724,6 +755,12 @@ lockId)`. `games.service.js`: new `scheduleGameSummaryGeneration` (post-
   (`schema.parse(req.query)`). Response contract: existing array key +
   `nextCursor` added. `listGamesByOwner`, `listTeamsByOwner`,
   `listPublicLeagues` paginate only when a `limit` is supplied.
+- ✅ **changed (OPT-022, 2026-07-07)** `games.repository.js`: `participantSchema`
+  gained `slug: { type: String, default: null }` (was silently dropped on
+  every save before this). New `scripts/backfill-participant-slug.js`
+  (idempotent, dry-run flag) for pre-existing games — already run against dev.
+  `.lean()` added to `listCompletedGames`/`listPublicCompletedGames`
+  (games.repository.js) and `listLeaguesByIds` (leagues.repository.js).
 
 ## 🔔 Implementation reminders
 
@@ -1437,6 +1474,32 @@ look and behave exactly as before**. Verify in DevTools Network / `curl`.
 **Pass criteria:** all list pages look identical to before; responses carry
 `nextCursor`; `limit`/`cursor` page cleanly with no dupes/drops; invalid params
 return 400.
+
+---
+
+### ✅ OPT-022 — Low-impact hygiene batch (backend sub-items)
+
+**What to test:** Mostly invisible correctness fixes — no UI change expected
+anywhere. The one user-visible effect is that dual-team league game pages may
+load their opponent info slightly faster (one fewer DB round-trip per side).
+
+1. **Participant slugs.** Open any **dual-team league** game (in progress or
+   completed) that existed before this change. It should look and behave
+   exactly as before — the slug was already being reconstructed live, this
+   just makes it a stored field instead. Nothing to visually check; the
+   backfill was already run and verified against dev.
+2. **Nothing else changed.** The dead-code investigation didn't remove
+   anything (both flagged targets turned out to be live), the `.lean()`
+   additions are read-only query optimisations with identical output shape,
+   and no validation gap existed to fix. If anything looks different on any
+   page, that's a regression — please flag it.
+3. **Regression check for the schema fix.** If you want to confirm the fix
+   itself: `node src/scripts/backfill-participant-slug.js --dry-run` from
+   `server/` (with `ENV_FILE` pointed at dev) should report "would update 0" —
+   confirming the backfill already ran and nothing is missing a slug anymore.
+
+**Pass criteria:** everything looks identical to before across all pages; the
+dry-run backfill reports 0 remaining.
 
 ---
 
@@ -2706,7 +2769,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 
 ### OPT-022 — Low-impact hygiene batch
 
-- **Priority:** Low · **Status:** Not Started · **Category:** Mixed
+- **Priority:** Low · **Status:** ✅ Completed (backend sub-items; canvas-on-demand deferred) · **Category:** Mixed
 - **Wave:** 5 · **Complexity:** S · **Dependencies:** none
 - **Description:** Bundle of independent small fixes: add `participant.slug` to
   the schema (kills perpetual runtime backfill, L3); remove dead code — legacy
@@ -2721,10 +2784,83 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   `GameDetailPage.jsx`, repositories, controllers.
 - **Testing:** slug backfill no longer runs; removed code has no references;
   share-card still generates on click; `.lean()` paths return expected shapes.
-- **Validation checklist:** [ ] slug in schema [ ] dead code removed cleanly
-  [ ] canvas on demand [ ] `.lean()` safe [ ] validation added.
+- **Validation checklist:** [x] slug in schema (+ backfill script, real-DB
+  verified) [~] dead code — **investigated, most of it isn't actually dead, see
+  notes** [ ] canvas on demand (deferred — client rendering, needs browser
+  testing) [x] `.lean()` safe (3 queries, callers individually verified)
+  [x] validation — **no gap found**, already 100% covered by OPT-018 + existing
+  feed validation.
 - **Source:** [30](./30-optimisation-roadmap.md) L2/L3/L5/L8, [22](./22-known-technical-debt.md).
-- **Completion notes:** —
+- **Completion notes:** 2026-07-07
+  - **Item 1 — `participant.slug` schema fix: a real bug, not just hygiene.**
+    `games.service.js` always tried to persist `slug: context.homeTeam.slug`
+    at dual-team game creation, but `participantSchema`
+    (`games.repository.js`) never declared a `slug` field — Mongoose silently
+    **dropped it on every save**. Every read of every dual-team league game
+    fell through to a per-request `findLeagueTeamById` lookup
+    (`resolveDualGameParticipants`) to reconstruct it live. Fixed by adding
+    `slug: { type: String, default: null }` to the schema, plus a new
+    idempotent `scripts/backfill-participant-slug.js` (same dry-run/re-run-safe
+    pattern as the OPT-008/010/013 backfills) for the 20 pre-existing games
+    that predate the fix. **Ran for real against dev**: dry-run showed all 20
+    affected, ran it, then independently re-queried to confirm the slug
+    persisted and 0 games remain missing it. Added a schema-introspection
+    regression test (`games.repository.schema.test.js`) that fails if the
+    field is ever dropped again — confirmed it fails on the pre-fix schema.
+    The runtime `findLeagueTeamById` fallback in `resolveDualGameParticipants`
+    was **intentionally left in place** as a safety net (now unreachable for
+    backfilled data, cheap, harmless) rather than removed, since a future doc
+    could theoretically still arrive without a slug via some other path.
+  - **Item 2 — dead-code claims mostly don't hold up; nothing was deleted.**
+    Investigated each named target instead of deleting on faith:
+    - `DashboardPage` — confirmed already removed (OPT-001). No-op.
+    - "Legacy checkout endpoint" (`POST /billing/checkout-session`) — **NOT
+      dead**. Explicitly commented `// Legacy route — kept for backward
+compatibility` and has a dedicated integration test asserting it still
+      works. The _client_ function that calls it (`billingApi.
+createCheckoutSession`) has no UI caller (superseded by
+      `createTeamCheckoutSession`/`createLeagueCheckoutSession`), so the path
+      is unreachable _from this app's UI_ — but the route itself is a
+      deliberate, tested, documented back-compat shim that could be serving
+      something outside this repo (old client build, another integration).
+      **Not removed** — a hygiene task shouldn't unilaterally delete an
+      intentional compat shim for a payment endpoint.
+    - "Email-verification path" — **NOT dead**. Live route → controller →
+      service, called by `authApi.js`, consumed by `VerifyEmailPage.jsx`,
+      linked from the login form. **Not removed.**
+    - "Unused exports" — a targeted sweep found no exports confidently
+      identifiable as dead within reasonable effort; static grep-based dead-
+      export detection produced too many false positives to trust for actual
+      deletions (e.g. flagged `ApiError`, `asyncHandler` — both obviously
+      live). **Closed as "no gap found"** rather than guessing.
+  - **Item 3 — canvas-on-demand: deferred, client rendering.**
+    `GameDetailPage.jsx`'s share-card canvas regenerates in a `useEffect` on
+    every `data` change instead of on the explicit share action. This is a
+    pure client-rendering restructure (move `createRecapCardDataUrl(...)` out
+    of the effect into a click handler) that needs live browser verification
+    to confirm the share button still works correctly after the change —
+    batched with OPT-021/016/014b for the future browser-testing session (see
+    Deferred section).
+  - **Item 4 — `.lean()` added to 3 verified-safe read-only queries.**
+    `listCompletedGames`, `listPublicCompletedGames` (games.repository.js),
+    and `listLeaguesByIds` (leagues.repository.js). Every caller of each was
+    traced individually to confirm none `.save()`s the result and none relies
+    on Mongoose-document-only behavior (all just read plain fields / filter /
+    map). Two other unbounded `.find()`s the initial survey flagged
+    (`listGamesByStandaloneParticipantTeamId`,
+    `listGamesByLeagueParticipantTeamId`) were left untouched — they have no
+    live caller, so there was nothing to verify against. **Verified against
+    real dev MongoDB**: confirmed all 3 now return lean plain objects (no
+    `.save` method) and that `listPublicCompletedGames`'s field exclusion
+    still works correctly alongside `.lean()`.
+  - **Item 5 — no query-validation gap found.** Independently grepped every
+    `req.query` usage across all controllers; all are already validated
+    (OPT-018's pagination schema plus feed's pre-existing `listFeedSchema`/
+    `shareableLookupSchema`). Closed as a no-op — OPT-018 already fully
+    covered this.
+  - **Tests:** new `games.repository.schema.test.js` (2, incl. proven to fail
+    without the fix). Full server suite **31 suites / 244 tests**; lint clean.
+    Not committed (per standing instruction).
 
 ---
 

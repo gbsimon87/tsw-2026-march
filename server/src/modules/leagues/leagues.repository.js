@@ -266,7 +266,12 @@ function findLeagueBySlug(slug) {
 }
 
 function listLeaguesByIds(leagueIds) {
-  return League.find({ _id: { $in: leagueIds } }).sort({ createdAt: -1 });
+  // OPT-022: both callers only read plain fields off the result (sanitizeLeague
+  // / Map lookups by id) and never .save() it — safe to skip Mongoose document
+  // hydration.
+  return League.find({ _id: { $in: leagueIds } })
+    .sort({ createdAt: -1 })
+    .lean();
 }
 
 function saveLeague(league) {

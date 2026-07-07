@@ -8,6 +8,14 @@ const participantSchema = new mongoose.Schema(
     participantType: { type: String, enum: ['team', 'league_team'], required: true },
     teamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
     leagueTeamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    // OPT-022: this field was always written at game-creation time
+    // (games.service.js sets `slug: context.homeTeam.slug`) but Mongoose
+    // silently drops unknown fields on save, so it was never actually
+    // persisted — every read fell through to a per-request
+    // `findLeagueTeamById` backfill lookup in `resolveDualGameParticipants`.
+    // Declaring it here makes it persist for real; see
+    // scripts/backfill-participant-slug.js for pre-existing games.
+    slug: { type: String, default: null },
     displayName: { type: String, required: true, trim: true },
     logo: {
       type: new mongoose.Schema(
@@ -293,17 +301,25 @@ async function listGamesByLeagueParticipantTeamId(leagueTeamId) {
 }
 
 async function listCompletedGames() {
-  return Game.find({ status: 'completed' }).sort({
-    scheduledAt: -1,
-    completedAt: -1,
-    createdAt: -1,
-  });
+  // OPT-022: sole caller (feed.service.js listShareableGames) only filters/maps
+  // plain fields, never saves — safe to skip document hydration.
+  return Game.find({ status: 'completed' })
+    .sort({
+      scheduledAt: -1,
+      completedAt: -1,
+      createdAt: -1,
+    })
+    .lean();
 }
 
 // OPT-004: Optimized for public endpoints — no events, limited results
 async function listPublicCompletedGames(limit = 100) {
+  // OPT-022: all 3 callers (teams.service.js) only read plain fields (opponent
+  // matching, computeTeamPoints via summarizeEvents(game.events), display
+  // projection) and never save — safe to skip document hydration.
   return Game.find({ status: 'completed' })
     .select('-events -rosterSnapshot -boxScore')
+    .lean()
     .sort({
       scheduledAt: -1,
       completedAt: -1,
