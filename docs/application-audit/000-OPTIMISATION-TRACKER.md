@@ -3056,6 +3056,17 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   verified without live browser testing. Batched with OPT-016 (full scope),
   OPT-014b, and OPT-018 client for a future browser-testing session. See the
   Deferred section + Decisions log.
+- **Re-triaged 2026-07-07 (still deferred):** during the frontend batch we split
+  this into its 3 parts by risk. **A — throttle the mobile `onScroll`** and
+  **B — `React.memo` cards + `useCallback` handlers** are safe, desktop/browser-
+  verifiable wins. **C — window/unmount off-screen video slides** is the risky
+  part: it interacts with mobile snap-scroll position, the
+  `useSnapScrollAutoplay` IntersectionObserver, and `scrollHeight` stability —
+  windowing bugs (scroll jumps, broken autoplay) genuinely need a real mobile
+  device to catch, which this session doesn't have. Decision (with owner): skip
+  OPT-021 for now and move to OPT-018 client (more mechanical, higher value at
+  current scale); come back to A+B and especially C when real device testing is
+  available. At today's tiny feed size the windowing benefit is ~nil anyway.
 - **Description:** Window the feed list (keep ±2 slides mounted on mobile snap
   feed; virtualise desktop) so off-screen `<video>` elements unmount; throttle
   the mobile onScroll near-end check (or use the existing IntersectionObserver);
