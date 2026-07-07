@@ -530,13 +530,20 @@ async function assertTeamCreationAllowed(userId) {
 // ─── Feed affiliation gate ────────────────────────────────────────────────────
 
 async function assertFeedPostingAllowed(userId) {
-  const [ownsTeam, isLeagueManager, isLeagueMember] = await Promise.all([
+  // TSW-001: league owners never get an explicit LeagueManager row (that's
+  // reserved for managers the owner adds via addLeagueManagerByEmail, which
+  // even rejects adding the owner themself). Every other authorization
+  // helper in leagues.service.js ORs in League.exists({ ownerUserId }) for
+  // this reason — this check was missing it, so a league owner with no team
+  // and no explicit manager row was wrongly rejected here.
+  const [ownsTeam, ownsLeague, isLeagueManager, isLeagueMember] = await Promise.all([
     Team.exists({ ownerUserId: userId }),
+    League.exists({ ownerUserId: userId }),
     LeagueManager.exists({ userId, status: 'active' }),
     LeagueTeamMember.exists({ userId, status: 'active' }),
   ]);
 
-  if (!ownsTeam && !isLeagueManager && !isLeagueMember) {
+  if (!ownsTeam && !ownsLeague && !isLeagueManager && !isLeagueMember) {
     throw new ApiError(403, 'You must be part of a team or league to post');
   }
 }

@@ -795,9 +795,20 @@ export function GameDetailPage() {
       setClipShareState((s) => ({ ...s, [eventId]: 'shared' }));
       trackEvent('game_highlight_clip_shared', { game_id: gameId });
     } catch (err) {
+      // TSW-001: this used to collapse every failure into a generic "Failed
+      // to share", which is what hid the real 403 (missing league-owner
+      // affiliation check in assertFeedPostingAllowed) until we could read
+      // server logs by requestId. Surface the server's actual message so
+      // future failures are self-diagnosing from the UI alone.
+      console.error('shareHighlightClip failed', {
+        gameId,
+        eventId,
+        requestId: err.requestId,
+        err,
+      });
       const msg = err.message?.toLowerCase().includes('already been shared')
         ? 'Already shared'
-        : 'Failed to share';
+        : err.message || 'Failed to share';
       setClipShareState((s) => ({ ...s, [eventId]: msg }));
     }
   }
