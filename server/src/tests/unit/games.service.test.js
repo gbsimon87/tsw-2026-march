@@ -548,6 +548,7 @@ describe('games service finish summaries', () => {
       aiSummary: existingSummary,
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
       awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
     });
 
     findGameById.mockResolvedValue(game);
@@ -565,6 +566,7 @@ describe('games service finish summaries', () => {
     const game = buildDualLeagueGame({
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
       awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
     });
 
     findGameById.mockResolvedValue(game);
@@ -584,6 +586,7 @@ describe('games service finish summaries', () => {
     const game = buildDualLeagueGame({
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
       awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
     });
 
     findGameById.mockResolvedValue(game);
@@ -675,6 +678,73 @@ describe('games service finish summaries', () => {
     });
 
     expect(game.aiSummary).toBeNull();
+  });
+});
+
+describe('games service league tie guard (OPT-024)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  test('finishGameForUser rejects a league game that would finish tied', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringContaining('cannot end in a tie'),
+    });
+    expect(game.status).not.toBe('completed');
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  test('finishGameForUser allows a league game with a clear winner', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    expect(game.status).toBe('completed');
+    expect(saveGame).toHaveBeenCalledTimes(1);
+  });
+
+  test('standalone (non-league) games are not blocked by the tie guard', async () => {
+    const game = buildDualLeagueGame({
+      gameContext: 'standalone',
+      leagueId: null,
+      homeLeagueTeamId: null,
+      awayLeagueTeamId: null,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    expect(game.status).toBe('completed');
   });
 });
 

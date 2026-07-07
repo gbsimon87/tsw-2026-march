@@ -48,7 +48,14 @@
 
 - **Overall status:** `All server-side hygiene AND ops work is DONE (OPT-001–006, 008–020, 022, 023). Everything remaining is either browser-gated frontend work (needs a session with live browser testing), prod-data-gated, or blocked on product decisions. There is NO unblocked backend work left.`
 - **Current wave:** Wave 5 complete for everything codeable-without-a-browser — **OPT-022 and OPT-023 both done and committed.** OPT-021 is deferred (browser-gated). Branch `dev`.
-- **Recommended next task:** No further backend work is unblocked. The remaining work is: **for a session WITH live browser testing** — the batched frontend follow-up (**`OPT-021`**, **`OPT-016`** full scope, **`OPT-014b`**, **`OPT-018` client**); **gated on external state** — **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–020, 022, 023.)
+- **Recommended next task:** **`OPT-025`** (project `events` out of league list
+  endpoints) — hand-held, prod-write session: run the existing
+  `backfill-game-finalscore.js` against production, confirm it completed, then
+  add the `.select()` projection. After that, the only remaining work is: **for
+  a session WITH live browser testing** — the batched frontend follow-up
+  (**`OPT-021`**, **`OPT-016`** full scope, **`OPT-014b`**, **`OPT-018`
+  client**); **gated on external state** — **`OPT-007`** (prod `$indexStats`).
+  (Done: OPT-001–006, 008–020, 022, 023, 024.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
@@ -57,10 +64,10 @@
 
 | Status      | Count                                                                       |
 | ----------- | --------------------------------------------------------------------------- |
-| Not Started | 2 (`007` gated-prod, `025` gated-prod)                                      |
+| Not Started | 2 (`007` gated-prod, `025` gated-prod — hand-held session next)             |
 | In Progress | 0                                                                           |
-| Blocked     | 1 (`OPT-024`, awaiting product decisions)                                   |
-| Completed   | 21 (`001`–`006`, `008`–`020`, `022`, `023`)                                 |
+| Blocked     | 0                                                                           |
+| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                          |
 | Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log) |
 
 ---
@@ -131,7 +138,7 @@ consumers and rework is minimised.
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Backend   | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
-| OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
+| OPT-024 | Correctness decisions                          | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started  | OPT-008 + backfill |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
@@ -141,6 +148,28 @@ blockers._
 
 ## ✅ Completed
 
+- **OPT-024** — Correctness decisions. _2026-07-07._ 4 product decisions from
+  the owner, all implemented: **(1) ties disallowed** — league games can no
+  longer finish tied (`assertLeagueScoreNotTied` in `games.service.js`, checked
+  before any mutation at finalize time and again on edits to a completed
+  league game); standings math fixed from a 2-way `>=` branch (which silently
+  awarded ties to the home team) to a real 3-way win/loss/tie branch with a new
+  `ties` row field. **(2) Private league visibility fixed** — investigated
+  first and found the gap was narrower than assumed: the authenticated
+  `/leagues/:leagueId` router already checked membership correctly; the bug was
+  isolated to the public-slug router, whose `assertLeagueVisible` 404'd a
+  private league for its own owner/manager/players, not just for strangers.
+  Extracted a shared `isLeagueMember` check (owner, active league manager, or
+  any team-member role) and wired it through `assertLeagueVisible` + all 6
+  public controller handlers, gated on the viewer's `req.auth?.userId` from the
+  already-applied `optionalAuthMiddleware`. Non-members still get a 404 (not 403) so a private league's existence isn't revealed. **(3) Contact-form HTML
+  escaping** — new `utils/escapeHtml.js`; free-text fields escaped before
+  interpolating into the HTML email body (plaintext body untouched). **(4)
+  Analytics distinctId bound to the authenticated user** — the client's
+  `identify()` call was already correct; the server's `/analytics/event` route
+  now overrides the client-supplied `distinctId` with `req.auth.userId` rather
+  than trusting the request body. Full suite **33 suites / 261 tests** (up from
+  32/249); lint clean. See card for full per-item detail.
 - **OPT-023** — Ops hardening. _2026-07-07._ Committed (`e97e5c8`+) on `dev`.
   All five sub-items shipped: **(1) graceful SIGTERM/SIGINT shutdown** in
   `server.js` (drain HTTP → disconnect Mongo → exit, with a 10s force-exit
@@ -240,7 +269,7 @@ blockers._
   `feat/opt-wave-0`. `getLeagueStandings` and `listLeagueGames` gained an optional
   `{teams, games}` pre-fetch escape hatch; 4 league-detail compositions now load
   teams + raw games ONCE and pass them down (was teams×2–3, games×2–3 per request →
-  now ×1 each). `publicOnly` behaviour preserved (bug still tracked in OPT-024).
+  now ×1 each). `publicOnly` behaviour preserved as-is (fixed later in OPT-024).
   ~10 redundant DB round-trips removed per league page; 174 tests pass. See its card.
 - **OPT-008** — `Game.finalScore` + `eventCount` denormalisation. _2026-07-05._
   Branch `feat/opt-wave-0`. **(Wave 1 — first structural prerequisite.)** New
@@ -375,8 +404,7 @@ _None._
 
 ## ⛔ Blocked
 
-- **OPT-024** — needs product/owner decisions (tie-break rule, `publicOnly`
-  intended behaviour) before implementation. See its card.
+_None._
 
 ## ⏸️ Deferred
 
@@ -502,9 +530,11 @@ Record every architectural / scope decision here with a date and rationale.
   stop computing on read (materialise), not to translate JS loops into `$group`
   ([24](./24-database-audit.md) #1). Aggregation stays for ad-hoc reads
   (event/roster counts, shareable search).
-- **2026-07-04 — Tie-break rule: PENDING.** Standings currently treat a tie as
-  a home win (`leagues.service.js:1763`). Correct behaviour needs a product
-  decision (OPT-024).
+- **2026-07-04 — Tie-break rule: RESOLVED (2026-07-07, OPT-024).** Product
+  decision: the league format doesn't allow ties. Implemented as a hard
+  validation error at game-finalize/edit time (`assertLeagueScoreNotTied` in
+  `games.service.js`), not a standings-math workaround — a tie can no longer
+  reach a `completed` league game at all. See OPT-024's card for full detail.
 - **2026-07-04 — Index drops gated on verification.** No prod index drop
   (OPT-007) until `$indexStats` shows a verification window of zero ops on the
   candidate ([19](./19-indexing-strategy.md) §Process).
@@ -801,6 +831,23 @@ lockId)`. `games.service.js`: new `scheduleGameSummaryGeneration` (post-
     `new Stripe(key, { apiVersion: '2024-06-20' })`. `rateLimit.middleware.js`: new
     `authCredentialLimiter` (20/15min) exported and applied to `/register`,
     `/login`, `/refresh` in `auth.routes.js`.
+- ✅ **built/changed (OPT-024, 2026-07-07)** correctness decisions:
+  `games.service.js`: new `assertLeagueScoreNotTied(gameContext, finalScore)`,
+  called in `finishGameForUser` (pre-mutation) and
+  `syncGameDenormalizedAfterEventChange` (post-edit-on-completed). New tie
+  rejection is 422. `leagues.service.js`: new shared `isLeagueMember(userId,
+league)` (owner / active league manager / any leagueTeamMember role) used by
+  both `assertLeagueViewer` (refactored onto it, behaviour unchanged) and
+  `assertLeagueVisible` (fixed — now takes `viewerUserId`, allows a member
+  through a private league via the public-slug routes). Standings loop gained
+  a `ties` row field. `getPublicLeagueBySlug`/`getPublicLeagueTeamBySlug`/
+  `getPublicLeaguePlayerBySlug`/`getPublicLeagueLeaders` all gained a
+  `viewerUserId` parameter; all 6 public controller handlers now pass
+  `req.auth?.userId || null`. New `utils/escapeHtml.js` (5-char HTML escape,
+  no new dependency); `contact.routes.js` builds a separate escaped
+  `htmlBodyLines` for the email's `html` field. `analytics.controller.js`
+  always overrides `distinctId` with `req.auth.userId` (schema field kept
+  optional for backward-compat, but ignored).
 
 ## 🔔 Implementation reminders
 
@@ -1002,8 +1049,11 @@ fields; points math is correct for every shot type.
 
 **Pass criteria:** Every league/team page renders identical content to before;
 standings, games, and rosters are consistent across sections; no duplicate
-teams/games fetches per request. ⚠️ Note: the `publicOnly` games filter is
-unchanged (still a no-op — separate OPT-024 decision).
+teams/games fetches per request. ⚠️ Note: the `publicOnly` **games** filter
+(a param to `listLeagueGames`, meant to hide individual draft/internal games
+within an otherwise-public league) is still a no-op — this was a distinct,
+smaller item from the **league-level** private/public visibility OPT-024
+fixed. Not yet scheduled; flag if it turns out to matter in practice.
 
 ---
 
@@ -1580,6 +1630,49 @@ its budget; no UI difference anywhere.
 
 ---
 
+### ✅ OPT-024 — Correctness decisions (backend)
+
+**What to test:** Four independent fixes; each has a distinct, checkable
+behaviour change.
+
+1. **Tie rule.** Try to finalize a league game with an equal score (in the
+   tracker UI, or `POST /api/v1/games/:gameId/finish` on a game whose events
+   sum to an equal home/away score) — it should now be **rejected** (422,
+   "League games cannot end in a tie…") instead of completing. A non-tied
+   score still finalizes normally. Editing events on an _already-completed_
+   league game so the score becomes level should also now be rejected.
+   Standalone (non-league) games are unaffected — a standalone game can still
+   finish level.
+2. **Private league visibility.** Set a league to private (owner-only toggle,
+   `isPublic: false`). Then:
+   - Log **out** and visit that league's public page (`/leagues/:slug` on the
+     public site) → should 404, same as before.
+   - Log in as a **stranger** (not a member) and visit the same public URL →
+     should still 404.
+   - Log in as the **owner**, a **league manager**, or **a rostered player on
+     one of its teams** and visit the same public URL → should now load
+     correctly (this is the fix — previously all of these also got a 404).
+   - Confirm a **public** league still loads fine for a logged-out visitor (no
+     regression).
+3. **Contact-form escaping.** Submit the contact form with a name or message
+   containing `<script>alert(1)</script>` or similar. The email that lands in
+   the configured `CONTACT_EMAIL` inbox should show the literal escaped text
+   (`&lt;script&gt;...`) in its HTML rendering, not execute anything or render
+   as a heading/bold/etc.
+4. **Analytics distinctId.** Not independently visible in the UI — this is a
+   server-side correctness fix on an endpoint the current client doesn't call.
+   If/when a client integration starts posting to `/api/v1/analytics/event`
+   while authenticated, confirm in PostHog that the event lands under the
+   user's real distinctId (their DB user id), not whatever the client sent.
+
+**Pass criteria:** tied league games are rejected at finalize and at
+retroactive edit; standalone games unaffected; private leagues are visible to
+their own members and still hidden from everyone else; contact-form HTML
+injection is neutralised; analytics events (if/when sent) bind to the
+authenticated user.
+
+---
+
 ## 🗂️ Task detail cards
 
 Each card follows the standard structure. Complexity: **S** ≤1 day · **M** 2–4
@@ -1807,8 +1900,9 @@ days · **L** 1–2 weeks.
     - `getPublicLeagueTeamBySlug` — was teams×2, games×3 → now teams×1, games×1
   - `getPublicLeaguePlayer` path (line ~991) already fetched once — left as-is.
   - **`publicOnly` behaviour preserved exactly:** `listLeagueGames` still accepts
-    (and still ignores) the `publicOnly` flag — that pre-existing bug is tracked
-    separately in **OPT-024** and was intentionally NOT changed here.
+    (and still ignores) the `publicOnly` flag. OPT-024 (2026-07-07) fixed the
+    **league-level** private/public visibility gap but did not scope this
+    **game-level** filter — it remains a no-op, not yet scheduled.
   - Net: ~10 redundant DB round-trips removed per league page load. All 174
     server tests pass; no response shape changed; eslint clean.
 
@@ -3000,9 +3094,9 @@ createCheckoutSession`) has no UI caller (superseded by
 
 ---
 
-### OPT-024 — Correctness decisions (Blocked)
+### OPT-024 — Correctness decisions
 
-- **Priority:** Low · **Status:** **Blocked** (needs product/owner decision) ·
+- **Priority:** Low · **Status:** ✅ **Completed** (2026-07-07) ·
   **Category:** Correctness
 - **Wave:** 5 · **Complexity:** S (once decided) · **Dependencies:** decisions
 - **Description:** Items that require a product decision before implementation:
@@ -3014,17 +3108,80 @@ createCheckoutSession`) has no UI caller (superseded by
   business/product call, not a purely technical one.
 - **Expected benefit:** Correct standings, correct public filtering, safe contact
   form, attributable analytics.
-- **Blocker:** Needs answers to: How should ties break? What should `publicOnly`
-  include? (Escaping + distinctId binding can proceed independently if split
-  out.)
 - **Files likely to change:** `leagues.service.js`, contact/analytics
   controllers.
 - **Testing:** once decided — encode the rule + unit tests; verify escaping;
   verify distinctId on authed events.
-- **Validation checklist:** [ ] tie rule decided & encoded [ ] `publicOnly`
-  behaviour decided [ ] contact input escaped [ ] distinctId bound.
+- **Validation checklist:** [x] tie rule decided & encoded [x] `publicOnly`
+  behaviour decided [x] contact input escaped [x] distinctId bound.
 - **Source:** [30](./30-optimisation-roadmap.md) L7/L9, [22](./22-known-technical-debt.md).
-- **Completion notes:** —
+- **Decisions (from product owner, 2026-07-07):** (1) **Ties are not allowed**
+  — the league format has no draws. (2) **Private leagues** should be
+  invisible to the general public, but visible to any of their own members —
+  manager, league manager, or a player on the league (helper/player/team
+  manager roles all count). (3) **Ship the HTML-escaping fix** — no further
+  decision needed. (4) **Bind analytics distinctId to the authenticated user's
+  stable ID** so sessions merge correctly.
+- **Completion notes:** All four items implemented and tested:
+  1. **Tie rule** — `games.service.js`: new `assertLeagueScoreNotTied(gameContext,
+finalScore)` rejects (422) a league game finishing tied, checked in
+     `finishGameForUser` **before** any mutation (so a rejected finalize leaves
+     the game untouched) and again in `syncGameDenormalizedAfterEventChange` for
+     edits to an already-completed league game (editing events can retroactively
+     create a tie). Standalone (non-league) games are explicitly exempt — no
+     competitive-tie concept there. `leagues.service.js`'s standings loop changed
+     `homePoints >= awayPoints` → a real 3-way branch (`>` / `<` / tie) with a new
+     `ties` row field, so legacy pre-guard tied data is recorded honestly instead
+     of being coerced into a phantom home win. New tests: 3 in
+     `games.service.test.js` (rejects a tie, allows a clear winner, standalone
+     games unaffected) + 1 updated in `leagues.service.test.js` (tie → `ties:1`,
+     not a win for either side).
+  2. **Private league visibility** — investigated first: the fully-authenticated
+     `/leagues/:leagueId` router already checked membership correctly via
+     `assertLeagueViewer` (independent of `isPublic`); the actual gap was
+     isolated to the **public-slug router** (`/public-leagues/:leagueSlug/...`),
+     whose `assertLeagueVisible` ignored the viewer entirely and 404'd a private
+     league for its own owner/manager/players just as it did for total
+     strangers. Fixed: extracted a shared `isLeagueMember(userId, league)`
+     (owner, active league manager, or any `leagueTeamMember` record — covers
+     team manager/helper/player) used by both `assertLeagueViewer` (unchanged
+     behaviour, now just refactored onto the shared helper) and the fixed
+     `assertLeagueVisible`, which now allows a request through when
+     `isPublic === true` **or** the viewer is a member — still 404 (not 403) for
+     non-members, so a private league's existence isn't revealed to strangers.
+     `viewerUserId` (sourced from `req.auth?.userId || null`, populated by the
+     already-applied `optionalAuthMiddleware`) threaded through all 6 public
+     controller handlers → 4 service functions
+     (`getPublicLeagueBySlug`/`getPublicLeagueTeamBySlug`/
+     `getPublicLeaguePlayerBySlug`/`getPublicLeagueLeaders`). New tests: 6 in
+     `leagues.service.test.js` covering anonymous, non-member, owner, manager,
+     rostered player, and "public league still open to anonymous" (regression
+     guard).
+  3. **Contact-form HTML escaping** — new `utils/escapeHtml.js` (5-character
+     escape map; no new dependency — the project has no existing HTML-sanitizing
+     library, and this is a small, stable, well-understood transform).
+     `contact.routes.js` now builds a separate `htmlBodyLines` with every
+     free-text field (`name`, `clubName`, `message`) escaped before
+     interpolating into the `<pre>` HTML email body; the plaintext `text` body
+     is untouched (no markup risk there). New integration test proves a
+     `<script>`/`<img onerror>` payload is neutralised in `html` while the
+     plaintext body still contains it verbatim (expected — no markup context).
+  4. **Analytics distinctId** — investigated first: the client already calls
+     `posthog.identify(user.id, …)` on login via `PostHogRouteTracker.jsx`
+     (`client/src/features/analytics/`), so the browser-side PostHog SDK was
+     already merging sessions correctly. The actual gap was server-side: the one
+     server analytics route (`POST /api/v1/analytics/event`, gated on
+     `authMiddleware`) trusted whatever `distinctId` the **client's JSON body**
+     supplied instead of using the session it already had. Fixed:
+     `analytics.controller.js` now always overrides `distinctId` with
+     `req.auth.userId` (kept the field optional in the zod schema so old client
+     payloads that still send it don't fail validation — they're just ignored).
+     Note: grepped the client codebase and found nothing currently calls this
+     server route (the client posts to PostHog directly) — the fix closes a real
+     gap in an existing, reachable, authenticated endpoint regardless of current
+     call volume. New unit tests: 2 in new `analytics.controller.test.js`.
+- **Verification:** full server suite **33 suites / 261 tests** (up from
+  32/249); lint clean on every changed file.
 
 ---
 

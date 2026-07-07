@@ -57,7 +57,10 @@ async function getById(req, res) {
 }
 
 async function getPublicBySlug(req, res) {
-  const league = await leaguesService.getPublicLeagueBySlug(req.params.leagueSlug);
+  const league = await leaguesService.getPublicLeagueBySlug(
+    req.params.leagueSlug,
+    req.auth?.userId || null
+  );
   res.status(200).json({ league });
 }
 
@@ -100,7 +103,8 @@ async function getTeam(req, res) {
 async function getPublicTeam(req, res) {
   const result = await leaguesService.getPublicLeagueTeamBySlug(
     req.params.leagueSlug,
-    req.params.teamSlug
+    req.params.teamSlug,
+    req.auth?.userId || null
   );
   res.status(200).json(result);
 }
@@ -353,7 +357,10 @@ async function standings(req, res) {
 }
 
 async function publicStandings(req, res) {
-  const league = await leaguesService.getPublicLeagueBySlug(req.params.leagueSlug);
+  const league = await leaguesService.getPublicLeagueBySlug(
+    req.params.leagueSlug,
+    req.auth?.userId || null
+  );
   res.status(200).json({ standings: league.standings });
 }
 
@@ -365,12 +372,19 @@ async function games(req, res) {
 }
 
 async function publicGames(req, res) {
-  const league = await leaguesService.getPublicLeagueBySlug(req.params.leagueSlug);
+  const league = await leaguesService.getPublicLeagueBySlug(
+    req.params.leagueSlug,
+    req.auth?.userId || null
+  );
   res.status(200).json({ games: league.games });
 }
 
 async function getPublicLeaders(req, res) {
-  const result = await leaguesService.getPublicLeagueLeaders(req.params.leagueSlug);
+  const result = await leaguesService.getPublicLeagueLeaders(
+    req.params.leagueSlug,
+    10,
+    req.auth?.userId || null
+  );
   res.status(200).json(result);
 }
 

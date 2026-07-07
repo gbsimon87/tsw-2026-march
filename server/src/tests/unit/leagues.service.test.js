@@ -32,6 +32,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   upsertLeagueStandings: jest.fn(),
   listLeaguePlayerStats: jest.fn(),
   replaceLeaguePlayerStats: jest.fn(),
+  findActiveLeagueManager: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -58,6 +59,8 @@ const {
   upsertLeagueStandings,
   listLeaguePlayerStats,
   replaceLeaguePlayerStats,
+  findActiveLeagueManager,
+  listLeagueMembershipsForUser,
 } = require('../../modules/leagues/leagues.repository');
 const { listLeagueGamesByLeagueId } = require('../../modules/games/games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../../modules/shared/stats.constants');
@@ -70,6 +73,7 @@ const {
   deriveLeaguePlayerScores,
   getLeaguePlayerStats,
   getPublicLeagueLeaders,
+  getPublicLeagueBySlug,
   recomputeLeagueAggregates,
 } = require('../../modules/leagues/leagues.service');
 
@@ -258,9 +262,12 @@ describe('league standings materialisation (OPT-010)', () => {
     // No materialised read, no persist — computed straight from in-hand data.
     expect(findLeagueStandings).not.toHaveBeenCalled();
     expect(upsertLeagueStandings).not.toHaveBeenCalled();
-    // 8-8 tie: home wins per current tie rule.
-    expect(result[0]).toMatchObject({ teamId: 'team-a', wins: 1 });
-    expect(result[1]).toMatchObject({ teamId: 'team-b', losses: 1 });
+    // OPT-024: league games can't end tied (finishGameForUser rejects it), but
+    // this path computes straight from in-hand data, so a tied finalScore from
+    // before the guard existed must be recorded honestly as a tie — not a
+    // phantom home win.
+    expect(result[0]).toMatchObject({ teamId: 'team-a', wins: 0, losses: 0, ties: 1 });
+    expect(result[1]).toMatchObject({ teamId: 'team-b', wins: 0, losses: 0, ties: 1 });
   });
 });
 
@@ -479,5 +486,78 @@ describe('league player stats materialisation (OPT-011)', () => {
       teamName: 'Alpha',
       teamSlug: 'alpha',
     });
+  });
+});
+
+describe('private league visibility on public-slug routes (OPT-024)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function seedPrivateLeague(overrides = {}) {
+    findLeagueBySlug.mockResolvedValue({
+      _id: 'league-1',
+      slug: 'secret-league',
+      ownerUserId: 'owner-1',
+      isPublic: false,
+      status: 'active',
+      ...overrides,
+    });
+    listLeagueTeams.mockResolvedValue([]);
+    listLeagueGamesByLeagueId.mockResolvedValue([]);
+    findLeagueStandings.mockResolvedValue({ leagueId: 'league-1', rows: [] });
+    upsertLeagueStandings.mockResolvedValue({});
+    listLeaguePlayerStats.mockResolvedValue([]);
+    replaceLeaguePlayerStats.mockResolvedValue({});
+    findActiveLeagueManager.mockResolvedValue(null);
+    listLeagueMembershipsForUser.mockResolvedValue([]);
+  }
+
+  test('anonymous visitor gets 404, not a hint the league exists', async () => {
+    seedPrivateLeague();
+
+    await expect(getPublicLeagueBySlug('secret-league', null)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+
+  test('a signed-in stranger (no membership) also gets 404', async () => {
+    seedPrivateLeague();
+
+    await expect(getPublicLeagueBySlug('secret-league', 'stranger-1')).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+
+  test('the league owner can view their own private league via the public slug route', async () => {
+    seedPrivateLeague();
+
+    const league = await getPublicLeagueBySlug('secret-league', 'owner-1');
+    expect(league.slug).toBe('secret-league');
+  });
+
+  test('an active league manager can view a private league via the public slug route', async () => {
+    seedPrivateLeague();
+    findActiveLeagueManager.mockResolvedValue({ leagueId: 'league-1', userId: 'manager-1' });
+
+    const league = await getPublicLeagueBySlug('secret-league', 'manager-1');
+    expect(league.slug).toBe('secret-league');
+  });
+
+  test('a rostered player (leagueTeamMember) can view a private league via the public slug route', async () => {
+    seedPrivateLeague();
+    listLeagueMembershipsForUser.mockResolvedValue([
+      { leagueId: 'league-1', leagueTeamId: 'team-a', role: 'player', status: 'active' },
+    ]);
+
+    const league = await getPublicLeagueBySlug('secret-league', 'player-1');
+    expect(league.slug).toBe('secret-league');
+  });
+
+  test('public leagues are unaffected — anonymous visitors can still view them', async () => {
+    seedPrivateLeague({ isPublic: true });
+
+    const league = await getPublicLeagueBySlug('secret-league', null);
+    expect(league.slug).toBe('secret-league');
   });
 });

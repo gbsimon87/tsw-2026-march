@@ -470,6 +470,19 @@ function syncGameFinalScore(game) {
   game.finalScore = computeGameFinalScore(game);
 }
 
+// OPT-024: league games can't end in a tie. Checked wherever a final score is
+// about to be (re)frozen for a league game — at finish time (before any
+// mutation, so a rejected finalize leaves the game untouched) and after
+// editing events on an already-completed game — so a tie can never be
+// persisted as a final result, regardless of which path produced it.
+function assertLeagueScoreNotTied(gameContext, finalScore) {
+  if (gameContext !== 'league') return;
+  const { home, away } = finalScore || {};
+  if (home != null && away != null && home === away) {
+    throw new ApiError(422, 'League games cannot end in a tie. Check the score before finalizing.');
+  }
+}
+
 // OPT-008: call after any event-array mutation. eventCount tracks the array
 // length on every save; finalScore is only refreshed for already-completed
 // games (in-progress games get their score frozen at finish time).
@@ -477,6 +490,9 @@ function syncGameDenormalizedAfterEventChange(game) {
   syncGameEventCount(game);
   if (game.status === 'completed') {
     syncGameFinalScore(game);
+    // OPT-024: editing events on an already-completed league game can
+    // retroactively create a tie — re-check every time the score is refrozen.
+    assertLeagueScoreNotTied(game.gameContext, game.finalScore);
   }
 }
 
@@ -1695,10 +1711,16 @@ async function finishGameForUser(userId, gameId) {
     }
   }
 
+  // OPT-024: validate the score against the current (still in_progress) events
+  // before mutating anything — a rejected finalize must leave the game
+  // untouched, not half-completed.
+  const finalScore = computeGameFinalScore(game);
+  assertLeagueScoreNotTied(game.gameContext, finalScore);
+
   game.status = 'completed';
   game.completedAt = new Date();
   // OPT-008: freeze the final score + event count on completion.
-  syncGameFinalScore(game);
+  game.finalScore = finalScore;
   syncGameEventCount(game);
 
   // OPT-012: freeze box score + game summary on completion (one team-context

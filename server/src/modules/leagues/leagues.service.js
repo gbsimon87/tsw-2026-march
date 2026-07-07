@@ -259,28 +259,28 @@ async function assertLeagueExists(leagueId) {
   return league;
 }
 
-async function assertLeagueViewer(userId, leagueId) {
-  const league = await assertLeagueExists(leagueId);
-  const isOwner = String(league.ownerUserId) === String(userId);
-
-  if (isOwner) {
-    return league;
-  }
+// OPT-024: shared by assertLeagueViewer (private-league management routes)
+// and assertLeagueVisible (public-slug routes) — a user is "in" a league as
+// its owner, an active league manager, or via any leagueTeamMember record
+// (team manager, helper, or player) for that league.
+async function isLeagueMember(userId, league) {
+  if (!userId) return false;
+  if (String(league.ownerUserId) === String(userId)) return true;
 
   const [leagueMgr, memberships] = await Promise.all([
-    findActiveLeagueManager(leagueId, userId),
+    findActiveLeagueManager(league._id, userId),
     listLeagueMembershipsForUser(userId),
   ]);
 
-  if (leagueMgr) {
-    return league;
-  }
+  if (leagueMgr) return true;
 
-  const hasMembership = memberships.some(
-    (membership) => String(membership.leagueId) === String(league._id)
-  );
+  return memberships.some((membership) => String(membership.leagueId) === String(league._id));
+}
 
-  if (!hasMembership) {
+async function assertLeagueViewer(userId, leagueId) {
+  const league = await assertLeagueExists(leagueId);
+
+  if (!(await isLeagueMember(userId, league))) {
     throw new ApiError(403, 'Forbidden');
   }
 
@@ -375,15 +375,32 @@ async function assertLeagueParticipant(userId, leagueId) {
   throw new ApiError(403, 'Forbidden');
 }
 
+// OPT-024: a private league must stay invisible to the general public, but a
+// signed-in member of that league (owner, league manager, team manager,
+// helper, or player) can still reach it through the public-slug routes — e.g.
+// sharing their own league's link. `viewerUserId` comes from
+// optionalAuthMiddleware, so it's null for anonymous requests, which keeps the
+// prior all-anonymous behaviour unchanged for public leagues and for
+// non-members hitting a private one (still a 404, not a 403 — we don't want
+// to reveal that a private league exists at all to a non-member).
 async function assertLeagueVisible(leagueIdOrSlug, options = {}) {
   const league = options.bySlug
     ? await findLeagueBySlug(leagueIdOrSlug)
     : await findLeagueById(leagueIdOrSlug);
-  if (!league || !league.isPublic || league.status !== 'active') {
+
+  if (!league || league.status !== 'active') {
     throw new ApiError(404, 'League not found');
   }
 
-  return league;
+  if (league.isPublic) {
+    return league;
+  }
+
+  if (await isLeagueMember(options.viewerUserId, league)) {
+    return league;
+  }
+
+  throw new ApiError(404, 'League not found');
 }
 
 async function assertLeagueTeamExists(leagueId, leagueTeamId) {
@@ -572,8 +589,8 @@ async function getLeagueForUser(userId, leagueId) {
   });
 }
 
-async function getPublicLeagueBySlug(slug) {
-  const league = await assertLeagueVisible(slug, { bySlug: true });
+async function getPublicLeagueBySlug(slug, viewerUserId = null) {
+  const league = await assertLeagueVisible(slug, { bySlug: true, viewerUserId });
   // OPT-005: fetch teams + raw games ONCE, then pass down (was teams×3, games×2).
   // NOTE: publicOnly is preserved as-is; listLeagueGames currently ignores it
   // (tracked separately in OPT-024). This refactor does not change that behaviour.
@@ -744,8 +761,8 @@ async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
   });
 }
 
-async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
-  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug, viewerUserId = null) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true, viewerUserId });
   const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
   if (!team) {
     throw new ApiError(404, 'League team not found');
@@ -999,7 +1016,7 @@ async function getPublicLeaguePlayerBySlug(
   leaguePlayerId,
   viewerUserId = null
 ) {
-  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true, viewerUserId });
   const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
   if (!team) {
     throw new ApiError(404, 'League team not found');
@@ -1734,6 +1751,9 @@ async function computeLeagueStandings(
         gamesPlayed: 0,
         wins: 0,
         losses: 0,
+        // OPT-024: retained only to describe legacy/pre-guard tied games
+        // honestly in `record` — new games can never tie (see the loop below).
+        ties: 0,
         winPct: 0,
         pointsFor: 0,
         pointsAgainst: 0,
@@ -1770,18 +1790,26 @@ async function computeLeagueStandings(
     awayRow.pointsAgainst += homePoints;
     awayRow.pointDiff = awayRow.pointsFor - awayRow.pointsAgainst;
 
-    if (homePoints >= awayPoints) {
+    // OPT-024: league games can't end tied — games.service.js's
+    // assertLeagueScoreNotTied rejects a tie at finalize/edit time before it
+    // ever reaches a completed game. This branch only exists to handle
+    // legacy/pre-guard data honestly (tie recorded as a tie, not a phantom
+    // home win) rather than assuming it can never happen.
+    if (homePoints > awayPoints) {
       homeRow.wins += 1;
       awayRow.losses += 1;
-    } else {
+    } else if (awayPoints > homePoints) {
       homeRow.losses += 1;
       awayRow.wins += 1;
+    } else {
+      homeRow.ties += 1;
+      awayRow.ties += 1;
     }
   }
 
   for (const row of rows.values()) {
     row.winPct = row.gamesPlayed > 0 ? row.wins / row.gamesPlayed : 0;
-    row.record = `${row.wins}-${row.losses}`;
+    row.record = `${row.wins}-${row.losses}${row.ties ? `-${row.ties}` : ''}`;
   }
 
   return Array.from(rows.values()).sort((a, b) => {
@@ -2208,8 +2236,8 @@ async function canEditCompletedLeagueGame(userId, game) {
   return managerChecks.some(Boolean);
 }
 
-async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
-  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+async function getPublicLeagueLeaders(leagueSlug, limit = 10, viewerUserId = null) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true, viewerUserId });
   // OPT-011: raw per-player totals come from the materialised read (indexed
   // find, self-backfilling) instead of replaying every team's games/events.
   const [teams, playerStatRows] = await Promise.all([
