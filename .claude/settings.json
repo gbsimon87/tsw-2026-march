@@ -88,7 +88,10 @@
       "Bash(ENV_FILE=../env/server/.env.development node ./__verify-ttl-tmp.js)",
       "Read(//Users/simoncordova/.claude/projects/**)",
       "Bash(sort -t/ -k4,5)",
-      "Bash(awk -F: '$1 > 800 && $1 < 1520')"
+      "Bash(awk -F: '$1 > 800 && $1 < 1520')",
+      "Bash(grep -n \"league_admin\\\\|leagueAdmin\" -r src/)",
+      "Bash(cat src/modules/analytics/analytics.routes.js)",
+      "Bash(git merge *)"
     ],
     "additionalDirectories": ["/private/tmp"]
   },
@@ -106,7 +109,6 @@
       },
       {
         "matcher": "Bash",
-        "if": "Bash(git commit *)",
         "hooks": [
           {
             "type": "command",
