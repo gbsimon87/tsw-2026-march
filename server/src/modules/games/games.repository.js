@@ -6,8 +6,10 @@ const participantSchema = new mongoose.Schema(
   {
     side: { type: String, enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY], required: true },
     participantType: { type: String, enum: ['team', 'league_team'], required: true },
-    teamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
-    leagueTeamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    // OPT-007: no query ever filters on homeParticipant.teamId/leagueTeamId (or
+    // the away side) — dropped the per-field index; it only cost writes.
+    teamId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    leagueTeamId: { type: mongoose.Schema.Types.ObjectId, default: null },
     // OPT-022: this field was always written at game-creation time
     // (games.service.js sets `slug: context.homeTeam.slug`) but Mongoose
     // silently drops unknown fields on save, so it was never actually
@@ -81,11 +83,14 @@ const shotEventSchema = new mongoose.Schema(
     x: { type: Number, min: 0, max: 100 },
     y: { type: Number, min: 0, max: 100 },
     relatedPlayerId: { type: mongoose.Schema.Types.ObjectId, required: false },
+    // OPT-007: was `index: true` — a multikey index on an embedded-array field,
+    // meaning every event push rewrote an index entry for it. No query anywhere
+    // filters on events.teamSide (per-event team is always derived in app code
+    // from the event's position/relatedPlayerId context); dropped.
     teamSide: {
       type: String,
       enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
       required: false,
-      index: true,
     },
     relatedTeamSide: {
       type: String,
@@ -145,17 +150,19 @@ const gameSchema = new mongoose.Schema(
       index: true,
     },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
+    // OPT-007: dropped `index: true` on homeLeagueTeamId/awayLeagueTeamId/
+    // homeTeamId/awayTeamId — each already starts a compound index below
+    // ({field:1, createdAt:-1}), which fully covers any field-only query.
+    // The standalone single-field index was pure redundant write cost.
     homeLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'LeagueTeam',
       default: null,
-      index: true,
     },
     awayLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'LeagueTeam',
       default: null,
-      index: true,
     },
     trackedLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -163,8 +170,8 @@ const gameSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    homeTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
-    awayTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
+    homeTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
+    awayTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
     initialActiveSide: {
       type: String,
       enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],

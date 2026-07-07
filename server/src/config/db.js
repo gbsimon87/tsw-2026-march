@@ -11,6 +11,12 @@ async function connectDb(attempt = 1) {
       // loop below then surfaces the problem in seconds, not half a minute.
       maxPoolSize: env.MONGO_MAX_POOL_SIZE,
       serverSelectionTimeoutMS: 5000,
+      // OPT-007: in production, index changes go through the explicit
+      // scripts/migrate-drop-dead-indexes.js migration, not an implicit
+      // createIndex on every connect — avoids surprise index builds on deploy
+      // and makes index drops (which Mongoose's autoIndex never does) a
+      // deliberate, auditable step. Dev/test keep autoIndex on for convenience.
+      autoIndex: env.NODE_ENV !== 'production',
     });
     logger.info('Connected to MongoDB');
   } catch (error) {

@@ -46,29 +46,33 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `All server-side hygiene AND ops work is DONE (OPT-001–006, 008–020, 022, 023). Everything remaining is either browser-gated frontend work (needs a session with live browser testing), prod-data-gated, or blocked on product decisions. There is NO unblocked backend work left.`
-- **Current wave:** Wave 5 complete for everything codeable-without-a-browser — **OPT-022 and OPT-023 both done and committed.** OPT-021 is deferred (browser-gated). Branch `dev`.
-- **Recommended next task:** **`OPT-025`** (project `events` out of league list
-  endpoints) — hand-held, prod-write session: run the existing
-  `backfill-game-finalscore.js` against production, confirm it completed, then
-  add the `.select()` projection. After that, the only remaining work is: **for
-  a session WITH live browser testing** — the batched frontend follow-up
+- **Overall status:** `All server-side hygiene AND ops work is DONE (OPT-001–006, 008–020, 022, 023, 024). OPT-025's prod backfill is done; its code projection was investigated and marked won't-fix. OPT-007's provably-dead index drops are done in dev, verified against production data via mongodump — same drop needs to be run against prod. The remaining OPT-007 half needs a week of $indexStats observation; everything else is browser-gated frontend work.`
+- **Current wave:** Wave 5 complete for everything codeable-without-a-browser
+  except OPT-007's traffic-gated half. Branch `dev`.
+- **Recommended next task:** **Run `scripts/migrate-drop-dead-indexes.js`
+  against production** (same command shape as OPT-025's backfill — dry-run
+  first, mongodump backup first, then the real drop). Once that's done, the
+  only remaining work is: **watch `$indexStats`** on the 5 traffic-gated
+  candidates (`leagueId`, `trackedLeagueTeamId`, `status`, `gameContext`,
+  `trackingMode`) for about a week before deciding on those; and **for a
+  session WITH live browser testing** — the batched frontend follow-up
   (**`OPT-021`**, **`OPT-016`** full scope, **`OPT-014b`**, **`OPT-018`
-  client**); **gated on external state** — **`OPT-007`** (prod `$indexStats`).
-  (Done: OPT-001–006, 008–020, 022, 023, 024.)
-- **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
-  slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
-  by every user immediately. Prioritise accordingly.
+  client**). (Done: OPT-001–006, 008–020, 022, 023, 024; won't-fix: OPT-025;
+  partial: OPT-007.)
+- **Dataset context:** tiny today (~17 games, 136 docs in dev; 14 games in
+  prod). Nothing is slow _now_; the P1 items are **scaling cliffs**, the
+  frontend items are felt by every user immediately. Prioritise accordingly.
 
 **Counts by status** (25 tasks total; OPT-025 added during OPT-008):
 
-| Status      | Count                                                                       |
-| ----------- | --------------------------------------------------------------------------- |
-| Not Started | 2 (`007` gated-prod, `025` gated-prod — hand-held session next)             |
-| In Progress | 0                                                                           |
-| Blocked     | 0                                                                           |
-| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                          |
-| Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log) |
+| Status      | Count                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| Not Started | 0                                                                                                |
+| In Progress | 1 (`OPT-007` — provably-dead half done in dev, needs prod run + observation window for the rest) |
+| Blocked     | 0                                                                                                |
+| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                                               |
+| Won't-fix   | 1 (`OPT-025` — prod backfill done; code projection unsafe, see its card)                         |
+| Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log)                      |
 
 ---
 
@@ -121,7 +125,7 @@ consumers and rework is minimised.
 | OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed | (OPT-007)          |
 | OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed | —                  |
 | OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed | —                  |
-| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | Not Started  | — (verify first)   |
+| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | 🟡 Partial   | — (verify first)   |
 | OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed | OPT-006            |
 | OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
 | OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
@@ -139,7 +143,7 @@ consumers and rework is minimised.
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Backend   | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | ✅ Completed | —                  |
-| OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started  | OPT-008 + backfill |
+| OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | 🚫 Won't-fix | OPT-008 + backfill |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -421,6 +425,29 @@ _None._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-07 — OPT-025: marked won't-fix; prod backfill kept.** Investigated
+  before writing any code and found the task as scoped would break real
+  functionality: 5 of 9 consumers of the shared `listLeagueGamesByLeagueId`
+  fetch (highlights, live per-player team stats, the standings/player-stats
+  materialisation fallback) still read `game.events` directly, and OPT-005
+  deliberately unified every league-detail read onto that one shared fetch per
+  request — there's no "list-only" code path that doesn't also feed an
+  events-needing sibling in the same request. Projecting `events` out of the
+  shared fetcher would silently zero highlights and team stats, or turn the
+  standings fallback into a silent wrong-score bug for any future
+  legacy/edge-case game. **Why not force it through anyway:** the actual bytes
+  saved at today's scale (14 prod games, low hundreds of events each) are
+  negligible, while the two honest ways to really achieve the goal — splitting
+  the shared fetch into a projected list-only query plus a separate full query
+  (re-adds the extra round-trip OPT-005 removed), or moving `events` to its own
+  collection (a real schema migration) — are both bigger than this task's
+  scope. **The prod backfill itself is real, done, and stays done** regardless
+  of this decision: all 14 production games now have a persisted `finalScore`/
+  `eventCount` (verified via a follow-up dry-run showing 0 remaining), which is
+  independently useful (the OPT-008 fast-path no longer needs a live compute
+  fallback for any current game) even though the events-projection half won't
+  ship. Revisit if event counts grow 10–100×, or if events move to their own
+  collection anyway for other reasons.
 - **2026-07-07 — OPT-023: credential limiter stays single-instance (IP-keyed
   in-memory) for now.** The new `authCredentialLimiter` uses express-rate-limit's
   default in-memory store, so its budget is per-process, not shared across
@@ -848,6 +875,19 @@ league)` (owner / active league manager / any leagueTeamMember role) used by
   `htmlBodyLines` for the email's `html` field. `analytics.controller.js`
   always overrides `distinctId` with `req.auth.userId` (schema field kept
   optional for backward-compat, but ignored).
+- ✅ **changed (OPT-007, 2026-07-07, partial)** index hygiene:
+  `games.repository.js` — removed `index: true` from 9 fields proven unqueried/
+  redundant (`homeTeamId`, `awayTeamId`, `homeLeagueTeamId`,
+  `awayLeagueTeamId`, `events.teamSide`, `homeParticipant.teamId`,
+  `awayParticipant.teamId`, `homeParticipant.leagueTeamId`,
+  `awayParticipant.leagueTeamId`). `config/db.js` — `autoIndex:
+env.NODE_ENV !== 'production'`. New `scripts/migrate-drop-dead-indexes.js`
+  — matches live indexes by key shape (not name), idempotent, `--dry-run`;
+  run against dev (9 dropped, verified 0 remaining); **not yet run against
+  production**. 5 remaining low-cardinality candidates
+  (`leagueId`/`trackedLeagueTeamId`/`status`/`gameContext`/`trackingMode`)
+  intentionally untouched — need a `$indexStats` traffic-observation window,
+  not provable from code.
 
 ## 🔔 Implementation reminders
 
@@ -1948,7 +1988,9 @@ days · **L** 1–2 weeks.
 
 ### OPT-007 — Index hygiene
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Database
+- **Priority:** Medium · **Status:** 🟡 **Partially complete** (2026-07-07 — the
+  provably-dead half is done; the traffic-gated half awaits a prod
+  observation window) · **Category:** Database
 - **Wave:** 0 · **Complexity:** S · **Dependencies:** none — **but verify first**
 - **Description:** Drop `events.teamSide_1` (multikey per-event, unqueried — the
   worst write-amplifier on the hottest path), redundant single-field prefixes of
@@ -1965,10 +2007,63 @@ days · **L** 1–2 weeks.
   `db.js` (`autoIndex:false` in prod).
 - **Testing:** `$indexStats` in prod shows a zero-op verification window on drop
   candidates **before dropping**; explain plans confirm new compounds are used.
-- **Validation checklist:** [ ] verification window passed [ ] drops applied via
-  migration [ ] new indexes used by planner [ ] prod autoIndex off.
+- **Validation checklist:** [x] provably-dead drops applied via migration (dev)
+  [ ] applied to prod [x] new/compound indexes confirmed still used [ ] remaining
+  low-cardinality candidates observed via `$indexStats` [ ] prod autoIndex off
+  (code ships `autoIndex:false` for prod; takes effect on next prod deploy).
 - **Source:** [30](./30-optimisation-roadmap.md) M5, [19](./19-indexing-strategy.md).
-- **Completion notes:** —
+- **Completion notes:** Split into two halves after investigating what's
+  actually provable from static analysis vs. what genuinely needs live
+  traffic data:
+
+  **Half 1 — provably dead, done (dev; prod pending your run):**
+  Found **9** dead indexes (2 more than the card's original estimate — the
+  card only named `events.teamSide_1` and didn't catch the embedded
+  `homeParticipant`/`awayParticipant` `teamId`/`leagueTeamId` single-field
+  indexes, which are equally unqueried):
+  - `homeTeamId_1`, `awayTeamId_1`, `homeLeagueTeamId_1`, `awayLeagueTeamId_1`
+    — each fully redundant: the same field already starts a compound index
+    (`{field:1, createdAt:-1}`), which covers any query the standalone index
+    could have served.
+  - `events.teamSide_1` — multikey (per-array-element) index on an embedded
+    event field; every event append rewrote an index entry for it. Zero query
+    usages anywhere in the codebase.
+  - `homeParticipant.teamId_1`, `awayParticipant.teamId_1`,
+    `homeParticipant.leagueTeamId_1`, `awayParticipant.leagueTeamId_1` — same
+    pattern as `events.teamSide`, zero query usages, not mentioned in the
+    original card but found during the codebase trace.
+
+  `games.repository.js`: removed `index: true` from all 9 fields (comments
+  left explaining why). `config/db.js`: `autoIndex: env.NODE_ENV !== 'production'`
+  — Mongoose's autoIndex only ever _creates_ indexes on connect, never drops
+  removed ones, so the schema change alone wouldn't remove these from a live
+  DB; disabling it in prod also matches the card's own ask (no more implicit
+  index builds on every prod deploy). New `scripts/migrate-drop-dead-indexes.js`
+  — matches live indexes by **key shape** (`{field: 1}`), never by name (safe
+  regardless of any naming-convention difference); idempotent; `--dry-run`
+  supported. **Ran against dev**: dry-run found all 9, real run dropped all 9,
+  follow-up dry-run confirmed 0 remaining, and a direct `listIndexes()` dump
+  confirmed the 4 compound indexes plus every traffic-gated single (`leagueId`,
+  `trackedLeagueTeamId`, `status`, `gameContext`, `trackingMode`) were left
+  untouched. New regression tests in `games.repository.schema.test.js` (5 new
+  tests: the 4 dropped-and-redundant fields have no standalone index, their
+  compounds still exist, `events.teamSide` has no index, the 4 embedded
+  participant fields have no index, and the 5 traffic-gated fields explicitly
+  still have theirs — guards against this drop ever silently expanding scope).
+  Full suite **33 suites / 266 tests** (up from 261); lint clean.
+  **Not yet run against production** — see the manual step below.
+
+  **Half 2 — traffic-gated, not started:** `leagueId_1`, `trackedLeagueTeamId_1`,
+  `status_1`, `gameContext_1`, `trackingMode_1` are each low-cardinality and
+  each used **alone** by at least one real query (e.g. `Game.find({status:
+'completed'})` in `listCompletedGames`/`listPublicCompletedGames`) — whether
+  they're worth keeping depends on real selectivity/traffic, which can't be
+  proven from code. Needs a `$indexStats` observation window in production
+  (~1 week) before any decision. The 3 new compound indexes the original card
+  proposed (`{leagueId:1,status:1}` etc.) are also untouched — adding an index
+  is lower-risk than dropping one, but they weren't the blocking, hand-held
+  part of this task, so they're left for a future pass alongside the
+  observation-window results.
 
 ---
 
@@ -3187,8 +3282,11 @@ finalScore)` rejects (422) a league game finishing tied, checked in
 
 ### OPT-025 — Project `events` out of list endpoints (follow-up to OPT-008)
 
-- **Priority:** Medium · **Status:** Not Started · **Category:** Backend / DB
-- **Wave:** 1 · **Complexity:** S · **Dependencies:** OPT-008 + **prod backfill**
+- **Priority:** Medium · **Status:** 🚫 **Won't-fix** (investigated 2026-07-07) ·
+  **Category:** Backend / DB
+- **Wave:** 1 · **Complexity:** S (as scoped — **actually L**, see below) ·
+  **Dependencies:** OPT-008 + **prod backfill** (✅ done, 2026-07-07 — 14/14 prod
+  games backfilled, verified 0 remaining)
 - **Description:** Now that `Game.finalScore` + `eventCount` exist (OPT-008) and
   `getLeagueGameScore` reads them first, add `.select('-events -rosterSnapshot ...')`
   to the league game-list and standings queries (`listLeagueGamesByLeagueId`
@@ -3202,11 +3300,59 @@ finalScore)` rejects (422) a league game finishing tied, checked in
 - **Gating requirement:** **Run `backfill-game-finalscore.js` in production
   first.** Projecting events out before backfill would zero the score of any
   game lacking `finalScore` (the compute-on-read fallback needs the array).
+  ✅ Done — dry-run confirmed 14/14 games needed it, real run updated 14/14,
+  follow-up dry-run confirmed 0 remaining. `mongodump` backup of the `games`
+  collection taken first (`backups/pre-opt025-20260707/`).
 - **Files likely to change:** `games.repository.js` (new projected finder or
   `.select()` on `listLeagueGamesByLeagueId`), `leagues.service.js` callers.
 - **Testing:** after backfill, list endpoints return identical scores with
   events projected out (query inspection confirms no events transferred).
-- **Validation checklist:** [ ] prod backfill run [ ] events projected out of
-  list queries [ ] scores identical [ ] detail endpoints still load events.
+- **Validation checklist:** [x] prod backfill run [ ] events projected out of
+  list queries — **not implemented, see below** [x] scores identical (n/a —
+  no projection shipped, no scores changed) [x] detail endpoints still load
+  events (unchanged, nothing touched).
 - **Source:** [30](./30-optimisation-roadmap.md) H3/#5, [28](./28-computation-optimisation.md) step 1.
-- **Completion notes:** —
+- **Completion notes:** Prod backfill completed and verified (see gating
+  requirement above) — **that part of the task is genuinely done and stays
+  done regardless of the code-projection decision below.**
+
+  **Investigation before touching code:** traced all 9 call sites of
+  `listLeagueGamesByLeagueId` (the single shared fetch OPT-005 deliberately
+  unified everything onto) to see whether `.select('-events')` was safe.
+  Result: **5 of 9 consumers still read `game.events` directly and would
+  break** if it were projected out:
+  - `getLeagueTeamForUser` / `getPublicLeaguePlayerBySlug` → per-event
+    highlight extraction (`buildLeaguePlayerHighlights`, needs
+    `event.videoTimestamp`/`statType`/`playerId` per event).
+  - `getPublicLeagueTeamBySlug` → live per-player stat aggregation
+    (`buildLeagueTeamPlayerStats`, needs the raw event stream).
+  - `computeLeagueStandings` / `computeLeaguePlayerStats` (OPT-010/011
+    materialisation) → `getLeagueGameScore`'s **fallback path** for any game
+    without a `finalScore` needs `events` to compute a score instead of
+    silently returning 0. Backfilling prod today doesn't retire this fallback
+    permanently — it's defensive code for any future edge case (a game
+    finalized outside the normal flow, a field getting unset, a migration
+    gap) and removing the data it needs would turn a graceful fallback into a
+    silent wrong-score bug.
+
+  Every call site that needs a plain list of games **always shares the same
+  `rawGames` prefetch** with a sibling that needs full events in the same
+  request (that's exactly what OPT-005 optimised for — one fetch, reused).
+  There is no "list-only, nothing else in this request needs events" code
+  path today. Projecting `events` out of the shared fetcher would silently
+  break highlights, team stat pages, and the standings fallback for real
+  users — **not something to risk on a task this small.**
+
+  **Decision (with app owner, 2026-07-07):** mark **won't-fix** rather than
+  force it through. The two honest ways to actually achieve the goal are both
+  bigger than this task's S-complexity: (a) split the shared fetch into a
+  projected list-only query **plus** a separate full query for the
+  events-needing siblings — re-introduces the extra round-trip OPT-005 removed,
+  a real tradeoff not a pure win; or (b) move `events` to its own collection
+  entirely — an actual schema migration. Both are legitimate future L-effort
+  work, not this ticket. At the current dataset size (14 games, low hundreds of
+  events each) the bytes saved by projection are negligible — revisit if event
+  counts grow 10–100×, or if events ever move to their own collection anyway
+  for other reasons.
+  **No code was changed for this task** — investigation only; current
+  behaviour and data are untouched.
