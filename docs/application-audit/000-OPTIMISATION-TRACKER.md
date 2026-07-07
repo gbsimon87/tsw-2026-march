@@ -140,7 +140,7 @@ consumers and rework is minimised.
 | OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
-| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Backend   | —                  |
+| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | 🚫 Won't-fix | OPT-008 + backfill |
@@ -425,6 +425,17 @@ _None._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-07 — browser-verification workflow established; frontend batch is
+  now workable.** The remaining frontend items (OPT-021, OPT-016 full scope,
+  OPT-014b, OPT-018 client) were originally deferred "for a session with real
+  browser verification." That session is now happening: `pnpm dev` runs both
+  servers against the dev DB, and changes are verified by clicking through in a
+  real browser (the user confirms behaviour). The smallest of the batch —
+  OPT-022's canvas-on-demand item — was completed and browser-verified this way
+  (commit `0572b38`). The rest of the batch is being tackled in ascending
+  difficulty order: OPT-021 → OPT-018 client → OPT-014b → OPT-016 (largest/
+  riskiest, the 3,141-line GameTrackPage, last). Dependencies for all are
+  already satisfied, so ordering is by risk, not blocking.
 - **2026-07-07 — OPT-025: marked won't-fix; prod backfill kept.** Investigated
   before writing any code and found the task as scoped would break real
   functionality: 5 of 9 consumers of the shared `listLeagueGamesByLeagueId`
@@ -3063,7 +3074,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 
 ### OPT-022 — Low-impact hygiene batch
 
-- **Priority:** Low · **Status:** ✅ Completed (backend sub-items; canvas-on-demand deferred) · **Category:** Mixed
+- **Priority:** Low · **Status:** ✅ **Completed** (all sub-items; canvas-on-demand done 2026-07-07, browser-verified) · **Category:** Mixed
 - **Wave:** 5 · **Complexity:** S · **Dependencies:** none
 - **Description:** Bundle of independent small fixes: add `participant.slug` to
   the schema (kills perpetual runtime backfill, L3); remove dead code — legacy
@@ -3080,8 +3091,9 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   share-card still generates on click; `.lean()` paths return expected shapes.
 - **Validation checklist:** [x] slug in schema (+ backfill script, real-DB
   verified) [~] dead code — **investigated, most of it isn't actually dead, see
-  notes** [ ] canvas on demand (deferred — client rendering, needs browser
-  testing) [x] `.lean()` safe (3 queries, callers individually verified)
+  notes** [x] canvas on demand (done 2026-07-07 — generated at share/download
+  click instead of on every `data` change; browser-verified) [x] `.lean()` safe
+  (3 queries, callers individually verified)
   [x] validation — **no gap found**, already 100% covered by OPT-018 + existing
   feed validation.
 - **Source:** [30](./30-optimisation-roadmap.md) L2/L3/L5/L8, [22](./22-known-technical-debt.md).
@@ -3123,14 +3135,20 @@ createCheckoutSession`) has no UI caller (superseded by
     export detection produced too many false positives to trust for actual
     deletions (e.g. flagged `ApiError`, `asyncHandler` — both obviously
     live). **Closed as "no gap found"** rather than guessing.
-  - **Item 3 — canvas-on-demand: deferred, client rendering.**
-    `GameDetailPage.jsx`'s share-card canvas regenerates in a `useEffect` on
-    every `data` change instead of on the explicit share action. This is a
-    pure client-rendering restructure (move `createRecapCardDataUrl(...)` out
-    of the effect into a click handler) that needs live browser verification
-    to confirm the share button still works correctly after the change —
-    batched with OPT-021/016/014b for the future browser-testing session (see
-    Deferred section).
+  - **Item 3 — canvas-on-demand: DONE 2026-07-07 (was deferred, now shipped).**
+    `GameDetailPage.jsx`'s share-card canvas used to regenerate in a
+    `useEffect` on every `data` change (incl. any React Query
+    refetch/invalidation), even when the user never shares/downloads. Moved the
+    generation into an on-demand `buildHeaderCardDataUrl()` builder called from
+    the Share/Download click handlers; removed the eager effect + the
+    `headerCardDataUrl` state; a shared `isPreparingCard` state disables the
+    buttons while generating; `shareHeaderCard` hands its already-built URL to
+    `downloadHeaderCard` on the fallback path so it isn't generated twice.
+    Browser-verified (download produces the PNG, share falls back to link-copy
+    on desktop, no canvas work on page load). Lint clean; no new test
+    regressions (the client suite's 20 pre-existing failures — YouTube embed
+    URL params + replay-lock text matching — are unrelated to this change).
+    Committed `0572b38`.
   - **Item 4 — `.lean()` added to 3 verified-safe read-only queries.**
     `listCompletedGames`, `listPublicCompletedGames` (games.repository.js),
     and `listLeaguesByIds` (leagues.repository.js). Every caller of each was
