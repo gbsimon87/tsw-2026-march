@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { authApi } from '../../auth/api/authApi';
@@ -97,20 +98,25 @@ function ProfileCard({ profile, avatarUrl }) {
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
-  const [profiles, setProfiles] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState('');
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    leaguesApi
-      .getMyProfiles()
-      .then((data) => setProfiles(data.profiles || []))
-      .catch((loadError) => setError(loadError.message || 'Failed to load profiles'))
-      .finally(() => setIsLoading(false));
-  }, []);
+  // OPT-014b: read migrated to React Query. The avatar upload below is a
+  // mutation that flows through AuthContext.updateUser (already on React
+  // Query), so it stays as-is — only the profiles read changes here.
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['myProfiles'],
+    queryFn: () => leaguesApi.getMyProfiles(),
+  });
+
+  const profiles = data?.profiles || [];
+  const error = isError ? queryError?.message || 'Failed to load profiles' : '';
 
   async function handleAvatarChange(event) {
     const file = event.target.files?.[0];

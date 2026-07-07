@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -11,12 +12,17 @@ vi.mock('../api/teamsApi', () => ({
 }));
 
 function renderPage() {
+  // OPT-014b: page now uses React Query — wrap in a provider, fresh client per
+  // render to isolate the cache between tests.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <MemoryRouter initialEntries={['/opponents/falcons']}>
-      <Routes>
-        <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
-      </Routes>
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/opponents/falcons']}>
+        <Routes>
+          <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 

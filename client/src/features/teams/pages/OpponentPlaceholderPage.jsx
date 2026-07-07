@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -20,17 +20,20 @@ function formatGameDate(game) {
 
 export function OpponentPlaceholderPage() {
   const { opponentSlug } = useParams();
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  // OPT-014b: read migrated to React Query, keyed by opponentSlug so navigating
+  // between opponents caches each one.
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['publicOpponent', opponentSlug],
+    queryFn: () => teamsApi.getPublicOpponentBySlug(opponentSlug),
+    enabled: Boolean(opponentSlug),
+  });
 
-  useEffect(() => {
-    teamsApi
-      .getPublicOpponentBySlug(opponentSlug)
-      .then(setData)
-      .catch((loadError) => setError(loadError.message || 'Failed to load opponent'))
-      .finally(() => setIsLoading(false));
-  }, [opponentSlug]);
+  const error = isError ? queryError?.message || 'Failed to load opponent' : '';
 
   if (isLoading) {
     return <SportsLoader label="Loading opponent" fullPage />;
