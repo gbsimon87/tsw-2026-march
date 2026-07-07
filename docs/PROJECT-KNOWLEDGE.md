@@ -293,11 +293,15 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 - **Mutations use no `useMutation`** — they are plain async `*Api` calls; cache
   updates are manual `queryClient.setQueryData` (e.g. feed optimistic insert,
   auth writes). **No `invalidateQueries` anywhere.**
-- ⚠️ **Data-fetch split-brain (known debt)**: TanStack Query is wired into only
-  ~6 call sites (AuthContext, FeedPage `useInfiniteQuery`, GameDetailPage, the 3
-  public league pages). **~22 pages still fetch imperatively** with
-  `useEffect + useState + Promise.all`. When adding a new data page, prefer
-  `useQuery`; migrating the imperative pages is the tracked "OPT-014b" follow-up.
+- ⚠️ **Data-fetch split-brain (known debt, shrinking)**: TanStack Query is wired
+  into ~11 call sites (AuthContext, FeedPage `useInfiniteQuery`, GameDetailPage,
+  the 3 public league pages, plus `GamesListPage`/`TeamsPage`/`LeaguesPage`/
+  `MySportyPage`/`OpponentPlaceholderPage` migrated 2026-07-07). **~15 pages
+  still fetch imperatively**, most notably `GameTrackPage` (the big one,
+  deliberately last) and a mix of admin/CRUD + billing-flow pages. When adding
+  a new data page, prefer `useQuery`; migrating the rest is the tracked
+  "OPT-014b" follow-up (see its card for the exact remaining list and why each
+  one is riskier than a plain read-swap).
 
 ---
 
@@ -366,8 +370,9 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 
 **Known debt / inconsistencies**
 
-- **Data-fetch split-brain** (client): ~22 pages bypass TanStack Query
-  (§8). No `useMutation`/`invalidateQueries`.
+- **Data-fetch split-brain** (client): ~15 pages bypass TanStack Query
+  (§8), down from ~22 after the 2026-07-07 OPT-014b pass. No
+  `useMutation`/`invalidateQueries`.
 - **Unused/partial fields**: `User.roles` (never enforced) and
   `User.league*` billing fields duplicate `League` state (League is the source
   of truth) — a partial/abandoned migration.
@@ -400,12 +405,17 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 - Single-instance assumption: the credential rate limiter uses an in-memory
   store (per-process, not shared) — revisit if the app goes multi-instance.
 
-**Active optimisation project**: the `docs/application-audit/` folder — headed by
-[`000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
-— is the living tracker for the performance/hardening work (OPT-###). Most
-backend items are done and committed; the open items are browser-gated frontend
-work (React Query migration, GameTrackPage decomposition, client
-infinite-scroll) and prod-data-gated migrations. Consult it before starting
+**Active optimisation project**: `docs/application-audit/000-OPTIMISATION-TRACKER.md`
+is the **sole surviving file** in that folder and the living tracker for the
+performance/hardening work (OPT-###) — the 30 original audit documents it was
+built from were removed 2026-07-07 once every finding was addressed (their
+"Source:" citations remain in the tracker as historical pointers only). All
+backend-only work is done and committed. Open items: a handful of client pages
+still need the OPT-014b React Query migration (mutation/polling-heavy or
+untested — see its card), `GameTrackPage` decomposition (OPT-016, deliberately
+last — the largest/riskiest file), feed windowing (OPT-021, partly gated on
+real mobile-device testing), and OPT-007's remaining index candidates (gated on
+~1 week of Atlas usage observation). Consult it before starting
 optimisation work.
 
 ---
