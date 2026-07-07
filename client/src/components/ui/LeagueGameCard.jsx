@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import CloudinaryImage from '../../features/media/CloudinaryImage';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
 
 function formatGameDate(game) {
@@ -45,10 +46,14 @@ export function LeagueGameCard({ game }) {
       <div className="space-y-3 px-4 py-4">
         {sides.map((side) => (
           <div key={side.name} className="flex items-center gap-3">
-            <img
+            <CloudinaryImage
               src={side.logo || teamPlaceholder}
               alt=""
+              width={36}
+              height={36}
               className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+              loading="lazy"
+              decoding="async"
             />
             <span
               className={`flex-1 truncate text-sm font-semibold ${side.won ? 'text-slate-900' : 'text-slate-500'}`}

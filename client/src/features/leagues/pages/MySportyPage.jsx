@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { authApi } from '../../auth/api/authApi';
@@ -8,14 +9,21 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 function ProfileCard({ profile, avatarUrl }) {
   const inner = (
     <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-sm">
       <div className="flex items-center gap-3">
-        <img
+        <CloudinaryImage
           src={avatarUrl || playerPlaceholder}
           alt=""
+          width={48}
+          height={48}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[48, 96, 144]}
+          sizes="48px"
           className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 bg-white object-cover"
         />
         <div className="min-w-0">
@@ -38,9 +46,15 @@ function ProfileCard({ profile, avatarUrl }) {
       <div className="space-y-2 border-t border-slate-100 pt-4">
         {profile.team && (
           <div className="flex items-center gap-2 text-sm">
-            <img
+            <CloudinaryImage
               src={profile.team.logo?.url || teamPlaceholder}
               alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
             />
             <span className="truncate font-medium text-slate-700">{profile.team.name}</span>
@@ -48,9 +62,15 @@ function ProfileCard({ profile, avatarUrl }) {
         )}
         {profile.league && (
           <div className="flex items-center gap-2 text-sm">
-            <img
+            <CloudinaryImage
               src={getLeagueHeaderImage(profile.league)}
               alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
             />
             <span className="truncate text-slate-500">{profile.league.name}</span>
@@ -78,20 +98,25 @@ function ProfileCard({ profile, avatarUrl }) {
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
-  const [profiles, setProfiles] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState('');
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    leaguesApi
-      .getMyProfiles()
-      .then((data) => setProfiles(data.profiles || []))
-      .catch((loadError) => setError(loadError.message || 'Failed to load profiles'))
-      .finally(() => setIsLoading(false));
-  }, []);
+  // OPT-014b: read migrated to React Query. The avatar upload below is a
+  // mutation that flows through AuthContext.updateUser (already on React
+  // Query), so it stays as-is — only the profiles read changes here.
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['myProfiles'],
+    queryFn: () => leaguesApi.getMyProfiles(),
+  });
+
+  const profiles = data?.profiles || [];
+  const error = isError ? queryError?.message || 'Failed to load profiles' : '';
 
   async function handleAvatarChange(event) {
     const file = event.target.files?.[0];
@@ -140,9 +165,15 @@ export function MySportyPage() {
             />
             {user?.avatarUrl ? (
               <>
-                <img
+                <CloudinaryImage
                   src={user.avatarUrl}
                   alt=""
+                  width={64}
+                  height={64}
+                  loading="lazy"
+                  decoding="async"
+                  srcSetWidths={[64, 128, 256]}
+                  sizes="64px"
                   className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
                 />
                 <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">

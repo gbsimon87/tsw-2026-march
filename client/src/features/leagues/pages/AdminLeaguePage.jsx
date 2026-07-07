@@ -9,6 +9,7 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { useAuth } from '../../../app/store/AuthContext';
 import { gamesApi } from '../../games/api/gamesApi';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const TABS = [
   {
@@ -542,9 +543,15 @@ export function AdminLeaguePage() {
             />
             {league.logo?.url ? (
               <>
-                <img
+                <CloudinaryImage
                   src={league.logo.url}
                   alt={`${league.name} logo`}
+                  width={64}
+                  height={64}
+                  loading="lazy"
+                  decoding="async"
+                  srcSetWidths={[64, 128, 256]}
+                  sizes="64px"
                   className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
                 />
                 <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">
@@ -653,14 +660,26 @@ export function AdminLeaguePage() {
                       >
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="flex shrink-0 items-center">
-                            <img
+                            <CloudinaryImage
                               src={game.homeTeamLogoUrl || teamPlaceholder}
                               alt=""
+                              width={32}
+                              height={32}
+                              loading="lazy"
+                              decoding="async"
+                              srcSetWidths={[32, 64, 96]}
+                              sizes="32px"
                               className="h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
                             />
-                            <img
+                            <CloudinaryImage
                               src={game.awayTeamLogoUrl || teamPlaceholder}
                               alt=""
+                              width={32}
+                              height={32}
+                              loading="lazy"
+                              decoding="async"
+                              srcSetWidths={[32, 64, 96]}
+                              sizes="32px"
                               className="-ml-2 h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
                             />
                           </div>

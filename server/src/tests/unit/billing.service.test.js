@@ -4,6 +4,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamById: jest.fn(),
   listTeamsByOwner: jest.fn(),
   saveTeam: jest.fn(),
+  claimTeamWebhookEvent: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
@@ -14,6 +15,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeagueByIdAndOwner: jest.fn(),
   findLeaguesByOwner: jest.fn(),
   saveLeague: jest.fn(),
+  claimLeagueWebhookEvent: jest.fn(),
 }));
 
 jest.mock('../../modules/auth/auth.repository', () => ({
@@ -48,9 +50,9 @@ jest.mock('stripe', () =>
 
 const {
   findTeamByIdAndOwner,
-  findTeamById,
   listTeamsByOwner,
   saveTeam,
+  claimTeamWebhookEvent,
 } = require('../../modules/teams/teams.repository');
 const { updateUserPlan } = require('../../modules/auth/auth.repository');
 const {
@@ -252,7 +254,9 @@ describe('handleWebhookEvent — team subscription', () => {
 
   test('applies subscription updates once and ignores replayed webhook events', async () => {
     const team = buildTeam();
-    findTeamById.mockResolvedValue(team);
+    // OPT-020: idempotency is enforced by the atomic claim — it returns the
+    // team the first time and null on replay (event id already in the set).
+    claimTeamWebhookEvent.mockResolvedValueOnce(team).mockResolvedValueOnce(null);
     listTeamsByOwner.mockResolvedValue([team]);
 
     mockConstructEvent.mockReturnValue({
@@ -274,9 +278,9 @@ describe('handleWebhookEvent — team subscription', () => {
 
     await handleWebhookEvent('sig', Buffer.from('payload'));
 
+    expect(claimTeamWebhookEvent).toHaveBeenCalledWith('team-1', 'evt_sub_updated');
     expect(team.plan).toBe('team');
     expect(team.subscriptionStatus).toBe('active');
-    expect(team.lastWebhookEventId).toBe('evt_sub_updated');
     expect(saveTeam).toHaveBeenCalledTimes(1);
     expect(updateUserPlan).toHaveBeenCalledWith('user-1', 'pro');
 
@@ -285,13 +289,14 @@ describe('handleWebhookEvent — team subscription', () => {
 
     await handleWebhookEvent('sig', Buffer.from('payload'));
 
+    // Second delivery: claim returns null (already processed) → no re-apply.
     expect(saveTeam).not.toHaveBeenCalled();
     expect(updateUserPlan).not.toHaveBeenCalled();
   });
 
   test('marks invoice failures and keeps replay from re-saving', async () => {
     const team = buildTeam({ plan: 'team', subscriptionStatus: 'active' });
-    findTeamById.mockResolvedValue(team);
+    claimTeamWebhookEvent.mockResolvedValueOnce(team).mockResolvedValueOnce(null);
     listTeamsByOwner.mockResolvedValue([team]);
 
     mockConstructEvent.mockReturnValue({
@@ -318,13 +323,14 @@ describe('handleWebhookEvent — team subscription', () => {
     expect(saveTeam).not.toHaveBeenCalled();
   });
 
-  test('stores only a bounded list of processed webhook ids', async () => {
-    const existingIds = Array.from({ length: 25 }, (_, i) => `evt_old_${i + 1}`);
-    const team = buildTeam({
-      processedWebhookEventIds: existingIds,
-      lastWebhookEventId: existingIds[24],
-    });
-    findTeamById.mockResolvedValue(team);
+  test('delegates idempotency to the atomic claim (bounding now enforced in the DB)', async () => {
+    // OPT-020: the processed-id list is appended + bounded atomically in the DB
+    // via $push/$slice inside claimWebhookEvent — the service no longer mutates
+    // an in-memory array. This test asserts the service delegates the claim
+    // (with the correct team id + event id); the $slice bounding itself is
+    // covered by webhookIdempotency.test.js.
+    const team = buildTeam();
+    claimTeamWebhookEvent.mockResolvedValue(team);
     listTeamsByOwner.mockResolvedValue([team]);
 
     mockConstructEvent.mockReturnValue({
@@ -346,9 +352,8 @@ describe('handleWebhookEvent — team subscription', () => {
 
     await handleWebhookEvent('sig', Buffer.from('payload'));
 
-    expect(team.processedWebhookEventIds).toHaveLength(25);
-    expect(team.processedWebhookEventIds).not.toContain('evt_old_1');
-    expect(team.processedWebhookEventIds).toContain('evt_sub_new');
+    expect(claimTeamWebhookEvent).toHaveBeenCalledWith('team-1', 'evt_sub_new');
+    expect(saveTeam).toHaveBeenCalledTimes(1);
   });
 });
 

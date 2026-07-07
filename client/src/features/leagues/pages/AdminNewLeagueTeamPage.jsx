@@ -5,6 +5,7 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 export function AdminNewLeagueTeamPage() {
   const { leagueId } = useParams();
@@ -90,9 +91,25 @@ export function AdminNewLeagueTeamPage() {
               className="group relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-slate-400"
             >
               {logoPreview ? (
-                <img src={logoPreview} alt="Logo preview" className="h-full w-full object-cover" />
+                <CloudinaryImage
+                  src={logoPreview}
+                  alt="Logo preview"
+                  width={80}
+                  height={80}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
               ) : (
-                <img src={teamPlaceholder} alt="" className="h-10 w-10 opacity-40" />
+                <CloudinaryImage
+                  src={teamPlaceholder}
+                  alt=""
+                  width={40}
+                  height={40}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-10 w-10 opacity-40"
+                />
               )}
             </button>
             <div className="space-y-1">

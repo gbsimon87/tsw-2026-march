@@ -6,6 +6,7 @@ const {
   appendEventSchema,
   setLineupSchema,
   updateEventSchema,
+  listGamesSchema,
 } = require('./games.validation');
 
 function requireAuthUserId(req) {
@@ -25,12 +26,12 @@ async function create(req, res) {
 
 async function list(req, res) {
   const userId = requireAuthUserId(req);
-  const filter = {
-    teamId: req.query.teamId,
-    status: req.query.status,
-  };
-  const games = await gamesService.listGamesForUser(userId, filter);
-  res.status(200).json({ games });
+  // OPT-018: validated cursor/limit + filters. The service returns
+  // { games, nextCursor }; the response keeps the existing `games` key so
+  // non-paginating clients are unaffected, with nextCursor added alongside.
+  const filter = listGamesSchema.parse(req.query);
+  const { games, nextCursor } = await gamesService.listGamesForUser(userId, filter);
+  res.status(200).json({ games, nextCursor });
 }
 
 async function update(req, res) {

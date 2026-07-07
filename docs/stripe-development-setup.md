@@ -2,15 +2,23 @@
 
 ## Overview
 
-This project uses Stripe Checkout plus Stripe webhooks for Team Pro monthly subscriptions.
+This project uses Stripe **hosted** Checkout plus Stripe webhooks for two
+subscription products — **Team Pro** and **League Pro** — each with a **monthly**
+and a **season** price (four prices total). There is no client-side Stripe.js;
+the client redirects to the hosted Checkout/Portal URL.
+
+> This file covers one-time local Stripe **setup**. For the full manual **QA
+> flows** (trial start, upgrade, portal cancel/reactivate, entitlement checks per
+> product/interval), use [`qa-billing-dev.md`](./qa-billing-dev.md).
 
 Required local result:
 
-- checkout session creation works
+- checkout session creation works for team and league checkouts
 - webhook events reach the local API
-- team billing state updates in MongoDB
-- replay and shot maps unlock for the upgraded team
-- billing success redirect confirms the upgraded team status after webhook processing
+- team/league billing state updates in MongoDB
+- replay, shot maps, and highlight clips unlock for the upgraded team; league
+  management unlocks for the upgraded league
+- billing success redirect confirms the upgraded resource after webhook processing
 
 ## 1. Work in Stripe Test Mode
 
@@ -18,30 +26,30 @@ Required local result:
 - Turn on `Test mode`
 - Confirm all keys and products below are test-mode values
 
-## 2. Create the Product
+## 2. Create the Products and Prices
 
-In Stripe test mode:
+In Stripe test mode, open `Product catalog` and create two products, each with a
+recurring monthly price and a recurring season price. Copy each generated
+`price_...` ID into the matching env var:
 
-1. Open `Product catalog`
-2. Create product `Team Pro`
-3. Add a recurring monthly price
-4. Copy the generated `price_...` ID
+| Product    | Interval | Env var                          |
+| ---------- | -------- | -------------------------------- |
+| Team Pro   | monthly  | `STRIPE_PRICE_ID_TEAM_MONTHLY`   |
+| Team Pro   | season   | `STRIPE_PRICE_ID_TEAM_SEASON`    |
+| League Pro | monthly  | `STRIPE_PRICE_ID_LEAGUE_MONTHLY` |
+| League Pro | season   | `STRIPE_PRICE_ID_LEAGUE_SEASON`  |
 
-Save this as:
-
-- `STRIPE_PRICE_ID_PRO_MONTHLY`
+(`STRIPE_PRICE_ID_PRO_MONTHLY` is a legacy var still read only by the seed
+script; the live billing flow uses the four price IDs above.)
 
 ## 3. Copy API Keys
 
-From Stripe developer settings in test mode, copy:
+From Stripe developer settings in test mode, copy the **Secret key** and save it as:
 
-- Publishable key
-- Secret key
-
-Save them as:
-
-- `VITE_STRIPE_PUBLISHABLE_KEY`
 - `STRIPE_SECRET_KEY`
+
+There is no client-side Stripe key to set — the client redirects to hosted
+Checkout, so `@stripe/stripe-js` / a publishable key are not used.
 
 ## 4. Install Stripe CLI
 
@@ -75,13 +83,15 @@ Use these local URLs:
 ### Client
 
 - `VITE_API_BASE_URL`
-- `VITE_STRIPE_PUBLISHABLE_KEY`
 
 ### Server
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ID_PRO_MONTHLY`
+- `STRIPE_PRICE_ID_TEAM_MONTHLY`
+- `STRIPE_PRICE_ID_TEAM_SEASON`
+- `STRIPE_PRICE_ID_LEAGUE_MONTHLY`
+- `STRIPE_PRICE_ID_LEAGUE_SEASON`
 - `STRIPE_SUCCESS_URL`
 - `STRIPE_CANCEL_URL`
 - `CLIENT_ORIGIN`
@@ -90,7 +100,7 @@ Use these local URLs:
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`
 
-Note: all five Stripe vars are declared `.optional()` in `env.js` — the server boots without them, but billing endpoints will respond with `503 Billing is not configured` if `STRIPE_SECRET_KEY` is absent. For local portal testing (cancel/reactivate), ensure the Stripe Dashboard has the portal enabled in test mode and that `STRIPE_SUCCESS_URL` is set as the portal return URL (`POST /api/v1/billing/customer-portal` uses it).
+Note: all Stripe vars are declared `.optional()` in `env.js` — the server boots without them, but billing endpoints will respond with `503 Billing is not configured` if `STRIPE_SECRET_KEY` (or the relevant price ID) is absent. For local portal testing (cancel/reactivate), ensure the Stripe Dashboard has the portal enabled in test mode and that `STRIPE_SUCCESS_URL` is set as the portal return URL (`POST /api/v1/billing/customer-portal` uses it).
 
 ## 8. Start the App
 
@@ -131,7 +141,7 @@ Verify these cases as well:
 
 ## Troubleshooting
 
-- If checkout creation fails, verify `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID_PRO_MONTHLY`
+- If checkout creation fails, verify `STRIPE_SECRET_KEY` and the price ID for the product/interval being purchased (`STRIPE_PRICE_ID_TEAM_MONTHLY|SEASON` / `STRIPE_PRICE_ID_LEAGUE_MONTHLY|SEASON`)
 - If webhook verification fails, verify `STRIPE_WEBHOOK_SECRET` came from the current `stripe listen` session
 - If billing state does not update, inspect server logs and Stripe CLI output for event delivery errors
 - If checkout finishes but the success page stays pending, confirm the returned `teamId` matches an owned team and the webhook event reached the API
@@ -141,7 +151,7 @@ Verify these cases as well:
 
 Before validating billing in staging or production:
 
-- Confirm `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO_MONTHLY`, `STRIPE_SUCCESS_URL`, and `STRIPE_CANCEL_URL` are set for the correct environment.
+- Confirm `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the four price IDs (`STRIPE_PRICE_ID_TEAM_MONTHLY|SEASON`, `STRIPE_PRICE_ID_LEAGUE_MONTHLY|SEASON`), `STRIPE_SUCCESS_URL`, and `STRIPE_CANCEL_URL` are set for the correct environment.
 - Confirm `STRIPE_SUCCESS_URL` and `STRIPE_CANCEL_URL` point to the deployed client origin, not localhost.
 - Confirm the Stripe webhook endpoint is configured to hit `/api/v1/billing/webhooks` on the deployed API.
 - Confirm Cloudinary env vars are present if feed uploads are enabled in that environment:

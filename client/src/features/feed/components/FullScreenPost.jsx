@@ -1,5 +1,7 @@
 import { forwardRef } from 'react';
 
+import CloudinaryImage from '../../media/CloudinaryImage';
+
 function formatTimestamp(value) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return '';
@@ -25,10 +27,14 @@ export const FullScreenPost = forwardRef(function FullScreenPost(
           <div className="flex items-center gap-3 min-w-0">
             {/* Avatar */}
             {post.creator.avatarUrl ? (
-              <img
+              <CloudinaryImage
                 src={post.creator.avatarUrl}
                 alt={post.creator.name}
+                width={40}
+                height={40}
                 className="h-10 w-10 shrink-0 rounded-full border-2 border-white/30 object-cover"
+                srcSetWidths={[40, 80, 160]}
+                sizes="40px"
               />
             ) : (
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-white/30 bg-white/20 text-sm font-black text-white backdrop-blur-sm">

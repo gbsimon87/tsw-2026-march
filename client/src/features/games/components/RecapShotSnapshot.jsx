@@ -1,4 +1,5 @@
 import courtImage from '../../../assets/courts/basketball_court_1.png';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 function isMade(statType) {
   return statType.endsWith('_MADE');
@@ -29,7 +30,15 @@ export function RecapShotSnapshot({ shotSnapshot }) {
           className="relative mx-auto mt-4 w-full max-w-[360px]"
           data-testid="recap-shot-snapshot"
         >
-          <img src={courtImage} alt="Game recap court" className="block w-full" />
+          <CloudinaryImage
+            src={courtImage}
+            alt="Game recap court"
+            width={420}
+            height={760}
+            loading="lazy"
+            decoding="async"
+            className="block w-full"
+          />
           {events.map((event, index) => {
             const made = isMade(event.statType);
             const offset = (index % 3) * 1.1;

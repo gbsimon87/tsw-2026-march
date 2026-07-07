@@ -12,6 +12,7 @@ import {
   feetToNormalized,
 } from '../court/courtGeometry';
 import { courtToImage, DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const { ZONE_LABELS } = gameConstants;
 
@@ -272,7 +273,15 @@ export function GameShotMap({ events }) {
       </div>
 
       <div className="relative mx-auto w-full max-w-[420px]" data-testid="game-shot-map">
-        <img src={courtImage} alt="Game shot map court" className="block w-full" />
+        <CloudinaryImage
+          src={courtImage}
+          alt="Game shot map court"
+          width={420}
+          height={760}
+          loading="lazy"
+          decoding="async"
+          className="block w-full"
+        />
         {showZoneLines ? (
           <svg
             className="pointer-events-none absolute inset-0 h-full w-full"

@@ -6,6 +6,7 @@ import {
   capturePostHogPageLeave,
   capturePostHogPageView,
   identifyPostHogUser,
+  initPostHog,
   resetPostHogUser,
 } from '../../lib/posthog';
 import { useScrollDepth } from './useScrollDepth';
@@ -77,6 +78,11 @@ export function PostHogRouteTracker() {
   useScrollDepth(onScrollDepthReached, routeKey);
 
   useEffect(() => {
+    // Init here (after first paint, before the first capture) rather than at
+    // module load, so the posthog chunk never blocks initial render (OPT-001).
+    // idempotent — safe to call on every route change.
+    initPostHog();
+
     const pageKey = `${location.pathname}${location.search}${location.hash}`;
 
     if (lastPageKeyRef.current === pageKey) {

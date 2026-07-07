@@ -9,7 +9,16 @@ jest.mock('../../modules/games/games.repository', () => ({
   findGameByIdAndOwner: jest.fn(),
   saveGame: jest.fn(),
   claimGameSummaryGeneration: jest.fn(),
+  releaseGameSummaryLock: jest.fn(),
   saveGameSummary: jest.fn(),
+}));
+
+jest.mock('../../modules/teams/teams.service', () => ({
+  scheduleTeamSeasonSummaryRecompute: jest.fn(),
+}));
+
+jest.mock('../../modules/feed/feed.service', () => ({
+  refreshGameCardPostsForGame: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('../../modules/billing/billing.service', () => ({
@@ -41,6 +50,7 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   canManageLeagueGame: jest.fn(() => false),
   canFinalizeLeagueGame: jest.fn(() => false),
   canEditCompletedLeagueGame: jest.fn(() => false),
+  scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
@@ -70,6 +80,7 @@ const {
   findGameById,
   saveGame,
   claimGameSummaryGeneration,
+  releaseGameSummaryLock,
   saveGameSummary,
 } = require('../../modules/games/games.repository');
 const { buildGameRecap } = require('../../modules/games/gameRecap.service');
@@ -83,15 +94,49 @@ const {
   computeBoxScore,
   createGameForUser,
   appendEventForUser,
+  removeEventForUser,
+  updateEventForUser,
   finishGameForUser,
   getGameForUser,
   setGameLineup,
+  computeGameFinalScore,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
+
+// The post-response schedulers (scheduleLeagueRecomputeForGame,
+// scheduleTeamSummaryRecomputeForGame, scheduleFeedCardRefreshForGame) fire
+// via setImmediate — flush pending immediates after every test so they run
+// (and hit their mocks) before Jest tears down the module registry, instead
+// of firing into a torn-down environment after the test file finishes.
+afterEach(() => new Promise((resolve) => setImmediate(resolve)));
+
+// OPT-020: the AI summary is generated inside a setImmediate (post-response).
+// Tests that assert on the generation must flush the immediate queue AND let
+// the async chain inside it settle. Two ticks: one to run the setImmediate
+// callback, and enough microtask draining for its awaited claim/build/save.
+async function flushAsyncScheduler() {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
 
 function buildPlayers(players) {
   const list = players.map((player) => ({ ...player }));
   list.id = (playerId) => list.find((player) => String(player._id) === String(playerId)) || null;
+  return list;
+}
+
+// Mimics the subset of Mongoose's DocumentArray API the event mutators use:
+// events.id(eventId) to find a subdocument, and event.deleteOne() to remove it
+// from the parent array in place.
+function buildEvents(events) {
+  const list = events.map((event) => ({ ...event }));
+  list.id = (eventId) => list.find((event) => String(event._id) === String(eventId)) || null;
+  list.forEach((event) => {
+    event.deleteOne = () => {
+      const index = list.findIndex((e) => String(e._id) === String(event._id));
+      if (index >= 0) list.splice(index, 1);
+    };
+  });
   return list;
 }
 
@@ -477,13 +522,20 @@ describe('games service finish summaries', () => {
 
     const result = await finishGameForUser('user-1', 'game-1');
 
+    // OPT-020: finish returns immediately without waiting on OpenAI — the
+    // summary is not yet generated when the response is produced.
+    expect(result).toBeDefined();
     expect(game.status).toBe('completed');
-    expect(game.aiSummary).toEqual(summary);
+    expect(saveGame).toHaveBeenCalledTimes(1);
+    expect(buildPersistedGameSummary).not.toHaveBeenCalled();
+
+    // Generation runs post-response; flush the scheduler and assert it landed.
+    await flushAsyncScheduler();
+
     expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
     expect(buildPersistedGameSummary).toHaveBeenCalledTimes(1);
     expect(saveGameSummary).toHaveBeenCalledTimes(1);
-    expect(saveGame).toHaveBeenCalledTimes(1);
-    expect(result.aiSummary).toEqual(expect.objectContaining({ text: summary.text, source: 'ai' }));
+    expect(game.aiSummary).toEqual(summary);
   });
 
   test('does not regenerate an existing league game summary', async () => {
@@ -496,6 +548,7 @@ describe('games service finish summaries', () => {
       aiSummary: existingSummary,
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
       awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
     });
 
     findGameById.mockResolvedValue(game);
@@ -513,6 +566,7 @@ describe('games service finish summaries', () => {
     const game = buildDualLeagueGame({
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
       awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
     });
 
     findGameById.mockResolvedValue(game);
@@ -520,10 +574,36 @@ describe('games service finish summaries', () => {
     claimGameSummaryGeneration.mockResolvedValue(null);
 
     await finishGameForUser('user-1', 'game-1');
+    await flushAsyncScheduler();
 
+    // The post-response scheduler attempted the claim but lost it → no build.
     expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
     expect(buildPersistedGameSummary).not.toHaveBeenCalled();
     expect(saveGameSummary).not.toHaveBeenCalled();
+  });
+
+  test('releases the summary lock when generation fails so a later finish can retry', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    claimGameSummaryGeneration.mockResolvedValue(game); // we win the claim
+    buildPersistedGameSummary.mockRejectedValue(new Error('openai down'));
+    releaseGameSummaryLock.mockResolvedValue(game);
+
+    // finish itself must not reject even though generation will fail post-response.
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    await flushAsyncScheduler();
+
+    expect(claimGameSummaryGeneration).toHaveBeenCalledTimes(1);
+    expect(buildPersistedGameSummary).toHaveBeenCalledTimes(1);
+    expect(saveGameSummary).not.toHaveBeenCalled();
+    // OPT-020 retry-on-cleared: the lock we claimed is released on failure.
+    expect(releaseGameSummaryLock).toHaveBeenCalledTimes(1);
   });
 
   test('does not generate summaries for standalone games', async () => {
@@ -598,6 +678,331 @@ describe('games service finish summaries', () => {
     });
 
     expect(game.aiSummary).toBeNull();
+  });
+});
+
+describe('games service league tie guard (OPT-024)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  test('finishGameForUser rejects a league game that would finish tied', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringContaining('cannot end in a tie'),
+    });
+    expect(game.status).not.toBe('completed');
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  test('finishGameForUser allows a league game with a clear winner', async () => {
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    expect(game.status).toBe('completed');
+    expect(saveGame).toHaveBeenCalledTimes(1);
+  });
+
+  test('standalone (non-league) games are not blocked by the tie guard', async () => {
+    const game = buildDualLeagueGame({
+      gameContext: 'standalone',
+      leagueId: null,
+      homeLeagueTeamId: null,
+      awayLeagueTeamId: null,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    expect(game.status).toBe('completed');
+  });
+});
+
+describe('games service frozen box score (OPT-012)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  test('finishGameForUser freezes boxScore and gameSummary on completion', async () => {
+    const game = buildDualLeagueGame({
+      aiSummary: { text: 'Already have one.', source: 'ai', generatedAt: new Date() },
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await finishGameForUser('user-1', 'game-1');
+
+    expect(game.status).toBe('completed');
+    expect(game.boxScore).toEqual({
+      home: expect.objectContaining({ players: expect.any(Array) }),
+      away: expect.objectContaining({ players: expect.any(Array) }),
+    });
+    expect(game.gameSummary).toEqual(
+      expect.objectContaining({ homePoints: 3, awayPoints: 2, teamPoints: 3, opponentPoints: 2 })
+    );
+  });
+
+  test('getGameForUser serves the frozen boxScore/gameSummary for a completed game', async () => {
+    const frozenBoxScore = { home: { players: [], totals: {} }, away: { players: [], totals: {} } };
+    const frozenSummary = { homePoints: 99, awayPoints: 1, teamPoints: 99, opponentPoints: 1 };
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: frozenBoxScore,
+      gameSummary: frozenSummary,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      // Live events would compute a totally different score than the frozen
+      // summary above — proves the frozen data is served, not recomputed.
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG2_MADE }],
+    });
+
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(result.boxScore).toBe(frozenBoxScore);
+    expect(result.gameSummary).toBe(frozenSummary);
+  });
+
+  test('getGameForUser falls back to live compute when no frozen data exists', async () => {
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: null,
+      gameSummary: null,
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [{ playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE }],
+    });
+
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(result.gameSummary).toEqual(
+      expect.objectContaining({ homePoints: 3, teamPoints: 3, awayPoints: 0 })
+    );
+  });
+
+  test('appendEventForUser refreezes boxScore after editing a completed game', async () => {
+    const homePlayers = [
+      buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+      buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      buildLeagueSnapshotPlayer('home-snap-3', 'Home Three'),
+      buildLeagueSnapshotPlayer('home-snap-4', 'Home Four'),
+      buildLeagueSnapshotPlayer('home-snap-5', 'Home Five'),
+    ];
+    const awayPlayers = [
+      buildLeagueSnapshotPlayer('away-snap-1', 'Away One'),
+      buildLeagueSnapshotPlayer('away-snap-2', 'Away Two'),
+      buildLeagueSnapshotPlayer('away-snap-3', 'Away Three'),
+      buildLeagueSnapshotPlayer('away-snap-4', 'Away Four'),
+      buildLeagueSnapshotPlayer('away-snap-5', 'Away Five'),
+    ];
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: { home: { players: [], totals: { points: 0 } }, away: { players: [], totals: {} } },
+      gameSummary: { homePoints: 0, awayPoints: 0, teamPoints: 0, opponentPoints: 0 },
+      homeRosterSnapshot: homePlayers,
+      awayRosterSnapshot: awayPlayers,
+      homeCurrentLineupPlayerIds: homePlayers.map((player) => player._id),
+      awayCurrentLineupPlayerIds: awayPlayers.map((player) => player._id),
+    });
+
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    canEditCompletedLeagueGame.mockResolvedValue(true);
+
+    const result = await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG3_MADE,
+    });
+
+    // The stale frozen summary (all zeroes) must have been refreshed.
+    expect(game.gameSummary.homePoints).toBe(3);
+    expect(result.gameSummary.homePoints).toBe(3);
+  });
+});
+
+describe('games service event mutation contract (OPT-015)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  function buildSlimTestGame(overrides = {}) {
+    const homePlayers = [
+      buildLeagueSnapshotPlayer('home-snap-1', 'Home One'),
+      buildLeagueSnapshotPlayer('home-snap-2', 'Home Two'),
+      buildLeagueSnapshotPlayer('home-snap-3', 'Home Three'),
+      buildLeagueSnapshotPlayer('home-snap-4', 'Home Four'),
+      buildLeagueSnapshotPlayer('home-snap-5', 'Home Five'),
+    ];
+    const awayPlayers = [
+      buildLeagueSnapshotPlayer('away-snap-1', 'Away One'),
+      buildLeagueSnapshotPlayer('away-snap-2', 'Away Two'),
+      buildLeagueSnapshotPlayer('away-snap-3', 'Away Three'),
+      buildLeagueSnapshotPlayer('away-snap-4', 'Away Four'),
+      buildLeagueSnapshotPlayer('away-snap-5', 'Away Five'),
+    ];
+    return buildDualLeagueGame({
+      homeRosterSnapshot: homePlayers,
+      awayRosterSnapshot: awayPlayers,
+      homeCurrentLineupPlayerIds: homePlayers.map((player) => player._id),
+      awayCurrentLineupPlayerIds: awayPlayers.map((player) => player._id),
+      ...overrides,
+    });
+  }
+
+  test('appendEventForUser returns the slim delta shape, not the full game-detail response', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    // Present: what the tracker actually renders after a tracked stat.
+    expect(result).toHaveProperty('game');
+    expect(result).toHaveProperty('lineups');
+    expect(result).toHaveProperty('boxScore');
+    expect(result).toHaveProperty('gameSummary');
+    expect(result).toHaveProperty('canEditCompletedGame');
+    // Absent: recap/highlights/team context — unchanged per-event, and the
+    // client's merge (`{...current, ...response}`) leaves the initial-load
+    // values in place when these keys aren't present in the response.
+    expect(result).not.toHaveProperty('recap');
+    expect(result).not.toHaveProperty('highlights');
+    expect(result).not.toHaveProperty('team');
+    expect(result).not.toHaveProperty('opponentTeam');
+    expect(result).not.toHaveProperty('participants');
+    expect(result).not.toHaveProperty('league');
+    expect(result).not.toHaveProperty('teamEntitlements');
+    expect(result).not.toHaveProperty('aiSummary');
+    expect(result).not.toHaveProperty('replayFilters');
+  });
+
+  test('appendEventForUser does not re-fetch the game a second time (no extra findGameById)', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await appendEventForUser('user-1', 'game-1', {
+      teamSide: 'home',
+      playerId: 'home-snap-1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    // getGameForUser used to re-run assertGameAccess (a second findGameById)
+    // just to build the response from data already in memory post-save.
+    expect(findGameById).toHaveBeenCalledTimes(1);
+  });
+
+  test('a concurrent write on a stale doc is rejected with 409, not silently clobbered', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    const versionError = new Error('No matching document found');
+    versionError.name = 'VersionError';
+    saveGame.mockRejectedValue(versionError);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        teamSide: 'home',
+        playerId: 'home-snap-1',
+        statType: STAT_TYPES.FG2_MADE,
+      })
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test('a non-version save error still propagates as-is', async () => {
+    const game = buildSlimTestGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockRejectedValue(new Error('disk full'));
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        teamSide: 'home',
+        playerId: 'home-snap-1',
+        statType: STAT_TYPES.FG2_MADE,
+      })
+    ).rejects.toThrow('disk full');
+  });
+
+  test('removeEventForUser returns the slim delta shape', async () => {
+    const game = buildSlimTestGame({
+      events: buildEvents([
+        { _id: 'evt-1', teamSide: 'home', playerId: 'home-snap-1', statType: 'FG2_MADE' },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await removeEventForUser('user-1', 'game-1', 'evt-1');
+
+    expect(result).toHaveProperty('boxScore');
+    expect(result).toHaveProperty('gameSummary');
+    expect(result).not.toHaveProperty('recap');
+    expect(result).not.toHaveProperty('team');
+  });
+
+  test('updateEventForUser returns the slim delta shape', async () => {
+    const game = buildSlimTestGame({
+      events: buildEvents([
+        { _id: 'evt-1', teamSide: 'home', playerId: 'home-snap-1', statType: 'FG2_MADE' },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await updateEventForUser('user-1', 'game-1', 'evt-1', {
+      statType: 'FG3_MADE',
+    });
+
+    expect(result).toHaveProperty('boxScore');
+    expect(result).toHaveProperty('gameSummary');
+    expect(result).not.toHaveProperty('recap');
+    expect(result).not.toHaveProperty('team');
   });
 });
 
@@ -697,6 +1102,41 @@ describe('games service lineups', () => {
       ])
     ).rejects.toMatchObject({
       statusCode: 400,
+    });
+  });
+});
+
+describe('computeGameFinalScore (OPT-008)', () => {
+  test('maps dual_team events to home/away points', () => {
+    const game = {
+      trackingMode: 'dual_team',
+      events: [
+        { teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { teamSide: 'home', statType: STAT_TYPES.FT_MADE },
+        { teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    };
+
+    expect(computeGameFinalScore(game)).toEqual({ home: 4, away: 2 });
+  });
+
+  test('maps one_sided events to tracked (home) vs opponent (away)', () => {
+    const game = {
+      trackingMode: 'one_sided',
+      events: [
+        { statType: STAT_TYPES.FG2_MADE },
+        { statType: STAT_TYPES.FG3_MADE },
+        { statType: STAT_TYPES.OPP_FG2_MADE },
+      ],
+    };
+
+    expect(computeGameFinalScore(game)).toEqual({ home: 5, away: 2 });
+  });
+
+  test('returns zeroes for a game with no events', () => {
+    expect(computeGameFinalScore({ trackingMode: 'one_sided', events: [] })).toEqual({
+      home: 0,
+      away: 0,
     });
   });
 });

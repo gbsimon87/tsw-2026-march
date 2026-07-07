@@ -171,6 +171,96 @@ function applyEventToFullTeamStatSummary(summary, statType) {
   return summary;
 }
 
+// Per-player box-score line accumulator (OPT-006). Shared by games and leagues
+// services so live-read and write-time materialisation stay in lockstep.
+function createEmptyPlayerStatLine(playerId, displayName, options = {}) {
+  return {
+    playerId,
+    ...(options.includeLeaguePlayerId
+      ? { leaguePlayerId: options.leaguePlayerId ? String(options.leaguePlayerId) : null }
+      : {}),
+    displayName,
+    ftm: 0,
+    fta: 0,
+    fg2m: 0,
+    fg2a: 0,
+    fg3m: 0,
+    fg3a: 0,
+    ast: 0,
+    oreb: 0,
+    dreb: 0,
+    stl: 0,
+    blk: 0,
+    tov: 0,
+    foul: 0,
+    reb: 0,
+    points: 0,
+  };
+}
+
+function applyEventToPlayerStatLine(line, statType) {
+  if (statType === STAT_TYPES.FT_MADE) {
+    line.ftm += 1;
+    line.fta += 1;
+    line.points += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.FT_MISS) {
+    line.fta += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.FG2_MADE) {
+    line.fg2m += 1;
+    line.fg2a += 1;
+    line.points += 2;
+    return line;
+  }
+  if (statType === STAT_TYPES.FG2_MISS) {
+    line.fg2a += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.FG3_MADE) {
+    line.fg3m += 1;
+    line.fg3a += 1;
+    line.points += 3;
+    return line;
+  }
+  if (statType === STAT_TYPES.FG3_MISS) {
+    line.fg3a += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.AST) {
+    line.ast += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.OREB) {
+    line.oreb += 1;
+    line.reb += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.DREB) {
+    line.dreb += 1;
+    line.reb += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.STL) {
+    line.stl += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.BLK) {
+    line.blk += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.TOV) {
+    line.tov += 1;
+    return line;
+  }
+  if (statType === STAT_TYPES.FOUL) {
+    line.foul += 1;
+  }
+  return line;
+}
+
 function summarizeEvents(events = []) {
   const summary = createEmptyTeamStatSummary();
 
@@ -207,8 +297,10 @@ function summarizeEventsBySide(events = []) {
 module.exports = {
   createEmptyTeamStatSummary,
   createEmptyFullTeamStatSummary,
+  createEmptyPlayerStatLine,
   applyEventToTeamStatSummary,
   applyEventToFullTeamStatSummary,
+  applyEventToPlayerStatLine,
   finalizeTeamStatSummary,
   finalizeFullTeamStatSummary,
   summarizeEvents,

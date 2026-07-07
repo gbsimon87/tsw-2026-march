@@ -58,8 +58,13 @@ async function uploadVideoBuffer(file) {
       {
         folder: env.CLOUDINARY_FOLDER,
         resource_type: 'video',
+        // OPT-009: transcode the MP4 asynchronously so the upload request
+        // returns as soon as the original is stored (was eager_async:false,
+        // which blocked the response for the full transcode — seconds on large
+        // clips). Delivery below falls back to the original + f_auto,q_auto,vc_auto
+        // until the eager MP4 is ready.
         eager: [{ format: 'mp4', quality: 'auto' }],
-        eager_async: false,
+        eager_async: true,
       },
       (error, result) => {
         if (error) {

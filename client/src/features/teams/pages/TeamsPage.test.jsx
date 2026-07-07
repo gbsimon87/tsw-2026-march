@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { within } from '@testing-library/react';
@@ -12,10 +13,15 @@ vi.mock('../api/teamsApi', () => ({
 }));
 
 function renderPage() {
+  // OPT-014b: TeamsPage now uses React Query, so it needs a provider. Fresh
+  // client per render keeps the cache from leaking across tests.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <MemoryRouter>
-      <TeamsPage />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <TeamsPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 

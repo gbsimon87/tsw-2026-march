@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { getGameCardLogo } from '../../cardImage';
 import { buildInitials, formatCompactDate } from './cardUtils';
+import CloudinaryImage from '../../../media/CloudinaryImage';
 
 export function FullScreenGameCard({ gameCard }) {
   if (!gameCard) {
@@ -64,10 +65,14 @@ export function FullScreenGameCard({ gameCard }) {
         ].map((side) => (
           <div key={side.name} className="flex items-center gap-4">
             {side.logo ? (
-              <img
+              <CloudinaryImage
                 src={side.logo}
                 alt={side.name}
+                width={56}
+                height={56}
                 className="h-14 w-14 shrink-0 rounded-full object-cover"
+                srcSetWidths={[56, 112, 168]}
+                sizes="56px"
               />
             ) : (
               <div

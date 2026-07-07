@@ -30,7 +30,8 @@ This is a pnpm workspace monorepo with two applications:
 Top-level files worth knowing:
 
 - [`README.md`](../README.md): product summary, quick start, feature inventory
-- [`ROADMAP.md`](../ROADMAP.md): current status and planned work
+- [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md): the definitive project reference
+- [`product-roadmap.md`](./product-roadmap.md): vision and planned work
 - [`render.yaml`](../render.yaml): deployment topology for dev and prod
 - [`docs/api.md`](./api.md): API surface summary
 - [`docs/deployment-render.md`](./deployment-render.md): deployment notes
@@ -61,6 +62,12 @@ Frontend entry path:
 - [`client/src/main.jsx`](../client/src/main.jsx): renders the app
 - [`client/src/app/providers/AppProviders.jsx`](../client/src/app/providers/AppProviders.jsx): wraps the app in `BrowserRouter` and `AuthProvider`
 - [`client/src/app/router/AppRouter.jsx`](../client/src/app/router/AppRouter.jsx): defines route-level composition
+
+Canonical routes worth noting (source of truth is `AppRouter.jsx`):
+
+- The public feed ("The Pulse") is **`/pulse`**. `/` and `/feed` redirect to it.
+- League admin lives under **`/admin`** and `/admin/leagues/*`; `/dashboard` and `/leagues` are aliases/redirects, and legacy `/leagues/:id/...` paths redirect to `/admin/leagues/...`.
+- `/games/:gameId/track` renders **outside** `AppLayout` (full-screen).
 - [`client/src/layouts/AppLayout.jsx`](../client/src/layouts/AppLayout.jsx): shared shell and nav
 
 Authentication state is loaded once at startup:
@@ -90,9 +97,9 @@ Major feature areas:
 - `games/`: new game flow, live tracking, game detail, recap, replay, shot-map logic
 - `feed/`: feed listing, composer, shareable cards, image/video/highlight clip posts
 - `leagues/`: league creation and admin, public standings/team/player pages, join requests, roster management
-- `billing/`: billing-related page components (PricingPage, BillingSuccessPage, BillingCancelPage); note that `/pricing`, `/billing/success`, and `/billing/cancel` currently redirect to `/` in AppRouter rather than rendering these pages directly
+- `billing/`: billing-related page components (PricingPage, BillingSuccessPage, BillingCancelPage). `/billing/success` and `/billing/cancel` render their pages; `/pricing` renders `PricingPage` **only outside production** and redirects to `/pulse` in production (billing not yet publicly launched)
 - `analytics/`: client-side event tracking
-- `dashboard/`: AdminPage — the authenticated entry point at `/admin` and `/dashboard` for league management
+- `dashboard/`: AdminPage — the authenticated entry point at `/admin` (and alias `/dashboard`) for league management
 - `contact/`: client-side contact form API wrapper (`contactApi.js`)
 
 Main user journeys:
@@ -311,7 +318,7 @@ See:
 If you need to understand:
 
 - overall product scope: [`README.md`](../README.md)
-- current priorities: [`ROADMAP.md`](../ROADMAP.md)
+- current priorities: [`product-roadmap.md`](./product-roadmap.md)
 - routing and page composition: [`client/src/app/router/AppRouter.jsx`](../client/src/app/router/AppRouter.jsx)
 - live game behavior: [`client/src/features/games/pages/GameTrackPage.jsx`](../client/src/features/games/pages/GameTrackPage.jsx)
 - derived stats and recap logic: [`server/src/modules/games/games.service.js`](../server/src/modules/games/games.service.js)

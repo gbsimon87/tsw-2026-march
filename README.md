@@ -7,7 +7,7 @@ Basketball team stat tracking app built on a MERN monorepo.
 TSW helps coaches/managers track live game stats, manage on-court lineups during games, and review shareable box scores later.
 The current product still focuses on one tracked team at a time, but it now includes a more complete live-game workflow:
 
-For a durable technical orientation guide, start with [`docs/app-overview.md`](docs/app-overview.md).
+For a durable technical orientation, start with [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md) (the definitive reference) and [`docs/app-overview.md`](docs/app-overview.md) (file-path map).
 
 - Authenticated user accounts (email/password + Google OAuth)
 - Team and player roster setup
@@ -100,32 +100,23 @@ For a durable technical orientation guide, start with [`docs/app-overview.md`](d
 
 ### Frontend Routes
 
-- `/dashboard`
-- `/feed`
-- `/home`
-- `/teams`
-- `/teams/new`
-- `/teams/:teamId`
-- `/teams/:teamId/edit`
-- `/teams/:teamId/players/:playerId`
-- `/leagues`
-- `/leagues/new`
-- `/leagues/:leagueId`
-- `/leagues/:leagueId/manage`
-- `/leagues/:leagueId/teams/:leagueTeamId`
-- `/leagues/:leagueId/games/new`
-- `/league/:leagueSlug`
-- `/league/:leagueSlug/standings`
-- `/league/:leagueSlug/games`
-- `/league/:leagueSlug/teams/:teamSlug`
-- `/games/new`
-- `/games`
-- `/games/:gameId/track`
-- `/games/:gameId`
-- `/pricing`
-- `/billing/success`
-- `/billing/cancel`
+Source of truth: [`client/src/app/router/AppRouter.jsx`](client/src/app/router/AppRouter.jsx).
+
+Primary:
+
+- `/pulse` — the public feed ("The Pulse"); `/` and `/feed` redirect here
+- `/home`, `/about`, `/contact`
+- `/admin` — league admin dashboard (`/dashboard` alias; `/leagues` redirects here)
+- `/admin/leagues/new`, `/admin/leagues/:leagueId`, `/admin/leagues/:leagueId/teams/:leagueTeamId`, `/admin/leagues/:leagueId/teams/new`, `/admin/leagues/:leagueId/games/new`
+- `/teams`, `/teams/new`, `/teams/:teamId`, `/teams/:teamId/edit`, `/teams/:teamId/players/:playerId`
+- `/games`, `/games/new`, `/games/:gameId`, `/games/:gameId/track` _(renders outside the app shell)_
+- `/my-sporty`
+- `/league/:leagueSlug`, `/league/:leagueSlug/standings`, `/league/:leagueSlug/games`, `/league/:leagueSlug/teams/:teamSlug`, `/league/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId`
 - `/opponents/:opponentSlug`
+- `/billing/success`, `/billing/cancel`
+- `/pricing` — **dev only** (redirects to `/pulse` in production)
+
+Legacy `/leagues/:id/...` paths redirect to their `/admin/leagues/...` equivalents.
 
 ### Tracking Interaction
 
@@ -297,7 +288,10 @@ Set at minimum:
 - `FEED_IMAGE_MAX_BYTES`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ID_PRO_MONTHLY`
+- `STRIPE_PRICE_ID_TEAM_MONTHLY`
+- `STRIPE_PRICE_ID_TEAM_SEASON`
+- `STRIPE_PRICE_ID_LEAGUE_MONTHLY`
+- `STRIPE_PRICE_ID_LEAGUE_SEASON`
 - `STRIPE_SUCCESS_URL`
 - `STRIPE_CANCEL_URL`
 
@@ -317,8 +311,8 @@ pnpm check-env
 
 ## Roadmap
 
-- Product roadmap: `docs/product-roadmap.md`
-- Top-level milestone tracker: `ROADMAP.md`
+- Product roadmap: [`docs/product-roadmap.md`](docs/product-roadmap.md)
+- Engineering optimisation tracker: [`docs/application-audit/000-OPTIMISATION-TRACKER.md`](docs/application-audit/000-OPTIMISATION-TRACKER.md)
 
 ## Future Work
 

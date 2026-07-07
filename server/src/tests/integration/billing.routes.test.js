@@ -5,6 +5,7 @@ jest.mock('../../middleware/rateLimit.middleware', () => {
   return {
     apiRateLimiter: passThrough,
     authRecoveryLimiter: passThrough,
+    authCredentialLimiter: passThrough,
     contactLimiter: passThrough,
     checkoutLimiter: passThrough,
   };

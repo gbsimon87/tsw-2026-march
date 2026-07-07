@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
+import { usePublicLeague } from '../hooks/usePublicLeague';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
@@ -12,6 +13,7 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 function formatPercentage(value) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '--';
@@ -32,9 +34,15 @@ const LEADERS_COLUMNS = [
     sortable: false,
     render: (row) => (
       <span className="flex items-center gap-2">
-        <img
+        <CloudinaryImage
           src={row.avatarUrl || playerPlaceholder}
           alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[24, 48, 72]}
+          sizes="24px"
           className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
         {row.teamSlug && row.leaguePlayerId ? (
@@ -64,9 +72,15 @@ const LEADERS_COLUMNS = [
     sortable: false,
     render: (row) => (
       <span className="flex items-center gap-1.5">
-        <img
+        <CloudinaryImage
           src={row.teamLogoUrl || teamPlaceholder}
           alt=""
+          width={20}
+          height={20}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[20, 40, 60]}
+          sizes="20px"
           className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
         <span className="text-slate-600">{row.teamName || '—'}</span>
@@ -153,25 +167,25 @@ const DPOY_COLUMNS = [
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
-  const [league, setLeague] = useState(null);
-  const [leaders, setLeaders] = useState([]);
-  const [dpoyLeaders, setDpoyLeaders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const {
+    data: league,
+    isLoading: isLeagueLoading,
+    isError: isLeagueError,
+  } = usePublicLeague(leagueSlug);
+  const {
+    data: leadersData,
+    isLoading: isLeadersLoading,
+    isError: isLeadersError,
+  } = useQuery({
+    queryKey: ['publicLeagueLeaders', leagueSlug],
+    queryFn: () => leaguesApi.getPublicLeagueLeaders(leagueSlug),
+    enabled: Boolean(leagueSlug),
+  });
 
-  useEffect(() => {
-    Promise.all([
-      leaguesApi.getPublicBySlug(leagueSlug),
-      leaguesApi.getPublicLeagueLeaders(leagueSlug),
-    ])
-      .then(([leagueResponse, leadersResponse]) => {
-        setLeague(leagueResponse.league);
-        setLeaders(leadersResponse.leaders || []);
-        setDpoyLeaders(leadersResponse.dpoyLeaders || []);
-      })
-      .catch((loadError) => setError(loadError.message || 'Failed to load league'))
-      .finally(() => setIsLoading(false));
-  }, [leagueSlug]);
+  const leaders = leadersData?.leaders || [];
+  const dpoyLeaders = leadersData?.dpoyLeaders || [];
+  const isLoading = isLeagueLoading || isLeadersLoading;
+  const error = isLeagueError || isLeadersError ? 'Failed to load league' : '';
 
   useDocumentMeta({
     title: league ? `${league.name} — League Standings & Games` : undefined,
@@ -199,9 +213,15 @@ export function PublicLeaguePage() {
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} • Public league standings and game results.`}
         media={
-          <img
+          <CloudinaryImage
             src={getLeagueHeaderImage(league)}
             alt={`${league.name} logo`}
+            width={64}
+            height={64}
+            loading="eager"
+            decoding="async"
+            srcSetWidths={[64, 128, 192]}
+            sizes="64px"
             className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
         }

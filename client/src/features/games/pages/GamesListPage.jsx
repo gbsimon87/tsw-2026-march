@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { gamesApi } from '../api/gamesApi';
@@ -40,17 +40,20 @@ function QuickActionLink({ to, label, primary = false, children }) {
 }
 
 export function GamesListPage() {
-  const [games, setGames] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  // OPT-014b: migrated from useEffect+useState to React Query. Cached + deduped
+  // across mounts; no behaviour change (still loads the owner's full games list).
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['games'],
+    queryFn: () => gamesApi.list(),
+  });
 
-  useEffect(() => {
-    gamesApi
-      .list()
-      .then((response) => setGames(response.games || []))
-      .catch((loadError) => setError(loadError.message || 'Failed to load games'))
-      .finally(() => setIsLoading(false));
-  }, []);
+  const games = data?.games || [];
+  const error = isError ? queryError?.message || 'Failed to load games' : '';
 
   return (
     <main className="space-y-8">

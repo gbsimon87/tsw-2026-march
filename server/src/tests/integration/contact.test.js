@@ -1,15 +1,14 @@
 const request = require('supertest');
 const { createApp } = require('../../app');
-const { sendTemplateEmail } = require('../../services/email.service');
+const { sendTemplateEmailAsync } = require('../../services/email.service');
 
 jest.mock('../../services/email.service', () => ({
-  sendTemplateEmail: jest.fn(),
+  sendTemplateEmailAsync: jest.fn(),
 }));
 
 describe('contact routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    sendTemplateEmail.mockResolvedValue({ delivery: 'resend' });
   });
 
   test('sends a contact form email', async () => {
@@ -29,7 +28,8 @@ describe('contact routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
-    expect(sendTemplateEmail).toHaveBeenCalledWith(
+    // OPT-020: dispatched off the request path via the fire-and-forget variant.
+    expect(sendTemplateEmailAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         replyTo: 'local.test@example.com',
         fallbackLabel: 'contact_form',
@@ -37,6 +37,37 @@ describe('contact routes', () => {
         text: expect.stringContaining('Email: local.test@example.com'),
       })
     );
+  });
+
+  test('escapes HTML in free-text fields for the html email body (OPT-024)', async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .post('/api/v1/contact')
+      .set('Origin', 'http://localhost:5173')
+      .send({
+        name: '<img src=x onerror=alert(1)>',
+        email: 'attacker@example.com',
+        role: 'coach',
+        clubName: 'Club & <b>Bold</b>',
+        interest: 'league-setup',
+        message: '<script>alert("xss")</script>',
+      });
+
+    expect(response.status).toBe(200);
+    const call = sendTemplateEmailAsync.mock.calls[0][0];
+
+    // The html body must not contain the raw markup...
+    expect(call.html).not.toContain('<img src=x onerror=alert(1)>');
+    expect(call.html).not.toContain('<script>alert("xss")</script>');
+    expect(call.html).not.toContain('<b>Bold</b>');
+    // ...it must contain the escaped form instead.
+    expect(call.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(call.html).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+    expect(call.html).toContain('Club &amp; &lt;b&gt;Bold&lt;/b&gt;');
+
+    // The plaintext body is untouched (no markup risk there).
+    expect(call.text).toContain('Name: <img src=x onerror=alert(1)>');
   });
 
   test('rejects invalid contact form payloads', async () => {
@@ -54,6 +85,6 @@ describe('contact routes', () => {
       });
 
     expect(response.status).toBe(400);
-    expect(sendTemplateEmail).not.toHaveBeenCalled();
+    expect(sendTemplateEmailAsync).not.toHaveBeenCalled();
   });
 });

@@ -59,6 +59,7 @@ import { Breadcrumbs } from '../../components/Breadcrumbs';
 import { PageHeader } from '../../components/PageHeader';
 import { getLeagueHeaderImage } from '../feed/cardImage';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../media/CloudinaryImage';
 
 function parseGameDate(game) {
   const rawDate =
@@ -278,9 +279,15 @@ export function AdminPage() {
                       to={`/admin/leagues/${league.id}`}
                       className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
                     >
-                      <img
+                      <CloudinaryImage
                         src={getLeagueHeaderImage(league)}
                         alt=""
+                        width={40}
+                        height={40}
+                        loading="lazy"
+                        decoding="async"
+                        srcSetWidths={[40, 80, 120]}
+                        sizes="40px"
                         className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                       />
                       <div className="min-w-0">
@@ -325,14 +332,26 @@ export function AdminPage() {
                       >
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="flex shrink-0 items-center">
-                            <img
+                            <CloudinaryImage
                               src={game.homeLogoUrl || teamPlaceholder}
                               alt=""
+                              width={32}
+                              height={32}
+                              loading="lazy"
+                              decoding="async"
+                              srcSetWidths={[32, 64, 96]}
+                              sizes="32px"
                               className="h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
                             />
-                            <img
+                            <CloudinaryImage
                               src={game.awayLogoUrl || teamPlaceholder}
                               alt=""
+                              width={32}
+                              height={32}
+                              loading="lazy"
+                              decoding="async"
+                              srcSetWidths={[32, 64, 96]}
+                              sizes="32px"
                               className="-ml-2 h-8 w-8 rounded-full border border-slate-200 bg-white object-cover"
                             />
                           </div>

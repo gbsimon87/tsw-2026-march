@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
@@ -10,13 +11,22 @@ vi.mock('../api/gamesApi', () => ({
   },
 }));
 
-describe('GamesListPage', () => {
-  test('renders empty state when no games exist', async () => {
-    render(
+// OPT-014b: GamesListPage now uses React Query — wrap it in a provider with a
+// fresh client per render so cached data doesn't leak between tests.
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
       <MemoryRouter>
         <GamesListPage />
       </MemoryRouter>
-    );
+    </QueryClientProvider>
+  );
+}
+
+describe('GamesListPage', () => {
+  test('renders empty state when no games exist', async () => {
+    renderPage();
 
     expect(screen.getByRole('link', { name: /New Game/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Dashboard/i })).toBeInTheDocument();
@@ -31,11 +41,7 @@ describe('GamesListPage', () => {
       games: [{ id: 'g1', title: 'vs Falcons', status: 'in_progress', opponent: 'Falcons' }],
     });
 
-    render(
-      <MemoryRouter>
-        <GamesListPage />
-      </MemoryRouter>
-    );
+    renderPage();
 
     await waitFor(() => {
       expect(
@@ -52,11 +58,7 @@ describe('GamesListPage', () => {
       games: [{ id: 'g1', title: 'Scrimmage', status: 'completed' }],
     });
 
-    render(
-      <MemoryRouter>
-        <GamesListPage />
-      </MemoryRouter>
-    );
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/Opponent: N\/A/i)).toBeInTheDocument();

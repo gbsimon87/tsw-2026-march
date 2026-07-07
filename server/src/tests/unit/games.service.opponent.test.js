@@ -30,6 +30,7 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
+  scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 
 jest.mock('mongoose', () => ({
@@ -125,10 +126,45 @@ describe('games service opponent support', () => {
       },
     ]);
 
-    const games = await listGamesForUser('user-1');
+    // OPT-018: listGamesForUser now returns { games, nextCursor }.
+    const { games, nextCursor } = await listGamesForUser('user-1');
 
     expect(games[0].opponent).toBe('Raptors');
     expect(games[1].opponent).toBeNull();
+    // No limit passed → unbounded (internal) path, no cursor.
+    expect(nextCursor).toBeNull();
+  });
+
+  test('OPT-018: paginated list splits the over-fetch and emits nextCursor', async () => {
+    findTeamById.mockResolvedValue({ _id: 'team-1', name: 'Team', players: [] });
+    // limit=2 → repo over-fetches 3 (limit+1); service must return 2 items and
+    // a cursor equal to the 2nd (last emitted) game's _id.
+    const rows = [
+      { _id: 'g1', teamId: 'team-1', title: 'G1', status: 'in_progress', events: [] },
+      { _id: 'g2', teamId: 'team-1', title: 'G2', status: 'in_progress', events: [] },
+      { _id: 'g3', teamId: 'team-1', title: 'G3', status: 'in_progress', events: [] },
+    ];
+    listGamesByOwner.mockResolvedValue(rows);
+
+    const { games, nextCursor } = await listGamesForUser('user-1', { limit: 2 });
+
+    expect(games).toHaveLength(2);
+    expect(games.map((g) => g.id)).toEqual(['g1', 'g2']); // extra row trimmed
+    expect(nextCursor).toBe('g2'); // cursor = last EMITTED game
+  });
+
+  test('OPT-018: paginated list with no further page returns nextCursor null', async () => {
+    findTeamById.mockResolvedValue({ _id: 'team-1', name: 'Team', players: [] });
+    // Only 2 rows for limit=2 → batch not exceeded → no next page.
+    listGamesByOwner.mockResolvedValue([
+      { _id: 'g1', teamId: 'team-1', title: 'G1', status: 'in_progress', events: [] },
+      { _id: 'g2', teamId: 'team-1', title: 'G2', status: 'in_progress', events: [] },
+    ]);
+
+    const { games, nextCursor } = await listGamesForUser('user-1', { limit: 2 });
+
+    expect(games).toHaveLength(2);
+    expect(nextCursor).toBeNull();
   });
 
   test('getGameForUser returns game opponent in detail payload', async () => {

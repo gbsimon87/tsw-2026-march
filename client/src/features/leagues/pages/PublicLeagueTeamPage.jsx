@@ -12,6 +12,7 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const TABS = [
   {
@@ -72,9 +73,15 @@ const PLAYER_STATS_COLUMNS = [
     sortable: false,
     render: (row) => (
       <span className="flex items-center gap-1.5">
-        <img
+        <CloudinaryImage
           src={row.avatarUrl || playerPlaceholder}
           alt=""
+          width={20}
+          height={20}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[20, 40, 60]}
+          sizes="20px"
           className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
         <Link
@@ -258,9 +265,15 @@ export function PublicLeagueTeamPage() {
       <PageHeader
         eyebrow={
           <span className="inline-flex items-center gap-2">
-            <img
+            <CloudinaryImage
               src={getLeagueHeaderImage(league)}
               alt={`${league.name} logo`}
+              width={20}
+              height={20}
+              loading="eager"
+              decoding="async"
+              srcSetWidths={[20, 40, 60]}
+              sizes="20px"
               className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
             />
             <span>{league.name}</span>
@@ -269,9 +282,15 @@ export function PublicLeagueTeamPage() {
         title={team.name}
         description={`Rank: ${team.standingsPosition || 'N/A'}`}
         media={
-          <img
+          <CloudinaryImage
             src={team.logo?.url || teamPlaceholder}
             alt={`${team.name} logo`}
+            width={64}
+            height={64}
+            loading="eager"
+            decoding="async"
+            srcSetWidths={[64, 128, 192]}
+            sizes="64px"
             className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
         }

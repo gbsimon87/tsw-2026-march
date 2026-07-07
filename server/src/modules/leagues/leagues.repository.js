@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -147,6 +149,72 @@ const leagueManagerSchema = new mongoose.Schema(
 
 leagueManagerSchema.index({ leagueId: 1, userId: 1, status: 1 });
 
+// OPT-010: materialised league standings. One doc per league; `rows` is the
+// pre-computed standings array (same shape the live compute returns). Read path
+// is an indexed findOne; write path is the recompute hook. Kept deliberately
+// loose (Mixed rows) so the compute code stays the single source of truth for
+// the row shape.
+const leagueStandingsSchema = new mongoose.Schema(
+  {
+    leagueId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'League',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    rows: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  },
+  { timestamps: true }
+);
+
+// OPT-011: materialised per-player league aggregates. One doc per
+// (leagueId, leagueTeamId, leaguePlayerId) — raw accumulated totals only
+// (gamesCount + the OPT-006 player-stat-line fields). Per-game ppg/fantasy/DPOY
+// scores are derived at READ time from these raw totals (roadmap: "keeps
+// weight-tuning without recompute"), so tuning a formula never requires a
+// recompute pass — only the raw box-score totals are persisted here.
+const leaguePlayerStatsSchema = new mongoose.Schema(
+  {
+    leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: true,
+      index: true,
+    },
+    leaguePlayerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeaguePlayer',
+      required: true,
+      index: true,
+    },
+    displayName: { type: String, default: null },
+    gamesCount: { type: Number, default: 0 },
+    ftm: { type: Number, default: 0 },
+    fta: { type: Number, default: 0 },
+    fg2m: { type: Number, default: 0 },
+    fg2a: { type: Number, default: 0 },
+    fg3m: { type: Number, default: 0 },
+    fg3a: { type: Number, default: 0 },
+    ast: { type: Number, default: 0 },
+    oreb: { type: Number, default: 0 },
+    dreb: { type: Number, default: 0 },
+    reb: { type: Number, default: 0 },
+    stl: { type: Number, default: 0 },
+    blk: { type: Number, default: 0 },
+    tov: { type: Number, default: 0 },
+    foul: { type: Number, default: 0 },
+    points: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+leaguePlayerStatsSchema.index(
+  { leagueId: 1, leagueTeamId: 1, leaguePlayerId: 1 },
+  { unique: true }
+);
+
 const League = mongoose.models.League || mongoose.model('League', leagueSchema);
 const LeagueTeam = mongoose.models.LeagueTeam || mongoose.model('LeagueTeam', leagueTeamSchema);
 const LeaguePlayer =
@@ -157,6 +225,10 @@ const LeagueJoinRequest =
   mongoose.models.LeagueJoinRequest || mongoose.model('LeagueJoinRequest', leagueJoinRequestSchema);
 const LeagueManager =
   mongoose.models.LeagueManager || mongoose.model('LeagueManager', leagueManagerSchema);
+const LeagueStandings =
+  mongoose.models.LeagueStandings || mongoose.model('LeagueStandings', leagueStandingsSchema);
+const LeaguePlayerStats =
+  mongoose.models.LeaguePlayerStats || mongoose.model('LeaguePlayerStats', leaguePlayerStatsSchema);
 
 function createLeague(input) {
   return League.create(input);
@@ -170,7 +242,14 @@ function findLeaguesByOwner(ownerUserId) {
   return listLeaguesByOwner(ownerUserId);
 }
 
-function listPublicLeagues() {
+function listPublicLeagues({ limit, cursor } = {}) {
+  // OPT-018: single-source list → clean keyset pagination when a limit is
+  // supplied. Without one, returns every public league (legacy behaviour).
+  if (limit) {
+    return League.find(applyIdCursor({ isPublic: true, status: 'active' }, cursor))
+      .sort({ _id: -1 })
+      .limit(limit + 1);
+  }
   return League.find({ isPublic: true, status: 'active' }).sort({ createdAt: -1 });
 }
 
@@ -187,11 +266,23 @@ function findLeagueBySlug(slug) {
 }
 
 function listLeaguesByIds(leagueIds) {
-  return League.find({ _id: { $in: leagueIds } }).sort({ createdAt: -1 });
+  // OPT-022: both callers only read plain fields off the result (sanitizeLeague
+  // / Map lookups by id) and never .save() it — safe to skip Mongoose document
+  // hydration.
+  return League.find({ _id: { $in: leagueIds } })
+    .sort({ createdAt: -1 })
+    .lean();
 }
 
 function saveLeague(league) {
   return league.save();
+}
+
+// OPT-020: atomically claim a Stripe webhook event for a league. Returns the
+// (updated) league if this caller won the claim, or null if the event was
+// already processed / the league wasn't found (via filter).
+function claimLeagueWebhookEvent(filter, eventId) {
+  return claimWebhookEvent(League, filter, eventId);
 }
 
 function createLeagueTeam(input) {
@@ -325,6 +416,46 @@ function saveLeagueManager(manager) {
   return manager.save();
 }
 
+// OPT-010: materialised standings read/write.
+function findLeagueStandings(leagueId) {
+  return LeagueStandings.findOne({ leagueId });
+}
+
+function upsertLeagueStandings(leagueId, rows) {
+  return LeagueStandings.findOneAndUpdate(
+    { leagueId },
+    { $set: { rows } },
+    { new: true, upsert: true }
+  );
+}
+
+function deleteLeagueStandings(leagueId) {
+  return LeagueStandings.deleteOne({ leagueId });
+}
+
+// OPT-011: materialised per-player league stats read/write.
+function listLeaguePlayerStats(leagueId) {
+  return LeaguePlayerStats.find({ leagueId }).lean();
+}
+
+// Full replace: delete every row for the league, then insert the fresh set.
+// Simpler and just as correct as diffing, and this only ever runs on the
+// post-response recompute path (never blocks a request).
+async function replaceLeaguePlayerStats(leagueId, rows) {
+  await LeaguePlayerStats.deleteMany({ leagueId });
+  if (rows.length === 0) {
+    return [];
+  }
+  return LeaguePlayerStats.insertMany(
+    rows.map((row) => ({ ...row, leagueId })),
+    { ordered: false }
+  );
+}
+
+function deleteLeaguePlayerStats(leagueId) {
+  return LeaguePlayerStats.deleteMany({ leagueId });
+}
+
 module.exports = {
   League,
   LeagueTeam,
@@ -332,6 +463,14 @@ module.exports = {
   LeagueTeamMember,
   LeagueManager,
   LeagueJoinRequest,
+  LeagueStandings,
+  findLeagueStandings,
+  upsertLeagueStandings,
+  deleteLeagueStandings,
+  LeaguePlayerStats,
+  listLeaguePlayerStats,
+  replaceLeaguePlayerStats,
+  deleteLeaguePlayerStats,
   createLeague,
   listLeaguesByOwner,
   listPublicLeagues,
@@ -341,6 +480,7 @@ module.exports = {
   findLeagueBySlug,
   listLeaguesByIds,
   saveLeague,
+  claimLeagueWebhookEvent,
   createLeagueTeam,
   listLeagueTeams,
   findLeagueTeamById,

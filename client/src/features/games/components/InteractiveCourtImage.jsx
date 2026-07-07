@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import courtImage from '../../../assets/courts/basketball_court_1.png';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const COURT_ASPECT_RATIO = 420 / 760;
 const ROTATED_COURT_ASPECT_RATIO = 760 / 420;
@@ -152,9 +153,13 @@ export function InteractiveCourtImage({
                 data-testid="interactive-court-image"
                 onPointerDown={onSelectPoint}
               >
-                <img
+                <CloudinaryImage
                   src={courtImage}
                   alt="Basketball court"
+                  width={420}
+                  height={760}
+                  loading="lazy"
+                  decoding="async"
                   className={`block h-full w-full select-none ${imageClassName}`.trim()}
                   draggable={false}
                 />

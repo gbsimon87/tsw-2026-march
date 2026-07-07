@@ -1,17 +1,18 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '../store/AuthContext';
-import { initPostHog } from '../../lib/posthog';
 import { PostHogRouteTracker } from '../../features/analytics/PostHogRouteTracker';
-
-initPostHog();
+import { queryClient } from './queryClient';
 
 export function AppProviders({ children }) {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <PostHogRouteTracker />
-        {children}
-      </AuthProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <PostHogRouteTracker />
+          {children}
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

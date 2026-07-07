@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
 const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
+const { buildCursorPage } = require('../../utils/pagination');
+const { logger } = require('../../config/logger');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
   createGame,
@@ -9,10 +11,17 @@ const {
   findGameById,
   saveGame,
   claimGameSummaryGeneration,
+  releaseGameSummaryLock,
   saveGameSummary,
 } = require('./games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
-const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const {
+  summarizeEvents,
+  summarizeEventsBySide,
+  createEmptyPlayerStatLine,
+  applyEventToPlayerStatLine,
+} = require('../shared/statSummary');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
   getTeamEntitlements,
   getBillingSummary,
@@ -26,6 +35,7 @@ const {
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,
   canFinalizeLeagueGame,
+  scheduleLeagueAggregateRecompute,
 } = require('../leagues/leagues.service');
 const { findLeagueTeamById, findLeagueById } = require('../leagues/leagues.repository');
 
@@ -107,7 +117,7 @@ function sanitizeLogo(logo) {
   }
 
   return {
-    url: logo.url,
+    url: transformCloudinaryUrl(logo.url),
     width: logo.width ?? null,
     height: logo.height ?? null,
   };
@@ -160,6 +170,102 @@ function sanitizeAiSummary(summary) {
 function clearAiSummaryAfterCompletedLeagueEdit(game) {
   if (game.gameContext === 'league' && game.status === 'completed' && game.aiSummary?.text) {
     game.aiSummary = null;
+  }
+}
+
+// OPT-010: after a league game's result changes, schedule a post-response
+// recompute of that league's materialised aggregates (standings). No-op for
+// standalone games. Only completed games affect standings, but we also trigger
+// on delete/finish where the completed set changes.
+function scheduleLeagueRecomputeForGame(game) {
+  if (game.gameContext === 'league' && game.leagueId) {
+    scheduleLeagueAggregateRecompute(game.leagueId);
+  }
+}
+
+// OPT-013: after a standalone one-sided game's result changes, schedule a
+// post-response recompute of that team's materialised season summary.
+// buildPublicTeamSummary (the compute this materialises) is scoped to
+// `listGamesByTeamId` (games.teamId), which only one_sided standalone games
+// populate — dual_team standalone games are looked up via homeTeamId/awayTeamId
+// (listGamesByStandaloneParticipantTeamId) and never appear in that summary, so
+// they're excluded here too. League games affect leaguestandings/
+// leagueplayerstats instead (scheduleLeagueRecomputeForGame). Required lazily
+// to avoid a require cycle — teams.service.js requires games.service.js for
+// computeBoxScore.
+function scheduleTeamSummaryRecomputeForGame(game) {
+  if (game.gameContext === 'standalone' && game.trackingMode === 'one_sided' && game.teamId) {
+    const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
+    scheduleTeamSeasonSummaryRecompute(game.teamId);
+  }
+}
+
+// OPT-017: after a game's result changes, refresh any shared feed cards that
+// snapshot its score — otherwise a card posted before the game finished (or
+// edited afterwards) shows a stale score forever. Post-response, non-blocking,
+// errors logged not thrown (same shape as the other recompute schedulers).
+// Lazy require to avoid a cycle — feed.service.js requires games.service.js
+// for getPublicGame/canAccessGame.
+function scheduleFeedCardRefreshForGame(gameId) {
+  if (!gameId) return;
+  setImmediate(() => {
+    const { refreshGameCardPostsForGame } = require('../feed/feed.service');
+    refreshGameCardPostsForGame(gameId).catch((error) => {
+      logger.error(
+        { err: error, gameId: String(gameId) },
+        'Post-response feed card refresh failed'
+      );
+    });
+  });
+}
+
+// OPT-020: generate the league AI summary AFTER the finish response is sent.
+// OpenAI can take several seconds, so blocking the finish request on it made
+// finishing a game feel slow. The claim is atomic (with a stale-lock TTL) so
+// concurrent finishes don't double-generate; on failure the lock is released
+// so a later finish can retry immediately instead of waiting out the TTL.
+// `deps` is injectable purely so tests can drive this deterministically.
+function scheduleGameSummaryGeneration(game, { recap, boxScore }) {
+  setImmediate(async () => {
+    const summaryLockId = randomUUID();
+    let claimed = false;
+    try {
+      const claimedGame = await claimGameSummaryGeneration(game._id, summaryLockId);
+      if (!claimedGame) return; // another worker owns it, or it's already done
+      claimed = true;
+      const summary = await buildPersistedGameSummary(game, { recap, boxScore });
+      await saveGameSummary(game._id, summaryLockId, summary);
+    } catch (error) {
+      logger.error(
+        { err: error, gameId: String(game._id) },
+        'Post-response AI summary generation failed'
+      );
+      if (claimed) {
+        // Release so a subsequent finish/retry can re-claim without waiting for
+        // the lock TTL to expire.
+        await releaseGameSummaryLock(game._id, summaryLockId).catch((releaseError) => {
+          logger.error(
+            { err: releaseError, gameId: String(game._id) },
+            'Failed to release AI summary lock after generation error'
+          );
+        });
+      }
+    }
+  });
+}
+
+// OPT-015: save an event mutation, translating Mongoose's optimistic-
+// concurrency VersionError (thrown when another request saved this doc after
+// it was loaded here — the classic co-tracker race) into a clear, retryable
+// 409 instead of either a confusing 500 or a silent last-write-wins clobber.
+async function saveGameEventMutation(game) {
+  try {
+    await saveGame(game);
+  } catch (error) {
+    if (error.name === 'VersionError') {
+      throw new ApiError(409, 'This game was updated by someone else. Reload and try again.');
+    }
+    throw error;
   }
 }
 
@@ -228,89 +334,17 @@ function findTeamPlayerById(team, playerId) {
   );
 }
 
+// OPT-006: delegate to the shared player-line accumulator. Game box scores
+// always carry a leaguePlayerId field, so include it here.
 function emptyStats(playerId, displayName, options = {}) {
-  return {
-    playerId,
-    leaguePlayerId: options.leaguePlayerId ? String(options.leaguePlayerId) : null,
-    displayName,
-    ftm: 0,
-    fta: 0,
-    fg2m: 0,
-    fg2a: 0,
-    fg3m: 0,
-    fg3a: 0,
-    ast: 0,
-    oreb: 0,
-    dreb: 0,
-    stl: 0,
-    blk: 0,
-    tov: 0,
-    foul: 0,
-    reb: 0,
-    points: 0,
-  };
+  return createEmptyPlayerStatLine(playerId, displayName, {
+    includeLeaguePlayerId: true,
+    leaguePlayerId: options.leaguePlayerId,
+  });
 }
 
 function applyEventToRow(row, statType) {
-  if (statType === STAT_TYPES.FT_MADE) {
-    row.ftm += 1;
-    row.fta += 1;
-    row.points += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FT_MISS) {
-    row.fta += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FG2_MADE) {
-    row.fg2m += 1;
-    row.fg2a += 1;
-    row.points += 2;
-    return;
-  }
-  if (statType === STAT_TYPES.FG2_MISS) {
-    row.fg2a += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FG3_MADE) {
-    row.fg3m += 1;
-    row.fg3a += 1;
-    row.points += 3;
-    return;
-  }
-  if (statType === STAT_TYPES.FG3_MISS) {
-    row.fg3a += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.AST) {
-    row.ast += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.OREB) {
-    row.oreb += 1;
-    row.reb += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.DREB) {
-    row.dreb += 1;
-    row.reb += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.STL) {
-    row.stl += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.BLK) {
-    row.blk += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.TOV) {
-    row.tov += 1;
-    return;
-  }
-  if (statType === STAT_TYPES.FOUL) {
-    row.foul += 1;
-  }
+  applyEventToPlayerStatLine(row, statType);
 }
 
 function isOpponentEvent(statType) {
@@ -412,6 +446,69 @@ function buildGameSummary(game) {
     opponentPoints: summary.opponentPoints || 0,
     hasOpponentScore: (summary.opponentPoints || 0) > 0,
   };
+}
+
+// OPT-008: compute the denormalised {home, away} final score for either
+// tracking mode. For one_sided games the tracked team is "home" and the
+// opponent is "away", matching how buildGameSummary maps teamPoints/opponentPoints.
+function computeGameFinalScore(game) {
+  if (game.trackingMode === 'dual_team') {
+    const summary = summarizeEventsBySide(game.events);
+    return { home: summary.home.points, away: summary.away.points };
+  }
+  const summary = summarizeEvents(game.events);
+  return { home: summary.points, away: summary.opponentPoints || 0 };
+}
+
+// OPT-008: keep the denormalised eventCount in lockstep with the events array.
+function syncGameEventCount(game) {
+  game.eventCount = Array.isArray(game.events) ? game.events.length : 0;
+}
+
+// OPT-008: refresh finalScore for a game that is (or is being) completed.
+function syncGameFinalScore(game) {
+  game.finalScore = computeGameFinalScore(game);
+}
+
+// OPT-024: league games can't end in a tie. Checked wherever a final score is
+// about to be (re)frozen for a league game — at finish time (before any
+// mutation, so a rejected finalize leaves the game untouched) and after
+// editing events on an already-completed game — so a tie can never be
+// persisted as a final result, regardless of which path produced it.
+function assertLeagueScoreNotTied(gameContext, finalScore) {
+  if (gameContext !== 'league') return;
+  const { home, away } = finalScore || {};
+  if (home != null && away != null && home === away) {
+    throw new ApiError(422, 'League games cannot end in a tie. Check the score before finalizing.');
+  }
+}
+
+// OPT-008: call after any event-array mutation. eventCount tracks the array
+// length on every save; finalScore is only refreshed for already-completed
+// games (in-progress games get their score frozen at finish time).
+function syncGameDenormalizedAfterEventChange(game) {
+  syncGameEventCount(game);
+  if (game.status === 'completed') {
+    syncGameFinalScore(game);
+    // OPT-024: editing events on an already-completed league game can
+    // retroactively create a tie — re-check every time the score is refrozen.
+    assertLeagueScoreNotTied(game.gameContext, game.finalScore);
+  }
+}
+
+// OPT-012: refreeze boxScore + gameSummary after an edit to an already-completed
+// game. Requires resolving team context (async), so this is a separate step
+// from the sync helpers above — call it after the edit's own save. Only
+// touches the fields it owns; the caller is responsible for saving.
+async function refreezeGameBoxScoreIfCompleted(userId, game) {
+  if (game.status !== 'completed') return;
+  const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
+  game.boxScore =
+    game.trackingMode === 'dual_team'
+      ? computeBoxScore(game, null, { participants })
+      : computeBoxScore(game, teamDoc);
+  game.gameSummary = buildGameSummary(game);
+  await saveGame(game);
 }
 
 function buildBoxScoreForSide(game, team, side) {
@@ -970,7 +1067,14 @@ async function createGameForUser(userId, payload) {
 }
 
 async function listGamesForUser(userId, filter = {}) {
-  const games = await listGamesByOwner(userId, filter);
+  const rawGames = await listGamesByOwner(userId, filter);
+
+  // OPT-018: when the caller paginates, the repo over-fetched by one — split
+  // into a bounded page + nextCursor before mapping (buildCursorPage reads the
+  // raw docs' `_id`, which the mapped output no longer exposes).
+  const { items: games, nextCursor } = filter.limit
+    ? buildCursorPage(rawGames, filter.limit)
+    : { items: rawGames, nextCursor: null };
 
   const standaloneTeamIds = new Set();
   const leagueTeamIds = new Set();
@@ -994,10 +1098,10 @@ async function listGamesForUser(userId, filter = {}) {
 
   const teamLogoById = new Map();
   for (const team of standaloneTeams) {
-    if (team) teamLogoById.set(String(team._id), team.logo?.url || null);
+    if (team) teamLogoById.set(String(team._id), transformCloudinaryUrl(team.logo?.url || null));
   }
   for (const team of leagueTeams) {
-    if (team) teamLogoById.set(String(team._id), team.logo?.url || null);
+    if (team) teamLogoById.set(String(team._id), transformCloudinaryUrl(team.logo?.url || null));
   }
 
   function resolveLogoUrl(game) {
@@ -1009,7 +1113,7 @@ async function listGamesForUser(userId, filter = {}) {
     };
   }
 
-  return games.map((game) => {
+  const mappedGames = games.map((game) => {
     const { homeLogoUrl, awayLogoUrl } = resolveLogoUrl(game);
     return {
       id: String(game._id),
@@ -1034,6 +1138,8 @@ async function listGamesForUser(userId, filter = {}) {
       awayLogoUrl,
     };
   });
+
+  return { games: mappedGames, nextCursor };
 }
 
 async function updateGameForUser(userId, gameId, payload) {
@@ -1059,17 +1165,65 @@ async function updateGameForUser(userId, gameId, payload) {
   return getGameForUser(userId, gameId);
 }
 
+// OPT-015: the slim response for the event-append/edit hot path. Returns only
+// the fields GameTrackPage actually reads after a tracked stat (game, lineups,
+// boxScore, gameSummary) — not recap/highlights/team/participants/league/
+// teamEntitlements/aiSummary, which don't change per-event and the client's
+// setData((current) => ({ ...current, ...response })) merge leaves untouched
+// from the initial full load. Works off the ALREADY-SAVED in-memory `game`
+// and the `context` the caller already resolved before mutating it (team/
+// participant docs are unaffected by an event mutation) — no second DB
+// round-trip the way returning getGameForUser(userId, gameId) would need.
+function buildSlimGameEventDelta(userId, game, context) {
+  const { teamDoc, participants } = context;
+  const boxScore =
+    game.status === 'completed' && game.boxScore
+      ? game.boxScore
+      : game.trackingMode === 'dual_team'
+        ? computeBoxScore(game, null, { participants })
+        : computeBoxScore(game, teamDoc);
+  const gameSummary =
+    game.status === 'completed' && game.gameSummary ? game.gameSummary : buildGameSummary(game);
+
+  return {
+    game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
+    lineups:
+      game.trackingMode === 'dual_team'
+        ? {
+            home: {
+              startingPlayerIds: (game.homeStartingLineupPlayerIds || []).map(String),
+              currentPlayerIds: (game.homeCurrentLineupPlayerIds || []).map(String),
+            },
+            away: {
+              startingPlayerIds: (game.awayStartingLineupPlayerIds || []).map(String),
+              currentPlayerIds: (game.awayCurrentLineupPlayerIds || []).map(String),
+            },
+          }
+        : null,
+    boxScore,
+    gameSummary,
+    canEditCompletedGame: game.status === 'completed' ? Boolean(userId) : false,
+  };
+}
+
 async function getGameForUser(userId, gameId) {
   const game = await assertGameAccess(userId, gameId);
   const { team, opponentTeam, teamDoc, participants, league } = await resolveGameTeamContext(
     userId,
     game
   );
+  // OPT-012: serve the frozen box score/summary for completed games instead of
+  // replaying the events array on every read. Falls back to live compute when
+  // absent (in-progress games, or completed games from before this field
+  // existed — reversible, self-correcting on the next finish/edit).
   const boxScore =
-    game.trackingMode === 'dual_team'
-      ? computeBoxScore(game, null, { participants })
-      : computeBoxScore(game, teamDoc);
-  const gameSummary = buildGameSummary(game);
+    game.status === 'completed' && game.boxScore
+      ? game.boxScore
+      : game.trackingMode === 'dual_team'
+        ? computeBoxScore(game, null, { participants })
+        : computeBoxScore(game, teamDoc);
+  const gameSummary =
+    game.status === 'completed' && game.gameSummary ? game.gameSummary : buildGameSummary(game);
   const canEditCompleted = game.status === 'completed' ? Boolean(userId) : false;
 
   // Fetch fresh logos for dual-team games so uploads after game creation are reflected
@@ -1078,7 +1232,8 @@ async function getGameForUser(userId, gameId) {
     const ids = [game.homeLeagueTeamId, game.awayLeagueTeamId].filter(Boolean);
     const teams = await Promise.all(ids.map((id) => findLeagueTeamById(id).catch(() => null)));
     for (const t of teams) {
-      if (t) freshLogoByLeagueTeamId.set(String(t._id), t.logo?.url || null);
+      if (t)
+        freshLogoByLeagueTeamId.set(String(t._id), transformCloudinaryUrl(t.logo?.url || null));
     }
   }
 
@@ -1086,6 +1241,9 @@ async function getGameForUser(userId, gameId) {
     if (leagueTeamId) {
       const fresh = freshLogoByLeagueTeamId.get(String(leagueTeamId));
       if (fresh !== undefined) return fresh ? { url: fresh } : null;
+    }
+    if (participant.logo?.url) {
+      return { ...participant.logo, url: transformCloudinaryUrl(participant.logo.url) };
     }
     return participant.logo || null;
   }
@@ -1129,7 +1287,7 @@ async function getGameForUser(userId, gameId) {
           name: league.name,
           slug: league.slug,
           seasonLabel: league.seasonLabel ?? null,
-          logo: league.logo?.url ? { url: league.logo.url } : null,
+          logo: league.logo?.url ? { url: transformCloudinaryUrl(league.logo.url) } : null,
         }
       : null,
     highlights: buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc)),
@@ -1316,8 +1474,19 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     );
     recalculateCurrentLineup(game);
     clearAiSummaryAfterCompletedLeagueEdit(game);
-    await saveGame(game);
-    return getGameForUser(userId, gameId);
+    syncGameDenormalizedAfterEventChange(game);
+    // OPT-015: rejects a stale concurrent write instead of silently
+    // clobbering another co-tracker's event.
+    await saveGameEventMutation(game);
+    if (game.status === 'completed') {
+      // OPT-010: editing a completed league game's events changes standings.
+      scheduleLeagueRecomputeForGame(game);
+      // OPT-012: refreeze the box score/summary to match the edited events.
+      await refreezeGameBoxScoreIfCompleted(userId, game);
+    }
+    // OPT-015: slim delta instead of the full getGameForUser response — see
+    // buildSlimGameEventDelta for what's included/excluded and why.
+    return buildSlimGameEventDelta(userId, game, context);
   }
 
   const { teamDoc } = context;
@@ -1387,7 +1556,21 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
-  await saveGame(game);
+  syncGameDenormalizedAfterEventChange(game);
+  // OPT-015: rejects a stale concurrent write instead of silently clobbering
+  // another co-tracker's event.
+  await saveGameEventMutation(game);
+  if (game.status === 'completed') {
+    // OPT-010: editing a completed league game's events changes standings.
+    scheduleLeagueRecomputeForGame(game);
+    // OPT-013: editing a completed standalone game's events changes its team's
+    // season summary.
+    scheduleTeamSummaryRecomputeForGame(game);
+    // OPT-017: any shared feed card for this game shows a now-stale score.
+    scheduleFeedCardRefreshForGame(game._id);
+    // OPT-012: refreeze the box score/summary to match the edited events.
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
   return getGameForUser(userId, gameId);
 }
 
@@ -1430,8 +1613,24 @@ async function removeEventForUser(userId, gameId, eventId) {
   event.deleteOne();
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
-  await saveGame(game);
-  return getGameForUser(userId, gameId);
+  syncGameDenormalizedAfterEventChange(game);
+  // OPT-015: rejects a stale concurrent write instead of silently clobbering
+  // another co-tracker's event.
+  await saveGameEventMutation(game);
+  if (game.status === 'completed') {
+    // OPT-010: editing a completed league game's events changes standings.
+    scheduleLeagueRecomputeForGame(game);
+    // OPT-013: editing a completed standalone game's events changes its team's
+    // season summary.
+    scheduleTeamSummaryRecomputeForGame(game);
+    // OPT-017: any shared feed card for this game shows a now-stale score.
+    scheduleFeedCardRefreshForGame(game._id);
+    // OPT-012: refreeze the box score/summary to match the edited events.
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
+  // OPT-015: slim delta instead of the full getGameForUser response.
+  const context = await resolveGameTeamContext(userId, game);
+  return buildSlimGameEventDelta(userId, game, context);
 }
 
 async function updateEventForUser(userId, gameId, eventId, patch) {
@@ -1449,8 +1648,24 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (patch.videoTimestamp !== undefined) event.videoTimestamp = patch.videoTimestamp ?? undefined;
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
-  await saveGame(game);
-  return getGameForUser(userId, gameId);
+  syncGameDenormalizedAfterEventChange(game);
+  // OPT-015: rejects a stale concurrent write instead of silently clobbering
+  // another co-tracker's event.
+  await saveGameEventMutation(game);
+  if (game.status === 'completed') {
+    // OPT-010: editing a completed league game's events changes standings.
+    scheduleLeagueRecomputeForGame(game);
+    // OPT-013: editing a completed standalone game's events changes its team's
+    // season summary.
+    scheduleTeamSummaryRecomputeForGame(game);
+    // OPT-017: any shared feed card for this game shows a now-stale score.
+    scheduleFeedCardRefreshForGame(game._id);
+    // OPT-012: refreeze the box score/summary to match the edited events.
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
+  // OPT-015: slim delta instead of the full getGameForUser response.
+  const context = await resolveGameTeamContext(userId, game);
+  return buildSlimGameEventDelta(userId, game, context);
 }
 
 async function deleteGameForUser(userId, gameId) {
@@ -1463,7 +1678,24 @@ async function deleteGameForUser(userId, gameId) {
     }
   }
 
+  // OPT-010/013: capture context before deletion, then recompute the relevant
+  // materialised aggregate after the row is gone (deleting a completed game
+  // changes league standings or the team's season summary).
+  const wasLeagueGame = game.gameContext === 'league';
+  const leagueId = game.leagueId;
+  const isStandaloneOneSided =
+    game.gameContext === 'standalone' && game.trackingMode === 'one_sided';
+  const teamId = game.teamId;
+
   await game.deleteOne();
+
+  if (wasLeagueGame) {
+    scheduleLeagueAggregateRecompute(leagueId);
+  }
+  if (isStandaloneOneSided && teamId) {
+    const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
+    scheduleTeamSeasonSummaryRecompute(teamId);
+  }
 }
 
 async function finishGameForUser(userId, gameId) {
@@ -1479,29 +1711,48 @@ async function finishGameForUser(userId, gameId) {
     }
   }
 
+  // OPT-024: validate the score against the current (still in_progress) events
+  // before mutating anything — a rejected finalize must leave the game
+  // untouched, not half-completed.
+  const finalScore = computeGameFinalScore(game);
+  assertLeagueScoreNotTied(game.gameContext, finalScore);
+
   game.status = 'completed';
   game.completedAt = new Date();
+  // OPT-008: freeze the final score + event count on completion.
+  game.finalScore = finalScore;
+  syncGameEventCount(game);
+
+  // OPT-012: freeze box score + game summary on completion (one team-context
+  // resolve, reused below for the AI summary too if this is a league game).
+  const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
+  const boxScore =
+    game.trackingMode === 'dual_team'
+      ? computeBoxScore(game, null, { participants })
+      : computeBoxScore(game, teamDoc);
+  game.boxScore = boxScore;
+  game.gameSummary = buildGameSummary(game);
+
   await saveGame(game);
 
-  if (game.gameContext === 'league' && !game.aiSummary?.text) {
-    const summaryLockId = randomUUID();
-    const claimedGame = await claimGameSummaryGeneration(game._id, summaryLockId);
-    if (!claimedGame) {
-      return getGameForUser(userId, gameId);
-    }
+  // OPT-010/013/017: a newly completed game changes its league's standings,
+  // its standalone team's season summary, and any shared feed card's score.
+  // Scheduled here (before the AI-summary branch's early returns) so it fires
+  // on every path.
+  scheduleLeagueRecomputeForGame(game);
+  scheduleTeamSummaryRecomputeForGame(game);
+  scheduleFeedCardRefreshForGame(game._id);
 
-    const { teamDoc, participants } = await resolveGameTeamContext(userId, game);
-    const boxScore =
-      game.trackingMode === 'dual_team'
-        ? computeBoxScore(game, null, { participants })
-        : computeBoxScore(game, teamDoc);
+  if (game.gameContext === 'league' && !game.aiSummary?.text) {
+    // OPT-020: generate the summary off the request path (see
+    // scheduleGameSummaryGeneration). The finish response no longer waits on
+    // OpenAI; the client picks up the summary on a later fetch once it lands.
     const recap = buildGameRecap(
       game,
       game.trackingMode === 'dual_team' ? participants : teamDoc,
       boxScore
     );
-    const summary = await buildPersistedGameSummary(game, { recap, boxScore });
-    await saveGameSummary(game._id, summaryLockId, summary);
+    scheduleGameSummaryGeneration(game, { recap, boxScore });
   }
 
   return getGameForUser(userId, gameId);
@@ -1521,6 +1772,7 @@ module.exports = {
   finishGameForUser,
   computeBoxScore,
   buildGameSummary,
+  computeGameFinalScore,
   canAccessStandaloneDualGame,
   canEditStandaloneDualGame,
   canAccessGame,

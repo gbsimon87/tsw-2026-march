@@ -45,7 +45,7 @@ Set separate values for each environment:
 - JWT secrets
 - Google OAuth callback URLs
 - Resend credentials (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `CONTACT_EMAIL`)
-- Stripe credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO_MONTHLY`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`)
+- Stripe credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`, and the four price IDs `STRIPE_PRICE_ID_TEAM_MONTHLY`, `STRIPE_PRICE_ID_TEAM_SEASON`, `STRIPE_PRICE_ID_LEAGUE_MONTHLY`, `STRIPE_PRICE_ID_LEAGUE_SEASON`) — note `render.yaml` still declares only the legacy `STRIPE_PRICE_ID_PRO_MONTHLY`; the four price IDs above are what the billing flow actually consumes and must be added
 - Cloudinary credentials (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`) — prod uses `tsw/feed/prod`, dev uses `tsw/feed/dev`
 - OpenAI (`OPENAI_API_KEY`, `OPENAI_GAME_SUMMARY_MODEL`, `OPENAI_GAME_SUMMARY_TIMEOUT_MS`)
 - `COOKIE_DOMAIN` — must match the deployed client domain (e.g. `.thesportyway.com` for prod; leave empty for dev)

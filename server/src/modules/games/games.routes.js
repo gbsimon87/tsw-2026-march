@@ -1,11 +1,21 @@
 const { Router } = require('express');
 const { asyncHandler } = require('../../utils/asyncHandler');
 const { authMiddleware, optionalAuthMiddleware } = require('../../middleware/auth.middleware');
+const { publicCacheMiddleware } = require('../../middleware/publicCache.middleware');
 const controller = require('./games.controller');
 
 const gamesRouter = Router();
 
-gamesRouter.get('/:gameId', optionalAuthMiddleware, asyncHandler(controller.getPublicById));
+// OPT-019: this is the one anonymously-readable game route (optional auth). It
+// personalises on req.auth, so publicCacheMiddleware only emits public caching
+// headers when no auth token is present. Weak ETags (Express default) give
+// anonymous viewers conditional revalidation on completed-game detail.
+gamesRouter.get(
+  '/:gameId',
+  optionalAuthMiddleware,
+  publicCacheMiddleware,
+  asyncHandler(controller.getPublicById)
+);
 gamesRouter.use(authMiddleware);
 gamesRouter.post('/', asyncHandler(controller.create));
 gamesRouter.get('/', asyncHandler(controller.list));

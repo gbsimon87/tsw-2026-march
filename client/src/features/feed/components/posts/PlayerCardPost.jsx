@@ -10,6 +10,7 @@ import {
   ShareCardTitle,
 } from '../cards/ShareCardPrimitives';
 import { formatAverage, getFallbackPlayerImage, getPlayerFallbackState } from './cardUtils';
+import CloudinaryImage from '../../../media/CloudinaryImage';
 
 function PlayerCardContent({ imageSrc, playerCard, onImageError }) {
   const fallbackState = getPlayerFallbackState({
@@ -37,11 +38,15 @@ function PlayerCardContent({ imageSrc, playerCard, onImageError }) {
             }}
           />
           {fallbackState.src ? (
-            <img
+            <CloudinaryImage
               src={fallbackState.src}
               alt={fallbackState.alt}
+              width={120}
+              height={152}
               className="h-full min-h-[9.5rem] w-full object-cover"
               onError={onImageError}
+              srcSetWidths={[120, 240, 360]}
+              sizes="120px"
             />
           ) : (
             <div

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getTeamCardImage } from '../../cardImage';
 import { buildInitials, formatPercentage } from './cardUtils';
+import CloudinaryImage from '../../../media/CloudinaryImage';
 
 export function FullScreenTeamCard({ teamCard }) {
   const [imageSrc, setImageSrc] = useState(() => getTeamCardImage(teamCard));
@@ -36,12 +37,16 @@ export function FullScreenTeamCard({ teamCard }) {
 
       {/* Logo */}
       {imageSrc ? (
-        <img
+        <CloudinaryImage
           src={imageSrc}
           alt={`${teamCard.teamName} logo`}
+          width={128}
+          height={128}
           className="h-32 w-32 rounded-full object-cover shadow-2xl"
           onError={() => setImageSrc(getTeamCardImage({}))}
           loading="lazy"
+          srcSetWidths={[128, 256, 384]}
+          sizes="128px"
         />
       ) : (
         <div

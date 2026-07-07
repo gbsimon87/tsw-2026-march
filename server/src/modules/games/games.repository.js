@@ -1,12 +1,23 @@
 const mongoose = require('mongoose');
 const { STAT_TYPES, SHOT_ZONE_IDS, TEAM_SIDES } = require('../shared/stats.constants');
+const { applyIdCursor } = require('../../utils/pagination');
 
 const participantSchema = new mongoose.Schema(
   {
     side: { type: String, enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY], required: true },
     participantType: { type: String, enum: ['team', 'league_team'], required: true },
-    teamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
-    leagueTeamId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    // OPT-007: no query ever filters on homeParticipant.teamId/leagueTeamId (or
+    // the away side) — dropped the per-field index; it only cost writes.
+    teamId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    leagueTeamId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // OPT-022: this field was always written at game-creation time
+    // (games.service.js sets `slug: context.homeTeam.slug`) but Mongoose
+    // silently drops unknown fields on save, so it was never actually
+    // persisted — every read fell through to a per-request
+    // `findLeagueTeamById` backfill lookup in `resolveDualGameParticipants`.
+    // Declaring it here makes it persist for real; see
+    // scripts/backfill-participant-slug.js for pre-existing games.
+    slug: { type: String, default: null },
     displayName: { type: String, required: true, trim: true },
     logo: {
       type: new mongoose.Schema(
@@ -72,11 +83,14 @@ const shotEventSchema = new mongoose.Schema(
     x: { type: Number, min: 0, max: 100 },
     y: { type: Number, min: 0, max: 100 },
     relatedPlayerId: { type: mongoose.Schema.Types.ObjectId, required: false },
+    // OPT-007: was `index: true` — a multikey index on an embedded-array field,
+    // meaning every event push rewrote an index entry for it. No query anywhere
+    // filters on events.teamSide (per-event team is always derived in app code
+    // from the event's position/relatedPlayerId context); dropped.
     teamSide: {
       type: String,
       enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
       required: false,
-      index: true,
     },
     relatedTeamSide: {
       type: String,
@@ -136,17 +150,19 @@ const gameSchema = new mongoose.Schema(
       index: true,
     },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
+    // OPT-007: dropped `index: true` on homeLeagueTeamId/awayLeagueTeamId/
+    // homeTeamId/awayTeamId — each already starts a compound index below
+    // ({field:1, createdAt:-1}), which fully covers any field-only query.
+    // The standalone single-field index was pure redundant write cost.
     homeLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'LeagueTeam',
       default: null,
-      index: true,
     },
     awayLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'LeagueTeam',
       default: null,
-      index: true,
     },
     trackedLeagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -154,8 +170,8 @@ const gameSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    homeTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
-    awayTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
+    homeTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
+    awayTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
     initialActiveSide: {
       type: String,
       enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY],
@@ -184,11 +200,49 @@ const gameSchema = new mongoose.Schema(
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     awayRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     events: { type: [shotEventSchema], default: [] },
+    // OPT-008: denormalised score + event count so list endpoints don't have to
+    // load and sum the full events array. finalScore is frozen on completion and
+    // refreshed on edits to completed games; eventCount is maintained on
+    // append/delete. Both are null/absent for pre-existing games (compute-on-read
+    // fallback covers those until backfilled).
+    finalScore: {
+      type: new mongoose.Schema(
+        {
+          home: { type: Number, default: 0 },
+          away: { type: Number, default: 0 },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    eventCount: { type: Number, default: null },
+    // OPT-012: frozen box score + game summary, computed once at completion (and
+    // refreshed on edits to completed games) instead of replaying the full
+    // events array on every read. Mixed because the shape differs by
+    // trackingMode (dual_team: {home,away}; one_sided: {players, teamTotals})
+    // — the compute code in games.service.js stays the single source of truth
+    // for the shape. Null/absent for in-progress and pre-existing games
+    // (live-compute fallback covers those). recap/highlights intentionally NOT
+    // frozen — they embed live player display names, so freezing would let
+    // those go stale; see OPT-012's completion notes for the scope decision.
+    boxScore: { type: mongoose.Schema.Types.Mixed, default: null },
+    gameSummary: { type: mongoose.Schema.Types.Mixed, default: null },
     aiSummary: { type: aiSummarySchema, default: null },
     aiSummaryGenerationLockId: { type: String, default: null, index: true },
     aiSummaryGenerationLockedAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // OPT-015: reject a save whose loaded version no longer matches the
+    // stored version instead of silently clobbering a concurrent co-tracker's
+    // event. Mongoose checks `__v` on save() and throws VersionError if it
+    // was bumped by another write since this doc was loaded — this is the
+    // "updatedAt-based optimistic concurrency check" the task asks for
+    // (Mongoose's built-in version key is the standard idiom for exactly this
+    // and needs no hand-rolled findOneAndUpdate filter across every mutable
+    // field on this document).
+    optimisticConcurrency: true,
+  }
 );
 
 gameSchema.index({ ownerUserId: 1, teamId: 1, createdAt: -1 });
@@ -212,6 +266,16 @@ async function listGamesByOwner(ownerUserId, filter = {}) {
 
   if (filter.status) {
     query.status = filter.status;
+  }
+
+  // OPT-018: keyset pagination. When a limit is supplied, page on `_id` desc
+  // (same newest-first order as before) and over-fetch by one so the service
+  // can derive nextCursor. No limit → legacy unbounded behaviour (internal
+  // callers that need every row).
+  if (filter.limit) {
+    return Game.find(applyIdCursor(query, filter.cursor))
+      .sort({ _id: -1 })
+      .limit(filter.limit + 1);
   }
 
   return Game.find(query).sort({ createdAt: -1 });
@@ -244,11 +308,31 @@ async function listGamesByLeagueParticipantTeamId(leagueTeamId) {
 }
 
 async function listCompletedGames() {
-  return Game.find({ status: 'completed' }).sort({
-    scheduledAt: -1,
-    completedAt: -1,
-    createdAt: -1,
-  });
+  // OPT-022: sole caller (feed.service.js listShareableGames) only filters/maps
+  // plain fields, never saves — safe to skip document hydration.
+  return Game.find({ status: 'completed' })
+    .sort({
+      scheduledAt: -1,
+      completedAt: -1,
+      createdAt: -1,
+    })
+    .lean();
+}
+
+// OPT-004: Optimized for public endpoints — no events, limited results
+async function listPublicCompletedGames(limit = 100) {
+  // OPT-022: all 3 callers (teams.service.js) only read plain fields (opponent
+  // matching, computeTeamPoints via summarizeEvents(game.events), display
+  // projection) and never save — safe to skip document hydration.
+  return Game.find({ status: 'completed' })
+    .select('-events -rosterSnapshot -boxScore')
+    .lean()
+    .sort({
+      scheduledAt: -1,
+      completedAt: -1,
+      createdAt: -1,
+    })
+    .limit(limit);
 }
 
 async function listLeagueGamesByLeagueId(leagueId) {
@@ -267,20 +351,50 @@ async function saveGame(game) {
   return game.save();
 }
 
-async function claimGameSummaryGeneration(gameId, lockId) {
+// OPT-020: a summary-generation lock is reclaimable once it's older than
+// AI_SUMMARY_LOCK_TTL_MS. Without a TTL, a process that crashed (or an OpenAI
+// call that hung) between claim and save would leave the lock set forever and
+// no later finish/retry could ever generate the summary. `now` is injectable
+// for deterministic tests.
+const AI_SUMMARY_LOCK_TTL_MS = 2 * 60 * 1000;
+
+async function claimGameSummaryGeneration(gameId, lockId, now = new Date()) {
+  const staleThreshold = new Date(now.getTime() - AI_SUMMARY_LOCK_TTL_MS);
   return Game.findOneAndUpdate(
     {
       _id: gameId,
       gameContext: 'league',
-      aiSummaryGenerationLockId: null,
-      $or: [{ aiSummary: null }, { 'aiSummary.text': null }, { 'aiSummary.text': '' }],
+      // Claimable when unlocked OR the existing lock has gone stale.
+      $and: [
+        {
+          $or: [
+            { aiSummaryGenerationLockId: null },
+            { aiSummaryGenerationLockedAt: null },
+            { aiSummaryGenerationLockedAt: { $lt: staleThreshold } },
+          ],
+        },
+        {
+          $or: [{ aiSummary: null }, { 'aiSummary.text': null }, { 'aiSummary.text': '' }],
+        },
+      ],
     },
     {
       $set: {
         aiSummaryGenerationLockId: lockId,
-        aiSummaryGenerationLockedAt: new Date(),
+        aiSummaryGenerationLockedAt: now,
       },
     },
+    { new: true }
+  );
+}
+
+// OPT-020: release the lock without writing a summary — used when generation
+// fails, so a later attempt can immediately re-claim instead of waiting out the
+// TTL. Gated on lockId so we only clear a lock we still own.
+async function releaseGameSummaryLock(gameId, lockId) {
+  return Game.findOneAndUpdate(
+    { _id: gameId, aiSummaryGenerationLockId: lockId },
+    { $set: { aiSummaryGenerationLockId: null, aiSummaryGenerationLockedAt: null } },
     { new: true }
   );
 }
@@ -313,9 +427,12 @@ module.exports = {
   listGamesByStandaloneParticipantTeamId,
   listGamesByLeagueParticipantTeamId,
   listCompletedGames,
+  listPublicCompletedGames,
   listLeagueGamesByLeagueId,
   findGameByLeagueIdAndId,
   saveGame,
   claimGameSummaryGeneration,
+  releaseGameSummaryLock,
   saveGameSummary,
+  AI_SUMMARY_LOCK_TTL_MS,
 };

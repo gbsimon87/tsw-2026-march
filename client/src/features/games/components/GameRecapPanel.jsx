@@ -4,6 +4,7 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import { extractYouTubeVideoId } from '../youtube.js';
 import { GameVideoEmbed } from './GameVideoEmbed';
 import { GameStatsCharts } from './GameStatsCharts';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const HIGHLIGHT_LABELS = {
   FG2_MADE: '2PT Make',
@@ -185,10 +186,14 @@ export function GameRecapPanel({
                 key={moment.eventId}
                 className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
               >
-                <img
+                <CloudinaryImage
                   src={playerPlaceholder}
                   alt=""
                   aria-hidden="true"
+                  width={32}
+                  height={32}
+                  loading="lazy"
+                  decoding="async"
                   className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                 />
                 <div>
@@ -226,10 +231,16 @@ export function GameRecapPanel({
                     >
                       <span className="sr-only">Home team: </span>
                       <div className="flex items-center justify-center gap-1.5">
-                        <img
+                        <CloudinaryImage
                           src={participants?.home?.logo?.url || teamPlaceholder}
                           alt=""
                           aria-hidden="true"
+                          width={20}
+                          height={20}
+                          loading="lazy"
+                          decoding="async"
+                          srcSetWidths={[20, 40, 80]}
+                          sizes="20px"
                           className="h-5 w-5 rounded-full border border-slate-200 bg-white object-cover"
                         />
                         <span>{recap?.home?.name || 'Home'}</span>
@@ -242,10 +253,16 @@ export function GameRecapPanel({
                     >
                       <span className="sr-only">Away team: </span>
                       <div className="flex items-center justify-center gap-1.5">
-                        <img
+                        <CloudinaryImage
                           src={participants?.away?.logo?.url || teamPlaceholder}
                           alt=""
                           aria-hidden="true"
+                          width={20}
+                          height={20}
+                          loading="lazy"
+                          decoding="async"
+                          srcSetWidths={[20, 40, 80]}
+                          sizes="20px"
                           className="h-5 w-5 rounded-full border border-slate-200 bg-white object-cover"
                         />
                         <span>{recap?.away?.name || 'Away'}</span>
@@ -354,10 +371,14 @@ export function GameRecapPanel({
               const inner = (
                 <>
                   <div className="flex items-center gap-3">
-                    <img
+                    <CloudinaryImage
                       src={playerPlaceholder}
                       alt=""
                       aria-hidden="true"
+                      width={40}
+                      height={40}
+                      loading="lazy"
+                      decoding="async"
                       className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
                     <div className="min-w-0">
@@ -374,10 +395,16 @@ export function GameRecapPanel({
                   </div>
                   {isDualTeam && player.teamName ? (
                     <div className="mt-3 flex items-center gap-1.5">
-                      <img
+                      <CloudinaryImage
                         src={teamLogo}
                         alt=""
                         aria-hidden="true"
+                        width={16}
+                        height={16}
+                        loading="lazy"
+                        decoding="async"
+                        srcSetWidths={[16, 32, 64]}
+                        sizes="16px"
                         className="h-4 w-4 rounded-full border border-slate-200 bg-white object-cover"
                       />
                       <span className="text-xs font-medium text-slate-500">{player.teamName}</span>

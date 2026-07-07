@@ -29,19 +29,13 @@ services:
         sync: false
       - key: GOOGLE_CALLBACK_URL
         sync: false
-      - key: SMTP_HOST
-        value: smtp.gmail.com
-      - key: SMTP_PORT
-        value: 587
-      - key: SMTP_SECURE
-        value: false
-      - key: SMTP_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PASS
+      - key: RESEND_FROM_EMAIL
         sync: false
-      - key: SMTP_FROM_EMAIL
+      - key: RESEND_FROM_NAME
         sync: false
-      - key: SMTP_FROM_NAME
+      - key: CONTACT_EMAIL
         sync: false
       - key: EMAIL_VERIFY_TTL_MINUTES
         value: 60
@@ -139,19 +133,13 @@ services:
         sync: false
       - key: GOOGLE_CALLBACK_URL
         sync: false
-      - key: SMTP_HOST
-        value: smtp.gmail.com
-      - key: SMTP_PORT
-        value: 587
-      - key: SMTP_SECURE
-        value: false
-      - key: SMTP_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PASS
+      - key: RESEND_FROM_EMAIL
         sync: false
-      - key: SMTP_FROM_EMAIL
+      - key: RESEND_FROM_NAME
         sync: false
-      - key: SMTP_FROM_NAME
+      - key: CONTACT_EMAIL
         sync: false
       - key: EMAIL_VERIFY_TTL_MINUTES
         value: 60

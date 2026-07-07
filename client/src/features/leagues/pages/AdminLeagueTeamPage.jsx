@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const TEAM_TABS = [
   {
@@ -355,9 +356,15 @@ export function AdminLeagueTeamPage() {
             />
             {team.logo?.url ? (
               <>
-                <img
+                <CloudinaryImage
                   src={team.logo.url}
                   alt={`${team.name} logo`}
+                  width={64}
+                  height={64}
+                  loading="lazy"
+                  decoding="async"
+                  srcSetWidths={[64, 128, 256]}
+                  sizes="64px"
                   className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover transition group-hover:opacity-60"
                 />
                 <span className="pointer-events-none absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:bg-slate-100">

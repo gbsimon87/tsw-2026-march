@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -64,13 +66,41 @@ const teamSchema = new mongoose.Schema(
 
 teamSchema.index({ ownerUserId: 1, name: 1 });
 
+// OPT-013: materialised standalone-team season summary. One doc per team;
+// `summary` is the pre-computed object `buildPublicTeamSummary` returns
+// (gamesCount, stat totals, boxScore). Mixed because that compute function
+// stays the single source of truth for the shape. Read path is an indexed
+// findOne; write path is the recompute hook (mirrors OPT-010's leaguestandings).
+const teamSeasonSummarySchema = new mongoose.Schema(
+  {
+    teamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Team',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    summary: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { timestamps: true }
+);
+
 const Team = mongoose.models.Team || mongoose.model('Team', teamSchema);
+const TeamSeasonSummary =
+  mongoose.models.TeamSeasonSummary || mongoose.model('TeamSeasonSummary', teamSeasonSummarySchema);
 
 async function createTeam(input) {
   return Team.create(input);
 }
 
-async function listTeamsByOwner(ownerUserId) {
+async function listTeamsByOwner(ownerUserId, { limit, cursor } = {}) {
+  // OPT-018: paginate only when a limit is supplied (the /teams endpoint);
+  // internal callers omit it and get every team, unchanged.
+  if (limit) {
+    return Team.find(applyIdCursor({ ownerUserId }, cursor))
+      .sort({ _id: -1 })
+      .limit(limit + 1);
+  }
   return Team.find({ ownerUserId }).sort({ createdAt: -1 });
 }
 
@@ -90,6 +120,31 @@ async function saveTeam(team) {
   return team.save();
 }
 
+// OPT-020: atomically claim a Stripe webhook event for a team. Returns the
+// (updated) team if this caller won the claim, or null if the event was
+// already processed / the team wasn't found. Callers apply their effect only
+// on a non-null result.
+function claimTeamWebhookEvent(teamId, eventId) {
+  return claimWebhookEvent(Team, { _id: teamId }, eventId);
+}
+
+// OPT-013: materialised team season summary read/write.
+function findTeamSeasonSummary(teamId) {
+  return TeamSeasonSummary.findOne({ teamId });
+}
+
+function upsertTeamSeasonSummary(teamId, summary) {
+  return TeamSeasonSummary.findOneAndUpdate(
+    { teamId },
+    { $set: { summary } },
+    { new: true, upsert: true }
+  );
+}
+
+function deleteTeamSeasonSummary(teamId) {
+  return TeamSeasonSummary.deleteOne({ teamId });
+}
+
 module.exports = {
   Team,
   createTeam,
@@ -98,4 +153,9 @@ module.exports = {
   findTeamById,
   listTeams,
   saveTeam,
+  claimTeamWebhookEvent,
+  TeamSeasonSummary,
+  findTeamSeasonSummary,
+  upsertTeamSeasonSummary,
+  deleteTeamSeasonSummary,
 };

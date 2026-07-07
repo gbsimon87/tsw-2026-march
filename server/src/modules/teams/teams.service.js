@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { buildCursorPage } = require('../../utils/pagination');
 const {
   summarizeEvents,
   createEmptyTeamStatSummary,
@@ -13,9 +14,12 @@ const {
   findTeamById,
   listTeams,
   saveTeam,
+  findTeamSeasonSummary,
+  upsertTeamSeasonSummary,
 } = require('./teams.repository');
-const { listGamesByTeamId, listCompletedGames } = require('../games/games.repository');
+const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
+const { logger } = require('../../config/logger');
 const {
   getBillingSummary,
   getTeamEntitlements,
@@ -26,6 +30,7 @@ const {
   destroyImage,
   isCloudinaryConfigured,
 } = require('../feed/cloudinary.client');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { env } = require('../../config/env');
 
 const PLAYER_POSITIONS = new Set(['PG', 'SG', 'SF', 'PF', 'C']);
@@ -139,7 +144,7 @@ function sanitizeLogo(logo) {
   }
 
   return {
-    url: logo.url,
+    url: transformCloudinaryUrl(logo.url),
     width: logo.width ?? null,
     height: logo.height ?? null,
   };
@@ -303,6 +308,103 @@ function buildPublicTeamSummary(games, team) {
   };
 }
 
+// OPT-013: pure live compute — the source of truth both the materialised read
+// AND recompute hook reuse. Fetches its own games/team so it can be called from
+// a write-trigger context that doesn't already have them loaded.
+async function computeTeamSeasonSummary(
+  teamId,
+  { team: prefetchedTeam, games: prefetchedGames } = {}
+) {
+  const [team, games] = await Promise.all([
+    prefetchedTeam ?? findTeamById(teamId),
+    prefetchedGames ?? listGamesByTeamId(teamId),
+  ]);
+  if (!team) {
+    return null;
+  }
+  return buildPublicTeamSummary(games, team);
+}
+
+// OPT-013: materialised read. Serves the pre-computed summary from
+// `teamseasonsummaries`; on a miss it computes live, persists, and returns
+// (self-backfilling, reversible — mirrors OPT-010's getLeagueStandings).
+// Callers that already loaded team/games for other parts of their response
+// (e.g. getPublicTeam needs both regardless) can pass them via `prefetch` —
+// used ONLY on a miss, to skip a redundant re-fetch; the materialised check
+// itself always runs first so the O(G×E) compute is still avoided on a hit.
+async function getTeamSeasonSummary(teamId, prefetch = {}) {
+  const materialised = await findTeamSeasonSummary(teamId);
+  if (materialised && materialised.summary) {
+    return materialised.summary;
+  }
+
+  const summary = await computeTeamSeasonSummary(teamId, prefetch);
+  if (summary) {
+    try {
+      await upsertTeamSeasonSummary(teamId, summary);
+    } catch (error) {
+      logger.warn(
+        { err: error, teamId: String(teamId) },
+        'Team season summary backfill persist failed'
+      );
+    }
+  }
+  return summary;
+}
+
+// OPT-013: recompute + persist hook, fired post-response from game-completion
+// triggers on standalone (non-league) teams. Per-team in-flight guard coalesces
+// overlapping triggers, same pattern as OPT-010's recomputeLeagueAggregates.
+const recomputeTeamSummaryInFlight = new Map();
+
+async function recomputeTeamSeasonSummary(teamId) {
+  const key = String(teamId);
+  const inFlight = recomputeTeamSummaryInFlight.get(key);
+  if (inFlight) {
+    // Same dirty-flag pattern as recomputeLeagueAggregates: a mid-flight pass
+    // read its data before the write that triggered this call, so coalescing
+    // alone would drop it — re-run once after (verification fix, 2026-07-06).
+    inFlight.dirty = true;
+    return inFlight.promise;
+  }
+
+  const entry = { dirty: false };
+  entry.promise = (async () => {
+    const summary = await computeTeamSeasonSummary(teamId);
+    if (summary) {
+      await upsertTeamSeasonSummary(teamId, summary);
+    }
+    return summary;
+  })();
+
+  recomputeTeamSummaryInFlight.set(key, entry);
+  try {
+    return await entry.promise;
+  } finally {
+    recomputeTeamSummaryInFlight.delete(key);
+    if (entry.dirty) {
+      recomputeTeamSeasonSummary(teamId).catch((error) => {
+        logger.error(
+          { err: error, teamId: String(teamId) },
+          'Dirty-flag team season summary recompute failed'
+        );
+      });
+    }
+  }
+}
+
+function scheduleTeamSeasonSummaryRecompute(teamId) {
+  if (!teamId) return;
+  setImmediate(() => {
+    recomputeTeamSeasonSummary(teamId).catch((error) => {
+      logger.error(
+        { err: error, teamId: String(teamId) },
+        'Post-response team season summary recompute failed'
+      );
+    });
+  });
+}
+
 const HIGHLIGHT_STAT_TYPES = new Set([
   'FG2_MADE',
   'FG2_MISS',
@@ -439,9 +541,13 @@ async function createTeamForUser(userId, payload) {
   return sanitizeTeam(team);
 }
 
-async function listTeamsForUser(userId) {
-  const teams = await listTeamsByOwner(userId);
-  return teams.map(sanitizeTeam);
+async function listTeamsForUser(userId, options = {}) {
+  const rawTeams = await listTeamsByOwner(userId, options);
+  // OPT-018: split the over-fetched page + derive nextCursor when paginating.
+  const { items, nextCursor } = options.limit
+    ? buildCursorPage(rawTeams, options.limit)
+    : { items: rawTeams, nextCursor: null };
+  return { teams: items.map(sanitizeTeam), nextCursor };
 }
 
 async function getTeamForUser(userId, teamId) {
@@ -499,7 +605,9 @@ async function getPublicTeam(teamId) {
       entitlements: getTeamEntitlements(team),
       players,
     },
-    summary: buildPublicTeamSummary(games, team),
+    // OPT-013: materialised read (indexed find); falls back to computing from
+    // the games/team already loaded above on a miss (no re-fetch needed).
+    summary: await getTeamSeasonSummary(team._id, { team, games }),
     games: games.map(sanitizePublicGame),
   };
 }
@@ -543,7 +651,8 @@ async function getPublicPlayer(teamId, playerId) {
 
 async function getPublicOpponentBySlug(opponentSlug) {
   const targetSlug = slugifyOpponentName(opponentSlug);
-  const games = await listCompletedGames();
+  // OPT-004: Use optimized query with limit (larger buffer for filtering)
+  const games = await listPublicCompletedGames(500);
   const relatedGames = [];
 
   for (const game of games) {
@@ -598,7 +707,8 @@ async function getPublicOpponentBySlug(opponentSlug) {
 }
 
 async function listPublicExploreGames(limit = 10) {
-  const games = await listCompletedGames();
+  // OPT-004: Use optimized query (buffer for dedup: limit * 2 in case many games are from same team)
+  const games = await listPublicCompletedGames(limit * 2);
   const selectedGames = [];
   const seenTeamIds = new Set();
 
@@ -642,7 +752,8 @@ async function listPublicExploreGames(limit = 10) {
 
 async function listPublicTeams(limit = 6) {
   const teams = await listTeams();
-  const games = await listCompletedGames();
+  // OPT-004: Use optimized query (large buffer to find enough unique teams)
+  const games = await listPublicCompletedGames(500);
   const publicTeamIds = new Set(
     games.filter((game) => isGamePubliclyViewable(game)).map((game) => String(game.teamId))
   );
@@ -789,6 +900,9 @@ async function addPlayerToTeam(userId, teamId, payload) {
   });
 
   await saveTeam(team);
+  // OPT-013: the materialised season summary embeds a (zeroed) row per roster
+  // player, so roster changes must refresh it (verification fix, 2026-07-06).
+  scheduleTeamSeasonSummaryRecompute(team._id);
   return sanitizeTeam(team);
 }
 
@@ -832,6 +946,8 @@ async function updatePlayerOnTeam(userId, teamId, playerId, payload) {
   }
 
   await saveTeam(team);
+  // OPT-013: renames/position changes are embedded in the materialised summary.
+  scheduleTeamSeasonSummaryRecompute(team._id);
   return sanitizeTeam(team);
 }
 
@@ -848,6 +964,8 @@ async function deactivatePlayerOnTeam(userId, teamId, playerId) {
 
   player.isActive = false;
   await saveTeam(team);
+  // OPT-013: roster changes must refresh the materialised season summary.
+  scheduleTeamSeasonSummaryRecompute(team._id);
   return sanitizeTeam(team);
 }
 
@@ -861,6 +979,10 @@ module.exports = {
   listPublicExploreGames,
   listPublicTeams,
   buildPublicTeamSummary,
+  computeTeamSeasonSummary,
+  getTeamSeasonSummary,
+  recomputeTeamSeasonSummary,
+  scheduleTeamSeasonSummaryRecompute,
   buildPublicPlayerGameRows,
   buildPublicPlayerSummary,
   slugifyOpponentName,

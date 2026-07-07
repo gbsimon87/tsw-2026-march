@@ -4,7 +4,10 @@ const multer = require('multer');
 const { asyncHandler } = require('../../utils/asyncHandler');
 const controller = require('./auth.controller');
 const { authMiddleware } = require('../../middleware/auth.middleware');
-const { authRecoveryLimiter } = require('../../middleware/rateLimit.middleware');
+const {
+  authRecoveryLimiter,
+  authCredentialLimiter,
+} = require('../../middleware/rateLimit.middleware');
 const { env } = require('../../config/env');
 const { isGoogleOAuthConfigured } = require('./oauth.google');
 
@@ -17,9 +20,9 @@ const authRouter = Router();
 const primaryClientOrigin = env.CLIENT_ORIGIN.split(',')[0].trim();
 const googleAuthEnabled = isGoogleOAuthConfigured();
 
-authRouter.post('/register', asyncHandler(controller.register));
-authRouter.post('/login', asyncHandler(controller.login));
-authRouter.post('/refresh', asyncHandler(controller.refresh));
+authRouter.post('/register', authCredentialLimiter, asyncHandler(controller.register));
+authRouter.post('/login', authCredentialLimiter, asyncHandler(controller.login));
+authRouter.post('/refresh', authCredentialLimiter, asyncHandler(controller.refresh));
 authRouter.post('/logout', asyncHandler(controller.logout));
 authRouter.get('/me', authMiddleware, asyncHandler(controller.me));
 authRouter.post(

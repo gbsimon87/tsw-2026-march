@@ -6,6 +6,8 @@ const {
   findPostById,
   deletePostById,
   findPostByHighlightEventId,
+  updatePostCardSnapshot,
+  listGameCardPostsByGameId,
 } = require('./feed.repository');
 const {
   createGameCardPostSchema,
@@ -21,7 +23,9 @@ const {
   destroyVideo,
 } = require('./cloudinary.client');
 const { env } = require('../../config/env');
-const { findUserById } = require('../auth/auth.repository');
+const { logger } = require('../../config/logger');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
+const { findUserById, findUsersByIds } = require('../auth/auth.repository');
 const { findGameById, listCompletedGames } = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const { findLeaguePlayerById } = require('../leagues/leagues.repository');
@@ -32,8 +36,43 @@ function cloudinaryThumbnailUrl(publicId, resourceType) {
   if (!publicId || resourceType !== 'video') return null;
   const cloudName = env.CLOUDINARY_CLOUD_NAME;
   if (!cloudName) return null;
-  // Generate a JPEG thumbnail at the first second of the video
-  return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,f_jpg,q_auto/${publicId}.jpg`;
+  // Generate a JPEG thumbnail at the first second of the video.
+  // f_auto lets Cloudinary serve WebP/AVIF to capable browsers (OPT-002 #4).
+  return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,f_auto,q_auto/${publicId}.jpg`;
+}
+
+// OPT-009: on-the-fly optimised video delivery. With eager_async the eager MP4
+// may not exist yet at upload time, so we deliver the source through Cloudinary's
+// f_auto,q_auto,vc_auto pipeline — it transcodes on first request and serves the
+// best codec/quality for the client, and keeps working before AND after the eager
+// MP4 lands. Falls back to the raw secure_url if the cloud name is unavailable.
+function cloudinaryVideoPlaybackUrl(publicId, fallbackUrl) {
+  if (!publicId) return fallbackUrl ?? null;
+  const cloudName = env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName) return fallbackUrl ?? null;
+  return `https://res.cloudinary.com/${cloudName}/video/upload/f_auto,q_auto,vc_auto/${publicId}.mp4`;
+}
+
+// OPT-009: await Cloudinary destroys and log failures instead of firing and
+// forgetting (which silently leaked assets → quota creep). Returns true on
+// success, false on failure — callers decide whether a failure is fatal.
+async function destroyCloudinaryAsset(kind, publicId) {
+  if (!publicId) return true;
+  const destroy = kind === 'video' ? destroyVideo : destroyImage;
+  try {
+    const result = await destroy(publicId);
+    if (result && result.result && result.result !== 'ok' && result.result !== 'not found') {
+      logger.warn(
+        { kind, publicId, result: result.result },
+        'Cloudinary destroy did not return ok'
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error({ err: error, kind, publicId }, 'Cloudinary destroy failed');
+    return false;
+  }
 }
 
 function sanitizeCaption(value) {
@@ -73,7 +112,7 @@ function matchesQuery(text, query) {
 async function resolveImagePayload(post) {
   return {
     image: {
-      url: post.image.url,
+      url: transformCloudinaryUrl(post.image.url),
       width: post.image.width ?? null,
       height: post.image.height ?? null,
     },
@@ -88,8 +127,8 @@ async function resolveVideoPayload(post) {
   return {
     image: null,
     video: {
-      url: post.video.url,
-      thumbnailUrl: post.video.thumbnailUrl ?? null,
+      url: transformCloudinaryUrl(post.video.url),
+      thumbnailUrl: transformCloudinaryUrl(post.video.thumbnailUrl ?? null),
       width: post.video.width ?? null,
       height: post.video.height ?? null,
       duration: post.video.duration ?? null,
@@ -100,93 +139,143 @@ async function resolveVideoPayload(post) {
   };
 }
 
-async function resolveGameCardPayload(post) {
+// OPT-017: pure builders for each card's denormalised display shape, given the
+// full public-pipeline payload. Called both at post-creation time (to snapshot
+// into the Post doc) and as the live-compute fallback when a snapshot is
+// missing/stale — one source of truth for the shape either way.
+function buildGameCardSnapshot(payload) {
+  const isDualTeam = payload.game.trackingMode === 'dual_team';
+  return {
+    gameId: payload.game.id,
+    gameUrl: `/games/${payload.game.id}`,
+    teamId: payload.team?.id ?? null,
+    teamName: isDualTeam
+      ? `${payload.participants?.home?.displayName || 'Home'} vs ${payload.participants?.away?.displayName || 'Away'}`
+      : (payload.team?.name ?? null),
+    teamLogo: isDualTeam
+      ? (payload.participants?.home?.logo ?? null)
+      : (payload.team?.logo ?? null),
+    teamColors: payload.team?.colors ?? [],
+    opponent: isDualTeam ? null : payload.game.opponent,
+  };
+}
+
+function buildPlayerCardSnapshot(payload) {
+  const playerImage = payload.player.image ?? null;
+  const teamLogo = payload.team.logo ?? null;
+  const imageFallback = playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder';
+
+  return {
+    teamId: payload.team.id,
+    teamName: payload.team.name,
+    playerId: payload.player.id,
+    playerName: payload.player.displayName,
+    jerseyNumber: payload.player.jerseyNumber ?? null,
+    playerImage,
+    teamLogo,
+    teamColors: payload.team.colors ?? [],
+    imageFallback,
+    summary: {
+      gamesCount: payload.summary.gamesCount,
+      pointsPerGame: payload.summary.pointsPerGame,
+      reboundsPerGame: payload.summary.reboundsPerGame,
+      assistsPerGame: payload.summary.assistsPerGame,
+    },
+    playerUrl: `/teams/${payload.team.id}/players/${payload.player.id}`,
+  };
+}
+
+function buildTeamCardSnapshot(payload) {
+  return {
+    teamId: payload.team.id,
+    teamName: payload.team.name,
+    teamLogo: payload.team.logo ?? null,
+    teamColors: payload.team.colors ?? [],
+    summary: {
+      gamesCount: payload.summary.gamesCount,
+      points: payload.summary.points,
+      fg2: payload.summary.fg2,
+      fg3: payload.summary.fg3,
+      ft: payload.summary.ft,
+    },
+    teamUrl: `/teams/${payload.team.id}`,
+  };
+}
+
+// OPT-017: resolve a card's display snapshot, preferring the denormalised
+// `cardSnapshot` (indexed doc field, no extra queries). On a miss (older posts
+// created before this field existed) falls back to the live pipeline and
+// persists the result — self-backfilling, same pattern as the OPT-010/011/013
+// materialisations. `refresh: true` forces a live re-resolve + re-persist
+// (the "slim refresh path for stale cards").
+async function resolveGameCardPayload(post, { refresh = false } = {}) {
+  if (!refresh && post.gameCard.cardSnapshot) {
+    return { image: null, gameCard: post.gameCard.cardSnapshot, playerCard: null, teamCard: null };
+  }
+
   let payload;
   try {
     payload = await getPublicGame(String(post.gameCard.gameId));
   } catch {
     return { image: null, gameCard: null, playerCard: null, teamCard: null };
   }
-  const isDualTeam = payload.game.trackingMode === 'dual_team';
-
-  return {
-    image: null,
-    gameCard: {
-      gameId: payload.game.id,
-      gameUrl: `/games/${payload.game.id}`,
-      teamId: payload.team?.id ?? null,
-      teamName: isDualTeam
-        ? `${payload.participants?.home?.displayName || 'Home'} vs ${payload.participants?.away?.displayName || 'Away'}`
-        : (payload.team?.name ?? null),
-      teamLogo: isDualTeam
-        ? (payload.participants?.home?.logo ?? null)
-        : (payload.team?.logo ?? null),
-      teamColors: payload.team?.colors ?? [],
-      opponent: isDualTeam ? null : payload.game.opponent,
-      participants: isDualTeam ? payload.participants : null,
-      recap: payload.recap,
-    },
-    playerCard: null,
-    teamCard: null,
-  };
+  const snapshot = buildGameCardSnapshot(payload);
+  persistCardSnapshot(post, 'gameCard', snapshot);
+  return { image: null, gameCard: snapshot, playerCard: null, teamCard: null };
 }
 
-async function resolvePlayerCardPayload(post) {
+async function resolvePlayerCardPayload(post, { refresh = false } = {}) {
+  if (!refresh && post.playerCard.cardSnapshot) {
+    return {
+      image: null,
+      gameCard: null,
+      playerCard: post.playerCard.cardSnapshot,
+      teamCard: null,
+    };
+  }
+
   const payload = await getPublicPlayer(
     String(post.playerCard.teamId),
     String(post.playerCard.playerId)
   );
-  const playerImage = payload.player.image ?? null;
-  const teamLogo = payload.team.logo ?? null;
-  const imageFallback = playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder';
-
-  return {
-    image: null,
-    gameCard: null,
-    playerCard: {
-      teamId: payload.team.id,
-      teamName: payload.team.name,
-      playerId: payload.player.id,
-      playerName: payload.player.displayName,
-      jerseyNumber: payload.player.jerseyNumber ?? null,
-      playerImage,
-      teamLogo,
-      teamColors: payload.team.colors ?? [],
-      imageFallback,
-      summary: {
-        gamesCount: payload.summary.gamesCount,
-        pointsPerGame: payload.summary.pointsPerGame,
-        reboundsPerGame: payload.summary.reboundsPerGame,
-        assistsPerGame: payload.summary.assistsPerGame,
-      },
-      playerUrl: `/teams/${payload.team.id}/players/${payload.player.id}`,
-    },
-    teamCard: null,
-  };
+  const snapshot = buildPlayerCardSnapshot(payload);
+  persistCardSnapshot(post, 'playerCard', snapshot);
+  return { image: null, gameCard: null, playerCard: snapshot, teamCard: null };
 }
 
-async function resolveTeamCardPayload(post) {
-  const payload = await getPublicTeam(String(post.teamCard.teamId));
+async function resolveTeamCardPayload(post, { refresh = false } = {}) {
+  if (!refresh && post.teamCard.cardSnapshot) {
+    return { image: null, gameCard: null, playerCard: null, teamCard: post.teamCard.cardSnapshot };
+  }
 
-  return {
-    image: null,
-    gameCard: null,
-    playerCard: null,
-    teamCard: {
-      teamId: payload.team.id,
-      teamName: payload.team.name,
-      teamLogo: payload.team.logo ?? null,
-      teamColors: payload.team.colors ?? [],
-      summary: {
-        gamesCount: payload.summary.gamesCount,
-        points: payload.summary.points,
-        fg2: payload.summary.fg2,
-        fg3: payload.summary.fg3,
-        ft: payload.summary.ft,
-      },
-      teamUrl: `/teams/${payload.team.id}`,
-    },
-  };
+  const payload = await getPublicTeam(String(post.teamCard.teamId));
+  const snapshot = buildTeamCardSnapshot(payload);
+  persistCardSnapshot(post, 'teamCard', snapshot);
+  return { image: null, gameCard: null, playerCard: null, teamCard: snapshot };
+}
+
+// OPT-017: best-effort, non-blocking persist of a computed snapshot back onto
+// the Post doc so the NEXT read hits the fast path. Never awaited by callers —
+// a failed persist just means the next read re-resolves live again (identical
+// to a permanent miss), so it's safe to fire-and-forget with logging.
+function persistCardSnapshot(post, cardField, snapshot) {
+  updatePostCardSnapshot(post._id, cardField, snapshot).catch((error) => {
+    logger.warn(
+      { err: error, postId: String(post._id), cardField },
+      'Feed card snapshot persist failed'
+    );
+  });
+}
+
+// OPT-017: the slim refresh path for stale cards. A game_card's snapshot is
+// taken once and never touched again by the read path — if the underlying
+// game's score changes after being shared (finish, or an edit to a completed
+// game), the shared card would show a stale score forever without this.
+// Intended to be called from games.service.js's existing completion/edit
+// triggers (post-response, non-blocking — matches the OPT-010/012/013 shape).
+async function refreshGameCardPostsForGame(gameId) {
+  const posts = await listGameCardPostsByGameId(gameId);
+  await Promise.all(posts.map((post) => resolveGameCardPayload(post, { refresh: true })));
 }
 
 const YOUTUBE_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
@@ -262,8 +351,12 @@ async function resolvePostPayload(post) {
   throw new ApiError(400, 'Unsupported post type');
 }
 
-async function sanitizePost(post, viewerUserId = null) {
-  const creator = await findUserById(post.creatorUserId);
+// OPT-017: accepts an optional pre-fetched `creator` so batch hydration
+// (listFeedPosts) can resolve every post's creator with one `$in` query
+// instead of one `findUserById` per post. Single-post call sites (create,
+// delete) omit it and get the original one-query-per-call behaviour.
+async function sanitizePost(post, viewerUserId = null, { creator: prefetchedCreator } = {}) {
+  const creator = prefetchedCreator ?? (await findUserById(post.creatorUserId));
   if (!creator) {
     return null;
   }
@@ -278,7 +371,7 @@ async function sanitizePost(post, viewerUserId = null) {
       creator: {
         id: String(creator._id),
         name: creator.name,
-        avatarUrl: creator.avatar?.url ?? null,
+        avatarUrl: transformCloudinaryUrl(creator.avatar?.url ?? null),
       },
       canDelete: Boolean(viewerUserId && String(viewerUserId) === String(post.creatorUserId)),
       ...payload,
@@ -294,12 +387,26 @@ async function listFeedPosts(viewerUserId, options = {}) {
     ensureObjectId(options.cursor, 'cursor');
   }
   const rawPosts = await listPosts({ limit: limit + 10, cursor: options.cursor || null });
+
+  // OPT-017: batch every post's creator with one $in instead of one
+  // findUserById per post (was the single biggest query multiplier on this
+  // page — one extra round-trip per post regardless of type).
+  const creatorsById = new Map(
+    (await findUsersByIds(rawPosts.map((post) => post.creatorUserId))).map((user) => [
+      String(user._id),
+      user,
+    ])
+  );
+
   const resolved = [];
   let lastResolvedRaw = null;
   let hitLimit = false;
 
   for (const post of rawPosts) {
-    const sanitized = await sanitizePost(post, viewerUserId);
+    const creator = creatorsById.get(String(post.creatorUserId));
+    const sanitized = creator
+      ? await sanitizePost(post, viewerUserId, { creator })
+      : await sanitizePost(post, viewerUserId);
     if (sanitized) {
       resolved.push(sanitized);
       lastResolvedRaw = post;
@@ -385,15 +492,26 @@ async function createVideoPostForUser(userId, file, caption) {
   const upload = await uploadVideoBuffer(file);
 
   if (upload.duration != null && upload.duration > env.FEED_VIDEO_MAX_DURATION_SECONDS) {
-    destroyVideo(upload.public_id).catch(() => null);
+    // OPT-009: await the cleanup so a failed destroy is logged (not leaked).
+    await destroyCloudinaryAsset('video', upload.public_id);
     throw new ApiError(
       422,
       `Video must be ${env.FEED_VIDEO_MAX_DURATION_SECONDS} seconds or shorter`
     );
   }
 
-  // Prefer the eager MP4 URL for consistent playback, fall back to original
-  const playbackUrl = upload.eager?.[0]?.secure_url ?? upload.secure_url;
+  // OPT-009: with async eager transcode the eager MP4 usually isn't ready yet,
+  // so deliver via the on-the-fly f_auto,q_auto,vc_auto pipeline (works before &
+  // after the eager MP4 lands). Prefer the eager URL if it's already present.
+  // The stored URL is permanent, and with eager_async the response's eager
+  // entry still carries the (deterministic) derived URL but with
+  // status:'processing' — requesting it mid-transcode 423s. Only trust the
+  // eager URL when it's actually ready (verification fix, 2026-07-06).
+  const eagerEntry = upload.eager?.[0];
+  const eagerReady = Boolean(eagerEntry?.secure_url) && eagerEntry.status !== 'processing';
+  const playbackUrl = eagerReady
+    ? eagerEntry.secure_url
+    : cloudinaryVideoPlaybackUrl(upload.public_id, upload.secure_url);
   const thumbnailUrl = cloudinaryThumbnailUrl(upload.public_id, upload.resource_type);
 
   const post = await createPost({
@@ -441,7 +559,10 @@ async function createPlayerCardPostForUser(userId, input) {
   ensureObjectId(payload.teamId, 'team id');
   ensureObjectId(payload.playerId, 'player id');
 
-  await getPublicPlayer(payload.teamId, payload.playerId);
+  // OPT-017: this pipeline call is also the source for the denormalised
+  // snapshot below — reused instead of discarded and re-resolved a moment
+  // later inside sanitizePost.
+  const publicPayload = await getPublicPlayer(payload.teamId, payload.playerId);
 
   const post = await createPost({
     creatorUserId: userId,
@@ -450,6 +571,7 @@ async function createPlayerCardPostForUser(userId, input) {
     playerCard: {
       teamId: payload.teamId,
       playerId: payload.playerId,
+      cardSnapshot: buildPlayerCardSnapshot(publicPayload),
     },
   });
 
@@ -460,7 +582,7 @@ async function createTeamCardPostForUser(userId, input) {
   const payload = createTeamCardPostSchema.parse(input);
   ensureObjectId(payload.teamId, 'team id');
 
-  await getPublicTeam(payload.teamId);
+  const publicPayload = await getPublicTeam(payload.teamId);
 
   const post = await createPost({
     creatorUserId: userId,
@@ -468,6 +590,7 @@ async function createTeamCardPostForUser(userId, input) {
     caption: sanitizeCaption(payload.caption),
     teamCard: {
       teamId: payload.teamId,
+      cardSnapshot: buildTeamCardSnapshot(publicPayload),
     },
   });
 
@@ -486,12 +609,15 @@ async function deletePostForUser(userId, postId) {
 
   await deletePostById(postId);
 
+  // OPT-009: await the asset cleanup and log any failure. The post row is
+  // already gone, so a failed destroy is logged (surfacing the orphan) rather
+  // than failing the delete — but it is no longer silently swallowed.
   if (post.type === 'image' && post.image?.publicId) {
-    destroyImage(post.image.publicId).catch(() => null);
+    await destroyCloudinaryAsset('image', post.image.publicId);
   }
 
   if (post.type === 'video' && post.video?.publicId) {
-    destroyVideo(post.video.publicId).catch(() => null);
+    await destroyCloudinaryAsset('video', post.video.publicId);
   }
 
   return { deleted: true };
@@ -655,4 +781,5 @@ module.exports = {
   listShareablePlayers,
   listShareableTeams,
   sanitizePost,
+  refreshGameCardPostsForGame,
 };

@@ -1,9 +1,16 @@
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
+const { buildCursorPage } = require('../../utils/pagination');
 const { findSharedEventIds } = require('../feed/feed.repository');
 const { env } = require('../../config/env');
-const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const {
+  summarizeEvents,
+  summarizeEventsBySide,
+  createEmptyPlayerStatLine,
+  applyEventToPlayerStatLine,
+} = require('../shared/statSummary');
 const { TEAM_SIDES } = require('../shared/stats.constants');
+const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
   listLeaguesByOwner,
   listPublicLeagues: listPublicLeaguesRepo,
@@ -42,9 +49,14 @@ const {
   listLeagueManagersByLeague,
   listLeaguesByManager,
   saveLeagueManager,
+  findLeagueStandings,
+  upsertLeagueStandings,
+  listLeaguePlayerStats,
+  replaceLeaguePlayerStats,
 } = require('./leagues.repository');
 const { findUserByEmail, findUserById } = require('../auth/auth.repository');
 const { listLeagueGamesByLeagueId } = require('../games/games.repository');
+const { logger } = require('../../config/logger');
 const {
   uploadImageBuffer,
   destroyImage,
@@ -92,7 +104,7 @@ function sanitizeLogo(logo) {
   }
 
   return {
-    url: logo.url,
+    url: transformCloudinaryUrl(logo.url),
     width: logo.width ?? null,
     height: logo.height ?? null,
   };
@@ -145,7 +157,7 @@ function sanitizeLeaguePlayer(player, usersById = new Map(), options = {}) {
     isActive: Boolean(player.isActive),
     isClaimed: Boolean(player.claimedByUserId),
     claimedBadgeLabel: player.claimedByUserId ? 'Claimed profile' : null,
-    avatarUrl: claimedUser?.avatar?.url || null,
+    avatarUrl: transformCloudinaryUrl(claimedUser?.avatar?.url || null),
     ...(options.includePrivateClaim
       ? {
           claimedBy: player.claimedByUserId
@@ -247,28 +259,28 @@ async function assertLeagueExists(leagueId) {
   return league;
 }
 
-async function assertLeagueViewer(userId, leagueId) {
-  const league = await assertLeagueExists(leagueId);
-  const isOwner = String(league.ownerUserId) === String(userId);
-
-  if (isOwner) {
-    return league;
-  }
+// OPT-024: shared by assertLeagueViewer (private-league management routes)
+// and assertLeagueVisible (public-slug routes) — a user is "in" a league as
+// its owner, an active league manager, or via any leagueTeamMember record
+// (team manager, helper, or player) for that league.
+async function isLeagueMember(userId, league) {
+  if (!userId) return false;
+  if (String(league.ownerUserId) === String(userId)) return true;
 
   const [leagueMgr, memberships] = await Promise.all([
-    findActiveLeagueManager(leagueId, userId),
+    findActiveLeagueManager(league._id, userId),
     listLeagueMembershipsForUser(userId),
   ]);
 
-  if (leagueMgr) {
-    return league;
-  }
+  if (leagueMgr) return true;
 
-  const hasMembership = memberships.some(
-    (membership) => String(membership.leagueId) === String(league._id)
-  );
+  return memberships.some((membership) => String(membership.leagueId) === String(league._id));
+}
 
-  if (!hasMembership) {
+async function assertLeagueViewer(userId, leagueId) {
+  const league = await assertLeagueExists(leagueId);
+
+  if (!(await isLeagueMember(userId, league))) {
     throw new ApiError(403, 'Forbidden');
   }
 
@@ -363,15 +375,32 @@ async function assertLeagueParticipant(userId, leagueId) {
   throw new ApiError(403, 'Forbidden');
 }
 
+// OPT-024: a private league must stay invisible to the general public, but a
+// signed-in member of that league (owner, league manager, team manager,
+// helper, or player) can still reach it through the public-slug routes — e.g.
+// sharing their own league's link. `viewerUserId` comes from
+// optionalAuthMiddleware, so it's null for anonymous requests, which keeps the
+// prior all-anonymous behaviour unchanged for public leagues and for
+// non-members hitting a private one (still a 404, not a 403 — we don't want
+// to reveal that a private league exists at all to a non-member).
 async function assertLeagueVisible(leagueIdOrSlug, options = {}) {
   const league = options.bySlug
     ? await findLeagueBySlug(leagueIdOrSlug)
     : await findLeagueById(leagueIdOrSlug);
-  if (!league || !league.isPublic || league.status !== 'active') {
+
+  if (!league || league.status !== 'active') {
     throw new ApiError(404, 'League not found');
   }
 
-  return league;
+  if (league.isPublic) {
+    return league;
+  }
+
+  if (await isLeagueMember(options.viewerUserId, league)) {
+    return league;
+  }
+
+  throw new ApiError(404, 'League not found');
 }
 
 async function assertLeagueTeamExists(leagueId, leagueTeamId) {
@@ -456,21 +485,35 @@ async function listLeaguesForUser(userId) {
     sortedLeagues.map((league) => buildLeagueViewerContext(userId, league))
   );
 
-  return sortedLeagues.map((league, index) =>
+  const sanitized = sortedLeagues.map((league, index) =>
     sanitizeLeague(league, { includeViewerContext: viewerContexts[index] })
   );
+
+  // OPT-018: this list MERGES three sources (owned + member + managed leagues),
+  // dedupes, and re-sorts in memory — a single-collection `_id` keyset cursor
+  // would be incorrect here (it can't page across the union). A user belongs to
+  // a handful of leagues, so it's not a scaling-cliff surface; keyset paging is
+  // intentionally NOT applied. nextCursor is always null so the response shape
+  // stays consistent with the other paginated lists. (Deferred, see tracker.)
+  return { leagues: sanitized, nextCursor: null };
 }
 
-async function listPublicLeagues() {
-  const leagues = await listPublicLeaguesRepo();
+async function listPublicLeagues(options = {}) {
+  const rawLeagues = await listPublicLeaguesRepo(options);
+  // OPT-018: split the over-fetched page + derive nextCursor when paginating,
+  // then enrich only the page's leagues with their teams.
+  const { items: leagues, nextCursor } = options.limit
+    ? buildCursorPage(rawLeagues, options.limit)
+    : { items: rawLeagues, nextCursor: null };
   const teamsPerLeague = await Promise.all(leagues.map((league) => listLeagueTeams(league._id)));
-  return leagues.map((league, i) =>
+  const sanitized = leagues.map((league, i) =>
     sanitizeLeague(league, {
       includeTeams: teamsPerLeague[i]
         .filter((team) => team.status === 'active')
         .map((team) => sanitizeLeagueTeam(team)),
     })
   );
+  return { leagues: sanitized, nextCursor };
 }
 
 async function buildLeagueViewerContext(userId, league) {
@@ -504,11 +547,16 @@ async function buildLeagueViewerContext(userId, league) {
 async function getLeagueForUser(userId, leagueId) {
   const league = await assertLeagueViewer(userId, leagueId);
 
-  const [teams, standings, games, viewerContext] = await Promise.all([
+  // OPT-005: fetch teams + raw games ONCE, then pass down to the standings and
+  // games-row builders instead of letting each re-query (was teams×3, games×2).
+  const [teams, rawGames, viewerContext] = await Promise.all([
     listLeagueTeams(league._id),
-    getLeagueStandings(league._id),
-    listLeagueGames(league._id),
+    listLeagueGamesByLeagueId(league._id),
     buildLeagueViewerContext(userId, league),
+  ]);
+  const [standings, games] = await Promise.all([
+    getLeagueStandings(league._id, { teams, games: rawGames }),
+    listLeagueGames(league._id, { teams, games: rawGames }),
   ]);
   const canViewAllTeamManagers =
     viewerContext.viewerRole === 'owner' || viewerContext.viewerRole === 'league_manager';
@@ -541,12 +589,18 @@ async function getLeagueForUser(userId, leagueId) {
   });
 }
 
-async function getPublicLeagueBySlug(slug) {
-  const league = await assertLeagueVisible(slug, { bySlug: true });
-  const [teams, standings, games] = await Promise.all([
+async function getPublicLeagueBySlug(slug, viewerUserId = null) {
+  const league = await assertLeagueVisible(slug, { bySlug: true, viewerUserId });
+  // OPT-005: fetch teams + raw games ONCE, then pass down (was teams×3, games×2).
+  // NOTE: publicOnly is preserved as-is; listLeagueGames currently ignores it
+  // (tracked separately in OPT-024). This refactor does not change that behaviour.
+  const [teams, rawGames] = await Promise.all([
     listLeagueTeams(league._id),
-    getLeagueStandings(league._id),
-    listLeagueGames(league._id, { publicOnly: true }),
+    listLeagueGamesByLeagueId(league._id),
+  ]);
+  const [standings, games] = await Promise.all([
+    getLeagueStandings(league._id, { teams, games: rawGames }),
+    listLeagueGames(league._id, { publicOnly: true, teams, games: rawGames }),
   ]);
 
   return sanitizeLeague(league, {
@@ -625,6 +679,8 @@ async function createLeagueTeamForLeague(userId, leagueId, payload) {
     status: 'active',
   });
 
+  // OPT-010: a new team adds a (zeroed) standings row.
+  scheduleLeagueAggregateRecompute(leagueId);
   return sanitizeLeagueTeam(leagueTeam);
 }
 
@@ -655,16 +711,20 @@ async function listTeamsForLeagueViewer(userId, leagueId) {
 async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
   const access = await getLeagueTeamAccess(userId, leagueId, leagueTeamId);
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
-  const [players, members, joinRequests, standings, games] = await Promise.all([
+  // OPT-005: load league teams + raw games once, reuse for both standings and
+  // the games rows (was teams×3, games×2 for this endpoint).
+  const canManage =
+    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager';
+  const [players, members, joinRequests, leagueTeams, rawGames] = await Promise.all([
     listLeaguePlayers(team._id),
-    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager'
-      ? listLeagueTeamMembers(team._id)
-      : Promise.resolve([]),
-    access.role === 'owner' || access.role === 'league_manager' || access.role === 'manager'
-      ? listLeagueJoinRequests(team._id)
-      : Promise.resolve([]),
-    getLeagueStandings(leagueId),
-    listLeagueGames(leagueId),
+    canManage ? listLeagueTeamMembers(team._id) : Promise.resolve([]),
+    canManage ? listLeagueJoinRequests(team._id) : Promise.resolve([]),
+    listLeagueTeams(leagueId),
+    listLeagueGamesByLeagueId(leagueId),
+  ]);
+  const [standings, games] = await Promise.all([
+    getLeagueStandings(leagueId, { teams: leagueTeams, games: rawGames }),
+    listLeagueGames(leagueId, { teams: leagueTeams, games: rawGames }),
   ]);
   const usersById = await buildUsersMap([
     ...players.map((player) => player.claimedByUserId),
@@ -701,18 +761,23 @@ async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
   });
 }
 
-async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
-  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug, viewerUserId = null) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true, viewerUserId });
   const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
   if (!team) {
     throw new ApiError(404, 'League team not found');
   }
 
-  const [players, games, rawGames, standings] = await Promise.all([
+  // OPT-005: load league teams + raw games once; derive game rows, raw games,
+  // and standings from the same data (was teams×2, games×3).
+  const [players, leagueTeams, rawGames] = await Promise.all([
     listLeaguePlayers(team._id),
-    listLeagueGames(league._id),
+    listLeagueTeams(league._id),
     listLeagueGamesByLeagueId(league._id),
-    getLeagueStandings(league._id),
+  ]);
+  const [games, standings] = await Promise.all([
+    listLeagueGames(league._id, { teams: leagueTeams, games: rawGames }),
+    getLeagueStandings(league._id, { teams: leagueTeams, games: rawGames }),
   ]);
   const usersById = await buildUsersMap(players.map((p) => p.claimedByUserId));
   const teamGames = games.filter(
@@ -731,7 +796,7 @@ async function getPublicLeagueTeamBySlug(leagueSlug, teamSlug) {
       .filter((p) => p.claimedByUserId)
       .map((p) => {
         const user = usersById.get(String(p.claimedByUserId));
-        return [String(p._id), user?.avatar?.url || null];
+        return [String(p._id), transformCloudinaryUrl(user?.avatar?.url || null)];
       })
   );
   const playerStatsWithAvatars = playerStats.map((row) => ({
@@ -832,7 +897,7 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsByI
           String(game.homeLeagueTeamId) === String(leagueTeamId)
             ? String(game.awayLeagueTeamId)
             : String(game.homeLeagueTeamId);
-        return teamsById.get(opponentTeamId)?.logo?.url || null;
+        return transformCloudinaryUrl(teamsById.get(opponentTeamId)?.logo?.url || null);
       })(),
       opponentDestination: {
         kind: 'game',
@@ -951,7 +1016,7 @@ async function getPublicLeaguePlayerBySlug(
   leaguePlayerId,
   viewerUserId = null
 ) {
-  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true, viewerUserId });
   const team = await findLeagueTeamByLeagueAndSlug(league._id, teamSlug);
   if (!team) {
     throw new ApiError(404, 'League team not found');
@@ -1013,6 +1078,8 @@ async function updateLeagueTeamForLeague(userId, leagueId, leagueTeamId, payload
   }
 
   await saveLeagueTeam(team);
+  // OPT-010: team rename changes the teamName in standings rows.
+  scheduleLeagueAggregateRecompute(leagueId);
   return sanitizeLeagueTeam(team);
 }
 
@@ -1025,6 +1092,8 @@ async function archiveLeagueTeamForLeague(userId, leagueId, leagueTeamId) {
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
   team.status = 'archived';
   await saveLeagueTeam(team);
+  // OPT-010: archiving changes the standings row set.
+  scheduleLeagueAggregateRecompute(leagueId);
   return sanitizeLeagueTeam(team);
 }
 
@@ -1467,88 +1536,14 @@ async function unclaimLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerI
   return sanitizeLeaguePlayer(player);
 }
 
+// OPT-006: delegate to the shared player-line accumulator. League player rows
+// do not carry a leaguePlayerId field, so it is omitted.
 function emptyStats(playerId, displayName) {
-  return {
-    playerId,
-    displayName,
-    ftm: 0,
-    fta: 0,
-    fg2m: 0,
-    fg2a: 0,
-    fg3m: 0,
-    fg3a: 0,
-    ast: 0,
-    oreb: 0,
-    dreb: 0,
-    stl: 0,
-    blk: 0,
-    tov: 0,
-    foul: 0,
-    reb: 0,
-    points: 0,
-  };
+  return createEmptyPlayerStatLine(playerId, displayName);
 }
 
 function applyEventToLine(line, statType) {
-  if (statType === 'FT_MADE') {
-    line.ftm += 1;
-    line.fta += 1;
-    line.points += 1;
-    return;
-  }
-  if (statType === 'FT_MISS') {
-    line.fta += 1;
-    return;
-  }
-  if (statType === 'FG2_MADE') {
-    line.fg2m += 1;
-    line.fg2a += 1;
-    line.points += 2;
-    return;
-  }
-  if (statType === 'FG2_MISS') {
-    line.fg2a += 1;
-    return;
-  }
-  if (statType === 'FG3_MADE') {
-    line.fg3m += 1;
-    line.fg3a += 1;
-    line.points += 3;
-    return;
-  }
-  if (statType === 'FG3_MISS') {
-    line.fg3a += 1;
-    return;
-  }
-  if (statType === 'AST') {
-    line.ast += 1;
-    return;
-  }
-  if (statType === 'OREB') {
-    line.oreb += 1;
-    line.reb += 1;
-    return;
-  }
-  if (statType === 'DREB') {
-    line.dreb += 1;
-    line.reb += 1;
-    return;
-  }
-  if (statType === 'STL') {
-    line.stl += 1;
-    return;
-  }
-  if (statType === 'BLK') {
-    line.blk += 1;
-    return;
-  }
-  if (statType === 'TOV') {
-    line.tov += 1;
-    return;
-  }
-  if (statType === 'FOUL') {
-    line.foul += 1;
-  }
+  applyEventToPlayerStatLine(line, statType);
 }
 
 function getLeagueGameTeamSide(game, leagueTeamId) {
@@ -1563,6 +1558,12 @@ function getLeagueGameTeamSide(game, leagueTeamId) {
 
 function getLeagueGameScore(game) {
   if (game.trackingMode === 'dual_team') {
+    // OPT-008: fast path — use the frozen finalScore when present (completed
+    // games). For dual_team, finalScore's {home, away} maps directly to the
+    // league home/away sides. Falls back to compute for legacy/in-progress games.
+    if (game.finalScore && (game.finalScore.home != null || game.finalScore.away != null)) {
+      return { homePoints: game.finalScore.home, awayPoints: game.finalScore.away };
+    }
     const summary = summarizeEventsBySide(game.events || []);
     return {
       homePoints: summary[TEAM_SIDES.HOME].points,
@@ -1570,7 +1571,6 @@ function getLeagueGameScore(game) {
     };
   }
 
-  const trackedSummary = summarizeEvents(game.events || []);
   const trackedTeamId = game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null;
   const homeTeamId = game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null;
 
@@ -1578,17 +1578,26 @@ function getLeagueGameScore(game) {
     return { homePoints: 0, awayPoints: 0 };
   }
 
-  if (trackedTeamId === homeTeamId) {
-    return {
-      homePoints: trackedSummary.points,
-      awayPoints: trackedSummary.opponentPoints || 0,
-    };
+  // OPT-008: fast path — the frozen finalScore stores {home: tracked-team points,
+  // away: opponent points} (games.service computeGameFinalScore maps tracked→home).
+  // Re-map onto the league's home/away sides using the tracked-team identity.
+  // Falls back to compute for legacy/in-progress games with no finalScore.
+  let trackedPoints;
+  let opponentPoints;
+  if (game.finalScore && (game.finalScore.home != null || game.finalScore.away != null)) {
+    trackedPoints = game.finalScore.home;
+    opponentPoints = game.finalScore.away;
+  } else {
+    const trackedSummary = summarizeEvents(game.events || []);
+    trackedPoints = trackedSummary.points;
+    opponentPoints = trackedSummary.opponentPoints || 0;
   }
 
-  return {
-    homePoints: trackedSummary.opponentPoints || 0,
-    awayPoints: trackedSummary.points,
-  };
+  if (trackedTeamId === homeTeamId) {
+    return { homePoints: trackedPoints, awayPoints: opponentPoints };
+  }
+
+  return { homePoints: opponentPoints, awayPoints: trackedPoints };
 }
 
 function getLeagueGameSnapshotForTeam(game, leagueTeamId) {
@@ -1635,8 +1644,12 @@ function createLeagueGameRow(game, teamsById) {
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
     homeTeamName: teamsById.get(String(game.homeLeagueTeamId))?.name || null,
     awayTeamName: teamsById.get(String(game.awayLeagueTeamId))?.name || null,
-    homeTeamLogoUrl: teamsById.get(String(game.homeLeagueTeamId))?.logo?.url || null,
-    awayTeamLogoUrl: teamsById.get(String(game.awayLeagueTeamId))?.logo?.url || null,
+    homeTeamLogoUrl: transformCloudinaryUrl(
+      teamsById.get(String(game.homeLeagueTeamId))?.logo?.url || null
+    ),
+    awayTeamLogoUrl: transformCloudinaryUrl(
+      teamsById.get(String(game.awayLeagueTeamId))?.logo?.url || null
+    ),
     homePoints: isCompleted ? score.homePoints : null,
     awayPoints: isCompleted ? score.awayPoints : null,
     teamPoints: isCompleted ? score.homePoints : null,
@@ -1702,18 +1715,32 @@ function buildLeagueTeamPlayerStats(games, leagueTeamId, currentPlayers = []) {
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-async function listLeagueGames(leagueId) {
-  const games = await listLeagueGamesByLeagueId(leagueId);
-  const teams = await listLeagueTeams(leagueId);
+// OPT-005: accepts optional pre-fetched teams/games so callers that already
+// loaded them (league detail compositions) don't re-query. Falls back to
+// loading when not provided — behaviour is identical either way.
+async function listLeagueGames(
+  leagueId,
+  // publicOnly is accepted but intentionally unused (see OPT-024) — kept in the
+  // signature so existing callers behave exactly as before.
+  { teams: prefetchedTeams, games: prefetchedGames } = {}
+) {
+  const games = prefetchedGames ?? (await listLeagueGamesByLeagueId(leagueId));
+  const teams = prefetchedTeams ?? (await listLeagueTeams(leagueId));
   const byId = new Map(teams.map((team) => [String(team._id), team]));
 
   return games.map((game) => createLeagueGameRow(game, byId));
 }
 
-async function getLeagueStandings(leagueId) {
+// OPT-010: the pure LIVE standings compute (the source of truth). Renamed from
+// getLeagueStandings; the public getLeagueStandings is now a materialised read
+// that falls back to this. OPT-005: same pre-fetch escape hatch as listLeagueGames.
+async function computeLeagueStandings(
+  leagueId,
+  { teams: prefetchedTeams, games: prefetchedGames } = {}
+) {
   const [teams, games] = await Promise.all([
-    listLeagueTeams(leagueId),
-    listLeagueGamesByLeagueId(leagueId),
+    prefetchedTeams ?? listLeagueTeams(leagueId),
+    prefetchedGames ?? listLeagueGamesByLeagueId(leagueId),
   ]);
   const rows = new Map(
     teams.map((team) => [
@@ -1724,6 +1751,9 @@ async function getLeagueStandings(leagueId) {
         gamesPlayed: 0,
         wins: 0,
         losses: 0,
+        // OPT-024: retained only to describe legacy/pre-guard tied games
+        // honestly in `record` — new games can never tie (see the loop below).
+        ties: 0,
         winPct: 0,
         pointsFor: 0,
         pointsAgainst: 0,
@@ -1760,18 +1790,26 @@ async function getLeagueStandings(leagueId) {
     awayRow.pointsAgainst += homePoints;
     awayRow.pointDiff = awayRow.pointsFor - awayRow.pointsAgainst;
 
-    if (homePoints >= awayPoints) {
+    // OPT-024: league games can't end tied — games.service.js's
+    // assertLeagueScoreNotTied rejects a tie at finalize/edit time before it
+    // ever reaches a completed game. This branch only exists to handle
+    // legacy/pre-guard data honestly (tie recorded as a tie, not a phantom
+    // home win) rather than assuming it can never happen.
+    if (homePoints > awayPoints) {
       homeRow.wins += 1;
       awayRow.losses += 1;
-    } else {
+    } else if (awayPoints > homePoints) {
       homeRow.losses += 1;
       awayRow.wins += 1;
+    } else {
+      homeRow.ties += 1;
+      awayRow.ties += 1;
     }
   }
 
   for (const row of rows.values()) {
     row.winPct = row.gamesPlayed > 0 ? row.wins / row.gamesPlayed : 0;
-    row.record = `${row.wins}-${row.losses}`;
+    row.record = `${row.wins}-${row.losses}${row.ties ? `-${row.ties}` : ''}`;
   }
 
   return Array.from(rows.values()).sort((a, b) => {
@@ -1781,6 +1819,226 @@ async function getLeagueStandings(leagueId) {
     if (b.pointDiff !== a.pointDiff) return b.pointDiff - a.pointDiff;
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
     return a.teamName.localeCompare(b.teamName);
+  });
+}
+
+// OPT-010: materialised standings read. Serves the pre-computed rows from
+// `leaguestandings`; on a miss (new league, never-recomputed, or after a manual
+// wipe) it computes live, persists, and returns — self-backfilling and fully
+// reversible (deleting the collection just makes every read compute-on-miss).
+// When the caller passes pre-fetched teams/games (league-detail compositions) we
+// skip the materialised read and compute directly from that in-hand data, since
+// it's already loaded and avoids any staleness within a single request.
+async function getLeagueStandings(leagueId, prefetch = {}) {
+  if (prefetch.teams || prefetch.games) {
+    return computeLeagueStandings(leagueId, prefetch);
+  }
+
+  const materialised = await findLeagueStandings(leagueId);
+  if (materialised && Array.isArray(materialised.rows)) {
+    return materialised.rows;
+  }
+
+  const rows = await computeLeagueStandings(leagueId);
+  try {
+    await upsertLeagueStandings(leagueId, rows);
+  } catch (error) {
+    // Persisting the backfill is best-effort — the computed rows are still
+    // correct to return even if the write races/fails.
+    logger.warn({ err: error, leagueId: String(leagueId) }, 'Standings backfill persist failed');
+  }
+  return rows;
+}
+
+// OPT-011: pure live compute for per-player RAW totals across every team in the
+// league (gamesCount + the OPT-006 player-stat-line fields). This is the single
+// source of truth both the materialised write path AND any live fallback use.
+// Deliberately returns raw totals only — ppg/fantasy/DPOY scores are derived at
+// read time (see deriveLeaguePlayerScores) so tuning those formulas never
+// requires a recompute.
+async function computeLeaguePlayerStats(
+  leagueId,
+  { teams: prefetchedTeams, games: prefetchedGames } = {}
+) {
+  const [teams, games] = await Promise.all([
+    prefetchedTeams ?? listLeagueTeams(leagueId),
+    prefetchedGames ?? listLeagueGamesByLeagueId(leagueId),
+  ]);
+  const completedGames = games.filter((g) => g.status === 'completed');
+
+  const rowsByKey = new Map();
+
+  for (const team of teams) {
+    const leagueTeamId = String(team._id);
+
+    for (const game of completedGames) {
+      const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
+      if (!rosterSnapshot.length) continue;
+
+      for (const snapshotPlayer of rosterSnapshot) {
+        const leaguePlayerId = String(snapshotPlayer.leaguePlayerId || snapshotPlayer._id);
+        const key = `${leagueTeamId}:${leaguePlayerId}`;
+        if (!rowsByKey.has(key)) {
+          rowsByKey.set(key, {
+            leagueTeamId,
+            leaguePlayerId,
+            ...createEmptyPlayerStatLine(leaguePlayerId, snapshotPlayer.displayName),
+            gamesCount: 0,
+          });
+        }
+        rowsByKey.get(key).gamesCount += 1;
+      }
+
+      for (const event of game.events || []) {
+        if (!event.playerId || !eventFilter(event)) continue;
+        const snapshotPlayer = rosterSnapshot.find((p) => String(p._id) === String(event.playerId));
+        if (!snapshotPlayer) continue;
+        const leaguePlayerId = String(snapshotPlayer.leaguePlayerId || event.playerId);
+        const key = `${leagueTeamId}:${leaguePlayerId}`;
+        const row = rowsByKey.get(key);
+        if (row) {
+          applyEventToPlayerStatLine(row, event.statType);
+        }
+      }
+    }
+  }
+
+  return Array.from(rowsByKey.values()).filter((row) => row.gamesCount > 0);
+}
+
+// OPT-011: derive the tunable, weight-dependent scores (ppg/fantasy/DPOY etc.)
+// from a raw materialised (or live-computed) row. Kept separate from the
+// persisted data on purpose — changing these formulas needs no recompute.
+function deriveLeaguePlayerScores(row) {
+  const { gamesCount, ...stats } = row;
+  const ppg = stats.points / gamesCount;
+  const rpg = stats.reb / gamesCount;
+  const apg = stats.ast / gamesCount;
+  const spg = stats.stl / gamesCount;
+  const bpg = (stats.blk || 0) / gamesCount;
+  const topg = stats.tov / gamesCount;
+  const fgMade = (stats.fg2m || 0) + (stats.fg3m || 0);
+  const fgAttempted = (stats.fg2a || 0) + (stats.fg3a || 0);
+  const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 2 + bpg * 2 + topg * -1;
+  const defensiveScore = rpg * 1.2 + spg * 3 + bpg * 3 + topg * -1;
+
+  return {
+    ppg,
+    rpg,
+    apg,
+    spg,
+    bpg,
+    topg,
+    fgMade,
+    fgAttempted,
+    fgPercentage: fgAttempted > 0 ? fgMade / fgAttempted : null,
+    fantasyScore,
+    defensiveScore,
+  };
+}
+
+// OPT-011: materialised league-WIDE player stats read (all teams — used by
+// leaders/DPOY, the O(T×G×E×R) unauthenticated hot path the roadmap flagged).
+// getPublicLeagueTeamBySlug's team-scoped stats intentionally stay on live
+// compute (buildLeagueTeamPlayerStats) — it's already scoped to one team's
+// games (cheap) and includes zero-game roster players, a shape materialising
+// here would either drop or require a roster-change recompute trigger for.
+async function getLeaguePlayerStats(leagueId, prefetch = {}) {
+  if (prefetch.teams || prefetch.games) {
+    return computeLeaguePlayerStats(leagueId, prefetch);
+  }
+
+  const materialised = await listLeaguePlayerStats(leagueId);
+  if (materialised.length > 0) {
+    return materialised;
+  }
+
+  const rows = await computeLeaguePlayerStats(leagueId);
+  if (rows.length > 0) {
+    try {
+      await replaceLeaguePlayerStats(leagueId, rows);
+    } catch (error) {
+      logger.warn(
+        { err: error, leagueId: String(leagueId) },
+        'Player stats backfill persist failed'
+      );
+    }
+  }
+  return rows;
+}
+
+// OPT-010: recompute + persist all materialised league aggregates. Today that is
+// standings; OPT-011 will extend this to player stats. Reuses the live compute
+// (which reuses OPT-006's shared accumulator) so materialised == live by
+// construction. Guarded by a per-league in-flight map so overlapping triggers
+// (e.g. finish + immediate edit) coalesce instead of racing.
+const recomputeInFlight = new Map();
+
+async function recomputeLeagueAggregates(leagueId) {
+  const key = String(leagueId);
+  const inFlight = recomputeInFlight.get(key);
+  if (inFlight) {
+    // A recompute is mid-flight and read its data BEFORE the write that
+    // triggered this call — coalescing alone would drop that write. Mark the
+    // entry dirty so one follow-up pass runs when the current one finishes
+    // (verification fix, 2026-07-06).
+    inFlight.dirty = true;
+    return inFlight.promise;
+  }
+
+  const entry = { dirty: false };
+  entry.promise = (async () => {
+    // OPT-011: fetch teams/games once, reuse for both standings and player
+    // stats — avoids doubling the DB reads this recompute pass needs.
+    const [teams, games] = await Promise.all([
+      listLeagueTeams(leagueId),
+      listLeagueGamesByLeagueId(leagueId),
+    ]);
+    const prefetch = { teams, games };
+
+    const [standingsRows, playerStatsRows] = await Promise.all([
+      computeLeagueStandings(leagueId, prefetch),
+      computeLeaguePlayerStats(leagueId, prefetch),
+    ]);
+
+    await Promise.all([
+      upsertLeagueStandings(leagueId, standingsRows),
+      replaceLeaguePlayerStats(leagueId, playerStatsRows),
+    ]);
+
+    return { standingsRows, playerStatsRows };
+  })();
+
+  recomputeInFlight.set(key, entry);
+  try {
+    const result = await entry.promise;
+    return result.standingsRows;
+  } finally {
+    recomputeInFlight.delete(key);
+    if (entry.dirty) {
+      // Re-run once to pick up writes that landed mid-flight.
+      recomputeLeagueAggregates(leagueId).catch((error) => {
+        logger.error(
+          { err: error, leagueId: String(leagueId) },
+          'Dirty-flag league aggregate recompute failed'
+        );
+      });
+    }
+  }
+}
+
+// OPT-010: fire a recompute AFTER the response, never blocking the request that
+// triggered it. Failures are logged, not thrown (the live-compute fallback keeps
+// reads correct even if a recompute is missed).
+function scheduleLeagueAggregateRecompute(leagueId) {
+  if (!leagueId) return;
+  setImmediate(() => {
+    recomputeLeagueAggregates(leagueId).catch((error) => {
+      logger.error(
+        { err: error, leagueId: String(leagueId) },
+        'Post-response league aggregate recompute failed'
+      );
+    });
   });
 }
 
@@ -1978,11 +2236,13 @@ async function canEditCompletedLeagueGame(userId, game) {
   return managerChecks.some(Boolean);
 }
 
-async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
-  const league = await assertLeagueVisible(leagueSlug, { bySlug: true });
-  const [teams, games] = await Promise.all([
+async function getPublicLeagueLeaders(leagueSlug, limit = 10, viewerUserId = null) {
+  const league = await assertLeagueVisible(leagueSlug, { bySlug: true, viewerUserId });
+  // OPT-011: raw per-player totals come from the materialised read (indexed
+  // find, self-backfilling) instead of replaying every team's games/events.
+  const [teams, playerStatRows] = await Promise.all([
     listLeagueTeams(league._id),
-    listLeagueGamesByLeagueId(league._id),
+    getLeaguePlayerStats(league._id),
   ]);
   const allPlayers = (
     await Promise.all(teams.map((team) => listLeaguePlayers(team._id).catch(() => [])))
@@ -1996,89 +2256,38 @@ async function getPublicLeagueLeaders(leagueSlug, limit = 10) {
         jerseyNumber: player.jerseyNumber ?? null,
         position: player.position ?? null,
         avatarUrl: player.claimedByUserId
-          ? usersById.get(String(player.claimedByUserId))?.avatar?.url || null
+          ? transformCloudinaryUrl(
+              usersById.get(String(player.claimedByUserId))?.avatar?.url || null
+            )
           : null,
       },
     ])
   );
-
   const teamsById = new Map(teams.map((t) => [String(t._id), t]));
-  const playerMap = new Map();
 
-  const completedGames = games.filter((g) => g.status === 'completed');
-
-  for (const team of teams) {
-    const teamId = String(team._id);
-
-    for (const game of completedGames) {
-      const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
-      if (!rosterSnapshot.length) continue;
-
-      for (const snapshotPlayer of rosterSnapshot) {
-        const key = String(snapshotPlayer.leaguePlayerId || snapshotPlayer._id);
-        if (!playerMap.has(key)) {
-          playerMap.set(key, {
-            leaguePlayerId: key,
-            displayName: snapshotPlayer.displayName,
-            teamId,
-            gamesCount: 0,
-            stats: emptyStats(key, snapshotPlayer.displayName),
-          });
-        }
-        playerMap.get(key).gamesCount += 1;
-      }
-
-      for (const event of game.events || []) {
-        if (!event.playerId || !eventFilter(event)) continue;
-        const snapshotPlayer = rosterSnapshot.find((p) => String(p._id) === String(event.playerId));
-        if (!snapshotPlayer) continue;
-        const key = String(snapshotPlayer.leaguePlayerId || event.playerId);
-        if (playerMap.has(key)) {
-          applyEventToLine(playerMap.get(key).stats, event.statType);
-        }
-      }
-    }
-  }
-
-  const allLeaders = Array.from(playerMap.values())
-    .filter((entry) => entry.gamesCount > 0)
-    .map((entry) => {
-      const { stats, gamesCount } = entry;
-      const ppg = stats.points / gamesCount;
-      const rpg = stats.reb / gamesCount;
-      const apg = stats.ast / gamesCount;
-      const spg = stats.stl / gamesCount;
-      const bpg = (stats.blk || 0) / gamesCount;
-      const topg = stats.tov / gamesCount;
-      const fgMade = (stats.fg2m || 0) + (stats.fg3m || 0);
-      const fgAttempted = (stats.fg2a || 0) + (stats.fg3a || 0);
-      const fantasyScore = ppg * 1 + rpg * 1.2 + apg * 1.5 + spg * 2 + bpg * 2 + topg * -1;
-      const defensiveScore = rpg * 1.2 + spg * 3 + bpg * 3 + topg * -1;
-      const team = teamsById.get(entry.teamId);
-      const currentPlayer = currentPlayersById.get(entry.leaguePlayerId);
-      return {
-        leaguePlayerId: entry.leaguePlayerId,
-        displayName: currentPlayer?.displayName || entry.displayName,
-        jerseyNumber: currentPlayer?.jerseyNumber ?? null,
-        position: currentPlayer?.position ?? null,
-        avatarUrl: currentPlayer?.avatarUrl || null,
-        teamName: team?.name || null,
-        teamSlug: team?.slug || null,
-        teamLogoUrl: team?.logo?.url || null,
-        gamesCount,
-        ppg,
-        rpg,
-        apg,
-        spg,
-        bpg,
-        topg,
-        fgMade,
-        fgAttempted,
-        fgPercentage: fgAttempted > 0 ? fgMade / fgAttempted : null,
-        fantasyScore,
-        defensiveScore,
-      };
-    });
+  const allLeaders = playerStatRows.map((row) => {
+    const scores = deriveLeaguePlayerScores(row);
+    // Materialised rows come back from Mongo (.lean()) with ObjectId ids while
+    // live-computed rows carry strings — normalise before the Map lookups, or
+    // teamName/jersey/avatar silently null out on the materialised path
+    // (verification bug found 2026-07-06).
+    const leagueTeamId = String(row.leagueTeamId);
+    const leaguePlayerId = String(row.leaguePlayerId);
+    const team = teamsById.get(leagueTeamId);
+    const currentPlayer = currentPlayersById.get(leaguePlayerId);
+    return {
+      leaguePlayerId,
+      displayName: currentPlayer?.displayName || row.displayName,
+      jerseyNumber: currentPlayer?.jerseyNumber ?? null,
+      position: currentPlayer?.position ?? null,
+      avatarUrl: currentPlayer?.avatarUrl || null,
+      teamName: team?.name || null,
+      teamSlug: team?.slug || null,
+      teamLogoUrl: transformCloudinaryUrl(team?.logo?.url || null),
+      gamesCount: row.gamesCount,
+      ...scores,
+    };
+  });
 
   const leaders = allLeaders.sort((a, b) => b.fantasyScore - a.fantasyScore).slice(0, limit);
   const dpoyLeaders = [...allLeaders]
@@ -2122,6 +2331,12 @@ module.exports = {
   unclaimLeaguePlayer,
   listLeagueGames,
   getLeagueStandings,
+  computeLeagueStandings,
+  computeLeaguePlayerStats,
+  deriveLeaguePlayerScores,
+  getLeaguePlayerStats,
+  recomputeLeagueAggregates,
+  scheduleLeagueAggregateRecompute,
   getLeagueContextForGame,
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,

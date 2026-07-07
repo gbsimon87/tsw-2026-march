@@ -11,10 +11,19 @@ const imageSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// OPT-017: `cardSnapshot` denormalises the card's display data (names, logos,
+// stats) at creation time, so hydrating a feed page doesn't need to re-run the
+// full public game/player/team pipeline per card. Mixed because the shape
+// mirrors whatever feed.service.js's resolve*CardPayload functions return
+// (minus fields the client never renders, e.g. gameCard.recap/participants) —
+// those functions stay the single source of truth. Null for pre-existing posts
+// and anything created before this snapshot existed; feed.service.js falls
+// back to the live resolve in that case (self-healing, reversible).
 const gameCardSchema = new mongoose.Schema(
   {
     gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, default: null },
+    cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }
 );
@@ -23,6 +32,7 @@ const playerCardSchema = new mongoose.Schema(
   {
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
     playerId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }
 );
@@ -30,6 +40,7 @@ const playerCardSchema = new mongoose.Schema(
 const teamCardSchema = new mongoose.Schema(
   {
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
+    cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }
 );
@@ -119,6 +130,12 @@ async function deletePostById(postId) {
   return Post.deleteOne({ _id: postId });
 }
 
+// OPT-017: find game_card posts referencing a game, so callers can refresh
+// their stale cardSnapshot after that game's score changes post-share.
+async function listGameCardPostsByGameId(gameId) {
+  return Post.find({ type: 'game_card', 'gameCard.gameId': gameId });
+}
+
 async function deletePostsByGameId(gameId) {
   return Post.deleteMany({
     $or: [
@@ -130,6 +147,12 @@ async function deletePostsByGameId(gameId) {
 
 async function findPostByHighlightEventId(eventId) {
   return Post.findOne({ type: 'highlight_clip', 'highlightClip.eventId': eventId });
+}
+
+// OPT-017: persist a resolved card snapshot back onto its post (self-backfill
+// or explicit refresh). cardField is one of 'gameCard'/'playerCard'/'teamCard'.
+async function updatePostCardSnapshot(postId, cardField, snapshot) {
+  return Post.updateOne({ _id: postId }, { $set: { [`${cardField}.cardSnapshot`]: snapshot } });
 }
 
 async function findSharedEventIds(eventIds) {
@@ -151,4 +174,6 @@ module.exports = {
   deletePostsByGameId,
   findPostByHighlightEventId,
   findSharedEventIds,
+  updatePostCardSnapshot,
+  listGameCardPostsByGameId,
 };

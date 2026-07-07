@@ -14,6 +14,7 @@ import {
 import { DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
 import gameConstants from '../constants';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const { STAT_LABELS, ZONE_LABELS, TEAM_SIDES } = gameConstants;
 
@@ -488,9 +489,16 @@ export function GameTrackPage() {
   const currentSideState = sideState[activeKey] || createEmptySideState();
   const team = data?.team || null;
   const teamId = data?.game?.teamId || null;
-  const lineupIds = isDualTeam
-    ? data?.lineups?.[activeSide]?.currentPlayerIds || []
-    : data?.game?.currentLineupPlayerIds || [];
+  // OPT-016: memoised — `|| []` was a fresh array every render whenever the
+  // lineup was empty, which alone defeated the onCourtPlayers/benchPlayers
+  // memoisation below (their deps never looked equal).
+  const lineupIds = useMemo(
+    () =>
+      isDualTeam
+        ? data?.lineups?.[activeSide]?.currentPlayerIds || []
+        : data?.game?.currentLineupPlayerIds || [],
+    [isDualTeam, data, activeSide]
+  );
   const players = useMemo(() => {
     if (isDualTeam) {
       return participantsBySide[activeSide]?.players || [];
@@ -513,8 +521,17 @@ export function GameTrackPage() {
     }
     return new Map(entries);
   }, [isDualTeam, participantsBySide, team]);
-  const onCourtPlayers = lineupIds.map((id) => playersById.get(id)).filter(Boolean);
-  const benchPlayers = players.filter((player) => !lineupIds.includes(player.id));
+  // OPT-016: memoised — these were recreated on every render (even ones that
+  // touch unrelated state like the shot picker or follow-up prompts), forcing
+  // every consumer to re-render and recompute derived data off a "new" array.
+  const onCourtPlayers = useMemo(
+    () => lineupIds.map((id) => playersById.get(id)).filter(Boolean),
+    [lineupIds, playersById]
+  );
+  const benchPlayers = useMemo(
+    () => players.filter((player) => !lineupIds.includes(player.id)),
+    [players, lineupIds]
+  );
   const otherSide = activeSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME;
   const playerSideMap = useMemo(() => {
     if (!isDualTeam) return new Map();
@@ -1487,9 +1504,15 @@ export function GameTrackPage() {
                         }`}
                       >
                         {logoUrl ? (
-                          <img
+                          <CloudinaryImage
                             src={logoUrl}
                             alt=""
+                            width={24}
+                            height={24}
+                            loading="lazy"
+                            decoding="async"
+                            srcSetWidths={[24, 48, 72]}
+                            sizes="24px"
                             className={`h-6 w-6 shrink-0 rounded-full object-cover ${isActive ? 'ring-2 ring-white/50' : 'border border-slate-200'}`}
                           />
                         ) : (
@@ -1819,9 +1842,15 @@ export function GameTrackPage() {
               >
                 {side === TEAM_SIDES.HOME ? (
                   <>
-                    <img
+                    <CloudinaryImage
                       src={participantsBySide.home?.logo?.url || teamPlaceholder}
                       alt={participantsBySide.home?.displayName || 'Home'}
+                      width={36}
+                      height={36}
+                      loading="lazy"
+                      decoding="async"
+                      srcSetWidths={[36, 72, 108]}
+                      sizes="36px"
                       className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
                     <div className="text-left">
@@ -1843,9 +1872,15 @@ export function GameTrackPage() {
                       </p>
                       <p className="text-3xl font-bold tabular-nums">{points || 0}</p>
                     </div>
-                    <img
+                    <CloudinaryImage
                       src={participantsBySide.away?.logo?.url || teamPlaceholder}
                       alt={participantsBySide.away?.displayName || 'Away'}
+                      width={36}
+                      height={36}
+                      loading="lazy"
+                      decoding="async"
+                      srcSetWidths={[36, 72, 108]}
+                      sizes="36px"
                       className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
                   </>
@@ -1864,9 +1899,15 @@ export function GameTrackPage() {
           <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
             <div className="flex items-end gap-4">
               <div className="flex items-center gap-2">
-                <img
+                <CloudinaryImage
                   src={team?.logo?.url || teamPlaceholder}
                   alt={team?.name || 'Team'}
+                  width={32}
+                  height={32}
+                  loading="lazy"
+                  decoding="async"
+                  srcSetWidths={[32, 64, 96]}
+                  sizes="32px"
                   className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                 />
                 <div>
@@ -2193,9 +2234,15 @@ export function GameTrackPage() {
                               return (
                                 <div className="flex min-w-0 items-center gap-2">
                                   {lastLogoUrl ? (
-                                    <img
+                                    <CloudinaryImage
                                       src={lastLogoUrl}
                                       alt=""
+                                      width={24}
+                                      height={24}
+                                      loading="lazy"
+                                      decoding="async"
+                                      srcSetWidths={[24, 48, 72]}
+                                      sizes="24px"
                                       className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                                     />
                                   ) : null}
@@ -2498,9 +2545,15 @@ export function GameTrackPage() {
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-start gap-2">
                                   {eventLogoUrl ? (
-                                    <img
+                                    <CloudinaryImage
                                       src={eventLogoUrl}
                                       alt=""
+                                      width={24}
+                                      height={24}
+                                      loading="lazy"
+                                      decoding="async"
+                                      srcSetWidths={[24, 48, 72]}
+                                      sizes="24px"
                                       className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                                     />
                                   ) : null}

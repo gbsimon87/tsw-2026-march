@@ -83,6 +83,14 @@ async function findUserById(id) {
   return User.findById(id);
 }
 
+// OPT-017: batch creator lookup for feed hydration (was N sequential
+// findUserById calls, one per post).
+async function findUsersByIds(ids) {
+  const uniqueIds = [...new Set((ids || []).filter(Boolean).map(String))];
+  if (uniqueIds.length === 0) return [];
+  return User.find({ _id: { $in: uniqueIds } });
+}
+
 async function findOrCreateGoogleUser({ googleId, email, name }) {
   let user = await User.findOne({ googleId });
   if (user) {
@@ -197,6 +205,7 @@ module.exports = {
   createUser,
   findUserByEmail,
   findUserById,
+  findUsersByIds,
   findOrCreateGoogleUser,
   upsertSession,
   findSessionById,

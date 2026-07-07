@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PostHogRouteTracker } from './PostHogRouteTracker';
 
 const posthogLibMocks = vi.hoisted(() => ({
+  initPostHog: vi.fn(),
   capturePostHogPageView: vi.fn(),
+  capturePostHogPageLeave: vi.fn(),
   identifyPostHogUser: vi.fn(),
   resetPostHogUser: vi.fn(),
 }));

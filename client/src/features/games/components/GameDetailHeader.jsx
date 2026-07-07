@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 function formatDateTime(value) {
   if (!value) {
@@ -117,9 +118,15 @@ export function GameDetailHeader({
             },
           ].map((side) => (
             <div key={side.side} className="flex items-center gap-3">
-              <img
+              <CloudinaryImage
                 src={side.logo}
                 alt={`${side.name} logo`}
+                width={40}
+                height={40}
+                loading="lazy"
+                decoding="async"
+                srcSetWidths={[40, 80, 160]}
+                sizes="40px"
                 className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
               />
               <span

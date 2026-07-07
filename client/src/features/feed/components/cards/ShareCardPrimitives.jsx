@@ -1,3 +1,5 @@
+import CloudinaryImage from '../../../media/CloudinaryImage';
+
 function clampStyle(lines) {
   return {
     display: '-webkit-box',
@@ -126,7 +128,15 @@ export function ShareCardLogoBadge({
       <div
         className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/12 bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] ${className}`}
       >
-        <img src={src} alt={alt} className="h-full w-full object-cover" />
+        <CloudinaryImage
+          src={src}
+          alt={alt}
+          width={80}
+          height={80}
+          className="h-full w-full object-cover"
+          srcSetWidths={[80, 160, 240]}
+          sizes="80px"
+        />
       </div>
     );
   }

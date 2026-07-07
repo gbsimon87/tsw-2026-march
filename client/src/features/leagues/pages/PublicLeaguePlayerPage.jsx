@@ -10,6 +10,7 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { extractYouTubeVideoId } from '../../games/youtube';
 import { feedApi } from '../../feed/api/feedApi';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const HIGHLIGHT_LABELS = {
   FG2_MADE: '2PT Make',
@@ -223,9 +224,15 @@ export function PublicLeaguePlayerPage() {
           to={row.opponentHref}
           className="inline-flex items-center gap-2 font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
         >
-          <img
+          <CloudinaryImage
             src={row.opponentLogoUrl || teamPlaceholder}
             alt=""
+            width={24}
+            height={24}
+            loading="lazy"
+            decoding="async"
+            srcSetWidths={[24, 48, 72]}
+            sizes="24px"
             className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
           />
           <span>{row.opponent}</span>
@@ -264,9 +271,15 @@ export function PublicLeaguePlayerPage() {
       >
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-start">
-            <img
+            <CloudinaryImage
               src={player.avatarUrl || playerPlaceholder}
               alt=""
+              width={80}
+              height={80}
+              loading="eager"
+              decoding="async"
+              srcSetWidths={[80, 160, 240]}
+              sizes="80px"
               className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover shadow-sm"
             />
             <div className="ml-auto grid grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-2 sm:ml-0">
@@ -341,9 +354,15 @@ export function PublicLeaguePlayerPage() {
                     to={`/league/${league.slug}`}
                     className="inline-flex items-center gap-2 transition hover:text-sky-900 hover:underline"
                   >
-                    <img
+                    <CloudinaryImage
                       src={getLeagueHeaderImage(league)}
                       alt=""
+                      width={20}
+                      height={20}
+                      loading="lazy"
+                      decoding="async"
+                      srcSetWidths={[20, 40, 60]}
+                      sizes="20px"
                       className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
                     <span>{league.name}</span>
@@ -357,9 +376,15 @@ export function PublicLeaguePlayerPage() {
                     to={`/league/${league.slug}/teams/${team.slug}`}
                     className="inline-flex items-center gap-2 transition hover:text-sky-900 hover:underline"
                   >
-                    <img
+                    <CloudinaryImage
                       src={team.logo?.url || teamPlaceholder}
                       alt=""
+                      width={20}
+                      height={20}
+                      loading="lazy"
+                      decoding="async"
+                      srcSetWidths={[20, 40, 60]}
+                      sizes="20px"
                       className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                     />
                     <span>{team.name}</span>

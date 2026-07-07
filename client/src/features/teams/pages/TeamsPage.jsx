@@ -1,24 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { teamsApi } from '../api/teamsApi';
 
 export function TeamsPage() {
-  const [teams, setTeams] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  // OPT-014b: migrated from useEffect+useState to React Query. Summary counts
+  // (teams.length, hiddenTeamsCount, active-player totals) still derive from the
+  // full list — unchanged; this page is not paginated (see OPT-018 client note).
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['teams'],
+    queryFn: () => teamsApi.list(),
+  });
+
+  const teams = data?.teams || [];
+  const error = isError ? queryError?.message || 'Failed to load teams' : '';
 
   const visibleTeams = teams.slice(0, 6);
   const hiddenTeamsCount = Math.max(teams.length - visibleTeams.length, 0);
-
-  useEffect(() => {
-    teamsApi
-      .list()
-      .then((response) => setTeams(response.teams || []))
-      .catch((loadError) => setError(loadError.message || 'Failed to load teams'))
-      .finally(() => setIsLoading(false));
-  }, []);
 
   return (
     <main className="space-y-8">
@@ -137,9 +142,15 @@ export function TeamsPage() {
                 className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2"
               >
                 <div className="flex items-center gap-3">
-                  <img
+                  <CloudinaryImage
                     src={team.logo?.url || placeholderLogo}
                     alt={`${team.name || 'Team'} logo`}
+                    width={48}
+                    height={48}
+                    loading="lazy"
+                    decoding="async"
+                    srcSetWidths={[48, 96, 144]}
+                    sizes="48px"
                     className="h-12 w-12 rounded-full border border-slate-200 bg-white object-cover"
                   />
                   <div>

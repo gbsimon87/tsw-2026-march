@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
@@ -6,23 +6,29 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { usePublicLeague } from '../hooks/usePublicLeague';
 
 export function PublicLeagueGamesPage() {
   const { leagueSlug } = useParams();
-  const [league, setLeague] = useState(null);
-  const [games, setGames] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const {
+    data: league,
+    isLoading: isLeagueLoading,
+    isError: isLeagueError,
+  } = usePublicLeague(leagueSlug);
+  const {
+    data: gamesData,
+    isLoading: isGamesLoading,
+    isError: isGamesError,
+  } = useQuery({
+    queryKey: ['publicLeagueGames', leagueSlug],
+    queryFn: () => leaguesApi.getPublicGames(leagueSlug),
+    enabled: Boolean(leagueSlug),
+  });
 
-  useEffect(() => {
-    Promise.all([leaguesApi.getPublicBySlug(leagueSlug), leaguesApi.getPublicGames(leagueSlug)])
-      .then(([leagueResponse, gamesResponse]) => {
-        setLeague(leagueResponse.league);
-        setGames(gamesResponse.games || []);
-      })
-      .catch((loadError) => setError(loadError.message || 'Failed to load games'))
-      .finally(() => setIsLoading(false));
-  }, [leagueSlug]);
+  const games = gamesData?.games || [];
+  const isLoading = isLeagueLoading || isGamesLoading;
+  const error = isLeagueError || isGamesError ? 'Failed to load games' : '';
 
   if (isLoading) {
     return <SportsLoader label="Loading league games" fullPage />;
@@ -46,9 +52,15 @@ export function PublicLeagueGamesPage() {
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} schedule and completed results.`}
         media={
-          <img
+          <CloudinaryImage
             src={getLeagueHeaderImage(league)}
             alt={`${league.name} logo`}
+            width={64}
+            height={64}
+            loading="eager"
+            decoding="async"
+            srcSetWidths={[64, 128, 192]}
+            sizes="64px"
             className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
           />
         }

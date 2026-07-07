@@ -10,6 +10,10 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().min(1),
   MONGO_URI: z.string().min(1),
   MONGO_DB_NAME: z.string().min(1).optional(),
+  // OPT-023: cap the Mongoose connection pool per instance. Default 10 matches
+  // the driver default; expose it so pool size can be tuned to the host without
+  // a code change.
+  MONGO_MAX_POOL_SIZE: z.coerce.number().int().positive().default(10),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   ACCESS_TOKEN_TTL: z.string().default('15m'),

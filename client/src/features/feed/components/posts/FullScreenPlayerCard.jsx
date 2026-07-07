@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatAverage, getFallbackPlayerImage, getPlayerFallbackState } from './cardUtils';
+import CloudinaryImage from '../../../media/CloudinaryImage';
 
 export function FullScreenPlayerCard({ playerCard }) {
   const [imageSrc, setImageSrc] = useState(
@@ -37,12 +38,16 @@ export function FullScreenPlayerCard({ playerCard }) {
       {/* Player image takes top 55% */}
       <div className="relative flex-1 overflow-hidden">
         {fallback.src ? (
-          <img
+          <CloudinaryImage
             src={fallback.src}
             alt={fallback.alt}
+            width={640}
+            height={640}
             className="h-full w-full object-cover object-top"
             onError={() => setImageSrc(getFallbackPlayerImage())}
             loading="lazy"
+            srcSetWidths={[320, 640, 1080]}
+            sizes="100vw"
           />
         ) : (
           <div

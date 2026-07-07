@@ -7,6 +7,7 @@ import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
+import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 // ── Shared primitives ────────────────────────────────────────────────
 
@@ -14,9 +15,15 @@ function TeamAvatar({ team, size = 'md' }) {
   const sizeClass = size === 'sm' ? 'h-7 w-7 text-xs' : 'h-10 w-10 text-sm';
   if (team?.logo?.url) {
     return (
-      <img
+      <CloudinaryImage
         src={team.logo.url}
         alt={team.name}
+        width={40}
+        height={40}
+        loading="lazy"
+        decoding="async"
+        srcSetWidths={[40, 80, 120]}
+        sizes="40px"
         className={`${sizeClass} shrink-0 rounded-full object-cover`}
       />
     );
