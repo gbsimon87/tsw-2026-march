@@ -34,11 +34,11 @@
 
 ## 📊 Status dashboard
 
-- **Overall status:** Investigation complete for all 5 issues. TSW-003 and
-  TSW-004 have confirmed, narrow root causes and are being implemented in the
-  same pass that created this tracker. TSW-002 is Ready. TSW-001 needs a
+- **Overall status:** `TSW-003` and `TSW-004` are done, tested, and committed
+  (2026-07-08). `TSW-002` is Ready (low-risk, next up). `TSW-001` needs a
   production-data investigation sub-step before its fix can be finalized.
-  TSW-005 is the largest task (Ready, ordered last).
+  `TSW-005` is the largest task (Ready, ordered last, soft-dep on `TSW-004`
+  now satisfied).
 - **Counts by status:**
 
 | Status          | Count                    |
@@ -46,15 +46,14 @@
 | Not Started     | 0                        |
 | Investigating   | 1 (`TSW-001`)            |
 | Ready           | 2 (`TSW-002`, `TSW-005`) |
-| In Progress     | 2 (`TSW-003`, `TSW-004`) |
+| In Progress     | 0                        |
 | Blocked         | 0                        |
 | Awaiting Review | 0                        |
-| Completed       | 0                        |
+| Completed       | 2 (`TSW-003`, `TSW-004`) |
 
-- **Recommended next task:** `TSW-003` and `TSW-004` are in progress in this
-  pass. After those ship, do `TSW-002` (low-risk, adjacent files), then
-  `TSW-001` (needs the prod-investigation sub-step first), then `TSW-005`
-  (largest, benefits from TSW-004 being done).
+- **Recommended next task:** `TSW-002` (low-risk, `GameRecapPanel.jsx` is
+  already fresh in context from `TSW-004`'s neighboring work). Then `TSW-001`
+  (needs the prod-investigation sub-step first), then `TSW-005` (largest).
 
 ---
 
@@ -74,9 +73,9 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 | ------- | ------------------------------------ | -------- | ---------- | ------ | ------------- | ------------------------------ |
 | TSW-001 | Share to Pulse failure in production | High     | M          | Medium | Investigating | none                           |
 | TSW-002 | Key Moments mobile scroll            | Medium   | S          | Low    | Ready         | none (sequenced after TSW-004) |
-| TSW-003 | Production nav title                 | Low      | XS         | Low    | In Progress   | none                           |
-| TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | In Progress   | none                           |
-| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready         | soft: TSW-004                  |
+| TSW-003 | Production nav title                 | Low      | XS         | Low    | ✅ Completed  | none                           |
+| TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | ✅ Completed  | none                           |
+| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready         | soft: TSW-004 (satisfied)      |
 
 ---
 
@@ -154,7 +153,7 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 
 ### TSW-003 — Production navigation title shows "tsw-2026-march"
 
-- **Priority:** Low · **Complexity:** XS · **Risk:** Low · **Status:** In Progress
+- **Priority:** Low · **Complexity:** XS · **Risk:** Low · **Status:** ✅ Completed (2026-07-08)
 - **Dependencies:** none
 - **Description:** Production displays the repo-name-shaped string
   "tsw-2026-march" as the app name in places driven by `VITE_APP_NAME`,
@@ -180,13 +179,20 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 - **Definition of Done:** the Zod default no longer resembles a repo/package
   name; production displays "TSW"/"The Sporty Way" wherever `VITE_APP_NAME`
   is consumed, regardless of whether the Render dashboard var is set.
-- **Completion notes:** —
+- **Completion notes (2026-07-08):** changed the Zod default in
+  `client/src/lib/env.js` from `'tsw-2026-march'` to `'The Sporty Way'`.
+  Committed `fbf11e7`. Lint clean; no test referenced the old default value.
+  **Remaining manual step (not code, tracked here so it isn't lost):**
+  whoever has Render dashboard access should still set `VITE_APP_NAME`
+  explicitly for the prod client service to close the actual configuration
+  gap — the code fix makes the failure mode harmless either way, but the
+  dashboard var being unset is still worth fixing at the source.
 
 ---
 
 ### TSW-004 — FullScreen components render wrong stats
 
-- **Priority:** High · **Complexity:** S · **Risk:** Low · **Status:** In Progress
+- **Priority:** High · **Complexity:** S · **Risk:** Low · **Status:** ✅ Completed (2026-07-08)
 - **Dependencies:** none
 - **Description:** Scores, averages, and statistics render incorrectly across
   the FullScreen\* feed components (FullScreenSlide, FullScreenTeamCard,
@@ -225,7 +231,32 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 - **Definition of Done:** shared game cards display real scores in both the
   feed and full-screen view; the duplicated derivation logic is consolidated;
   no regression in player/team card rendering.
-- **Completion notes:** —
+- **Completion notes (2026-07-08):** fixed at the root — `payload` passed
+  into `buildGameCardSnapshot()` is literally a `getPublicGame()` return
+  value, which already computes `recap`; the function just never copied it
+  into the snapshot it returns. One-line fix: `recap: payload.recap`.
+  **Also found and fixed a second, compounding bug while verifying the
+  first**: both consumer components detect dual-team mode via
+  `!!gameCard?.participants`, but the old snapshot never included
+  `participants` either — every cached dual-team (league) game card was
+  rendering with the wrong recap branch on top of the 0-0 bug. Added
+  `participants: isDualTeam ? payload.participants : null` alongside the
+  `recap` fix.
+  Extracted the duplicated home/away name+points+logo+winner derivation
+  (verbatim between `GameCardPost.jsx` and `FullScreenGameCard.jsx`) into a
+  shared `buildGameCardDisplay()` helper in `cardUtils.js` — both components
+  now consume it instead of re-deriving.
+  **Player/team card staleness sub-scope: deferred, not done this pass** —
+  confirmed as a separate, lower-severity design question in the
+  investigation; not pursued here to keep this fix narrow and low-risk. If
+  it needs doing, split into a follow-up task (see
+  [`02_ARCHITECTURE_NOTES.md`](./02_ARCHITECTURE_NOTES.md#card-snapshot-staleness-has-no-consistent-refresh-story)).
+  Exported `buildGameCardSnapshot` for direct testing; added 2 unit tests
+  (standalone + dual-team payload shapes) to `feed.service.test.js`. Full
+  server suite 33 suites/268 tests pass (was 33/266); full client suite
+  baseline unchanged at 20 pre-existing failures/118 passed (tracked
+  separately as `OPT-026` in the OPT-### tracker). Lint clean. Committed
+  `f7a2b9c`.
 
 ---
 
@@ -277,6 +308,17 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 
 Record every scope/architecture decision here with a date and rationale.
 
+- **2026-07-08 — TSW-004's player/team card staleness sub-scope deferred, not
+  bundled into the fix.** The investigation surfaced a real but separate
+  issue (no refresh trigger for player/team card snapshots) while confirming
+  the `recap`-omission bug. Chose to ship the narrow, fully-confirmed `recap`/
+  `participants` fix on its own rather than bundle a design decision
+  ("what should trigger a refresh?") into a low-risk task. **Why:** keeps
+  TSW-004's diff small and easy to verify; the staleness question deserves
+  its own scoping pass rather than being decided as a side-effect of an
+  unrelated bug fix. See
+  [`02_ARCHITECTURE_NOTES.md`](./02_ARCHITECTURE_NOTES.md#card-snapshot-staleness-has-no-consistent-refresh-story)
+  for the durable note; revisit as a follow-up task if it becomes a priority.
 - **2026-07-07 — TSW-005 verdict: extend, don't rewrite.** Investigated
   FeedComposer's current architecture (490-line single-file component, three
   structurally-identical search/select blocks, flat per-entity-type state)
@@ -301,4 +343,18 @@ Record every scope/architecture decision here with a date and rationale.
 Log new patterns, shared components/hooks, or schema changes as they're
 introduced during this initiative.
 
-_(empty — populated as tasks ship)_
+- ✅ **built (TSW-004, 2026-07-08)** `buildGameCardDisplay(gameCard)` in
+  `client/src/features/feed/components/posts/cardUtils.js` — the shared
+  home/away name+points+logo+winner derivation for game cards, consumed by
+  both `GameCardPost.jsx` and `FullScreenGameCard.jsx`. Also exported
+  `buildGameCardSnapshot` from `feed.service.js` (previously internal-only)
+  for direct unit testing.
+- ✅ **changed (TSW-004, 2026-07-08)** `feed.service.js`'s
+  `buildGameCardSnapshot()` now includes `recap` and `participants` in its
+  returned snapshot — previously silently omitted both, which is why cached
+  game cards rendered 0-0 (and dual-team cards used the wrong recap branch).
+  No schema change — these were already present on the input `payload`
+  (a `getPublicGame()` result); the fix just stops dropping them.
+- ✅ **changed (TSW-003, 2026-07-08)** `client/src/lib/env.js`'s
+  `VITE_APP_NAME` Zod default changed from `'tsw-2026-march'` to
+  `'The Sporty Way'`.
