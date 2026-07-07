@@ -2857,10 +2857,25 @@ again.")` — a clear, retryable conflict instead of the previous silent
 - **Testing:** cursor paging correctness; client loads pages; validation rejects
   bad params.
 - **Validation checklist:** [x] keyset cursor on the clean single-source lists
-  (`/games`, `/teams`, `/public/leagues`) [~] client paginates (deferred — see
-  notes; responses are backward-compatible so nothing breaks) [x] query
-  validation added (shared zod schema) [x] no dropped/duplicated items across
-  pages (unit-proven + verified against real dev Mongo).
+  (`/games`, `/teams`, `/public/leagues`) [🚫] client paginates — **won't-fix-yet
+  (2026-07-07), see re-triage note** (responses are backward-compatible so
+  nothing breaks) [x] query validation added (shared zod schema) [x] no
+  dropped/duplicated items across pages (unit-proven + verified against real dev
+  Mongo).
+- **Client-half re-triage (2026-07-07, with owner):** investigated wiring the
+  list pages to consume `nextCursor` with infinite scroll and found it's **not**
+  a clean "copy the feed pattern" job. Unlike the feed (a pure stream, no
+  stats), `GamesListPage`/`TeamsPage` are **dashboards**: they render summary
+  cards ("Total Games", "In Progress", active-player totals, `hiddenTeamsCount`)
+  computed from the **full** array. Paginating them would make those counts
+  wrong unless a separate count endpoint/field is added — real scope + real
+  regression risk. And prod is at **14 games / 0 teams / 2 leagues**,
+  per-owner-filtered, so no user can fill even one 20-item page (`DEFAULT_PAGE_LIMIT` 20) — the client half fixes a problem that can't occur at current scale. The
+  backend keyset pagination (the actual scaling safeguard, opt-in via `limit`)
+  is done and sufficient. **Decision: leave the client half unshipped**; revisit
+  if a single owner's list ever approaches ~50 items. Same
+  premature-at-this-scale reasoning as OPT-025. (Separately, these pages do need
+  the React Query migration regardless — that's OPT-014b, being done now.)
 - **Source:** [30](./30-optimisation-roadmap.md) M6, [23](./23-api-audit.md) #9/#10.
 - **Completion notes:** 2026-07-07 — **scope: backend-complete + client
   backward-compat** (chosen with the user; client infinite-scroll/virtualisation
