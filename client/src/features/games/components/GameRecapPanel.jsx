@@ -32,6 +32,15 @@ function getParticipantName(participants, side) {
   return participants?.[side]?.displayName || side;
 }
 
+// TSW-002: Highlights scrolled correctly on mobile; Key Moments didn't — it
+// was never built as a horizontal scroller (it shipped as a plain vertical
+// <ul>). This wraps the proven Highlights scroll-container pattern
+// (overflow-x-auto + shrink-0 fixed-width children) so both sections share
+// one implementation and can't drift apart again.
+function HorizontalScrollRow({ children, className = '' }) {
+  return <div className={`flex gap-3 overflow-x-auto pb-2 ${className}`}>{children}</div>;
+}
+
 function GameHighlightClip({
   videoUrl,
   timestamp,
@@ -120,7 +129,7 @@ export function GameRecapPanel({
       {highlights.length > 0 ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h3>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <HorizontalScrollRow>
             {selectHighlights(highlights).map((h) => {
               const clipState =
                 clipShareState[h.eventId] ||
@@ -165,14 +174,14 @@ export function GameRecapPanel({
                 </div>
               );
             })}
-          </div>
+          </HorizontalScrollRow>
         </section>
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-xl font-semibold text-slate-900">Key Moments</h3>
-          <p className="text-sm text-slate-500">{(recap?.keyMoments || []).length} highlights</p>
+          <p className="text-sm text-slate-500">{(recap?.keyMoments || []).length} key moments</p>
         </div>
 
         {(recap?.keyMoments || []).length === 0 ? (
@@ -180,11 +189,11 @@ export function GameRecapPanel({
             No key moments were available for this game.
           </p>
         ) : (
-          <ul className="mt-4 space-y-3">
+          <HorizontalScrollRow className="mt-4">
             {recap.keyMoments.map((moment) => (
-              <li
+              <div
                 key={moment.eventId}
-                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
+                className="flex w-56 shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
               >
                 <CloudinaryImage
                   src={playerPlaceholder}
@@ -196,20 +205,20 @@ export function GameRecapPanel({
                   decoding="async"
                   className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
                 />
-                <div>
+                <div className="min-w-0">
                   <p
                     className="text-xs font-semibold uppercase tracking-wide text-slate-500"
                     title="Real-world clock time when this moment was recorded"
                   >
                     at {formatMomentTime(moment.occurredAt)}
                   </p>
-                  <p className="mt-0.5 text-sm font-medium text-slate-900">
+                  <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
                     {moment.playerName} • {moment.statLabel}
                   </p>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </HorizontalScrollRow>
         )}
       </section>
 
