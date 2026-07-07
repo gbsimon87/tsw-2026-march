@@ -34,9 +34,8 @@
 
 ## 📊 Status dashboard
 
-- **Overall status:** `TSW-002`, `TSW-003`, and `TSW-004` are code-complete,
-  tested, and committed (2026-07-08). `TSW-002`'s mobile-scroll behavior is
-  pending a manual browser check (can't be meaningfully unit tested).
+- **Overall status:** `TSW-002`, `TSW-003`, and `TSW-004` are done, tested,
+  committed, and (for `TSW-002`) mobile-verified by the user (2026-07-08).
   `TSW-001` needs a production-data investigation sub-step before its fix can
   be finalized. `TSW-005` is the largest remaining task (Ready, ordered last).
 - **Counts by status:**
@@ -127,7 +126,7 @@ now satisfied since TSW-004 shipped).
 
 ### TSW-002 — Key Moments doesn't scroll on mobile
 
-- **Priority:** Medium · **Complexity:** S · **Risk:** Low · **Status:** ✅ Completed (2026-07-08, pending manual mobile verification)
+- **Priority:** Medium · **Complexity:** S · **Risk:** Low · **Status:** ✅ Completed (2026-07-08, mobile-verified by user)
 - **Dependencies:** none (sequenced after TSW-004 for file-adjacency
   convenience only, not a hard blocker)
 - **Description:** Highlights scrolls correctly on mobile; Key Moments does
@@ -156,10 +155,15 @@ now satisfied since TSW-004 shipped).
   — copy-paste leftover from Highlights — now correctly "N key moments").
   No existing test file for this component. Full client suite baseline
   unchanged at 20 pre-existing failures/118 passed. Lint clean. Committed
-  `0ae08d8`. **Manual mobile-viewport verification pending** — this is a
-  touch/CSS behavior fix that can't be meaningfully unit tested; awaiting
-  browser confirmation before this can be considered fully done, not just
-  code-complete.
+  `0ae08d8`. **User-verified on mobile** — Key Moments and Highlights both
+  scroll correctly.
+  **Follow-up scope extension (2026-07-08, same day):** user asked for the
+  same treatment on **Top Performers**, which was a wrapping grid
+  (`md:grid-cols-3 lg:grid-cols-1`), not a scroller either. Switched it to
+  the same `HorizontalScrollRow` + fixed-width (`w-64 shrink-0`) card
+  pattern. All three sections in the recap panel (Highlights, Key Moments,
+  Top Performers) now behave consistently on mobile. Lint clean; baseline
+  unchanged. Committed `45aa04d`.
 
 ---
 
@@ -372,7 +376,9 @@ introduced during this initiative.
   `'The Sporty Way'`.
 - ✅ **built (TSW-002, 2026-07-08)** `HorizontalScrollRow` — a small local
   component in `GameRecapPanel.jsx` wrapping the `flex gap-3 overflow-x-auto
-pb-2` scroll-container pattern. Consumed by both the Highlights and Key
-  Moments sections. Local to this file for now (not extracted to a shared
-  cross-feature component) since it has exactly one consumer file today —
-  promote it if a third horizontal-scroll use case appears elsewhere.
+pb-2` scroll-container pattern. Consumed by Highlights, Key Moments, and
+  (as of the same-day follow-up) Top Performers — all three sections in the
+  recap panel now scroll identically on mobile. Local to this file for now
+  (not extracted to a shared cross-feature component) since it has exactly
+  one consumer file today — promote it if a horizontal-scroll use case
+  appears outside `GameRecapPanel.jsx`.
