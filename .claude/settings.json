@@ -91,7 +91,11 @@
       "Bash(awk -F: '$1 > 800 && $1 < 1520')",
       "Bash(grep -n \"league_admin\\\\|leagueAdmin\" -r src/)",
       "Bash(cat src/modules/analytics/analytics.routes.js)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(mongodump --version)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"---exit code: $?---\")",
+      "Bash(ENV_FILE=/Users/simoncordova/Desktop/Simon/tsw-2026-march/env/server/.env.production node src/scripts/backfill-game-finalscore.js --dry-run)"
     ],
     "additionalDirectories": ["/private/tmp"]
   },
