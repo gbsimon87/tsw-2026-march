@@ -2008,9 +2008,13 @@ days · **L** 1–2 weeks.
 - **Testing:** `$indexStats` in prod shows a zero-op verification window on drop
   candidates **before dropping**; explain plans confirm new compounds are used.
 - **Validation checklist:** [x] provably-dead drops applied via migration (dev)
-  [ ] applied to prod [x] new/compound indexes confirmed still used [ ] remaining
-  low-cardinality candidates observed via `$indexStats` [ ] prod autoIndex off
-  (code ships `autoIndex:false` for prod; takes effect on next prod deploy).
+  [x] applied to prod (2026-07-07 — 9 dropped, verified 0 remaining; mongodump
+  backup taken first at `backups/pre-opt007-*`) [x] new/compound indexes
+  confirmed still used [ ] remaining low-cardinality candidates observed
+  (via **Atlas UI**, see below — NOT a script; the app's prod DB user is denied
+  the `indexStats` action, which is correct least-privilege posture) [ ] prod
+  autoIndex off (code ships `autoIndex:false` for prod; takes effect on next
+  prod deploy).
 - **Source:** [30](./30-optimisation-roadmap.md) M5, [19](./19-indexing-strategy.md).
 - **Completion notes:** Split into two halves after investigating what's
   actually provable from static analysis vs. what genuinely needs live
@@ -2051,19 +2055,43 @@ days · **L** 1–2 weeks.
   participant fields have no index, and the 5 traffic-gated fields explicitly
   still have theirs — guards against this drop ever silently expanding scope).
   Full suite **33 suites / 266 tests** (up from 261); lint clean.
-  **Not yet run against production** — see the manual step below.
+  **Run against production 2026-07-07** — dry-run showed all 9, real run
+  dropped all 9, verify dry-run confirmed 0 remaining (`games`-collection
+  `mongodump` taken first at `backups/pre-opt007-<date>/`). Dropping an index
+  is instant, metadata-only, and never touches documents — no data-loss risk.
 
-  **Half 2 — traffic-gated, not started:** `leagueId_1`, `trackedLeagueTeamId_1`,
-  `status_1`, `gameContext_1`, `trackingMode_1` are each low-cardinality and
-  each used **alone** by at least one real query (e.g. `Game.find({status:
-'completed'})` in `listCompletedGames`/`listPublicCompletedGames`) — whether
-  they're worth keeping depends on real selectivity/traffic, which can't be
-  proven from code. Needs a `$indexStats` observation window in production
-  (~1 week) before any decision. The 3 new compound indexes the original card
-  proposed (`{leagueId:1,status:1}` etc.) are also untouched — adding an index
-  is lower-risk than dropping one, but they weren't the blocking, hand-held
-  part of this task, so they're left for a future pass alongside the
-  observation-window results.
+  **Half 2 — traffic-gated, observation pending:** `leagueId_1`,
+  `trackedLeagueTeamId_1`, `status_1`, `gameContext_1`, `trackingMode_1` are
+  each low-cardinality and each used **alone** by at least one real query (e.g.
+  `Game.find({status: 'completed'})` in
+  `listCompletedGames`/`listPublicCompletedGames`) — whether they're worth
+  keeping depends on real selectivity/traffic, which can't be proven from code.
+  **How to observe (decided 2026-07-07):** via the **Atlas UI**, NOT a script
+  — the app's prod DB user (`tsw_prod_user`) is denied the `indexStats`
+  action (correct least-privilege scoping), so a `$indexStats` cron with the
+  app credential is impossible, and granting/storing an admin credential for a
+  one-week diagnostic isn't worth it. Instead: Atlas → `tsw-2026-cluster` →
+  Collections → `tsw_2026_prod.games` → **Indexes** tab (or cluster Metrics →
+  Indexes) shows per-index op counts with no special permission. Observe from
+  ~2026-07-07 for ~a week, then decide. **Interpreting it:** `accesses.ops` is
+  cumulative since each mongod process last started and resets on
+  restart/failover/Atlas maintenance — read the trend within a window between
+  resets ("did ops ever climb above its start value across a week of real
+  traffic?"), not a single number. Ops flat at ~0 → unused → safe to add to
+  `migrate-drop-dead-indexes.js` (same key-shape-matched, dry-run-first
+  approach). Ops climbing → keep. Note: only 14 games in prod today, so
+  absolute counts will be low regardless — the signal is relative (touched at
+  all vs. never), and this is about setting the pattern before data grows, not
+  a current perf problem. The 3 new compound indexes the original card proposed
+  (`{leagueId:1,status:1}` etc.) are also untouched — adding an index is
+  lower-risk than dropping one, left for a future pass alongside the
+  observation results.
+
+  **A tried-and-rejected approach, recorded so it isn't re-attempted:** a daily
+  local cron/launchd job running a `log-index-stats.js` script was built and
+  then removed — it can't work, because the only prod credential available
+  locally is the app user, which Atlas denies `indexStats`. Atlas UI is the
+  path.
 
 ---
 
