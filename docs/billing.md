@@ -16,17 +16,24 @@ Free is the product's growth engine. It includes:
 
 ### Team Pro
 
-Team Pro is billed monthly per team. It unlocks:
+Team Pro is billed per team, **monthly ($12/mo) or per season ($89/season)**. It unlocks:
 
 - replay
 - shot maps on public game pages
+- highlight clips
 - priority billing support
+
+### League Pro
+
+League Pro is billed per league, **monthly ($49/mo) or per season ($299/season)**, and unlocks league management/creation. League billing state lives on the `League` document (the source of truth); a per-user `league*` entitlement mirror on the account also exists but the League record is authoritative.
+
+> Display prices come from `client/src/features/billing/pages/PricingPage.jsx`; the actual amounts are set on the Stripe prices referenced by `STRIPE_PRICE_ID_TEAM_MONTHLY|SEASON` and `STRIPE_PRICE_ID_LEAGUE_MONTHLY|SEASON`.
 
 ## Billing Scope
 
-Billing is tied to a single team, not a user account.
+Billing is **resource-scoped** — tied to a single Team or a single League, not a user account.
 
-Each team can have its own plan and subscription status. A user with multiple teams can mix free and Pro teams.
+Each team/league has its own plan and subscription status. A user with multiple teams can mix free and Pro teams. Checkout supports a 14-day trial and both `monthly` and `season` intervals (`billing.validation.js`).
 
 ## Entitlements
 
@@ -39,9 +46,10 @@ Entitlements must be enforced server-side for premium data and mirrored client-s
 
 ## Billing Architecture
 
-- React pricing page at `/pricing`
-- Stripe Checkout for subscription start
+- React pricing page at `/pricing` (**dev-only** — redirects to `/pulse` in production; billing is not yet publicly launched)
+- Stripe **hosted** Checkout for subscription start (no client-side Stripe.js); returned URLs are validated with `isSafeStripeUrl()` before redirect
 - Stripe Billing Portal for subscription management
+- Stripe SDK pinned to `apiVersion: '2024-06-20'`
 - Express webhook endpoint for subscription lifecycle updates
 - Team document stores billing state
 - Team billing success page polls owner team data to confirm access after redirect

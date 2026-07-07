@@ -68,8 +68,73 @@
       "Bash(/private/tmp/claude-502/-Users-simoncordova-Desktop-Simon-tsw-2026-march/29cab8a6-6771-434e-8786-bccd5e09cfda/scratchpad/detailed_check.sh)",
       "Bash(awk 'NR>=1150 && NR<=1420 && /saveGame\\\\\\(|await saveGame|insertEvent\\\\\\(|game.events|clearAiSummary/ {print NR\": \"$0}' modules/games/games.service.js)",
       "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-game-finalscore.js --dry-run)",
-      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-game-finalscore.js)"
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-game-finalscore.js)",
+      "Bash(awk -F: '{sum+=$2} END {print \"Total remaining <img>:\", sum}')",
+      "Bash(echo \"---exit:$?---\")",
+      "Bash(echo \"---EXIT:$?---\")",
+      "Bash(git reset *)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-league-standings.js --dry-run)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-league-standings.js)",
+      "Bash(ENV_FILE=../env/server/.env.development node -e ' *)",
+      "Bash(git rev-list *)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-team-season-summaries.js --dry-run)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-team-season-summaries.js)",
+      "Bash(awk '/^const gameSchema = new mongoose.Schema\\\\\\(/,/^\\\\\\);$/' /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/src/modules/games/games.repository.js)",
+      "Bash(awk 'NR<=1516 && /^async function/{name=$0; line=NR} END{print line\": \"name}' /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/src/modules/games/games.service.js)",
+      "Bash(curl -s http://localhost:5173/ -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:4000/api/v1/health)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"nodemon src/server.js\")",
+      "Bash(ENV_FILE=../env/server/.env.development node ./__verify-ttl-tmp.js)",
+      "Read(//Users/simoncordova/.claude/projects/**)",
+      "Bash(sort -t/ -k4,5)",
+      "Bash(awk -F: '$1 > 800 && $1 < 1520')"
     ],
     "additionalDirectories": ["/private/tmp"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */env/*|*.env|*.env.*|*/render.yaml) echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Editing env files, .env, or render.yaml is blocked by policy (see docs/security.md). Secrets are managed by hand / via the Render dashboard, never through file edits.\"}}';; esac",
+            "statusMessage": "Checking secret-file policy"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "if": "Bash(git commit *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "m=$(jq -r '.tool_input.command' | perl -ne 'if (/-m\\s+\"([^\"]*)\"/) {print \"$1\";exit} elsif (/-m\\s+'\\''([^'\\'']*)'\\''/) {print \"$1\";exit}'); [ -z \"$m\" ] && exit 0; printf '%s' \"$m\" | ./node_modules/.bin/commitlint --config commitlint.config.cjs",
+            "statusMessage": "Linting commit message"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in */client/*|*/server/*) case \"$f\" in *.js|*.jsx|*.cjs|*.mjs) ./node_modules/.bin/prettier --write \"$f\" >/dev/null 2>&1; ./node_modules/.bin/eslint --fix \"$f\" >/dev/null 2>&1;; esac;; esac; exit 0",
+            "statusMessage": "Formatting + lint-fixing"
+          },
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in */server/src/config/env.js|*/client/src/lib/env.js|*/render.yaml) pnpm check-env 2>&1 | tail -20 || true;; esac; exit 0",
+            "statusMessage": "Validating env contract"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "stripe@claude-plugins-official": true
   }
 }

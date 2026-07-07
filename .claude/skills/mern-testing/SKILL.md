@@ -1,92 +1,88 @@
 ---
 name: mern-testing
-description: Use when writing or reviewing tests for a MERN app — Jest unit tests, React Testing Library component tests, Supertest API/integration tests, or setting up a test database. Trigger on mentions of "test", "Jest", "React Testing Library", "Supertest", "mock", or "test coverage".
+description: Use when writing or reviewing tests in this project — server Jest+Supertest tests, or client Vitest + React Testing Library tests. Trigger on "test", "Jest", "Vitest", "React Testing Library", "Supertest", "mock", "snapshot", or "coverage".
 ---
 
-# MERN Testing Patterns
+# TSW Testing Patterns
 
-## Test pyramid for a MERN app
+**The runner differs per side — do not mix them up:**
 
-- **Unit tests** (most numerous) — pure functions, utility helpers, individual service methods with dependencies mocked.
-- **Integration tests** — API routes tested end-to-end through Supertest against a real (test) database; React components tested with Testing Library including their hooks and child components.
-- **E2E tests** (fewest) — Playwright/Cypress covering critical user flows only (signup, checkout, login) — expensive to run and maintain, so keep this layer small.
+|            | Runner                              | Command                     | Location                               |
+| ---------- | ----------------------------------- | --------------------------- | -------------------------------------- |
+| **Server** | **Jest + Supertest**, `--runInBand` | `pnpm --filter server test` | `server/src/tests/{unit,integration}/` |
+| **Client** | **Vitest + RTL** (jsdom)            | `pnpm --filter client test` | colocated `*.test.jsx` / `*.test.js`   |
 
-## Backend: API testing with Supertest + Jest
+Never use Vitest on the server or Jest on the client.
 
-Use a separate test database (or `mongodb-memory-server` for a fully in-memory instance) — never run tests against a shared dev/production database.
+## Server (Jest + Supertest)
+
+- Config `server/jest.config.js`: `testEnvironment: 'node'`, `roots: ['<rootDir>/src']`,
+  `setupFiles: ['src/tests/setupEnv.js']` (stubs env), runs serially (`--runInBand`).
+- There is **no `mongodb-memory-server`** — the DB layer is mocked at the
+  repository/service boundary. Follow existing suites (e.g.
+  `billing.service.test.js`, `billing.routes.test.js`) rather than opening a real
+  connection.
+- Integration suites in `src/tests/integration/` drive real Express through
+  Supertest (`feed`, `teams.auth`, `games.public`, `health`, `contact`,
+  `billing.routes`, `gates`, `public-teams`).
+- **Flush post-response schedulers**: any test that calls `finishGameForUser`, the
+  event mutators, or `deleteGameForUser` must flush pending `setImmediate`
+  callbacks or they fire into a torn-down module registry:
+
+  ```js
+  afterEach(() => new Promise((r) => setImmediate(r)));
+  ```
+
+- Assert the real response envelope: `{ error: { message, details, requestId } }`
+  for failures; success shapes as the controller returns them.
 
 ```js
 const request = require('supertest');
-const app = require('../app');
-const mongoose = require('mongoose');
+const { createApp } = require('../../app');
 
-beforeAll(async () => {
-  await mongoose.connect(process.env.TEST_DB_URI);
-});
-afterEach(async () => {
-  await mongoose.connection.db.dropDatabase(); // clean slate between tests
-});
-afterAll(async () => {
-  await mongoose.connection.close();
-});
-
-test('POST /api/users creates a user', async () => {
-  const res = await request(app)
-    .post('/api/users')
-    .send({ email: 'a@b.com', password: 'longenough123' });
-  expect(res.status).toBe(201);
-  expect(res.body.data).toHaveProperty('_id');
-  expect(res.body.data).not.toHaveProperty('passwordHash'); // never leak the hash
-});
-
-test('POST /api/users rejects invalid email', async () => {
-  const res = await request(app).post('/api/users').send({ email: 'not-an-email' });
+test('rejects invalid registration', async () => {
+  const res = await request(createApp()).post('/api/v1/auth/register').send({ email: 'nope' });
   expect(res.status).toBe(400);
+  expect(res.body.error).toBeDefined();
 });
 ```
 
-Test the unhappy paths explicitly: missing fields, invalid types, unauthorized access, not-found resources — these are usually undertested compared to the happy path.
+## Client (Vitest + React Testing Library)
 
-## Frontend: React Testing Library
-
-Test behavior from the user's perspective, not implementation details. Query by role/text/label, not by CSS class or component internals.
+- Config lives in `client/vite.config.js` (`test.environment: 'jsdom'`,
+  `setupFiles: './src/utils/testSetup.js'` — stubs env, polyfills `matchMedia` +
+  `IntersectionObserver`).
+- Use `vi.*` (not `jest.*`). Query by role/text/label, not CSS class.
+- **Anything using TanStack Query needs a `QueryClientProvider` test wrapper** with
+  a **fresh `QueryClient` per render** (no cache bleed) — auth context, feed, game
+  detail, and league pages all require it.
+- **Snapshot tests** exist for share-card image generation
+  (`features/games/__snapshots__`, `features/feed/components/posts/__snapshots__`) —
+  review snapshot diffs deliberately, don't blindly `-u`.
 
 ```jsx
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import LoginForm from './LoginForm';
+import { render, screen } from '@testing-library/react';
+import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 
-test('shows validation error on empty submit', async () => {
-  render(<LoginForm onSubmit={jest.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: /log in/i }));
-  expect(await screen.findByText(/email is required/i)).toBeInTheDocument();
-});
-
-test('calls onSubmit with form values', async () => {
-  const handleSubmit = jest.fn();
-  render(<LoginForm onSubmit={handleSubmit} />);
-  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'a@b.com' } });
-  fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'secret123' } });
-  fireEvent.click(screen.getByRole('button', { name: /log in/i }));
-  await waitFor(() =>
-    expect(handleSubmit).toHaveBeenCalledWith({ email: 'a@b.com', password: 'secret123' })
-  );
-});
+function renderWithQuery(ui) {
+  return render(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
+}
 ```
 
-Mock network calls at the boundary (`fetch`/axios via `msw` — Mock Service Worker) rather than mocking the component's internal functions, so the test exercises real component logic.
+Mock the API boundary (the `*Api` object or `apiClient`), not component internals.
 
-## Mocking guidelines
+## Mocking
 
-- Mock external services (email sending, payment gateways, third-party APIs) — never hit real third parties in tests.
-- Don't mock the thing you're actually testing — if testing a service function, mock its DB calls or dependencies, not the function itself.
-- Prefer `msw` for frontend API mocking over manually mocking `fetch`/`axios` module-by-module — it intercepts at the network level so components behave exactly as in production.
+- Never hit real third parties (Stripe, Cloudinary, Resend, PostHog, OpenAI) — they
+  are mocked. Emails are fire-and-forget in prod code, so assert they were
+  scheduled, not awaited.
+- Don't mock the unit under test; mock its dependencies.
 
-## What to prioritize when coverage is limited
+## Prioritize when coverage is limited
 
-1. Auth and permission logic (highest risk if broken)
-2. Payment/money-related calculations
-3. Data validation and sanitization boundaries
-4. Any function with branching logic or edge cases (empty arrays, null, boundary numbers)
-5. Regression tests for any previously-shipped bug
-
-Coverage percentage is a weak signal on its own — 100% coverage with no assertions on error cases is worse than 70% coverage that tests the risky paths above.
+1. Auth, session rotation, and league permission gates (`assert*`/`can*`)
+2. Billing: entitlement derivation, webhook idempotency (`claim*WebhookEvent`)
+3. Stat/box-score derivation (`shared/statSummary.js`) and materialization parity
+4. Zod validation boundaries
+5. A regression test for every fixed bug (the repo's convention — confirm it fails
+   without the fix)

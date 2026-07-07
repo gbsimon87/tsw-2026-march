@@ -1,99 +1,120 @@
 ---
 name: express-api-patterns
-description: Use when building or reviewing Express.js REST APIs — route structure, middleware, error handling, input validation, controllers, or response shaping. Trigger on mentions of "Express route", "controller", "middleware", "API endpoint", "REST API", or "error handling" in a Node backend.
+description: Use when building or reviewing this project's Express API — adding an endpoint, a controller/service/repository, middleware, validation, or error handling in server/src/modules. Trigger on "Express route", "controller", "service", "repository", "middleware", "API endpoint", "validation", or "error handling".
 ---
 
-# Express API Design Patterns
+# TSW Express API Patterns
 
-## Project structure (route -> controller -> service -> model)
+The server (`server/src/`) is **module-based**, CommonJS, Zod-validated, Pino-logged.
+Do not introduce a layered `routes/controllers/services/models/` structure — that is
+not how this repo is organized.
 
-Keep route files thin. They should only wire HTTP verbs to controller functions and middleware — no business logic.
+## Adding an endpoint = touch 4 (or 5) files in one module
+
+Each domain lives in `server/src/modules/<domain>/` with strict naming
+`<domain>.<layer>.js`:
 
 ```
-src/
-  routes/
-    users.routes.js       # app.get('/api/users', auth, userController.list)
-  controllers/
-    users.controller.js   # parses req, calls service, shapes res
-  services/
-    users.service.js      # business logic, talks to models
-  models/
-    User.js
-  middleware/
-    auth.js
-    errorHandler.js
-    validate.js
+modules/games/
+  games.routes.js        # HTTP verbs → controller, attach middleware, asyncHandler
+  games.controller.js    # parse/validate req, call service, shape JSON. THIN.
+  games.service.js       # business logic + authorization (assert* helpers)
+  games.repository.js     # Mongoose schema (inline!) + all data access
+  games.validation.js    # Zod schemas
 ```
 
-Controllers should not contain raw Mongoose/DB calls — that belongs in the service layer. This keeps controllers testable without a database and lets you reuse business logic outside HTTP (e.g., in a script or cron job).
+Register the router in `server/src/routes/index.js` under `/api/v1`.
 
-## Centralized error handling
-
-Never repeat `try/catch` boilerplate with duplicated `res.status(500).json(...)` in every controller. Use one async wrapper and one error-handling middleware:
+### Route file
 
 ```js
-// middleware/asyncHandler.js
-const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-
-// controllers/users.controller.js
-exports.getUser = asyncHandler(async (req, res) => {
-  const user = await userService.findById(req.params.id);
-  if (!user) {
-    const err = new Error('User not found');
-    err.statusCode = 404;
-    throw err;
-  }
-  res.json(user);
-});
-
-// middleware/errorHandler.js — mount LAST, after all routes
-app.use((err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
-    error: {
-      message: err.message || 'Internal server error',
-      ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
-    },
-  });
-});
+// asyncHandler wraps EVERY handler so rejections reach the error middleware
+gamesRouter.post('/:gameId/events', authMiddleware, asyncHandler(controller.appendEvent));
 ```
 
-Never leak stack traces or internal error details to clients in production.
-
-## Input validation
-
-- Validate at the route boundary, before the controller runs — with a schema library (Zod, Joi, or express-validator), not scattered `if` checks.
-- Validation middleware should return `400` with a structured list of field errors, not a generic message.
-- Never trust `req.body`, `req.query`, or `req.params` shape — always parse through a schema, including type coercion for query strings (e.g., `page` arrives as a string and must be coerced to a number).
-
-## Response shape consistency
-
-Pick one envelope convention and apply it everywhere in the API:
+### Controller — thin, validates, shapes
 
 ```js
-// Success
-{ "data": { ... } }
-// or for lists
-{ "data": [...], "meta": { "page": 1, "total": 42 } }
+const { appendEventSchema } = require('./games.validation');
 
-// Error
-{ "error": { "message": "...", "code": "USER_NOT_FOUND" } }
+exports.appendEvent = async (req, res) => {
+  const userId = requireAuthUserId(req); // local helper, throws 401
+  const body = appendEventSchema.parse(req.body); // Zod at the boundary
+  const result = await gamesService.appendEventForUser(userId, req.params.gameId, body);
+  res.json(result);
+};
 ```
 
-## Middleware ordering (order matters in Express)
+Controllers must **not** contain Mongoose calls — those live in the repository,
+invoked via the service.
 
-1. Security headers (helmet)
-2. CORS
-3. Body parser (`express.json()`)
-4. Request logging
-5. Rate limiting (on auth/write-heavy routes at minimum)
-6. Route-specific auth middleware
-7. Routes
-8. 404 handler (catch-all after routes)
-9. Error-handling middleware (must be last, must have 4 args: `(err, req, res, next)`)
+### Service — logic + authorization
 
-## Async/await pitfalls to catch in review
+Authorization lives here, not in middleware. Throw `ApiError` from
+`utils/apiError.js`; never `res.status(...).json(...)` in a service.
 
-- Unhandled promise rejections from route handlers that aren't wrapped (crashes the process on an uncaught error without a global handler).
-- Forgetting to `return` after calling `res.send()`/`res.json()` inside an `if` block, causing "headers already sent" errors when code continues to a second response call.
-- Using `Promise.all` for independent async calls instead of sequential `await` — sequential awaits for unrelated operations needlessly slow down response time.
+```js
+const ApiError = require('../../utils/apiError');
+
+async function appendEventForUser(userId, gameId, event) {
+  const game = await findGameById(gameId);
+  if (!game) throw new ApiError(404, 'Game not found');
+  if (!(await canManageLeagueGame(userId, game))) throw new ApiError(403, 'Forbidden');
+  // ...
+}
+```
+
+### Repository — schema inline + data access
+
+The Mongoose model is defined **in the repository file** (no `models/` dir),
+guarded against re-registration:
+
+```js
+const gameSchema = new mongoose.Schema(
+  {
+    /* ... */
+  },
+  { timestamps: true, optimisticConcurrency: true }
+);
+const Game = mongoose.models.Game || mongoose.model('Game', gameSchema);
+```
+
+## Error handling (already centralized — reuse it)
+
+- Throw `new ApiError(statusCode, message, details?)` from services.
+- `error.middleware.js` maps ZodError / Multer `LIMIT_FILE_SIZE` / CastError → 400,
+  else `err.statusCode || 500`, and **masks 500 bodies** to "Internal server error".
+- Response envelope: `{ error: { message, details, requestId } }`. Match it.
+- Never add per-controller `try/catch` + `res.status(500)` — `asyncHandler` + the
+  error middleware already own that path.
+
+## Validation
+
+- Parse `req.body` / `req.query` / `req.params` through a Zod schema in
+  `<domain>.validation.js` at the controller. Never trust raw request shape.
+- Query strings are strings — coerce with Zod (`z.coerce.number()`). List endpoints
+  reuse `modules/shared/pagination.validation.js` (`paginationQuerySchema`).
+
+## Middleware order (defined in `app.js` — don't reorder blindly)
+
+1. `trust proxy 1`
+2. `requestIdMiddleware` → `pino-http`
+3. `helmet()` → `cors(corsOptions)`
+4. **Stripe webhook mounted with `express.raw()` BEFORE `express.json()`** — the
+   webhook needs the raw body for signature verification. Any new raw-body route
+   goes here too.
+5. `express.json({ limit: '1mb' })` → `cookieParser` → Passport (Google OAuth)
+6. `attachCsrfToken` → `csrfProtection`
+7. `/api` rate limiter → `/api/v1` router
+8. `notFoundMiddleware` → `errorMiddleware` (last, 4-arg)
+
+## Review checklist
+
+- New handler wrapped in `asyncHandler`? Router registered in `routes/index.js`?
+- Input parsed through a Zod schema (including query coercion)?
+- Errors thrown as `ApiError`, not ad-hoc `res.status`?
+- Auth/permission checked in the **service** via an `assert*`/`can*` helper?
+- Mongoose calls only in the repository?
+- List endpoint returns `nextCursor` and paginates via `utils/pagination.js` when a `limit` is passed?
+- No stack traces or internal detail leaked (500s are masked already — don't undo that).
+- Missing `return` after `res.json()` inside an `if` (headers-already-sent)?

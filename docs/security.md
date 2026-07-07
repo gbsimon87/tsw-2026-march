@@ -31,6 +31,7 @@ The Google OAuth callback route (`/api/v1/auth/google/callback`) is exempt. For 
 ### Rate Limiting
 
 - General API (`/api/*`): 300 requests per 15-minute window.
+- Auth credential endpoints (`/register`, `/login`, `/refresh`): 20 requests per 15-minute window (`authCredentialLimiter`). Note: in-memory store, so per-process — revisit for multi-instance.
 - Auth recovery endpoints (forgot-password, reset-password, verify-email, request-verification): 8 requests per 15-minute window.
 - Contact form: 5 requests per hour.
 

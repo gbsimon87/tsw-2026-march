@@ -1,6 +1,17 @@
 # API Reference
 
-Base path: `/api/v1`
+Base path: `/api/v1`. Source of truth: `server/src/routes/index.js` and each
+module's `*.routes.js`.
+
+Conventions:
+
+- Mutating requests require the CSRF `x-csrf-token` header; most non-public routes
+  require auth (cookie `accessToken` or `Authorization: Bearer`). See
+  [`security.md`](./security.md).
+- Error responses use `{ error: { message, details, requestId } }`.
+- `/public/*` routes are anonymous-readable (personalized when a token is present).
+- Authorization rules for league/team/game actions live in
+  [`permissions.md`](./permissions.md).
 
 ## Health
 
@@ -81,7 +92,7 @@ Base path: `/api/v1`
 ## Teams
 
 - `POST /teams`
-- `GET /teams`
+- `GET /teams` _(keyset-paginated; returns `nextCursor`)_
 - `GET /teams/:teamId`
 - `PATCH /teams/:teamId`
 - `GET /teams/:teamId/entitlements`
@@ -248,3 +259,63 @@ Substitution:
 - `x` and `y` are normalized to `0..100` over the full-court SVG.
 - `x=0` is the left sideline, `x=100` is the right sideline.
 - `y=0` is the north/top baseline, `y=100` is the south/bottom baseline.
+
+## Feed
+
+- `GET /feed` _(public; auth optional)_
+- `GET /feed/shareable/games`
+- `GET /feed/shareable/players`
+- `GET /feed/shareable/teams`
+- `POST /feed/image` _(multipart; field `image`)_
+- `POST /feed/video` _(multipart; field `video`)_
+- `POST /feed/game-card`
+- `POST /feed/player-card`
+- `POST /feed/team-card`
+- `POST /feed/highlight-clip`
+- `DELETE /feed/:postId` _(creator only)_
+
+Post creation requires auth and Pro-team entitlement (`assertFeedPostingAllowed`).
+Image/video size limits come from `FEED_IMAGE_MAX_BYTES` / `FEED_VIDEO_MAX_BYTES`.
+
+## Billing
+
+- `POST /billing/checkout-session` _(legacy alias, kept for compatibility)_
+- `POST /billing/team-checkout`
+- `POST /billing/league-checkout`
+- `POST /billing/customer-portal`
+- `POST /billing/webhooks` _(Stripe signature-verified; mounted with a raw body **before** `express.json()`, so it is not under the JSON-parsed router)_
+
+Checkout/portal endpoints require auth and return a hosted Stripe URL. `interval`
+accepts `monthly` (default) or `season`. Entitlements and plan state are updated by
+webhooks. See [`billing.md`](./billing.md) and
+[`stripe-development-setup.md`](./stripe-development-setup.md).
+
+## Contact
+
+- `POST /contact` _(rate-limited to 5/hour via `contactLimiter`)_
+
+## Leagues (admin, auth required)
+
+Mounted under `/leagues`. Authorization per action is defined in
+[`permissions.md`](./permissions.md).
+
+- `POST /leagues`, `GET /leagues` _(keyset-paginated)_, `GET /leagues/my-profiles`
+- `GET /leagues/:leagueId`, `PATCH /leagues/:leagueId`, `POST /leagues/:leagueId/archive`
+- `GET /leagues/:leagueId/standings`, `GET /leagues/:leagueId/games`
+- `POST|DELETE /leagues/:leagueId/logo`
+- `GET|POST /leagues/:leagueId/managers`, `DELETE /leagues/:leagueId/managers/:managerId`
+- `POST|GET /leagues/:leagueId/teams`, `GET|PATCH /leagues/:leagueId/teams/:leagueTeamId`, `POST /leagues/:leagueId/teams/:leagueTeamId/archive`
+- `POST|DELETE /leagues/:leagueId/teams/:leagueTeamId/logo`
+- `POST /leagues/:leagueId/teams/:leagueTeamId/players`, `PATCH|DELETE /leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId`, `POST /leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId/unclaim`
+- `GET /leagues/:leagueId/teams/:leagueTeamId/members`, `POST /leagues/:leagueId/teams/:leagueTeamId/managers`, `PATCH|DELETE /leagues/:leagueId/teams/:leagueTeamId/members/:memberId`
+- Join requests: `POST|GET /leagues/:leagueId/teams/:leagueTeamId/join-requests`, and `POST .../join-requests/:requestId/{approve,reject,cancel}`
+
+## Public routes (anonymous-readable)
+
+- `GET /public/teams/explore`
+- `GET /public/teams/:teamId`, `GET /public/teams/:teamId/players/:playerId`
+- `GET /public/opponents/:opponentSlug`
+- `GET /public/leagues`, `GET /public/leagues/:leagueSlug`
+- `GET /public/leagues/:leagueSlug/standings`, `/games`, `/leaders`
+- `GET /public/leagues/:leagueSlug/teams/:teamSlug`
+- `GET /public/leagues/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId`

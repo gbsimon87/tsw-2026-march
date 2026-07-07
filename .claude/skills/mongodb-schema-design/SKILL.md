@@ -1,61 +1,93 @@
 ---
 name: mongodb-schema-design
-description: Use when designing MongoDB schemas, writing Mongoose models, deciding between embedding vs referencing documents, adding indexes, writing aggregation pipelines, or reviewing/optimizing MongoDB queries for a MERN app. Trigger on mentions of "schema", "model", "collection", "Mongoose", "aggregation", "index", or "populate".
+description: Use when adding or changing a Mongoose schema, deciding embed vs reference, adding indexes, writing aggregations, or reviewing/optimizing queries in this project. Trigger on "schema", "model", "collection", "Mongoose", "aggregation", "index", "populate", ".lean()", or "materialize".
 ---
 
-# MongoDB Schema Design (Mongoose)
+# TSW MongoDB / Mongoose Patterns
 
-## When to embed vs reference
-
-- **Embed** when the sub-data is always accessed with the parent, has a bounded size (won't grow unbounded), and doesn't need to be queried independently. Example: a `shippingAddress` on an `Order`.
-- **Reference** when the related data is large, grows unbounded (comments, orders, posts), is shared across multiple parents, or needs independent querying/pagination. Example: `Comment` documents referencing a `Post` by `postId`, not an array of comments embedded in the post.
-- Rule of thumb: if an array could grow past ~100 items or grows indefinitely, reference instead of embed.
-
-## Standard Mongoose model pattern
-
-Always include:
-
-1. Explicit `timestamps: true` in schema options — don't hand-roll `createdAt`/`updatedAt`.
-2. `select: false` on sensitive fields (password hashes, tokens) so they're excluded by default.
-3. Validation at the schema level (`required`, `min`, `max`, `enum`, custom `validate`) — don't rely solely on frontend/route validation.
-4. An index on any field used in a `find`/`sort`/`filter` in production queries.
+Schemas here are **defined inline inside `server/src/modules/<domain>/<domain>.repository.js`**
+— there is no `models/` directory. Guard registration so tests can re-import:
 
 ```js
-const userSchema = new mongoose.Schema(
+const teamSchema = new mongoose.Schema(
   {
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    passwordHash: { type: String, required: true, select: false },
-    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    /* ... */
   },
   { timestamps: true }
 );
-
-userSchema.index({ email: 1 }, { unique: true });
+const Team = mongoose.models.Team || mongoose.model('Team', teamSchema);
 ```
 
-## Indexing checklist
+The 15 collections and their owning modules are listed in
+`docs/PROJECT-KNOWLEDGE.md` §5. Read it before adding a new one.
 
-- Every field used in `.find({ field })`, `.sort({ field })`, or as a foreign-key reference should have an index.
-- Compound indexes: order fields by equality-match fields first, then range/sort fields (ESR rule: Equality, Sort, Range).
-- Use `.explain('executionStats')` to verify a query is using an index (`IXSCAN`) and not a full collection scan (`COLLSCAN`) before shipping.
-- Don't over-index — every index adds write overhead. Only add what queries actually need.
+## Embed vs reference — how this repo actually decides
 
-## Aggregation pipelines
+- **Game events are embedded** in the `Game` document (an array on the doc), not a
+  separate collection. Box scores, recaps, replay, and public summaries are all
+  derived from that embedded event list. Follow this pattern for data that is
+  always read with its parent and bounded per game.
+- **Leagues reference**: `LeagueTeam`, `LeaguePlayer`, `LeagueTeamMember`,
+  `LeagueJoinRequest`, `LeagueManager`, `LeagueStandings`, `LeaguePlayerStats` are
+  all separate collections keyed by `leagueId` — they grow, are queried
+  independently, and are materialized separately.
+- Rule of thumb, as applied here: unbounded or independently-queried → reference;
+  bounded and always-co-read → embed.
 
-- Put `$match` as early as possible in the pipeline to reduce the working set before expensive stages like `$lookup` or `$group`.
-- Use `$project` to drop unneeded fields before a `$lookup` to reduce memory use.
-- For pagination inside aggregation, use `$facet` to get both paginated results and a total count in one query rather than two separate queries.
-- See `references/aggregation-recipes.md` for common pipeline patterns (joins, grouping with counts, pagination).
+## Standard schema conventions
 
-## Common mistakes to catch in review
+1. `{ timestamps: true }` in options — never hand-roll `createdAt`/`updatedAt`.
+2. `select: false` on secrets (hashed tokens, refresh-token hashes).
+3. Schema-level validation (`required`, `enum`, `default`) — the `Game` stat/zone
+   enums come from `modules/shared/stats.constants.js`; reuse those constants,
+   don't re-list literals.
+4. Compound indexes for real query paths, e.g.
+   `gameSchema.index({ ownerUserId: 1, teamId: 1, createdAt: -1 })`.
+5. **TTL indexes** on ephemeral docs: `Session.expiresAt` and `AuthToken.expiresAt`
+   use `{ expireAfterSeconds: 0 }`.
+6. **Optimistic concurrency** is enabled on the `Game` schema
+   (`optimisticConcurrency: true`) so concurrent co-tracker saves throw a
+   `VersionError` (→ 409). Preserve this on any change to the event-append path.
 
-- Using `find()` then filtering in JS instead of filtering in the query — pushes work to the app server and pulls unnecessary data over the wire.
-- Missing `.lean()` on read-only queries that don't need Mongoose document methods — `.lean()` returns plain JS objects and is significantly faster.
-- Not handling `CastError` (invalid ObjectId) separately from `ValidationError` in error middleware.
-- Using `findByIdAndUpdate` without `{ new: true, runValidators: true }` — without these, you get the stale document back and validators are skipped on update.
-- Storing money as floating point `Number` instead of integer cents or a `Decimal128`.
+## Read patterns used here
 
-## Population
+- **`.lean()`** on read-only list/public queries (they return plain objects, no
+  save). Only add `.lean()` after confirming the caller never `.save()`s the result
+  — trace it, don't assume.
+- **Keyset (cursor) pagination** via `utils/pagination.js` (`applyIdCursor`,
+  `buildCursorPage`, pages on `_id: -1`, `DEFAULT_PAGE_LIMIT=20`,
+  `MAX_PAGE_LIMIT=50`). Repos paginate **only when a `limit` is passed**, so
+  internal callers stay unbounded. Response adds `nextCursor` beside the existing
+  array key.
+- **Materialization over read-time compute** (the standing OPT direction):
+  standings (`LeagueStandings`), league player stats (`LeaguePlayerStats`), team
+  season summaries (`TeamSeasonSummary`), and frozen
+  `Game.finalScore`/`eventCount`/`boxScore`/`gameSummary`. The pattern is:
+  **compute-on-miss + persist** (self-healing, reversible, no migration) with a
+  **post-response `setImmediate` recompute** fired from write triggers, guarded by
+  an in-flight dirty-flag so a concurrent write isn't dropped. Reuse the shared
+  accumulator in `modules/shared/statSummary.js` — do not duplicate stat loops.
 
-- Use `.populate('field', 'onlyTheseFields')` to limit populated data instead of pulling the full referenced document.
-- Avoid deep population chains (populating a populated field) in hot-path routes — consider denormalizing a small copy of frequently-needed fields instead (e.g., store `authorName` on a `Post` alongside `authorId`).
+## Aggregation
+
+- `$match` first; `$project` to drop fields before `$lookup`/`$group`.
+- The house decision (Decisions log) is **materialize, don't rewrite stat JS loops
+  into `$group`** — aggregation stays for ad-hoc reads (counts, shareable search),
+  not for the hot standings/stats paths.
+
+## Mistakes to catch in review
+
+- `find()` then filter in JS instead of filtering in the query (the public-scan bug
+  fixed in OPT-004 — use projected/limited finders like `listPublicCompletedGames`).
+- Missing `.lean()` on a genuinely read-only path (or adding it where the result is
+  later `.save()`d).
+- `findByIdAndUpdate` without `{ new: true, runValidators: true }`.
+- Adding a field to a sub-schema (e.g. `participant`) but forgetting it must be
+  **declared** — Mongoose silently drops undeclared fields on save (the OPT-022
+  `participant.slug` bug). New persisted field → new schema path + a backfill script.
+- Webhook idempotency: use the atomic `claim*WebhookEvent` gated `findOneAndUpdate`
+  (`utils/webhookIdempotency.js`), never read-check-write.
+
+## References
+
+- `references/aggregation-recipes.md` — pipeline patterns.

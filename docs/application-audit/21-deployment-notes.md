@@ -3,7 +3,7 @@
 > Part of the [Application Audit](./README.md) · July 2026
 
 Primary references: `render.yaml`, `server/Dockerfile`, `docker-compose.yml`,
-`docs/deployment-render.md`, `docs/render-env-matrix.md`, `docs/go-live.md`,
+`docs/deployment-render.md`, `docs/render-env-matrix.md`,
 `docs/mongodb-production-backup.md`.
 
 ## Topology

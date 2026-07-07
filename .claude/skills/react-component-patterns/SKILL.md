@@ -1,72 +1,83 @@
 ---
 name: react-component-patterns
-description: Use when building or reviewing React components, hooks, state management, data fetching, or forms in a MERN frontend. Trigger on mentions of "React component", "hook", "useState", "useEffect", "context", "form", or "state management".
+description: Use when building or reviewing React components, hooks, data fetching (TanStack Query), forms, or state in this project's client. Trigger on "React component", "hook", "useQuery", "TanStack Query", "useEffect", "context", "form", "apiClient", or "state management".
 ---
 
-# React Component Patterns
+# TSW React / Client Patterns
 
-## Component structure defaults
+The client (`client/src/`) is **feature-based**:
+`features/<domain>/{api,components,hooks,pages,schemas}`. Composition root is
+`app/` (`providers/`, `router/`, `store/`). Do **not** create a
+`components/pages/hooks/api/context` top-level layout — put feature code under its
+feature folder.
 
-- Functional components with hooks only — no class components in new code.
-- One component per file; file name matches component name (`UserCard.jsx` exports `UserCard`).
-- Co-locate a component's styles, tests, and sub-components that only it uses in the same folder.
-- Keep components under ~150 lines; if it grows past that, extract a sub-component or a custom hook.
+## Component structure
 
-## Data fetching pattern
+- Functional components + hooks only. **Named exports** (the router unwraps
+  `lazy(() => import(...).then(m => ({ default: m.X })))`) — don't use default exports.
+- One component per file; file name matches the component.
+- Tailwind utility classes inline (slate/emerald/amber/violet palette). No CSS
+  modules. `components/ui` is **bespoke** — there is no shadcn / Radix / `cn()`.
+- **No path aliases** — imports are relative (`../../../lib/apiClient`).
+- Keep accessibility (`aria-label`, `inert`, focus management, `useId`) intact.
 
-Prefer a dedicated data-fetching library (React Query / TanStack Query, or SWR) over hand-rolled `useEffect` + `useState` fetching once the app has more than a couple of API calls. Hand-rolled fetching re-implements caching, race-condition handling, and loading/error state every time.
+## Data fetching — prefer TanStack Query for new code
 
-If hand-rolling for a small app, always guard against race conditions and unmounted-component updates:
+The app is **mid-migration**: TanStack Query is configured
+(`app/providers/queryClient.js`, global `staleTime: 30_000`, `retry: 1`) but only
+~6 call sites use it; ~22 pages still fetch imperatively with
+`useEffect + useState + Promise.all`. **New data pages should use `useQuery`**, not
+add to the imperative pile.
 
-```jsx
-useEffect(() => {
-  let cancelled = false;
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/users/${id}`);
-      const data = await res.json();
-      if (!cancelled) setUser(data);
-    } catch (err) {
-      if (!cancelled) setError(err);
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
-  }
-  load();
-  return () => {
-    cancelled = true;
-  };
-}, [id]);
-```
+- All HTTP goes through `lib/apiClient.js` (cookies + CSRF + silent refresh already
+  handled). Wrap it in a feature `*Api` object (e.g. `authApi`, `billingApi`) — never
+  call `fetch` directly.
+- **Query keys** are inline camelCase array literals: `['game', gameId]`,
+  `['publicLeague', slug]`, `FEED_QUERY_KEY = ['feed']`. There is no key factory;
+  match the existing style and keep the resource name + params.
+- Factor a shared hook when >1 page needs the same query — the pattern to copy is
+  `features/leagues/hooks/usePublicLeague.js`
+  (`useQuery` + `enabled: Boolean(slug)` + `select: r => r.league`).
+- **Mutations**: the repo currently uses plain async `*Api` calls + manual
+  `queryClient.setQueryData` (feed optimistic insert, auth writes) and has **no
+  `useMutation`/`invalidateQueries`**. For new mutations, prefer `useMutation` with
+  `invalidateQueries` unless you are matching an adjacent optimistic pattern — call
+  it out in review either way.
 
-## Custom hooks
+If you must hand-roll a fetch, guard against races/unmount with a `cancelled` flag.
 
-Extract a custom hook when: the same stateful logic is duplicated across 2+ components, or a component's state logic is complex enough to obscure the render output. Name hooks `useX` and keep them focused on one concern (`useDebounce`, `useLocalStorage`, `useAuth`) rather than one giant `useApp` hook.
+## State management
 
-## State management decision guide
-
-- **Local component state** (`useState`) — state only one component and its direct children need.
-- **Lifted state / prop drilling** — fine for 1-2 levels down.
-- **Context** — for state read by many components across the tree that changes infrequently (auth user, theme, feature flags). Don't put frequently-changing, high-frequency state in Context — it re-renders every consumer on every change.
-- **External store (Redux Toolkit / Zustand)** — for complex shared state with frequent updates, cross-cutting concerns, or when you need time-travel debugging / middleware.
+- Global auth = React Context (`app/store/AuthContext.jsx`) backed by a
+  `['auth','me']` query. `useAuth()` throws outside the provider. On auth
+  transitions it calls `purgePrivateCache()` to evict the prior user's cache — keep
+  that when touching login/logout.
+- Everything else is local `useState`/`useRef`. No Redux/Zustand.
+- Don't put high-frequency state in Context (re-renders all consumers).
 
 ## Forms
 
-- Use a form library (React Hook Form) for anything beyond 2-3 fields — avoids re-rendering the whole form on every keystroke that manual `useState`-per-field causes.
-- Validate on the client for UX (immediate feedback) AND always re-validate on the server — client validation is not a security boundary.
-- Disable the submit button while a submission is in flight to prevent duplicate submissions.
+- **Hand-rolled**, not react-hook-form. The pattern is `features/auth/hooks/useAuthForm.js`:
+  controlled `values`, `onChange` by `event.target.name`, submit runs
+  `schema.parse(values)` (Zod) then `onSubmit`, surfaces `err.issues[0].message`.
+- Zod schemas live in a feature `schemas/` folder (only `auth` has one today; add
+  one when a feature grows form validation).
+- Disable submit while in flight; client validation is UX only — the server re-validates.
 
 ## Performance
 
-- Don't reach for `useMemo`/`useCallback`/`React.memo` by default — they add complexity and have their own overhead. Add them when you've identified an actual re-render problem (via React DevTools Profiler), typically: expensive computations, or components that re-render often with the same props inside large lists.
-- Use a stable `key` (an id, not the array index) when rendering lists that can reorder, filter, or have items inserted/removed — index keys cause state to attach to the wrong item.
+- Don't reach for `useMemo`/`useCallback`/`memo` by default — add them against a
+  measured re-render problem (the OPT-016 `onCourtPlayers`/`benchPlayers` memoization
+  is the documented example: arrays recreated every render, including unrelated ones).
+- Stable list `key`s (ids, not array index).
 
-## Common review flags
+## Review flags
 
-- `useEffect` with a missing or incorrect dependency array causing stale closures or infinite loops.
-- Directly mutating state (`state.items.push(x)`) instead of creating a new array/object — breaks React's change detection.
-- Fetching data in a component that's also responsible for heavy rendering logic — split into a container (data) and presentational (view) component if the file is doing both.
-- Storing derived data in state instead of computing it during render (e.g., storing a `filteredList` in `useState` when it should just be `list.filter(...)` computed each render).
+- Adding another imperative `useEffect` fetch where `useQuery` fits.
+- Calling `fetch` directly instead of through `apiClient`/`*Api`.
+- Default export on a lazy-loaded page (breaks the router's named-unwrap).
+- Storing derived data in state instead of computing during render.
+- Mutating state in place; missing/incorrect `useEffect` deps.
+- Adding a new route without updating `PostHogRouteTracker`'s route-pattern list.
 
-See `references/component-checklist.md` for a pre-PR review checklist.
+See `references/component-checklist.md` for the pre-PR checklist.

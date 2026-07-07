@@ -1,91 +1,89 @@
 ---
 name: mern-project-structure
-description: Use when scaffolding a new MERN project, deciding on folder structure, setting up environment configs, or organizing a monorepo vs separate client/server repos. Trigger on mentions of "project structure", "new MERN app", "monorepo", "folder structure", "scaffold", or "boilerplate".
+description: Use when navigating this repo's layout, adding a module/feature, wiring env vars, running scripts, or understanding the monorepo/tooling/deploy setup. Trigger on "project structure", "folder structure", "monorepo", "where does X go", "env", "scripts", "workspace", or "new module".
 ---
 
-# MERN Project Structure & Setup
+# TSW Monorepo Structure & Setup
 
-## Repo layout: monorepo vs separate repos
-
-- **Separate repos** (client + server) when the frontend and backend are deployed independently, on different release cadences, or maintained by different teams. Simplest CI/CD setup.
-- **Monorepo** (single repo, `client/` and `server/` folders) when one team owns both, they deploy together, and you want shared types/utilities (e.g., shared TypeScript interfaces for API request/response shapes) without publishing a package.
-
-Default recommendation for a small team or solo project: monorepo with clear top-level separation — easier to keep frontend/backend types in sync and easier for Claude Code (or any agent) to reason about the whole app in one session.
+pnpm workspace monorepo (`pnpm-workspace.yaml`), Node ≥20, two apps:
 
 ```
-project-root/
-  client/                 # React app (Vite or CRA)
+tsw-2026-march/
+  client/                     # React 18 + Vite (ESM)
     src/
-      components/
-      pages/
-      hooks/
-      api/               # fetch wrappers / API client
-      context/
-    package.json
-  server/                 # Express app
+      app/                    # providers/, router/, store/ (composition root)
+      features/<domain>/      # api/ components/ hooks/ pages/ schemas/
+      components/ (+ ui/)     # shared UI (bespoke, not shadcn)
+      lib/                    # apiClient.js, env.js, posthog.js
+      layouts/  pages/  hooks/  utils/  styles/  assets/
+  server/                     # Express + Mongoose (CommonJS)
     src/
-      routes/
-      controllers/
-      services/
-      models/
-      middleware/
-      config/
-    package.json
-  .env.example            # documents required env vars, never the real .env
-  README.md
+      app.js  server.js       # app factory + bootstrap/graceful shutdown
+      config/                 # env.js (Zod), db.js, logger.js, cors.js, cookie.js
+      middleware/             # auth, error, notFound, rateLimit, requestId, csrf, publicCache
+      routes/index.js         # mounts module routers under /api/v1
+      services/               # cross-cutting: token, session, authToken, email
+      utils/                  # apiError, asyncHandler, pagination, webhookIdempotency, crypto
+      modules/<domain>/       # <domain>.{routes,controller,service,repository,validation}.js
+      scripts/                # seed + idempotent backfills
+      tests/{unit,integration}/
+  env/{client,server}/.env.{development,production}   # env lives OUTSIDE the apps
+  config/                     # shared eslint/prettier configs
+  docs/                       # PROJECT-KNOWLEDGE.md is the definitive reference
+  render.yaml                 # Render deploy blueprint (4 services)
+  docker-compose.yml  .husky/  .github/workflows/ci.yml
 ```
 
-## Environment configuration
+Domains (both sides): `auth`, `games`, `teams`, `leagues`, `feed`, `billing`,
+`analytics`, `contact` (+ server `health`, `shared`).
 
-- One `.env` per environment, never committed. Commit a `.env.example` listing every required variable name with a placeholder value.
-- Centralize env var access through a single config module (`server/src/config/index.js`) that validates required vars are present at startup and fails fast with a clear error rather than crashing later mid-request:
+## Adding code — where it goes
 
-```js
-const required = ['MONGO_URI', 'JWT_SECRET', 'PORT'];
-required.forEach((key) => {
-  if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
-});
+- **New backend domain** → a folder in `server/src/modules/<domain>/` with the 5
+  `<domain>.<layer>.js` files (see `express-api-patterns`); register in
+  `routes/index.js`. **Schema goes inline in the repository**, not a `models/` dir.
+- **New frontend area** → a folder in `client/src/features/<domain>/` with
+  `api/`/`pages/` (and `components/`/`hooks/`/`schemas/` as needed); add routes to
+  `app/router/AppRouter.jsx` (and the `PostHogRouteTracker` route list).
+
+## Environment
+
+- Env files live in **`env/{client,server}/`** (gitignored), **not** in each app.
+  Server reads via `ENV_FILE=...`; client via Vite `envDir: '../env/client'`.
+- Both sides **Zod-validate env at boot** (`server/src/config/env.js`,
+  `client/src/lib/env.js`) and fail fast. Always add a new var to the schema; never
+  read `process.env.X` / `import.meta.env.X` scattered across files.
+- `pnpm check-env` validates env templates (runs in CI).
+
+## Scripts (root `package.json`)
+
+```bash
+pnpm dev       # client :5173 + server :4000 in parallel
+pnpm test      # all workspaces (server=Jest, client=Vitest)
+pnpm lint      # all workspaces
+pnpm build     # all workspaces
+pnpm check-env # validate env templates
+pnpm seed      # seed dev DB
+pnpm bootstrap # scripts/bootstrap.sh (install + first-time setup)
 ```
 
-- Never import `process.env.X` scattered across files — always go through the config module so there's one place to see everything the app depends on.
+Backfills: `ENV_FILE=../env/server/.env.development node src/scripts/<name>.js` (all `--dry-run`-able).
 
-## Package.json scripts convention
+## Tooling & workflow
 
-Standardize these script names across every MERN project so switching between projects (or letting an agent run them) doesn't require rediscovery:
+- **Husky** pre-commit runs `lint-staged` (Prettier); `commit-msg` runs commitlint
+  (conventional commits required).
+- **CI** (`.github/workflows/ci.yml`): `check-env → lint → test → build` on PRs and
+  pushes to `main`.
+- **Branch flow**: feature → `dev` (staging) → `main` (prod; deploys are manual).
+  See `CONTRIBUTING.md`. Run the full CI set locally before a PR.
+- **Deploy**: Render blueprint (`render.yaml`) — API + client × dev/prod. Secrets
+  via the Render dashboard, never in `render.yaml`. See `docs/deployment-render.md`.
 
-```json
-{
-  "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "lint": "eslint src",
-    "build": "vite build"
-  }
-}
-```
+## Server startup facts worth knowing
 
-## Database connection pattern
-
-Connect once at startup, not per-request. Handle connection errors and disconnects gracefully:
-
-```js
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => {
-    console.error('MongoDB connection failed:', err.message);
-    process.exit(1); // fail fast — don't let the app run without a DB
-  });
-
-mongoose.connection.on('disconnected', () => console.warn('MongoDB disconnected'));
-```
-
-## What to set up before writing feature code
-
-1. Linting + formatting (ESLint + Prettier) with a shared config for client and server
-2. `.env.example` and config validation module
-3. Error-handling middleware (see express-api-patterns skill)
-4. A health-check route (`GET /api/health`) for deployment monitoring
-5. Basic CI (lint + test on every push) even for a solo project — catches regressions early
+- `db.js` connects once with a retry loop, `maxPoolSize` (env `MONGO_MAX_POOL_SIZE`,
+  default 10), `serverSelectionTimeoutMS: 5000`; `disconnectDb()` for shutdown.
+- `server.js` registers graceful SIGTERM/SIGINT shutdown (drain HTTP → disconnect
+  Mongo → exit, 10s force-exit guard).
+- `/api/v1/health` pings Mongo and returns 503 if disconnected.
