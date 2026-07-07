@@ -157,6 +157,13 @@ function buildGameCardSnapshot(payload) {
       : (payload.team?.logo ?? null),
     teamColors: payload.team?.colors ?? [],
     opponent: isDualTeam ? null : payload.game.opponent,
+    participants: isDualTeam ? payload.participants : null,
+    // TSW-004: this was missing entirely — FullScreenGameCard/GameCardPost
+    // read every score/stat field from gameCard.recap.*, so omitting it made
+    // every persisted snapshot render 0-0 once a post used this cached path
+    // instead of the live getPublicGame() pipeline (which already includes
+    // recap). payload IS a getPublicGame() result, so this is already computed.
+    recap: payload.recap,
   };
 }
 
@@ -782,4 +789,6 @@ module.exports = {
   listShareableTeams,
   sanitizePost,
   refreshGameCardPostsForGame,
+  // TSW-004: exported for direct unit testing of the snapshot shape.
+  buildGameCardSnapshot,
 };

@@ -485,4 +485,60 @@ describe('feed service', () => {
     expect(teams).toHaveLength(1);
     expect(players).toHaveLength(1);
   });
+
+  // TSW-004: buildGameCardSnapshot omitted `recap` entirely, so every card
+  // that went through the persisted-snapshot path (as opposed to the live
+  // getPublicGame() fallback) rendered 0-0 — FullScreenGameCard/GameCardPost
+  // read every score field from gameCard.recap.*. buildGameCardSnapshot's
+  // `payload` argument IS a getPublicGame() return value, which already
+  // computes `recap` — the fix is copying it through, not recomputing it.
+  describe('buildGameCardSnapshot (TSW-004)', () => {
+    test('includes recap for a standalone (one-sided) game', () => {
+      const payload = {
+        game: { id: 'g1', trackingMode: 'one_sided', opponent: 'Falcons' },
+        team: { id: 't1', name: 'TSW Blue', logo: null, colors: ['#123456'] },
+        participants: null,
+        recap: {
+          statusLabel: 'Final',
+          team: { id: 't1', name: 'TSW Blue', points: 58 },
+          opponent: { name: 'Falcons', points: 51 },
+          teamStats: { points: 58, reb: 30, ast: 12 },
+        },
+      };
+
+      const snapshot = service.buildGameCardSnapshot(payload);
+
+      expect(snapshot.recap).toBe(payload.recap);
+      expect(snapshot.recap.team.points).toBe(58);
+      expect(snapshot.recap.opponent.points).toBe(51);
+      expect(snapshot.participants).toBeNull();
+    });
+
+    test('includes recap AND participants for a dual-team (league) game', () => {
+      const payload = {
+        game: { id: 'g2', trackingMode: 'dual_team', opponent: null },
+        team: null,
+        participants: {
+          home: { displayName: 'Home Team', logo: null },
+          away: { displayName: 'Away Team', logo: null },
+        },
+        recap: {
+          statusLabel: 'Final',
+          home: { name: 'Home Team', points: 64 },
+          away: { name: 'Away Team', points: 59 },
+        },
+      };
+
+      const snapshot = service.buildGameCardSnapshot(payload);
+
+      expect(snapshot.recap).toBe(payload.recap);
+      expect(snapshot.recap.home.points).toBe(64);
+      expect(snapshot.recap.away.points).toBe(59);
+      // Consumers (FullScreenGameCard/GameCardPost) detect dual-team mode via
+      // `!!gameCard?.participants` — this was ALSO missing from the old
+      // snapshot, so every cached dual-team card rendered as if it were
+      // standalone (wrong recap branch) on top of the 0-0 bug.
+      expect(snapshot.participants).toBe(payload.participants);
+    });
+  });
 });
