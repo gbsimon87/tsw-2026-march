@@ -30,7 +30,10 @@ function getStripe() {
     throw new ApiError(503, 'Billing is not configured');
   }
   if (!stripeClient) {
-    stripeClient = new Stripe(env.STRIPE_SECRET_KEY);
+    // OPT-023: pin the Stripe API version so a server-side SDK bump can't
+    // silently change request/response shapes under us. Matches the SDK's
+    // built-in LatestApiVersion for stripe@16; bump deliberately on upgrade.
+    stripeClient = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
   }
   return stripeClient;
 }

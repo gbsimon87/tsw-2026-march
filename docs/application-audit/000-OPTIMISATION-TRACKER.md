@@ -46,9 +46,9 @@
 
 ## 📊 Project status dashboard
 
-- **Overall status:** `All server-side hygiene work is DONE (OPT-001–006, 008–020, 022). Everything remaining is either browser-gated frontend work (needs a session with live browser testing), prod-data-gated, or the one small OPT-023 ops task. Practically no unblocked+uncommitted backend work left after OPT-023.`
-- **Current wave:** Wave 5 underway — OPT-022 done (backend sub-items); **OPT-023 is the last fully-unblocked, codeable-without-a-browser task in the whole tracker.** OPT-021 is deferred (browser-gated). Branch `dev`.
-- **Recommended next task (for a normal session, no browser needed):** **`OPT-023`** (ops hardening — SIGTERM, DB-ping health check, connection pool sizing, pin Stripe `apiVersion`, login rate limiter). After that, the only remaining work is: **for a session WITH live browser testing** — the batched frontend follow-up (**`OPT-021`**, **`OPT-016`** full scope, **`OPT-014b`**, **`OPT-018` client**); **gated on external state** — **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–020, 022.) 🛑 **OPT-022 not committed yet — see standing instruction at the top of this file.**
+- **Overall status:** `All server-side hygiene AND ops work is DONE (OPT-001–006, 008–020, 022, 023). Everything remaining is either browser-gated frontend work (needs a session with live browser testing), prod-data-gated, or blocked on product decisions. There is NO unblocked backend work left.`
+- **Current wave:** Wave 5 complete for everything codeable-without-a-browser — **OPT-022 and OPT-023 both done and committed.** OPT-021 is deferred (browser-gated). Branch `dev`.
+- **Recommended next task:** No further backend work is unblocked. The remaining work is: **for a session WITH live browser testing** — the batched frontend follow-up (**`OPT-021`**, **`OPT-016`** full scope, **`OPT-014b`**, **`OPT-018` client**); **gated on external state** — **`OPT-007`** (prod `$indexStats`), **`OPT-025`** (prod backfill), **`OPT-024`** (product decisions). (Done: OPT-001–006, 008–020, 022, 023.)
 - **Dataset context:** tiny today (~17 games, 136 docs in dev). Nothing is
   slow _now_; the P1 items are **scaling cliffs**, the frontend items are felt
   by every user immediately. Prioritise accordingly.
@@ -57,10 +57,10 @@
 
 | Status      | Count                                                                       |
 | ----------- | --------------------------------------------------------------------------- |
-| Not Started | 3 (`007` gated-prod, `023` unblocked, `025` gated-prod)                     |
+| Not Started | 2 (`007` gated-prod, `025` gated-prod)                                      |
 | In Progress | 0                                                                           |
 | Blocked     | 1 (`OPT-024`, awaiting product decisions)                                   |
-| Completed   | 20 (`001`–`006`, `008`–`020`, `022`)                                        |
+| Completed   | 21 (`001`–`006`, `008`–`020`, `022`, `023`)                                 |
 | Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log) |
 
 ---
@@ -130,7 +130,7 @@ consumers and rework is minimised.
 | OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
 | OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
 | OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Backend   | —                  |
-| OPT-023 | Ops hardening                                  | 5    | Low      | S          | Not Started  | —                  |
+| OPT-023 | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | **Blocked**  | product decision   |
 | OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | Not Started  | OPT-008 + backfill |
 
@@ -141,8 +141,21 @@ blockers._
 
 ## ✅ Completed
 
+- **OPT-023** — Ops hardening. _2026-07-07._ Committed (`e97e5c8`+) on `dev`.
+  All five sub-items shipped: **(1) graceful SIGTERM/SIGINT shutdown** in
+  `server.js` (drain HTTP → disconnect Mongo → exit, with a 10s force-exit
+  guard); **(2) DB-ping health check** — `/health` now returns 503 unless Mongo
+  is connected _and_ answers a ping, so orchestrators pull severed instances out
+  of rotation; **(3) pool + fail-fast** — `maxPoolSize` (new
+  `MONGO_MAX_POOL_SIZE` env, default 10) + `serverSelectionTimeoutMS: 5000` on
+  connect, plus a `disconnectDb()` for the shutdown path; **(4) pinned Stripe
+  `apiVersion: '2024-06-20'`** so an SDK bump can't silently reshape payloads;
+  **(5) dedicated credential rate limiter** (20/15min) on
+  `/register`,`/login`,`/refresh`, which previously had only the global
+  300/15min budget. Full suite **32 suites / 249 tests**; lint clean. See card
+  for per-item detail.
 - **OPT-022** — Low-impact hygiene batch (backend sub-items; canvas-on-demand
-  deferred). _2026-07-07._ Branch `dev` (uncommitted). 5 independent sub-items,
+  deferred). _2026-07-07._ Committed (`e97e5c8`) on `dev`. 5 independent sub-items,
   each investigated rather than assumed: **(1) `participant.slug` schema fix —
   a real bug, not just hygiene.** The field was always written at game
   creation but never declared in the schema, so Mongoose silently dropped it
@@ -380,6 +393,23 @@ _None._
 
 Record every architectural / scope decision here with a date and rationale.
 
+- **2026-07-07 — OPT-023: credential limiter stays single-instance (IP-keyed
+  in-memory) for now.** The new `authCredentialLimiter` uses express-rate-limit's
+  default in-memory store, so its budget is per-process, not shared across
+  instances. Correct multi-instance limiting needs a shared store (Redis), which
+  is deliberately deferred with the rest of the Redis work (caching layer, etc.)
+  — the app is single-instance today, so per-process limiting is already a strict
+  improvement over the zero limiter these endpoints had. **Why:** shipping the
+  limiter now closes the credential-abuse gap immediately; wiring Redis for it
+  alone would pull an unbudgeted dependency forward. Revisit when the app goes
+  multi-instance or when Redis lands for caching.
+- **2026-07-07 — OPT-023: one `/health` endpoint doubles as liveness AND
+  readiness.** Rather than split into `/livez` + `/readyz`, the single endpoint
+  now returns 503 when the DB is unreachable. **Why:** the deployment only needs
+  one probe today and a DB-severed instance genuinely can't serve, so failing
+  the one health check is the desired behaviour. If a future orchestrator needs
+  a liveness probe that stays 200 during DB blips (to avoid restart storms),
+  split then — noted so it isn't a surprise.
 - **2026-07-07 — OPT-022: two of the card's "dead code" targets were investigated
   and NOT removed — they're live.** The card assumed a "legacy checkout
   endpoint" and an "email-verification path" were dead code to delete. Both
@@ -761,6 +791,16 @@ lockId)`. `games.service.js`: new `scheduleGameSummaryGeneration` (post-
   (idempotent, dry-run flag) for pre-existing games — already run against dev.
   `.lean()` added to `listCompletedGames`/`listPublicCompletedGames`
   (games.repository.js) and `listLeaguesByIds` (leagues.repository.js).
+- ✅ **built/changed (OPT-023, 2026-07-07)** ops hardening:
+  `server.js` gained `registerGracefulShutdown(server)` (SIGTERM/SIGINT drain →
+  `disconnectDb` → exit, 10s force-exit guard) and now captures the
+  `http.Server` from `app.listen`. `config/db.js`: `connect` sets `maxPoolSize`
+  - `serverSelectionTimeoutMS: 5000`; new `disconnectDb()` export. `config/env.js`:
+    new `MONGO_MAX_POOL_SIZE` (default 10). `health.controller.js` now pings Mongo
+    (503 unless connected + ping OK; response gains a `db` field). `billing.service.js`:
+    `new Stripe(key, { apiVersion: '2024-06-20' })`. `rateLimit.middleware.js`: new
+    `authCredentialLimiter` (20/15min) exported and applied to `/register`,
+    `/login`, `/refresh` in `auth.routes.js`.
 
 ## 🔔 Implementation reminders
 
@@ -1500,6 +1540,43 @@ load their opponent info slightly faster (one fewer DB round-trip per side).
 
 **Pass criteria:** everything looks identical to before across all pages; the
 dry-run backfill reports 0 remaining.
+
+---
+
+### ✅ OPT-023 — Ops hardening (backend)
+
+**What to test:** All infra-facing; no UI change. Best verified in a running
+server + a staging deploy. Each sub-item can be checked independently.
+
+1. **Graceful shutdown.** Start the server (`pnpm --filter server dev` or prod
+   start), then send it `SIGTERM` (or Ctrl-C for `SIGINT`). Expect logs:
+   `Received shutdown signal; draining` → `Disconnected from MongoDB` →
+   `Shutdown complete`, then a clean `exit 0`. Fire a slow request first and
+   confirm it finishes before the process exits (it should not be dropped). If
+   a connection hangs >10s the process force-exits with a logged error — that's
+   the safety net, not a bug.
+2. **DB-ping health check.** With Mongo up, `GET /api/v1/health` → **200**
+   `{ status:'ok', db:'ok', … }`. Then stop Mongo (or point `MONGO_URI` at a
+   dead host) and hit it again → **503** `{ status:'unavailable', db:'error' or
+'disconnected' }`. A load balancer using this endpoint will now drop the
+   instance from rotation instead of sending it traffic.
+3. **Pool / fail-fast.** Point `MONGO_URI` at an unreachable host and start the
+   server — connection selection should fail in ~5s (not hang ~30s), then the
+   existing retry loop logs its attempts. Optionally set `MONGO_MAX_POOL_SIZE`
+   and confirm it's accepted (numeric, positive).
+4. **Stripe pinned version.** Trigger any billing call (e.g. start a checkout in
+   staging) and confirm it still works — the SDK now sends
+   `Stripe-Version: 2024-06-20`. Visible in Stripe Dashboard → Developers →
+   Logs on the request, or via `stripe listen`.
+5. **Credential rate limiter.** Hit `POST /api/v1/auth/login` (wrong creds is
+   fine) more than ~20 times within 15 min from one IP → the 21st should return
+   **429** `{ error: { message: 'Too many authentication attempts…' } }`. The
+   global browsing budget (300/15min) is unaffected; recovery endpoints keep
+   their own tighter limit.
+
+**Pass criteria:** graceful drain on signal; `/health` flips 200↔503 with DB
+up/down; billing still works with the pinned version; login trips a 429 past
+its budget; no UI difference anywhere.
 
 ---
 
@@ -2812,27 +2889,23 @@ stale-while-revalidate=300` on the public routers (which never personalise);
     backfilled data, cheap, harmless) rather than removed, since a future doc
     could theoretically still arrive without a slug via some other path.
   - **Item 2 — dead-code claims mostly don't hold up; nothing was deleted.**
-    Investigated each named target instead of deleting on faith:
-    - `DashboardPage` — confirmed already removed (OPT-001). No-op.
-    - "Legacy checkout endpoint" (`POST /billing/checkout-session`) — **NOT
-      dead**. Explicitly commented `// Legacy route — kept for backward
+    Investigated each named target instead of deleting on faith: - `DashboardPage` — confirmed already removed (OPT-001). No-op. - "Legacy checkout endpoint" (`POST /billing/checkout-session`) — **NOT
+    dead**. Explicitly commented `// Legacy route — kept for backward
 compatibility` and has a dedicated integration test asserting it still
-      works. The _client_ function that calls it (`billingApi.
+    works. The _client_ function that calls it (`billingApi.
 createCheckoutSession`) has no UI caller (superseded by
-      `createTeamCheckoutSession`/`createLeagueCheckoutSession`), so the path
-      is unreachable _from this app's UI_ — but the route itself is a
-      deliberate, tested, documented back-compat shim that could be serving
-      something outside this repo (old client build, another integration).
-      **Not removed** — a hygiene task shouldn't unilaterally delete an
-      intentional compat shim for a payment endpoint.
-    - "Email-verification path" — **NOT dead**. Live route → controller →
-      service, called by `authApi.js`, consumed by `VerifyEmailPage.jsx`,
-      linked from the login form. **Not removed.**
-    - "Unused exports" — a targeted sweep found no exports confidently
-      identifiable as dead within reasonable effort; static grep-based dead-
-      export detection produced too many false positives to trust for actual
-      deletions (e.g. flagged `ApiError`, `asyncHandler` — both obviously
-      live). **Closed as "no gap found"** rather than guessing.
+    `createTeamCheckoutSession`/`createLeagueCheckoutSession`), so the path
+    is unreachable _from this app's UI_ — but the route itself is a
+    deliberate, tested, documented back-compat shim that could be serving
+    something outside this repo (old client build, another integration).
+    **Not removed** — a hygiene task shouldn't unilaterally delete an
+    intentional compat shim for a payment endpoint. - "Email-verification path" — **NOT dead**. Live route → controller →
+    service, called by `authApi.js`, consumed by `VerifyEmailPage.jsx`,
+    linked from the login form. **Not removed.** - "Unused exports" — a targeted sweep found no exports confidently
+    identifiable as dead within reasonable effort; static grep-based dead-
+    export detection produced too many false positives to trust for actual
+    deletions (e.g. flagged `ApiError`, `asyncHandler` — both obviously
+    live). **Closed as "no gap found"** rather than guessing.
   - **Item 3 — canvas-on-demand: deferred, client rendering.**
     `GameDetailPage.jsx`'s share-card canvas regenerates in a `useEffect` on
     every `data` change instead of on the explicit share action. This is a
@@ -2866,7 +2939,7 @@ createCheckoutSession`) has no UI caller (superseded by
 
 ### OPT-023 — Ops hardening
 
-- **Priority:** Low · **Status:** Not Started · **Category:** Ops / backend
+- **Priority:** Low · **Status:** ✅ **Completed** (2026-07-07) · **Category:** Ops / backend
 - **Wave:** 5 · **Complexity:** S · **Dependencies:** none
 - **Description:** Graceful SIGTERM shutdown (`server.js`); DB-ping health check
   (currently no DB ping); explicit Mongoose `maxPoolSize` +
@@ -2879,10 +2952,51 @@ createCheckoutSession`) has no UI caller (superseded by
   config, auth rate-limit middleware.
 - **Testing:** SIGTERM drains connections; health fails when DB down; login
   limiter trips; Stripe calls use pinned version.
-- **Validation checklist:** [ ] graceful shutdown [ ] DB-ping health [ ] pool/
-  timeout set [ ] Stripe pinned [ ] login limiter.
+- **Validation checklist:** [x] graceful shutdown [x] DB-ping health [x] pool/
+  timeout set [x] Stripe pinned [x] login limiter.
 - **Source:** [30](./30-optimisation-roadmap.md) L6, [21](./21-deployment-notes.md), [24](./24-database-audit.md) §7.
-- **Completion notes:** —
+- **Completion notes:** All five sub-items shipped (commit on branch `dev`):
+  1. **Graceful shutdown** (`server.js`) — `bootstrap` now captures the
+     `http.Server` from `app.listen` and `registerGracefulShutdown` traps
+     `SIGTERM`/`SIGINT`: stop accepting new connections (`server.close`), let
+     in-flight requests drain, then `disconnectDb()`, then `exit(0)`. A 10s
+     `unref`'d timeout force-exits if a hung socket blocks the drain. Idempotent
+     via a `shuttingDown` guard so a double signal can't double-run it.
+  2. **DB-ping health check** (`health.controller.js`) — the endpoint now
+     returns **503** (`status:'unavailable'`) when `mongoose.connection.readyState
+!== 1` OR when `db.admin().ping()` throws, and **200** (`db:'ok'`) only when
+     the ping succeeds. A load balancer will now pull a DB-severed instance out
+     of rotation instead of routing to a server that can only 500.
+  3. **Pool + timeout** (`config/db.js`, `config/env.js`) — `mongoose.connect`
+     now sets `maxPoolSize` (new env `MONGO_MAX_POOL_SIZE`, default 10) and
+     `serverSelectionTimeoutMS: 5000` (fail-fast instead of the driver's 30s
+     hang; the existing retry loop then surfaces it in seconds). Added
+     `disconnectDb()` export used by the shutdown path.
+  4. **Stripe pinned** (`billing.service.js`) — `new Stripe(key, { apiVersion:
+'2024-06-20' })`. Matches stripe@16's built-in `LatestApiVersion`; bump
+     deliberately on SDK upgrade so a version bump can't silently reshape
+     request/response payloads.
+  5. **Credential rate limiter** (`rateLimit.middleware.js`, `auth.routes.js`)
+     — new `authCredentialLimiter` (20 req / 15 min, IP-keyed) applied to
+     `/register`, `/login`, `/refresh` — which previously had **no** limiter
+     beyond the global 300/15min `/api` budget. Recovery endpoints keep the
+     existing tighter `authRecoveryLimiter`.
+- **Tests:** rewrote `health.test.js` (integration) to drive the three
+  connection states (connected+ping-ok → 200; disconnected → 503; ping-throws → 503) since the endpoint now requires a live DB; new
+  `rateLimit.middleware.test.js` (unit) proves the credential limiter is wired,
+  trips a 429 with the expected JSON body over its budget, and is a distinct
+  instance from the global limiter. Updated the `rateLimit.middleware` mocks in
+  `gates.test.js` and `billing.routes.test.js` to include the new export (they
+  mock the whole module, so an omitted key crashed route registration).
+- **Verification:** full suite **32 suites / 249 tests pass** (up from 30/244 —
+  +2 suites: rate-limit unit + the reworked health tests contribute net-new
+  cases); lint clean on all changed files. Stripe pinned-version instantiation
+  smoke-tested against the real SDK. `node --check` on all rewritten files.
+- **Not done (out of scope / future):** the IP-keyed limiter is still
+  single-instance — a shared store (Redis) for multi-instance correctness is
+  deferred with the rest of the Redis work (see Decisions log). No new metrics/
+  readiness-vs-liveness split; the single `/health` endpoint now doubles as a
+  readiness probe.
 
 ---
 
