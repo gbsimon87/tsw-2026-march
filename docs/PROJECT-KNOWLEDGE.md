@@ -8,7 +8,11 @@
 > file-path map), [`api.md`](./api.md) (endpoint reference),
 > [`permissions.md`](./permissions.md) (authorization matrix),
 > [`billing.md`](./billing.md), [`security.md`](./security.md),
-> [`posthog-implementation.md`](./posthog-implementation.md).
+> [`posthog-implementation.md`](./posthog-implementation.md). Active work
+> trackers: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
+> (performance/hardening, OPT-###) and
+> [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md)
+> (targeted bug fixes + architecture review, TSW-###).
 
 ---
 
@@ -407,31 +411,53 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 
 **Active optimisation project**: `docs/application-audit/000-OPTIMISATION-TRACKER.md`
 is the **sole surviving file** in that folder and the living tracker for the
-performance/hardening work (OPT-###) — the 30 original audit documents it was
-built from were removed 2026-07-07 once every finding was addressed (their
-"Source:" citations remain in the tracker as historical pointers only). All
-backend-only work is done and committed. Open items: a handful of client pages
-still need the OPT-014b React Query migration (mutation/polling-heavy or
-untested — see its card), `GameTrackPage` decomposition (OPT-016, deliberately
-last — the largest/riskiest file), feed windowing (OPT-021, partly gated on
-real mobile-device testing), and OPT-007's remaining index candidates (gated on
-~1 week of Atlas usage observation). Consult it before starting
+performance/hardening work (OPT-###, 27 tasks) — the 30 original audit
+documents it was built from were removed 2026-07-07 once every finding was
+addressed (their "Source:" citations remain in the tracker as historical
+pointers only). 22 tasks are done and committed; 1 is won't-fix (`OPT-025`,
+investigated and found unsafe to ship — the prod backfill half is real and
+done); 1 is deferred (`OPT-021`, its risky part needs real mobile-device
+testing). Two remain open: `OPT-007` (5 index candidates await a ~1wk Atlas
+usage observation — no code left to write, waiting on data) and `OPT-014b`
+(React Query migration — 5 clean read-only pages done 2026-07-07;
+mutation/polling-heavy pages like `BillingSuccessPage`'s poll loop and the
+two large untested Public pages remain, plus `GameTrackPage`'s decomposition,
+deliberately last as the biggest/riskiest file). `OPT-026` tracks the client
+test suite's ~20 pre-existing failures (test-drift, not live bugs — discovered
+2026-07-07, not yet triaged). Consult the tracker before starting any
 optimisation work.
+
+**Separate initiative — targeted bug fixes & architecture review**:
+`docs/project-improvement-plan/00_IMPLEMENTATION_TRACKER.md` tracks 5
+investigated issues (`TSW-001`–`TSW-005`), started 2026-07-08. 3 are done:
+`TSW-002` (Key Moments mobile scroll — it was never built as a horizontal
+scroller, unlike the working Highlights section), `TSW-003` (prod nav title
+falling back to a repo-name-shaped string), `TSW-004` (shared game cards
+rendering 0-0 — the card snapshot builder silently omitted the `recap` field
+the display components read from). `TSW-001` (Share to Pulse failing for
+League Admins — the permission chain is actually correct; the real bug is a
+swallowed client error masking the true cause) needs a quick look at a real
+failed request in production before its fix can be finalized. `TSW-005`
+(extending FeedComposer to support league-scoped teams/games/players, not
+just standalone ones) is investigated and scoped as an additive change, not a
+rewrite — largest remaining task. This tracker is independent of the OPT-###
+one; neither modifies the other.
 
 ---
 
 ## 12. Where to start (by question)
 
-| I need to understand…          | Start here                                                                                         |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| Product scope & features       | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                  |
-| Fast file-path orientation     | [`app-overview.md`](./app-overview.md)                                                             |
-| Routing / page composition     | `client/src/app/router/AppRouter.jsx`                                                              |
-| Live game behavior             | `client/src/features/games/pages/GameTrackPage.jsx`                                                |
-| Derived stats / recap logic    | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                               |
-| API surface                    | [`api.md`](./api.md)                                                                               |
-| Persistence schemas            | `server/src/modules/*/*.repository.js`                                                             |
-| Authorization rules            | [`permissions.md`](./permissions.md)                                                               |
-| Billing                        | [`billing.md`](./billing.md)                                                                       |
-| Deploy & env                   | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md) |
-| Performance/optimisation state | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md) |
+| I need to understand…          | Start here                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Product scope & features       | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
+| Fast file-path orientation     | [`app-overview.md`](./app-overview.md)                                                                             |
+| Routing / page composition     | `client/src/app/router/AppRouter.jsx`                                                                              |
+| Live game behavior             | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
+| Derived stats / recap logic    | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
+| API surface                    | [`api.md`](./api.md)                                                                                               |
+| Persistence schemas            | `server/src/modules/*/*.repository.js`                                                                             |
+| Authorization rules            | [`permissions.md`](./permissions.md)                                                                               |
+| Billing                        | [`billing.md`](./billing.md)                                                                                       |
+| Deploy & env                   | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
+| Performance/optimisation state | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
+| Open bug fixes / arch review   | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |
