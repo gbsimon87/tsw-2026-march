@@ -1,20 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { leaguesApi } from '../api/leaguesApi';
 
 export function LeaguesPage() {
-  const [leagues, setLeagues] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  // OPT-014b: migrated from useEffect+useState to React Query.
+  const {
+    data,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['leagues'],
+    queryFn: () => leaguesApi.list(),
+  });
 
-  useEffect(() => {
-    leaguesApi
-      .list()
-      .then((response) => setLeagues(response.leagues || []))
-      .catch((loadError) => setError(loadError.message || 'Failed to load leagues'))
-      .finally(() => setIsLoading(false));
-  }, []);
+  const leagues = data?.leagues || [];
+  const error = isError ? queryError?.message || 'Failed to load leagues' : '';
 
   return (
     <main className="space-y-8">
