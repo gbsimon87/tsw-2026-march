@@ -63,16 +63,17 @@
   prod). Nothing is slow _now_; the P1 items are **scaling cliffs**, the
   frontend items are felt by every user immediately. Prioritise accordingly.
 
-**Counts by status** (25 tasks total; OPT-025 added during OPT-008):
+**Counts by status** (26 tasks total; OPT-025 added during OPT-008, OPT-026
+added during OPT-022):
 
-| Status      | Count                                                                                            |
-| ----------- | ------------------------------------------------------------------------------------------------ |
-| Not Started | 0                                                                                                |
-| In Progress | 1 (`OPT-007` — provably-dead half done in dev, needs prod run + observation window for the rest) |
-| Blocked     | 0                                                                                                |
-| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                                               |
-| Won't-fix   | 1 (`OPT-025` — prod backfill done; code projection unsafe, see its card)                         |
-| Deferred    | 1 (`OPT-021`, batched with browser-gated frontend work — see Decisions log)                      |
+| Status      | Count                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| Not Started | 1 (`OPT-026` — pre-existing client test failures, housekeeping)                                |
+| In Progress | 1 (`OPT-007` — dead-index drops done in dev+prod; 5 candidates await a ~1wk Atlas observation) |
+| Blocked     | 0                                                                                              |
+| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                                             |
+| Won't-fix   | 1 (`OPT-025` — prod backfill done; code projection unsafe, see its card)                       |
+| Deferred    | 1 (`OPT-021`, browser-gated frontend batch — now workable, being tackled; see Decisions log)   |
 
 ---
 
@@ -144,6 +145,7 @@ consumers and rework is minimised.
 | OPT-023 | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-024 | Correctness decisions                          | 5    | Low      | S          | ✅ Completed | —                  |
 | OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | 🚫 Won't-fix | OPT-008 + backfill |
+| OPT-026 | Fix pre-existing client test-suite failures    | —    | Low      | M          | Not Started  | —                  |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -3402,3 +3404,53 @@ finalScore)` rejects (422) a league game finishing tied, checked in
   for other reasons.
   **No code was changed for this task** — investigation only; current
   behaviour and data are untouched.
+
+---
+
+### OPT-026 — Fix pre-existing client test-suite failures
+
+- **Priority:** Low · **Status:** Not Started · **Category:** Test hygiene / frontend
+- **Wave:** — (housekeeping, no dependency) · **Complexity:** M · **Dependencies:** none
+- **Description:** The client `vitest` suite has **20 failing tests across 9
+  files** that predate the current optimisation work — discovered 2026-07-07
+  while verifying OPT-022's canvas change had no regressions (confirmed via
+  `git stash`: the same 20 fail with and without every recent change). They are
+  test-drift from earlier feature/branding changes where the tests weren't
+  updated alongside the code, NOT live bugs — the app works; the assertions are
+  stale.
+- **Reason:** A suite that's been red for a while trains everyone to ignore it,
+  and it hides real regressions in the noise — exactly the risk during the
+  remaining frontend batch (OPT-021/018-client/014b/016), where a green suite
+  would be the cheapest regression signal.
+- **Failing files + apparent root cause (2026-07-07 snapshot):**
+  - `src/tests.smoke.test.jsx` — "App shell renders branding text": looks for a
+    link named **"TSW"** that no longer exists (branding change).
+  - `src/lib/posthog.test.js` — init spy expects different args than the current
+    `posthog.init(...)` config (page-view tracking config drift).
+  - `src/features/games/components/InteractiveCourtImage.test.jsx` (×2) — the
+    coordinate-mapping `onSelect` spy isn't called with the expected `{x,y}` —
+    possible real interaction/behaviour change, needs a closer look (not
+    obviously pure test-drift).
+  - `src/features/games/pages/GameDetailPage.test.jsx` (×4) — YouTube embed
+    `src` now has extra query params (`?enablejsapi=1&controls=1&...`); replay-
+    lock copy text changed from "Replay is only available for Pro users".
+  - `src/features/games/pages/GameTrackPage.test.jsx` (×7) — several
+    interaction tests; needs triage (may overlap with OPT-016's decomposition,
+    so possibly worth doing together or immediately after).
+  - `src/features/feed/pages/FeedPage.test.jsx` (×2), `AdminLeaguePage`,
+    `AdminNewLeagueGamePage`, `CardPosts` snapshot — assorted; triage each.
+- **Expected benefit:** A green baseline so the suite is a trustworthy
+  regression signal again.
+- **Files likely to change:** the 9 test files above (and possibly a few
+  components if any failure turns out to be a real bug, not test-drift — the
+  InteractiveCourtImage and GameTrackPage ones warrant checking before assuming
+  drift).
+- **Testing:** `pnpm --filter client test` (vitest) goes fully green; each fix
+  is verified to be updating a stale assertion, not deleting a test that caught
+  a real bug.
+- **Validation checklist:** [ ] each failure triaged (drift vs real bug)
+  [ ] real bugs (if any) fixed in code, not the test [ ] stale assertions
+  updated [ ] full client suite green.
+- **Source:** discovered during OPT-022 (2026-07-07); not from the original
+  audit.
+- **Completion notes:** —
