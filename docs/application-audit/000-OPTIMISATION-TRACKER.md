@@ -63,17 +63,17 @@
   prod). Nothing is slow _now_; the P1 items are **scaling cliffs**, the
   frontend items are felt by every user immediately. Prioritise accordingly.
 
-**Counts by status** (26 tasks total; OPT-025 added during OPT-008, OPT-026
-added during OPT-022):
+**Counts by status** (27 tasks total; OPT-025 added during OPT-008, OPT-026
+added during OPT-022, OPT-014b split out from OPT-014):
 
-| Status      | Count                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| Not Started | 1 (`OPT-026` — pre-existing client test failures, housekeeping)                                |
-| In Progress | 1 (`OPT-007` — dead-index drops done in dev+prod; 5 candidates await a ~1wk Atlas observation) |
-| Blocked     | 0                                                                                              |
-| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                                             |
-| Won't-fix   | 1 (`OPT-025` — prod backfill done; code projection unsafe, see its card)                       |
-| Deferred    | 1 (`OPT-021`, browser-gated frontend batch — now workable, being tackled; see Decisions log)   |
+| Status      | Count                                                                                                                                        |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Not Started | 1 (`OPT-026` — pre-existing client test failures, housekeeping)                                                                              |
+| In Progress | 2 (`OPT-007` — 5 index candidates await a ~1wk Atlas observation; `OPT-014b` — 5 pages migrated, mutation/polling/untested-big pages remain) |
+| Blocked     | 0                                                                                                                                            |
+| Completed   | 22 (`001`–`006`, `008`–`020`, `022`, `023`, `024`)                                                                                           |
+| Won't-fix   | 1 (`OPT-025` — prod backfill done; code projection unsafe, see its card)                                                                     |
+| Deferred    | 1 (`OPT-021`, browser-gated frontend batch — A+B doable, C needs a real phone; see its card)                                                 |
 
 ---
 
@@ -118,34 +118,35 @@ consumers and rework is minimised.
 
 ## 📋 Status board
 
-| ID      | Title                                          | Wave | Priority | Complexity | Status       | Depends on         |
-| ------- | ---------------------------------------------- | ---- | -------- | ---------- | ------------ | ------------------ |
-| OPT-001 | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed | —                  |
-| OPT-002 | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed | —                  |
-| OPT-003 | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | ✅ Completed | OPT-002            |
-| OPT-004 | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed | (OPT-007)          |
-| OPT-005 | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed | —                  |
-| OPT-006 | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed | —                  |
-| OPT-007 | Index hygiene                                  | 0    | Medium   | S          | 🟡 Partial   | — (verify first)   |
-| OPT-008 | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed | OPT-006            |
-| OPT-009 | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
-| OPT-010 | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
-| OPT-011 | `leagueplayerstats` materialisation            | 2    | High     | L          | ✅ Completed | OPT-010            |
-| OPT-012 | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | ✅ Scoped    | OPT-008            |
-| OPT-013 | Team season summaries (standalone)             | 2    | Medium   | M          | ✅ Completed | OPT-006            |
-| OPT-014 | React Query on the client                      | 3    | High     | M          | ✅ Scoped    | (OPT-010, OPT-011) |
-| OPT-015 | Slim event-append hot path                     | 3    | Medium   | M          | ✅ Scoped    | OPT-008            |
-| OPT-016 | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | ✅ Scoped    | OPT-015            |
-| OPT-017 | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
-| OPT-018 | Pagination everywhere                          | 4    | Medium   | M          | ✅ Backend   | —                  |
-| OPT-019 | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
-| OPT-020 | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
-| OPT-021 | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
-| OPT-022 | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Completed | —                  |
-| OPT-023 | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
-| OPT-024 | Correctness decisions                          | 5    | Low      | S          | ✅ Completed | —                  |
-| OPT-025 | Project `events` out of list endpoints         | 1    | Medium   | S          | 🚫 Won't-fix | OPT-008 + backfill |
-| OPT-026 | Fix pre-existing client test-suite failures    | —    | Low      | M          | Not Started  | —                  |
+| ID       | Title                                          | Wave | Priority | Complexity | Status       | Depends on         |
+| -------- | ---------------------------------------------- | ---- | -------- | ---------- | ------------ | ------------------ |
+| OPT-001  | Route code splitting + chunking                | 0    | High     | S/M        | ✅ Completed | —                  |
+| OPT-002  | Cloudinary URL transformer (server)            | 0    | High     | S          | ✅ Completed | —                  |
+| OPT-003  | `<CloudinaryImage>` + lazy + srcset            | 0    | High     | S/M        | ✅ Completed | OPT-002            |
+| OPT-004  | Kill full-collection public scans              | 0    | High     | S/M        | ✅ Completed | (OPT-007)          |
+| OPT-005  | De-dup intra-request league loads              | 0    | Medium   | S          | ✅ Completed | —                  |
+| OPT-006  | Consolidate stat code → `statSummary.js`       | 0    | Medium   | S/M        | ✅ Completed | —                  |
+| OPT-007  | Index hygiene                                  | 0    | Medium   | S          | 🟡 Partial   | — (verify first)   |
+| OPT-008  | `Game.finalScore` + `eventCount` + projections | 1    | High     | M          | ✅ Completed | OPT-006            |
+| OPT-009  | Async video transcode + video hygiene          | 1    | Medium   | S          | ✅ Completed | OPT-002            |
+| OPT-010  | `leaguestandings` materialisation              | 2    | High     | L          | ✅ Completed | OPT-006, OPT-008   |
+| OPT-011  | `leagueplayerstats` materialisation            | 2    | High     | L          | ✅ Completed | OPT-010            |
+| OPT-012  | Frozen `Game.boxScore` + single event pass     | 2    | Medium   | M          | ✅ Scoped    | OPT-008            |
+| OPT-013  | Team season summaries (standalone)             | 2    | Medium   | M          | ✅ Completed | OPT-006            |
+| OPT-014  | React Query on the client                      | 3    | High     | M          | ✅ Scoped    | (OPT-010, OPT-011) |
+| OPT-014b | React Query — migrate remaining pages          | 3    | Medium   | M          | 🟡 Partial   | OPT-014            |
+| OPT-015  | Slim event-append hot path                     | 3    | Medium   | M          | ✅ Scoped    | OPT-008            |
+| OPT-016  | GameTrackPage decomposition + memo             | 3    | Medium   | M/L        | ✅ Scoped    | OPT-015            |
+| OPT-017  | Feed hydration batching + denormalise          | 3    | Medium   | M          | ✅ Completed | —                  |
+| OPT-018  | Pagination everywhere                          | 4    | Medium   | M          | ✅ Backend   | —                  |
+| OPT-019  | HTTP caching for anonymous GETs                | 4    | Medium   | S          | ✅ Completed | OPT-010, OPT-011   |
+| OPT-020  | Blocking integrations off request path         | 4    | Medium   | S          | ✅ Completed | —                  |
+| OPT-021  | Feed windowing + video unmount                 | 4    | Low      | M          | ⏸️ Deferred  | (OPT-009)          |
+| OPT-022  | Low-impact hygiene batch                       | 5    | Low      | S          | ✅ Completed | —                  |
+| OPT-023  | Ops hardening                                  | 5    | Low      | S          | ✅ Completed | —                  |
+| OPT-024  | Correctness decisions                          | 5    | Low      | S          | ✅ Completed | —                  |
+| OPT-025  | Project `events` out of list endpoints         | 1    | Medium   | S          | 🚫 Won't-fix | OPT-008 + backfill |
+| OPT-026  | Fix pre-existing client test-suite failures    | —    | Low      | M          | Not Started  | —                  |
 
 _Deps in (parentheses) are "benefits from / stronger after" rather than hard
 blockers._
@@ -2607,7 +2608,57 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
     pre-existing failures.
   - **Not committed yet** — per the user's 2026-07-06 standing instruction
     at the top of this file, all OPT-014 changes are left in the working
-    tree pending manual browser testing and explicit go-ahead.
+    tree pending manual browser testing and explicit go-ahead. _(Historical
+    note — OPT-014 was subsequently committed as `6ae914d`.)_
+
+---
+
+### OPT-014b — React Query: migrate remaining pages
+
+- **Priority:** Medium · **Status:** 🟡 **Partial** (2026-07-07 — 5 clean
+  read-only pages done + browser-verified; mutation/polling/untested-big pages
+  remain) · **Category:** Frontend / caching
+- **Wave:** 3 · **Complexity:** M · **Dependencies:** OPT-014 (provider +
+  pattern established)
+- **Description:** Finish the page-by-page React Query migration OPT-014
+  started — swap the remaining `useEffect`+`useState`+`.then(setState)` reads
+  for keyed `useQuery`, matching OPT-014's convention (`['games']`, `['teams']`,
+  `['leagues']`, `['game', id]`, `['publicLeague', slug]`, …).
+- **Reason:** The unmigrated pages still refetch on every mount with no cache;
+  a consistent React Query surface makes nav instant and dedups shared reads.
+- **Done this pass (2026-07-07, browser-verified, each committed):**
+  - `GamesListPage` → `useQuery(['games'])`, `TeamsPage` → `['teams']`,
+    `LeaguesPage` → `['leagues']` (commit `95261a2`). Summary counts still
+    derive from the full list — these pages are **not** paginated (see OPT-018
+    client note).
+  - `MySportyPage` → `useQuery(['myProfiles'])` (avatar-upload mutation left
+    as-is, already flows through `AuthContext.updateUser`); `OpponentPlaceholderPage`
+    → `useQuery(['publicOpponent', slug])` (commit `cb650ae`).
+  - Test files wrapped in a `QueryClientProvider` (fresh client per render,
+    `retry:false`) — the OPT-014 test pattern. Full client suite baseline
+    unchanged at 20 pre-existing failures / 118 passed throughout.
+- **Remaining (deliberately NOT done this pass — higher risk):**
+  - `NewGamePage` — fetch seeds form state (teams + known opponents) then a
+    submit mutation; read-migration needs care around form init.
+  - `BillingSuccessPage` — a **stateful poll loop** (retries `teamsApi.list()`/
+    `leaguesApi.list()` with an attempt counter until billing status flips);
+    a correct React Query version needs `refetchInterval`/`enabled` design +
+    testing, not a plain read swap.
+  - `PricingPage` — `Promise.all([teamsApi.list(), leaguesApi.list()])` plus
+    checkout mutations.
+  - `PublicPlayerPage` (456 lines) / `PublicTeamPage` (540 lines) — large, and
+    **zero test coverage today** — add tests before migrating (per OPT-014's
+    own note).
+  - `GoogleCompletePage` — trivial, no data fetch; likely nothing to do.
+- **Files likely to change:** the pages above + their test files.
+- **Testing:** per page — existing test file wrapped in a provider (or added
+  first for the untested ones); full client suite baseline stays green
+  (no new failures beyond the pre-existing 20, tracked in OPT-026).
+- **Validation checklist:** [x] 5 clean read-only pages migrated + verified
+  [ ] NewGamePage [ ] BillingSuccessPage (poll loop) [ ] PricingPage
+  [ ] PublicPlayerPage (+ tests first) [ ] PublicTeamPage (+ tests first).
+- **Source:** follow-up to OPT-014 ([30](./30-optimisation-roadmap.md) H4).
+- **Completion notes:** see "Done this pass" above.
 
 ---
 
