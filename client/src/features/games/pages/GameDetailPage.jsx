@@ -394,9 +394,9 @@ export function GameDetailPage() {
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [feedPostState, setFeedPostState] = useState('');
   const [imageState, setImageState] = useState('');
-  const [headerCardDataUrl, setHeaderCardDataUrl] = useState('');
   const [isSharingHeaderCard, setIsSharingHeaderCard] = useState(false);
   const isSharingHeaderCardRef = useRef(false);
+  const [isPreparingCard, setIsPreparingCard] = useState(false);
   const [clipShareState, setClipShareState] = useState({});
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
@@ -419,13 +419,15 @@ export function GameDetailPage() {
     }
   }, [isError, queryError]);
 
-  useEffect(() => {
+  // OPT-022: generated on demand (share/download click) instead of eagerly on
+  // every `data` change — the canvas render is wasted work whenever the user
+  // never shares/downloads, and re-runs on every query refetch even though the
+  // card's inputs (score, names, logos) rarely change after a game completes.
+  function buildHeaderCardDataUrl() {
     if (!data) {
-      setHeaderCardDataUrl('');
-      return undefined;
+      return Promise.resolve('');
     }
 
-    let cancelled = false;
     const { game, team, boxScore, participants } = data;
     const isDualTeam = game.trackingMode === 'dual_team';
     const recap = data.recap;
@@ -468,18 +470,12 @@ export function GameDetailPage() {
           },
         };
 
-    createRecapCardDataUrl(cardRecap, {
+    return createRecapCardDataUrl(cardRecap, {
       homeLogoUrl,
       awayLogoUrl,
       teamColors: team?.colors || [],
-    }).then((url) => {
-      if (!cancelled) setHeaderCardDataUrl(url);
     });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data]);
+  }
 
   const metaIsDualTeam = data?.game?.trackingMode === 'dual_team';
   const metaGameSummary = data?.gameSummary || {
@@ -837,14 +833,30 @@ export function GameDetailPage() {
     : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.`;
   const shareText = `${shareSummary}\nView game: ${shareUrl}`;
 
-  function downloadHeaderCard() {
-    if (!headerCardDataUrl) {
+  // `preparedDataUrl` lets a caller that already generated the card (e.g.
+  // shareHeaderCard's fallback path) hand it straight through instead of
+  // this function regenerating it a second time.
+  async function downloadHeaderCard(preparedDataUrl) {
+    if (!data || isPreparingCard) {
+      return;
+    }
+
+    let dataUrl = preparedDataUrl;
+    if (!dataUrl) {
+      setIsPreparingCard(true);
+      try {
+        dataUrl = await buildHeaderCardDataUrl();
+      } finally {
+        setIsPreparingCard(false);
+      }
+    }
+    if (!dataUrl) {
       return;
     }
 
     trackEvent('game_detail_card_downloaded', { game_id: gameId });
     const link = document.createElement('a');
-    link.href = headerCardDataUrl;
+    link.href = dataUrl;
     link.download = cardFilename;
     document.body.append(link);
     link.click();
@@ -897,6 +909,8 @@ export function GameDetailPage() {
     setIsSharingHeaderCard(true);
 
     try {
+      const headerCardDataUrl = await buildHeaderCardDataUrl();
+
       if (headerCardDataUrl && navigator?.share && navigator?.canShare) {
         let file = null;
         try {
@@ -927,7 +941,7 @@ export function GameDetailPage() {
 
       const didShareLink = await shareGameLinkFallback();
       if (!didShareLink) {
-        downloadHeaderCard();
+        downloadHeaderCard(headerCardDataUrl);
       }
     } finally {
       isSharingHeaderCardRef.current = false;
@@ -1043,7 +1057,7 @@ export function GameDetailPage() {
                 aria-label="Share image card"
                 title={isSharingHeaderCard ? 'Preparing image card' : 'Share image card'}
                 className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!headerCardDataUrl || isSharingHeaderCard}
+                disabled={!data || isSharingHeaderCard}
               >
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
                   <ShareIcon />
@@ -1052,11 +1066,17 @@ export function GameDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={downloadHeaderCard}
+                onClick={() => downloadHeaderCard()}
                 aria-label="Download image card"
-                title={imageState === 'downloaded' ? 'Downloaded' : 'Download image card'}
+                title={
+                  imageState === 'downloaded'
+                    ? 'Downloaded'
+                    : isPreparingCard
+                      ? 'Preparing image card'
+                      : 'Download image card'
+                }
                 className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!headerCardDataUrl}
+                disabled={!data || isPreparingCard}
               >
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
                   <DownloadIcon downloaded={imageState === 'downloaded'} />
