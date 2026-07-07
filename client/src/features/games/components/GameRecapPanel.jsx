@@ -371,7 +371,7 @@ export function GameRecapPanel({
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-xl font-semibold text-slate-900">Top Performers</h3>
-          <div className="mt-4 grid gap-4 md:grid-cols-3 lg:grid-cols-1">
+          <HorizontalScrollRow className="mt-4">
             {(recap?.topPerformers || []).map((player) => {
               const teamLogo =
                 isDualTeam && player.teamSide
@@ -448,20 +448,20 @@ export function GameRecapPanel({
                 <Link
                   key={player.playerId}
                   to={playerHref}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                  className="w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                 >
                   {inner}
                 </Link>
               ) : (
                 <article
                   key={player.playerId || player.displayName}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  className="w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                 >
                   {inner}
                 </article>
               );
             })}
-          </div>
+          </HorizontalScrollRow>
         </section>
       </div>
     </div>
