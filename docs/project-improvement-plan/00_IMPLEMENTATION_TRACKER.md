@@ -34,26 +34,26 @@
 
 ## 📊 Status dashboard
 
-- **Overall status:** `TSW-003` and `TSW-004` are done, tested, and committed
-  (2026-07-08). `TSW-002` is Ready (low-risk, next up). `TSW-001` needs a
-  production-data investigation sub-step before its fix can be finalized.
-  `TSW-005` is the largest task (Ready, ordered last, soft-dep on `TSW-004`
-  now satisfied).
+- **Overall status:** `TSW-002`, `TSW-003`, and `TSW-004` are code-complete,
+  tested, and committed (2026-07-08). `TSW-002`'s mobile-scroll behavior is
+  pending a manual browser check (can't be meaningfully unit tested).
+  `TSW-001` needs a production-data investigation sub-step before its fix can
+  be finalized. `TSW-005` is the largest remaining task (Ready, ordered last).
 - **Counts by status:**
 
-| Status          | Count                    |
-| --------------- | ------------------------ |
-| Not Started     | 0                        |
-| Investigating   | 1 (`TSW-001`)            |
-| Ready           | 2 (`TSW-002`, `TSW-005`) |
-| In Progress     | 0                        |
-| Blocked         | 0                        |
-| Awaiting Review | 0                        |
-| Completed       | 2 (`TSW-003`, `TSW-004`) |
+| Status          | Count                               |
+| --------------- | ----------------------------------- |
+| Not Started     | 0                                   |
+| Investigating   | 1 (`TSW-001`)                       |
+| Ready           | 1 (`TSW-005`)                       |
+| In Progress     | 0                                   |
+| Blocked         | 0                                   |
+| Awaiting Review | 0                                   |
+| Completed       | 3 (`TSW-002`, `TSW-003`, `TSW-004`) |
 
-- **Recommended next task:** `TSW-002` (low-risk, `GameRecapPanel.jsx` is
-  already fresh in context from `TSW-004`'s neighboring work). Then `TSW-001`
-  (needs the prod-investigation sub-step first), then `TSW-005` (largest).
+- **Recommended next task:** `TSW-001` (needs the prod-investigation
+  sub-step first — good next pick if you have prod log/devtools access
+  handy), then `TSW-005` (largest, no remaining blockers).
 
 ---
 
@@ -63,19 +63,20 @@ See [`01_MASTER_ROADMAP.md`](./01_MASTER_ROADMAP.md) for the full dependency
 graph. Summary: **TSW-003 → TSW-004 → TSW-002 → TSW-001 → TSW-005.** TSW-003/
 004 are cheapest and fully confirmed; TSW-002 is low-risk and file-adjacent to
 TSW-004; TSW-001 needs a prod-log check before its fix can be scoped; TSW-005
-is the largest and has a soft dependency on TSW-004 (shared rendering code).
+is the largest and has a soft dependency on TSW-004 (shared rendering code,
+now satisfied since TSW-004 shipped).
 
 ---
 
 ## 📋 Status board
 
-| ID      | Title                                | Priority | Complexity | Risk   | Status        | Dependencies                   |
-| ------- | ------------------------------------ | -------- | ---------- | ------ | ------------- | ------------------------------ |
-| TSW-001 | Share to Pulse failure in production | High     | M          | Medium | Investigating | none                           |
-| TSW-002 | Key Moments mobile scroll            | Medium   | S          | Low    | Ready         | none (sequenced after TSW-004) |
-| TSW-003 | Production nav title                 | Low      | XS         | Low    | ✅ Completed  | none                           |
-| TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | ✅ Completed  | none                           |
-| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready         | soft: TSW-004 (satisfied)      |
+| ID      | Title                                | Priority | Complexity | Risk   | Status        | Dependencies              |
+| ------- | ------------------------------------ | -------- | ---------- | ------ | ------------- | ------------------------- |
+| TSW-001 | Share to Pulse failure in production | High     | M          | Medium | Investigating | none                      |
+| TSW-002 | Key Moments mobile scroll            | Medium   | S          | Low    | ✅ Completed  | none                      |
+| TSW-003 | Production nav title                 | Low      | XS         | Low    | ✅ Completed  | none                      |
+| TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | ✅ Completed  | none                      |
+| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready         | soft: TSW-004 (satisfied) |
 
 ---
 
@@ -126,7 +127,7 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 
 ### TSW-002 — Key Moments doesn't scroll on mobile
 
-- **Priority:** Medium · **Complexity:** S · **Risk:** Low · **Status:** Ready
+- **Priority:** Medium · **Complexity:** S · **Risk:** Low · **Status:** ✅ Completed (2026-07-08, pending manual mobile verification)
 - **Dependencies:** none (sequenced after TSW-004 for file-adjacency
   convenience only, not a hard blocker)
 - **Description:** Highlights scrolls correctly on mobile; Key Moments does
@@ -147,7 +148,18 @@ is the largest and has a soft dependency on TSW-004 (shared rendering code).
 - **Definition of Done:** Key Moments scrolls horizontally on mobile,
   matching Highlights' behavior; both sections share one scroll-row
   implementation (no duplicated CSS/structure).
-- **Completion notes:** —
+- **Completion notes (2026-07-08):** extracted the proven Highlights scroll
+  pattern into a local `HorizontalScrollRow` component in
+  `GameRecapPanel.jsx` and applied it to both sections. Key Moments cards
+  are now fixed-width (`w-56 shrink-0`) matching Highlights' `w-64` cards.
+  Also fixed a mislabeled counter ("N highlights" on the Key Moments header
+  — copy-paste leftover from Highlights — now correctly "N key moments").
+  No existing test file for this component. Full client suite baseline
+  unchanged at 20 pre-existing failures/118 passed. Lint clean. Committed
+  `0ae08d8`. **Manual mobile-viewport verification pending** — this is a
+  touch/CSS behavior fix that can't be meaningfully unit tested; awaiting
+  browser confirmation before this can be considered fully done, not just
+  code-complete.
 
 ---
 
@@ -358,3 +370,9 @@ introduced during this initiative.
 - ✅ **changed (TSW-003, 2026-07-08)** `client/src/lib/env.js`'s
   `VITE_APP_NAME` Zod default changed from `'tsw-2026-march'` to
   `'The Sporty Way'`.
+- ✅ **built (TSW-002, 2026-07-08)** `HorizontalScrollRow` — a small local
+  component in `GameRecapPanel.jsx` wrapping the `flex gap-3 overflow-x-auto
+pb-2` scroll-container pattern. Consumed by both the Highlights and Key
+  Moments sections. Local to this file for now (not extracted to a shared
+  cross-feature component) since it has exactly one consumer file today —
+  promote it if a third horizontal-scroll use case appears elsewhere.
