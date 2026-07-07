@@ -34,25 +34,24 @@
 
 ## 📊 Status dashboard
 
-- **Overall status:** `TSW-002`, `TSW-003`, and `TSW-004` are done, tested,
-  committed, and (for `TSW-002`) mobile-verified by the user (2026-07-08).
-  `TSW-001` needs a production-data investigation sub-step before its fix can
-  be finalized. `TSW-005` is the largest remaining task (Ready, ordered last).
+- **Overall status:** `TSW-001`, `TSW-002`, `TSW-003`, and `TSW-004` are done,
+  tested, and committed (`TSW-002` is also mobile-verified by the user,
+  2026-07-08). `TSW-005` is the only remaining task (Ready, largest, ordered
+  last).
 - **Counts by status:**
 
-| Status          | Count                               |
-| --------------- | ----------------------------------- |
-| Not Started     | 0                                   |
-| Investigating   | 1 (`TSW-001`)                       |
-| Ready           | 1 (`TSW-005`)                       |
-| In Progress     | 0                                   |
-| Blocked         | 0                                   |
-| Awaiting Review | 0                                   |
-| Completed       | 3 (`TSW-002`, `TSW-003`, `TSW-004`) |
+| Status          | Count                                          |
+| --------------- | ---------------------------------------------- |
+| Not Started     | 0                                              |
+| Investigating   | 0                                              |
+| Ready           | 1 (`TSW-005`)                                  |
+| In Progress     | 0                                              |
+| Blocked         | 0                                              |
+| Awaiting Review | 0                                              |
+| Completed       | 4 (`TSW-001`, `TSW-002`, `TSW-003`, `TSW-004`) |
 
-- **Recommended next task:** `TSW-001` (needs the prod-investigation
-  sub-step first — good next pick if you have prod log/devtools access
-  handy), then `TSW-005` (largest, no remaining blockers).
+- **Recommended next task:** `TSW-005` (the only remaining task, no
+  remaining blockers — its soft dependency on `TSW-004` is satisfied).
 
 ---
 
@@ -69,13 +68,13 @@ now satisfied since TSW-004 shipped).
 
 ## 📋 Status board
 
-| ID      | Title                                | Priority | Complexity | Risk   | Status        | Dependencies              |
-| ------- | ------------------------------------ | -------- | ---------- | ------ | ------------- | ------------------------- |
-| TSW-001 | Share to Pulse failure in production | High     | M          | Medium | Investigating | none                      |
-| TSW-002 | Key Moments mobile scroll            | Medium   | S          | Low    | ✅ Completed  | none                      |
-| TSW-003 | Production nav title                 | Low      | XS         | Low    | ✅ Completed  | none                      |
-| TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | ✅ Completed  | none                      |
-| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready         | soft: TSW-004 (satisfied) |
+| ID      | Title                                | Priority | Complexity | Risk   | Status       | Dependencies              |
+| ------- | ------------------------------------ | -------- | ---------- | ------ | ------------ | ------------------------- |
+| TSW-001 | Share to Pulse failure in production | High     | M          | Medium | ✅ Completed | none                      |
+| TSW-002 | Key Moments mobile scroll            | Medium   | S          | Low    | ✅ Completed | none                      |
+| TSW-003 | Production nav title                 | Low      | XS         | Low    | ✅ Completed | none                      |
+| TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | ✅ Completed | none                      |
+| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready        | soft: TSW-004 (satisfied) |
 
 ---
 
@@ -83,7 +82,7 @@ now satisfied since TSW-004 shipped).
 
 ### TSW-001 — Share to Pulse failure in production
 
-- **Priority:** High · **Complexity:** M · **Risk:** Medium · **Status:** Investigating
+- **Priority:** High · **Complexity:** M · **Risk:** Medium · **Status:** ✅ Completed (2026-07-08)
 - **Dependencies:** none (independent of other tasks)
 - **Description:** The "Share to Pulse" button in the Game Recap Highlights
   panel fails in production, flipping to "Failed to share". Reported as a
@@ -120,7 +119,41 @@ now satisfied since TSW-004 shipped).
   error surfaced + logged with `requestId`); the actual root cause is
   confirmed and fixed; a league admin can successfully share a highlight in
   production.
-- **Completion notes:** —
+- **Completion notes (2026-07-08):** the user pulled the real Render prod
+  log for a failed request and it immediately identified the true root
+  cause — **not** a `videoUrl`/`videoTimestamp` data gap as hypothesized,
+  and **not** a bug in `canManageLeagueGame`'s permission chain. The actual
+  error was `403 "You must be part of a team or league to post"` thrown by
+  `assertFeedPostingAllowed` (`billing.service.js`) — a _different_ gate
+  than the one originally traced. That function checked `Team.exists`,
+  `LeagueManager.exists({status:'active'})`, and `LeagueTeamMember.exists`,
+  but **never `League.exists({ownerUserId})`**. League creation
+  (`createLeagueFromCheckoutSession`) never auto-inserts a `LeagueManager`
+  row for the owner — that's reserved for managers the owner explicitly adds
+  via `addLeagueManagerByEmail`, which even rejects adding the owner
+  themself ("That user is already the league owner"). So a pure league
+  owner with no team and no explicit manager row failed all three checks.
+  Every other authorization helper in `leagues.service.js`
+  (`canManageLeagueGame`, `isLeagueMember`, `assertLeagueManagerOrOwner`,
+  etc.) correctly ORs in an owner check — this billing-side gate was the one
+  outlier missing it. Fix: added `League.exists({ ownerUserId: userId })`
+  as a fourth OR'd condition in `assertFeedPostingAllowed`
+  (`billing.service.js`). Also shipped the swallowed-error fix in
+  `GameDetailPage.jsx`'s catch block regardless — it now surfaces the real
+  `err.message` (falling back to "Failed to share" only if none) and logs
+  `requestId` to the console, so this class of bug is self-diagnosing next
+  time without needing prod log access. Added 5 unit tests for
+  `assertFeedPostingAllowed` covering each of the four allow-paths plus the
+  403 case (`billing.service.test.js`) — none existed before (the only prior
+  test coverage mocked this function out entirely). Full server suite: 33
+  suites/273 tests pass (was 33/268). Full client suite baseline unchanged
+  at 20 pre-existing failures/118 passed. Lint clean. Committed `0669f1f`.
+  **Lesson for future prod-only bugs:** the swallowed-error anti-pattern
+  cost real diagnosis time here — static code tracing found a plausible but
+  wrong root cause (the permission chain looked fine on paper) until the
+  actual server log revealed a completely different gate had thrown. See
+  [`02_ARCHITECTURE_NOTES.md`](./02_ARCHITECTURE_NOTES.md) for the durable
+  note.
 
 ---
 
@@ -324,6 +357,17 @@ now satisfied since TSW-004 shipped).
 
 Record every scope/architecture decision here with a date and rationale.
 
+- **2026-07-08 — TSW-001's original root-cause hypothesis was wrong; the
+  swallowed-error fix is what actually found the real bug.** Static code
+  tracing pointed at `canManageLeagueGame`/`videoUrl`/`videoTimestamp` as
+  candidates and found the permission chain looked correct on paper. The
+  real cause — a missing `League.exists({ownerUserId})` check in a
+  _different_ gate (`assertFeedPostingAllowed` in `billing.service.js`,
+  not the `leagues.service.js` chain originally traced) — only surfaced
+  once the user pulled the actual Render prod log for a failed request.
+  **Why this matters:** confirms the investigation-sub-step requirement
+  this task was flagged with was correct process, not overcaution — for
+  prod-only bugs, a real log/requestId beats however much static tracing.
 - **2026-07-08 — TSW-004's player/team card staleness sub-scope deferred, not
   bundled into the fix.** The investigation surfaced a real but separate
   issue (no refresh trigger for player/team card snapshots) while confirming
@@ -359,6 +403,12 @@ Record every scope/architecture decision here with a date and rationale.
 Log new patterns, shared components/hooks, or schema changes as they're
 introduced during this initiative.
 
+- ✅ **changed (TSW-001, 2026-07-08)** `assertFeedPostingAllowed` in
+  `server/src/modules/billing/billing.service.js` now also checks
+  `League.exists({ ownerUserId: userId })` alongside the existing
+  `Team`/`LeagueManager`/`LeagueTeamMember` checks — matching the
+  owner-OR-manager pattern already used everywhere else in
+  `leagues.service.js`. No schema change.
 - ✅ **built (TSW-004, 2026-07-08)** `buildGameCardDisplay(gameCard)` in
   `client/src/features/feed/components/posts/cardUtils.js` — the shared
   home/away name+points+logo+winner derivation for game cards, consumed by

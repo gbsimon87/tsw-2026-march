@@ -48,6 +48,45 @@ ever extended.
 
 ---
 
+## Authorization gates must OR in the owner check consistently — one omission is enough to lock owners out
+
+**Discovered during:** TSW-001 investigation + fix.
+
+**The pattern:** everywhere in `leagues.service.js`, "can this user act on
+this league?" is answered as `ownerUserId === userId OR an active
+LeagueManager row exists` (`canManageLeagueGame`, `isLeagueMember`,
+`assertLeagueManagerOrOwner`, `assertTeamManagerOrOwner`, and others all
+follow this shape). That's because **league creation never auto-inserts a
+LeagueManager row for the owner** — ownership and the manager role are
+deliberately separate, and `addLeagueManagerByEmail` even refuses to add the
+owner as a manager of themself ("That user is already the league owner").
+
+**Where it broke:** `assertFeedPostingAllowed` in `billing.service.js` is a
+_different_ gate (feed-posting affiliation, not league-game management) that
+happened to reimplement the same "who can act here" question independently —
+and it forgot the owner OR-clause. A pure league owner with no team of their
+own and no explicit manager row failed every check and got a 403.
+
+**The lesson:** when a new gate needs to answer "does this user have
+{team|league} affiliation," don't write it from scratch — check whether
+`leagues.service.js` already has an equivalent helper and reuse or mirror its
+exact OR conditions. Any gate that checks `LeagueManager`/`LeagueTeamMember`
+without also checking `League.exists({ownerUserId})` is very likely
+reproducing this same bug. Grep for `LeagueManager.exists` and
+`LeagueTeamMember.exists` outside `leagues.service.js` if this pattern needs
+auditing again in the future — `billing.service.js` was the only offender
+found this pass, but nothing rules out others.
+
+**Compounding factor:** this was hard to find by code-reading alone because
+`GameDetailPage.jsx`'s catch block swallowed the real error message — the
+actual 403 and its message only surfaced once the user pulled the Render
+production log. See the swallowed-error fix in the same commit; prefer
+surfacing real backend error messages to the UI by default rather than
+generic strings, specifically so this class of bug is diagnosable without
+log access next time.
+
+---
+
 ## Card snapshot staleness has no consistent refresh story
 
 **Discovered during:** TSW-004 investigation (secondary finding).
