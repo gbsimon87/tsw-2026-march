@@ -1,35 +1,66 @@
 import { Link } from 'react-router-dom';
-import { PageHeader } from '../components/PageHeader';
+import { DarkPageHeader } from '../components/DarkPageHeader';
 
 export function AboutPage() {
   const appName = import.meta.env.VITE_APP_NAME;
 
   return (
-    <main className="space-y-8">
-      <PageHeader
-        eyebrow="About"
-        title={appName}
-        description="Basketball stat tracking built for the people running actual games."
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+      {/* Hero: manifesto band */}
+      <DarkPageHeader
+        size="hero"
+        titleAriaLabel={appName}
+        eyebrow={`About ${appName}`}
+        title="Built for the people running actual games."
+        description="Basketball stat tracking for coaches and team managers who need a credible box score the moment the final buzzer sounds."
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-8">
-        <h2 className="text-xl font-semibold text-slate-900">For the people running the game</h2>
+      {/* Pitch */}
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            The problem
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            For the people running the game
+          </h2>
+        </header>
         <div className="mt-4 space-y-4 text-slate-700 md:text-base">
           <p>
             Most amateur basketball stats live in a notebook someone left at home, a spreadsheet
             updated at midnight, or a player&apos;s memory. Getting a usable box score after a game
             usually means hours of cleanup, if it happens at all.
           </p>
+          <blockquote
+            className="border-l-4 border-[#F4A300] pl-4 text-xl leading-snug text-slate-900 md:text-2xl"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            No spreadsheets. No manual entry after the fact.
+          </blockquote>
           <p>
             {appName} is built for coaches and team managers who want to capture what&apos;s
             happening during a real game and have something credible to show for it the moment the
-            final buzzer sounds. No spreadsheets. No manual entry after the fact.
+            final buzzer sounds.
           </p>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-8">
-        <h2 className="text-xl font-semibold text-slate-900">What you walk away with</h2>
+      {/* What you walk away with */}
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            The output
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            What you walk away with
+          </h2>
+        </header>
         <div className="mt-4 space-y-4 text-slate-700 md:text-base">
           <p>
             The work happens during the game. You record events as they happen on a full-court
@@ -44,41 +75,61 @@ export function AboutPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-8">
-        <h2 className="text-xl font-semibold text-slate-900">Who it&apos;s for</h2>
-        <p className="mt-2 text-slate-600">
+      {/* Who it's for */}
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            On the roster
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            Who it&apos;s for
+          </h2>
+        </header>
+        <p className="mt-4 max-w-2xl text-slate-600">
           Amateur and youth basketball programs — the teams that play real games but don&apos;t have
           a dedicated stats crew. Everyone connected to the team gets something out of it.
         </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <p className="font-semibold text-slate-900">Players</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Track your performance across games, spot strengths and weaknesses faster, and build
-              confidence with clear evidence of your development over time.
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <p className="font-semibold text-slate-900">Managers and Coaches</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Understand team and player performance at a glance, review meaningful insights without
-              extra noise, and make better game-time and training decisions with clearer data.
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <p className="font-semibold text-slate-900">Friends and Family</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Follow games, keep up with player progress, and celebrate key achievements as the team
-              grows together throughout the season.
-            </p>
-          </div>
+          {[
+            {
+              tag: 'Players',
+              body: 'Track your performance across games, spot strengths and weaknesses faster, and build confidence with clear evidence of your development over time.',
+            },
+            {
+              tag: 'Coaches',
+              body: 'Understand team and player performance at a glance, review meaningful insights without extra noise, and make better game-time and training decisions with clearer data.',
+            },
+            {
+              tag: 'Family',
+              body: 'Follow games, keep up with player progress, and celebrate key achievements as the team grows together throughout the season.',
+            },
+          ].map((audience) => (
+            <div
+              key={audience.tag}
+              className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 transition hover:border-[#F4A300]/60 hover:bg-white"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#F4A300]">
+                {audience.tag}
+              </p>
+              <p className="mt-3 text-sm text-slate-600">{audience.body}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-8">
+      {/* Contact */}
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Want to talk?</h2>
+            <h2
+              className="text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              Want to talk?
+            </h2>
             <p className="mt-2 text-sm text-slate-600">
               We&apos;re a company based in the United Kingdom. If you&apos;re interested in using{' '}
               {appName} for your league or team, contact us and we&apos;ll follow up directly.
@@ -86,7 +137,7 @@ export function AboutPage() {
           </div>
           <Link
             to="/contact"
-            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#141414] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
           >
             Contact us
           </Link>

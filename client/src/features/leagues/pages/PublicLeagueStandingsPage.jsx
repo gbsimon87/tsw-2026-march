@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
-import { PageHeader } from '../../../components/PageHeader';
+import { DarkPageHeader } from '../../../components/DarkPageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
@@ -45,9 +45,11 @@ export function PublicLeagueStandingsPage() {
   ];
 
   return (
-    <main className="space-y-8">
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <PageHeader
+
+      <DarkPageHeader
+        titleAriaLabel={league.name}
         eyebrow="Public League Standings"
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.`}
@@ -61,25 +63,38 @@ export function PublicLeagueStandingsPage() {
             decoding="async"
             srcSetWidths={[64, 128, 192]}
             sizes="64px"
-            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
+            className="h-16 w-16 shrink-0 rounded-full border-2 border-white/10 bg-white object-cover"
           />
         }
       >
-        <div className="flex flex-wrap gap-3 text-sm">
-          <Link to={`/league/${league.slug}`} className="font-medium text-sky-700 hover:underline">
+        <div className="flex flex-wrap gap-4 text-sm">
+          <Link
+            to={`/league/${league.slug}`}
+            className="font-semibold text-white/80 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#F4A300]"
+          >
             League overview
           </Link>
           <Link
             to={`/league/${league.slug}/games`}
-            className="font-medium text-sky-700 hover:underline"
+            className="font-semibold text-white/80 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#F4A300]"
           >
             League games
           </Link>
         </div>
-      </PageHeader>
+      </DarkPageHeader>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold text-slate-900">Standings</h2>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            League table
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            Standings
+          </h2>
+        </header>
         <LeagueStandingsTable
           standings={standings}
           getTeamHref={(row) => {
@@ -90,6 +105,7 @@ export function PublicLeagueStandingsPage() {
             const team = (league.teams || []).find((t) => t.id === row.teamId);
             return team?.logo?.url ?? null;
           }}
+          className="mt-4"
         />
       </section>
     </main>

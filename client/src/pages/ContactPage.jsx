@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { PageHeader } from '../components/PageHeader';
 import { contactApi } from '../features/contact/contactApi';
+import { DarkPageHeader } from '../components/DarkPageHeader';
 
 const ROLES = [
   { value: 'coach', label: 'Coach' },
@@ -23,14 +23,16 @@ export function ContactPage() {
   const appName = import.meta.env.VITE_APP_NAME;
 
   return (
-    <main className="space-y-8">
-      <PageHeader
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+      <DarkPageHeader
+        size="hero"
+        titleAriaLabel="Contact"
         eyebrow="Contact"
-        title="Get in touch"
+        title="Get in touch."
         description={`Interested in using ${appName} for your league or team? Send us a message and we'll follow up directly.`}
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-8">
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
         <ContactForm />
       </section>
     </main>
@@ -91,8 +93,10 @@ function ContactForm() {
 
   if (status === 'success') {
     return (
-      <div className="rounded-xl border border-sky-200 bg-sky-50 p-6 text-center">
-        <p className="font-semibold text-slate-900">Message sent.</p>
+      <div className="rounded-xl border border-[#F4A300]/30 bg-[#F4A300]/10 p-6 text-center">
+        <p className="text-xl text-slate-900" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
+          Message sent.
+        </p>
         <p className="mt-1 text-sm text-slate-600">We&apos;ll be in touch at {form.email}.</p>
       </div>
     );
@@ -222,7 +226,7 @@ function ContactForm() {
           type="submit"
           disabled={status === 'loading'}
           aria-label={status === 'loading' ? 'Sending...' : 'Send message'}
-          className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+          className="rounded-xl bg-[#141414] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
         >
           {status === 'loading' ? 'Sending...' : 'Send message'}
         </button>
@@ -249,6 +253,6 @@ function Field({ id, label, hint, required, error, children }) {
 
 function inputClass(hasError) {
   return `w-full rounded-xl border px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
-    hasError ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-sky-200'
+    hasError ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-[#F4A300]/30'
   }`;
 }

@@ -6,7 +6,7 @@ import { usePublicLeague } from '../hooks/usePublicLeague';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
-import { PageHeader } from '../../../components/PageHeader';
+import { DarkPageHeader } from '../../../components/DarkPageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
@@ -48,7 +48,7 @@ const LEADERS_COLUMNS = [
         {row.teamSlug && row.leaguePlayerId ? (
           <Link
             to={`/league/${row.leagueSlug}/teams/${row.teamSlug}/players/${row.leaguePlayerId}`}
-            className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+            className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-[#1B4332] hover:decoration-[#F4A300]"
           >
             {row.displayName}
           </Link>
@@ -207,9 +207,13 @@ export function PublicLeaguePage() {
   const breadcrumbs = [{ label: 'Discover', href: '/home' }, { label: league.name }];
 
   return (
-    <main className="space-y-8">
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <PageHeader
+
+      {/* League card header */}
+      <DarkPageHeader
+        titleAriaLabel={league.name}
+        eyebrow="League"
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} • Public league standings and game results.`}
         media={
@@ -222,21 +226,31 @@ export function PublicLeaguePage() {
             decoding="async"
             srcSetWidths={[64, 128, 192]}
             sizes="64px"
-            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
+            className="h-16 w-16 shrink-0 rounded-full border-2 border-white/10 bg-white object-cover"
           />
         }
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-slate-900">Standings</h2>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+              League table
+            </p>
+            <h2
+              className="mt-1 text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              Standings
+            </h2>
+          </div>
           <Link
             to={`/league/${league.slug}/standings`}
-            className="text-sm font-medium text-sky-700 hover:underline"
+            className="text-sm font-semibold text-slate-900 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
           >
             View full standings
           </Link>
-        </div>
+        </header>
         <LeagueStandingsTable
           standings={league.standings || []}
           getTeamHref={(row) => {
@@ -251,8 +265,18 @@ export function PublicLeaguePage() {
         />
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">MVP Standings</h2>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            Leaderboard
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            MVP Standings
+          </h2>
+        </header>
         {leaders.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
         ) : (
@@ -271,8 +295,18 @@ export function PublicLeaguePage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Defensive Player of the Season</h2>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            Leaderboard
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            Defensive Player of the Season
+          </h2>
+        </header>
         {dpoyLeaders.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
         ) : (
@@ -295,16 +329,26 @@ export function PublicLeaguePage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-slate-900">Games</h2>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+              On the schedule
+            </p>
+            <h2
+              className="mt-1 text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              Games
+            </h2>
+          </div>
           <Link
             to={`/league/${league.slug}/games`}
-            className="text-sm font-medium text-sky-700 hover:underline"
+            className="text-sm font-semibold text-slate-900 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
           >
             View all games
           </Link>
-        </div>
+        </header>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {(league.games || []).length === 0 ? (
             <p className="text-sm text-slate-600">No league games yet.</p>

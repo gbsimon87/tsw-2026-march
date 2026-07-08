@@ -28,7 +28,7 @@ function GoogleIcon() {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100';
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20';
 
 export function RegisterForm({ redirectTo, onRegistered, onSwitchToLogin }) {
   const { register } = useAuth();
@@ -109,7 +109,7 @@ export function RegisterForm({ redirectTo, onRegistered, onSwitchToLogin }) {
       <button
         type="submit"
         aria-label="Create account"
-        className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-[#141414] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1B4332] active:bg-[#123328] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={isSubmitting}
       >
         {isSubmitting ? 'Creating account…' : 'Create account'}

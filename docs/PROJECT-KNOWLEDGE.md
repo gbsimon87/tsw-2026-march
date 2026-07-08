@@ -330,8 +330,9 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 - **Named exports everywhere** (lazy loader unwraps `.then(m => ({default: m.X}))`).
 - Zod for all boundary validation; forms are hand-rolled (`useAuthForm` pattern),
   **not** react-hook-form.
-- Tailwind utility classes inline (slate/emerald/amber/violet palette); no CSS
-  modules; `components/ui` is bespoke (no shadcn/Radix/`cn()`).
+- Tailwind utility classes inline; no CSS modules; `components/ui` is bespoke
+  (no shadcn/Radix/`cn()`). Two palettes coexist — see §9.1 for which pages use
+  which and why.
 - Accessibility is taken seriously (`aria-label`, `inert`, focus management,
   `useId`) — maintain it.
 - **No path aliases** — imports are deep relative chains (`../../../lib/...`).
@@ -344,6 +345,88 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
   [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 - Pre-PR checks: `pnpm check-env && pnpm lint && pnpm test && pnpm build` (also
   the CI job in `.github/workflows/ci.yml`).
+
+### 9.1 Frontend visual design system ("scoreboard" redesign, 2026-07-08)
+
+A subset of client pages were redesigned away from the original generic
+slate/sky-blue admin-dashboard look toward a basketball-specific visual
+identity. **This redesign is partial** — it only touches the pages listed
+below. Everything else (admin CRUD flows, billing pages, game tracking, most
+team pages) still uses the original light/slate/sky-blue look via `PageHeader`.
+Treat the two as coexisting design languages, not one replacing the other,
+until/unless the remaining pages are explicitly redesigned too.
+
+**Token system**
+
+| Token           | Value                                                                | Use                                                                         |
+| --------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Ink (dark card) | `#141414`                                                            | Hero/header card backgrounds                                                |
+| Brand orange    | `#F4A300`                                                            | Eyebrows, stat numerals, accent underlines, hover states                    |
+| Court green     | `#1B4332`                                                            | Secondary accent — section eyebrows, link hover, buttons                    |
+| Warm page bg    | `#F7F5F0`                                                            | Page background on redesigned pages (replaces `slate-50`)                   |
+| Display face    | `'Archivo Black', sans-serif` (inline `style`, not a Tailwind class) | Headlines, section titles — always paired with a `#F4A300` eyebrow above it |
+| Data/mono face  | `'IBM Plex Mono', monospace` (inline `style`)                        | Scoreboard-style numerals: stat lines, jersey numbers, "GP" counts          |
+| Body face       | Inter (`index.css` default, now actually loaded — see below)         | Body copy, unchanged                                                        |
+
+Archivo Black + IBM Plex Mono are loaded via a Google Fonts `<link>` in
+[`client/index.html`](../client/index.html) (Inter was already declared in
+`globals.css` but was never linked — that's fixed too, no visible effect since
+it matches the system-sans fallback).
+
+**Recurring page shape** (Home, About, Contact, MySportyPage, AuthPage, the 3
+public league pages, PublicLeaguePlayerPage, PublicLeagueTeamPage,
+AdminLeaguePage):
+
+1. A dark (`#141414`) header/hero card with a faint repeating-vertical-line
+   texture (`opacity-[0.07]` background image), an orange all-caps eyebrow,
+   an Archivo Black `<h1>`, and white/60% description text.
+2. White `rounded-2xl border border-slate-200` content sections below, each
+   with an eyebrow (`text-[#1B4332]`) + Archivo Black `<h2>` header pattern,
+   replacing the old plain `text-xl font-semibold` headers.
+3. Cards/list items use `bg-slate-50/60` with `hover:border-[#F4A300]/60
+hover:bg-white` instead of the old plain slate hover.
+4. Any stat/score/count gets the mono face + orange color instead of a plain
+   bold slate number — this is the "scoreboard" motif and the closest thing to
+   a signature element (see `StatReadout` in `HomePage.jsx` and the jersey-badge
+   pattern in `PublicLeaguePlayerPage.jsx`/`MySportyPage.jsx`).
+5. Primary buttons: `bg-[#141414]` with `hover:bg-[#1B4332]` (replaces
+   `bg-slate-900 hover:bg-slate-700`). Links: `underline decoration-[#F4A300]
+decoration-2 underline-offset-4` with `hover:text-[#1B4332]` (replaces
+   `text-sky-700 hover:underline`).
+
+**`DarkPageHeader` component** — [`client/src/components/DarkPageHeader.jsx`](../client/src/components/DarkPageHeader.jsx)
+factors out step 1 above as a shared component with the same prop shape as
+`PageHeader` (`eyebrow`, `title`, `titleAriaLabel`, `description`, `media`,
+`children`, `className`, plus a `size="hero"` variant for the bigger Home/
+About/Contact headline). It's a straight swap wherever the header is a plain
+eyebrow+title+description(+static media) block: `HomePage`, `AboutPage`,
+`ContactPage`, `PublicLeaguePage`, `PublicLeagueStandingsPage`,
+`PublicLeagueGamesPage`.
+
+**Deliberately left as bespoke inline JSX, not `DarkPageHeader`**, because
+their header content doesn't fit a generic eyebrow/title/description/media
+shape: `AuthPage` (no card, no media — just a centered heading above the form
+card), `MySportyPage` and `AdminLeaguePage` (interactive avatar/logo upload
+control in the media slot, not passive image; `AdminLeaguePage` additionally
+has inline click-to-edit title JSX), `PublicLeaguePlayerPage` and
+`PublicLeagueTeamPage` (two-column layout with a stat grid or compound
+logo+text eyebrow, not a plain string). If a future change makes these more
+uniform, revisit whether `DarkPageHeader` should grow render-prop/slot support
+— it wasn't worth the added complexity for five one-off headers.
+
+**`LeagueStandingsTable`** (`features/leagues/components/LeagueStandingsTable.jsx`)
+team-name links were switched from `sky-700` to `#1B4332`/`#F4A300` — this is
+shared by `AdminLeaguePage` too, so the admin (non-redesigned) page picked up
+the new link color as a side effect; everything else on that page is still the
+old palette.
+
+**When adding a new page or extending one of the pages above**: match the
+existing pattern on that specific page (check the file, not just this doc —
+some accent choices are per-section, e.g. league pages use `#1B4332` eyebrows
+throughout, game/player pages mix in mono stat numerals). When adding to a
+page **not** in the list above, keep using the original slate/sky-blue/
+`PageHeader` look unless the user explicitly asks for that page to be
+redesigned too — don't spread the new palette opportunistically.
 
 ---
 
@@ -459,17 +542,18 @@ neither modifies the other.
 
 ## 12. Where to start (by question)
 
-| I need to understand…          | Start here                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Product scope & features       | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
-| Fast file-path orientation     | [`app-overview.md`](./app-overview.md)                                                                             |
-| Routing / page composition     | `client/src/app/router/AppRouter.jsx`                                                                              |
-| Live game behavior             | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
-| Derived stats / recap logic    | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
-| API surface                    | [`api.md`](./api.md)                                                                                               |
-| Persistence schemas            | `server/src/modules/*/*.repository.js`                                                                             |
-| Authorization rules            | [`permissions.md`](./permissions.md)                                                                               |
-| Billing                        | [`billing.md`](./billing.md)                                                                                       |
-| Deploy & env                   | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
-| Performance/optimisation state | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
-| Bug fix / arch review history  | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |
+| I need to understand…                   | Start here                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
+| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                             |
+| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                              |
+| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
+| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
+| API surface                             | [`api.md`](./api.md)                                                                                               |
+| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                             |
+| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                               |
+| Billing                                 | [`billing.md`](./billing.md)                                                                                       |
+| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
+| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
+| Bug fix / arch review history           | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |
+| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                             |

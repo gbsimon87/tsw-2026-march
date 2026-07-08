@@ -550,7 +550,7 @@ export function GameDetailPage() {
         row.playerHref ? (
           <Link
             to={row.playerHref}
-            className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+            className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-[#1B4332] hover:decoration-[#F4A300]"
           >
             {row.displayName}
           </Link>
@@ -559,7 +559,7 @@ export function GameDetailPage() {
         ) : (
           <Link
             to={`/teams/${team.id}/players/${row.playerId}`}
-            className="font-medium text-blue-700 hover:text-blue-900 hover:underline"
+            className="font-medium text-[#1B4332] underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#123328]"
           >
             {row.displayName}
           </Link>
@@ -637,8 +637,8 @@ export function GameDetailPage() {
 
   const statsContent = (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded border bg-white">
-        <div className="flex items-center gap-2 border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2 text-sm font-semibold text-slate-900">
           {isDualTeam ? (
             <CloudinaryImage
               src={participants?.home?.logo?.url || teamPlaceholder}
@@ -662,8 +662,8 @@ export function GameDetailPage() {
       </div>
 
       {isDualTeam && statsView.secondaryRows ? (
-        <div className="overflow-x-auto rounded border bg-white">
-          <div className="flex items-center gap-2 border-b bg-slate-50 px-3 py-2 text-sm font-semibold">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2 text-sm font-semibold text-slate-900">
             <CloudinaryImage
               src={participants?.away?.logo?.url || teamPlaceholder}
               alt=""
@@ -687,7 +687,12 @@ export function GameDetailPage() {
 
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-xl font-semibold text-slate-900">Scoring Timeline</h3>
+          <h3
+            className="text-xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            Scoring Timeline
+          </h3>
           <p className="text-sm text-slate-600">How the score progressed as the game went on.</p>
           <ScoringTimelineChart
             events={sortedEvents}
@@ -700,15 +705,15 @@ export function GameDetailPage() {
         <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
       </div>
 
-      <div className="rounded border bg-white">
-        <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold">Play by Play</div>
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900">Play by Play</div>
           {sortedEvents.length > 5 ? (
             <button
               type="button"
               onClick={() => setShowAllEvents((value) => !value)}
               aria-label={showAllEvents ? 'Show Last 5' : 'Show All'}
-              className="text-xs font-semibold text-blue-600 hover:underline"
+              className="text-xs font-semibold text-[#1B4332] hover:underline"
             >
               {showAllEvents ? 'Show Last 5' : 'Show All'}
             </button>
@@ -757,7 +762,9 @@ export function GameDetailPage() {
   ) : (
     <LockedFeatureCard planName="Team" pricingHref="/pricing">
       <div className="rounded-xl bg-slate-100 p-8 text-center text-slate-400">
-        <p className="text-lg font-semibold">Replay</p>
+        <p className="text-lg" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
+          Replay
+        </p>
         <p className="mt-1 text-sm">Event-by-event possession replay</p>
       </div>
     </LockedFeatureCard>
@@ -966,23 +973,27 @@ export function GameDetailPage() {
         <button
           type="button"
           onClick={() => window.print()}
-          className="rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+          className="rounded-lg bg-[#141414] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
         >
           Print
         </button>
         <button
           type="button"
           onClick={() => updateSearchParam('print', null)}
-          className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
         >
           Exit Print View
         </button>
       </div>
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
           Printable Box Score
         </p>
-        <h1 className="text-2xl font-bold text-slate-900" aria-label={game.title}>
+        <h1
+          className="text-2xl text-slate-900"
+          style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          aria-label={game.title}
+        >
           {game.title}
         </h1>
         <p className="text-sm text-slate-700">
@@ -1055,9 +1066,9 @@ export function GameDetailPage() {
                 onClick={() => updateSearchParam('print', '1')}
                 aria-label="Print box score"
                 title="Print box score"
-                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A300]"
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-[#F4A300]/60 hover:bg-slate-50">
                   <PrintIcon />
                 </span>
                 <span className="text-[11px] font-medium">Print</span>
@@ -1067,10 +1078,10 @@ export function GameDetailPage() {
                 onClick={shareHeaderCard}
                 aria-label="Share image card"
                 title={isSharingHeaderCard ? 'Preparing image card' : 'Share image card'}
-                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A300] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!data || isSharingHeaderCard}
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-[#F4A300]/60 hover:bg-slate-50">
                   <ShareIcon />
                 </span>
                 <span className="text-[11px] font-medium">Share</span>
@@ -1086,10 +1097,10 @@ export function GameDetailPage() {
                       ? 'Preparing image card'
                       : 'Download image card'
                 }
-                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A300] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!data || isPreparingCard}
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-[#F4A300]/60 hover:bg-slate-50">
                   <DownloadIcon downloaded={imageState === 'downloaded'} />
                 </span>
                 <span className="text-[11px] font-medium">Download</span>
@@ -1099,9 +1110,9 @@ export function GameDetailPage() {
                 onClick={openFeedComposer}
                 aria-label="Share to The Pulse"
                 title="Share to The Pulse"
-                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A300]"
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-slate-400 hover:bg-slate-50">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-[#F4A300]/60 hover:bg-slate-50">
                   <FeedIcon />
                 </span>
                 <span className="text-[11px] font-medium">Pulse</span>

@@ -222,7 +222,7 @@ export function PublicLeaguePlayerPage() {
       render: (row) => (
         <Link
           to={row.opponentHref}
-          className="inline-flex items-center gap-2 font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+          className="inline-flex items-center gap-2 font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-[#1B4332] hover:decoration-[#F4A300]"
         >
           <CloudinaryImage
             src={row.opponentLogoUrl || teamPlaceholder}
@@ -263,33 +263,58 @@ export function PublicLeaguePlayerPage() {
   ];
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6">
+    <main className="mx-auto max-w-5xl space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={breadcrumbs} />
+
+      {/* Player card header */}
       <section
         aria-labelledby="league-player-profile-title"
-        className="rounded-2xl border border-slate-200 bg-white p-5 md:p-6"
+        className="relative overflow-hidden rounded-2xl bg-[#141414] p-5 md:p-8"
       >
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(90deg, #fff 0, #fff 1px, transparent 1px, transparent 64px)',
+          }}
+        />
+        <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-start">
-            <CloudinaryImage
-              src={player.avatarUrl || playerPlaceholder}
-              alt=""
-              width={80}
-              height={80}
-              loading="eager"
-              decoding="async"
-              srcSetWidths={[80, 160, 240]}
-              sizes="80px"
-              className="h-20 w-20 rounded-2xl border border-slate-200 bg-white object-cover shadow-sm"
-            />
-            <div className="ml-auto grid grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-2 sm:ml-0">
+            <div className="relative shrink-0">
+              <CloudinaryImage
+                src={player.avatarUrl || playerPlaceholder}
+                alt=""
+                width={80}
+                height={80}
+                loading="eager"
+                decoding="async"
+                srcSetWidths={[80, 160, 240]}
+                sizes="80px"
+                className="h-20 w-20 rounded-2xl border-2 border-white/10 bg-white object-cover"
+              />
+              {typeof player.jerseyNumber === 'number' && (
+                <span
+                  className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#141414] bg-[#F4A300] text-sm text-[#141414]"
+                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  {player.jerseyNumber}
+                </span>
+              )}
+            </div>
+            <div className="ml-auto grid grid-cols-4 gap-2 rounded-2xl bg-white/5 p-2 sm:ml-0">
               {averageStats.map((stat) => (
                 <div
                   key={stat.label}
-                  className="min-w-14 rounded-xl bg-white px-3 py-2 text-center"
+                  className="min-w-14 rounded-xl bg-white/5 px-3 py-2 text-center"
                 >
-                  <p className="text-lg font-bold leading-none text-slate-900">{stat.value}</p>
-                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  <p
+                    className="text-lg leading-none text-[#F4A300]"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    {stat.value}
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
                     {stat.label}
                   </p>
                 </div>
@@ -300,12 +325,13 @@ export function PublicLeaguePlayerPage() {
             <div className="flex flex-wrap items-center gap-3">
               <h1
                 id="league-player-profile-title"
-                className="text-2xl font-bold leading-tight text-slate-900 md:text-3xl"
+                className="text-2xl leading-tight text-white md:text-3xl"
+                style={{ fontFamily: "'Archivo Black', sans-serif" }}
               >
                 {playerLabel}
               </h1>
               {player.isClaimed ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#F4A300]/40 bg-[#F4A300]/10 px-2.5 py-1 text-xs font-semibold text-[#F4A300]">
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
@@ -320,7 +346,7 @@ export function PublicLeaguePlayerPage() {
                   {player.claimedBadgeLabel}
                 </span>
               ) : claimStatus ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-300">
                   {claimStatus}
                 </span>
               ) : (
@@ -328,7 +354,7 @@ export function PublicLeaguePlayerPage() {
                   type="button"
                   disabled={isSubmittingClaim}
                   onClick={onClaim}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold text-white/80 transition hover:border-[#F4A300]/50 hover:text-[#F4A300] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <svg
                     viewBox="0 0 16 16"
@@ -346,13 +372,13 @@ export function PublicLeaguePlayerPage() {
                 </button>
               )}
             </div>
-            {claimError ? <p className="mt-2 text-xs text-red-600">{claimError}</p> : null}
+            {claimError ? <p className="mt-2 text-xs text-[#F4A300]">{claimError}</p> : null}
             <nav aria-label="Player affiliations" className="mt-3">
-              <ul className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
+              <ul className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold uppercase tracking-wide text-white/60">
                 <li>
                   <Link
                     to={`/league/${league.slug}`}
-                    className="inline-flex items-center gap-2 transition hover:text-sky-900 hover:underline"
+                    className="inline-flex items-center gap-2 transition hover:text-[#F4A300] hover:underline"
                   >
                     <CloudinaryImage
                       src={getLeagueHeaderImage(league)}
@@ -363,18 +389,18 @@ export function PublicLeaguePlayerPage() {
                       decoding="async"
                       srcSetWidths={[20, 40, 60]}
                       sizes="20px"
-                      className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      className="h-5 w-5 shrink-0 rounded-full border border-white/10 bg-white object-cover"
                     />
                     <span>{league.name}</span>
                   </Link>
                 </li>
-                <li aria-hidden="true" className="text-slate-300">
+                <li aria-hidden="true" className="text-white/20">
                   /
                 </li>
                 <li>
                   <Link
                     to={`/league/${league.slug}/teams/${team.slug}`}
-                    className="inline-flex items-center gap-2 transition hover:text-sky-900 hover:underline"
+                    className="inline-flex items-center gap-2 transition hover:text-[#F4A300] hover:underline"
                   >
                     <CloudinaryImage
                       src={team.logo?.url || teamPlaceholder}
@@ -385,7 +411,7 @@ export function PublicLeaguePlayerPage() {
                       decoding="async"
                       srcSetWidths={[20, 40, 60]}
                       sizes="20px"
-                      className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      className="h-5 w-5 shrink-0 rounded-full border border-white/10 bg-white object-cover"
                     />
                     <span>{team.name}</span>
                   </Link>
@@ -396,38 +422,40 @@ export function PublicLeaguePlayerPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* Season totals scoreboard */}
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
-            <p className="text-sm font-medium text-slate-500">Season Totals</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-900">Production Snapshot</h2>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+              Season totals
+            </p>
+            <h2
+              className="mt-1 text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              Production Snapshot
+            </h2>
           </div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p
+            className="text-sm text-slate-400"
+            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+          >
             {summary.gamesCount} GP
           </p>
-        </div>
+        </header>
         <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-7">
           {totalStats.map((stat) => (
             <article
               key={stat.label}
-              className={`rounded-2xl border p-4 text-center ${
-                stat.featured
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                  : 'border-slate-200 bg-slate-50 text-slate-900'
-              }`}
+              className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-center transition hover:border-[#F4A300]/60 hover:bg-white"
             >
               <p
-                className={`text-2xl font-bold leading-none ${
-                  stat.featured ? 'text-white' : 'text-slate-900'
-                }`}
+                className="text-2xl leading-none text-[#F4A300]"
+                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               >
                 {stat.value}
               </p>
-              <p
-                className={`mt-2 text-[10px] font-semibold uppercase tracking-wide ${
-                  stat.featured ? 'text-slate-300' : 'text-slate-500'
-                }`}
-              >
+              <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 {stat.label}
               </p>
             </article>
@@ -436,9 +464,19 @@ export function PublicLeaguePlayerPage() {
       </section>
 
       {data.highlights?.length > 0 ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h2 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+        <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+          <header className="border-b border-slate-100 pb-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+              Film room
+            </p>
+            <h2
+              className="mt-1 text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              Highlights
+            </h2>
+          </header>
+          <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
             {selectHighlights(data.highlights).map((h) => {
               const clipState =
                 clipShareState[h.eventId] ||
@@ -456,7 +494,7 @@ export function PublicLeaguePlayerPage() {
                       type="button"
                       disabled={clipState === 'loading' || clipState === 'shared'}
                       onClick={() => shareHighlightClip(h.eventId, h.gameId)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-[#F4A300]/60 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {clipState === 'loading'
                         ? 'Sharing…'
@@ -474,8 +512,18 @@ export function PublicLeaguePlayerPage() {
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-semibold text-slate-900">Game Log</h2>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
+        <header className="border-b border-slate-100 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+            Box scores
+          </p>
+          <h2
+            className="mt-1 text-2xl text-slate-900"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            Game Log
+          </h2>
+        </header>
         <div className="mt-4 overflow-x-auto">
           <StatsTable columns={gameLogColumns} rows={gameLogRows} tableClassName="w-full text-sm" />
         </div>

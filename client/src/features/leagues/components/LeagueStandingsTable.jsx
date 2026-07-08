@@ -40,7 +40,7 @@ export function LeagueStandingsTable({
                     {teamHref ? (
                       <Link
                         to={teamHref}
-                        className="font-semibold text-sky-700 underline decoration-sky-300 underline-offset-2 transition hover:text-sky-900 hover:decoration-sky-700"
+                        className="font-semibold text-[#1B4332] underline decoration-[#F4A300]/60 underline-offset-2 transition hover:text-[#123328] hover:decoration-[#F4A300]"
                       >
                         {row.teamName}
                       </Link>
