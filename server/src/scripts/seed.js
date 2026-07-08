@@ -1040,8 +1040,23 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('Seed failed');
-  console.error(error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Seed failed');
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  randomInt,
+  randomChoice,
+  playerNamePool,
+  fallbackTeamPrefixes,
+  fallbackTeamMascots,
+  opponents,
+  buildPlayerBlueprints,
+  buildLeagueRosterSnapshot,
+  buildLeagueGameEvents,
+  attachTeamSide,
+};
