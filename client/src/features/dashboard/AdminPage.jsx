@@ -56,7 +56,7 @@ import { teamsApi } from '../teams/api/teamsApi';
 import { gamesApi } from '../games/api/gamesApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
-import { PageHeader } from '../../components/PageHeader';
+import { DarkPageHeader } from '../../components/DarkPageHeader';
 import { getLeagueHeaderImage } from '../feed/cardImage';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../media/CloudinaryImage';
@@ -113,8 +113,8 @@ function QuickActionLink({ to, label, primary = false, children }) {
       aria-label={label}
       className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
         primary
-          ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-700'
-          : 'border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50'
+          ? 'border-[#141414] bg-[#141414] text-white hover:bg-[#1B4332]'
+          : 'border-slate-300 bg-white text-slate-800 hover:border-[#F4A300]/60 hover:bg-slate-50'
       }`}
     >
       <span
@@ -177,15 +177,17 @@ export function AdminPage() {
   }
 
   return (
-    <main className="space-y-6">
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={[{ label: 'Admin' }]} />
 
-      <PageHeader
+      <DarkPageHeader
+        titleAriaLabel="Admin"
+        eyebrow="Dashboard"
         title="Admin"
         description="Manage your leagues and non-league teams all in one place."
       >
-        {user?.name ? <p className="text-sm text-slate-600">Welcome back, {user.name}.</p> : null}
-      </PageHeader>
+        {user?.name ? <p className="text-sm text-white/60">Welcome back, {user.name}.</p> : null}
+      </DarkPageHeader>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -196,19 +198,28 @@ export function AdminPage() {
       <div className="grid grid-cols-3 gap-3">
         <article className="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <p className="text-xs text-slate-500">Leagues</p>
-          <p className="mt-0.5 text-xl font-semibold text-slate-900">
+          <p
+            className="mt-0.5 text-xl leading-none text-[#F4A300]"
+            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+          >
             {isLoading ? '—' : leagues.length}
           </p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <p className="text-xs text-slate-500">One-off Teams</p>
-          <p className="mt-0.5 text-xl font-semibold text-slate-900">
+          <p
+            className="mt-0.5 text-xl leading-none text-[#F4A300]"
+            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+          >
             {isLoading ? '—' : teams.length}
           </p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <p className="text-xs text-slate-500">All Games</p>
-          <p className="mt-0.5 text-xl font-semibold text-slate-900">
+          <p
+            className="mt-0.5 text-xl leading-none text-[#F4A300]"
+            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+          >
             {isLoading ? '—' : games.length}
           </p>
         </article>
@@ -229,7 +240,7 @@ export function AdminPage() {
                 index < TABS.length - 1 ? 'border-r border-slate-200' : ''
               } ${
                 activeTab === tab.id
-                  ? 'bg-slate-900 text-white'
+                  ? 'bg-[#141414] text-white'
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
             >
@@ -244,7 +255,12 @@ export function AdminPage() {
             <div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">My Leagues</h2>
+                  <h2
+                    className="text-lg text-slate-900"
+                    style={{ fontFamily: "'Archivo Black', sans-serif" }}
+                  >
+                    My Leagues
+                  </h2>
                   <p className="mt-1 text-sm text-slate-600">
                     Leagues bring multiple teams under one roof — standings, fixtures, and join
                     requests all in one place.
@@ -252,7 +268,7 @@ export function AdminPage() {
                 </div>
                 <Link
                   to="/pricing"
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
                 >
                   New League
                 </Link>
@@ -265,7 +281,7 @@ export function AdminPage() {
                     No leagues yet.{' '}
                     <Link
                       to="/pricing"
-                      className="font-medium text-slate-900 underline underline-offset-4"
+                      className="font-medium text-slate-900 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
                     >
                       Start your 14-day trial →
                     </Link>
@@ -277,7 +293,7 @@ export function AdminPage() {
                     <Link
                       key={league.id}
                       to={`/admin/leagues/${league.id}`}
-                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300"
+                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#F4A300]/60 hover:bg-white"
                     >
                       <CloudinaryImage
                         src={getLeagueHeaderImage(league)}
@@ -310,7 +326,12 @@ export function AdminPage() {
 
           {activeTab === 'games' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">One-off Games</h2>
+              <h2
+                className="text-lg text-slate-900"
+                style={{ fontFamily: "'Archivo Black', sans-serif" }}
+              >
+                One-off Games
+              </h2>
               <p className="mt-1 text-sm text-slate-600">
                 Standalone games tracked independently, outside of any league.
               </p>
@@ -376,7 +397,7 @@ export function AdminPage() {
                             type="button"
                             aria-label={`Copy share link for ${getGameTitle(game, index)}`}
                             disabled={!canNavigateToGame}
-                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => {
                               if (gameId) copyShareUrl(gameId);
                             }}
@@ -402,7 +423,7 @@ export function AdminPage() {
                             type="button"
                             aria-label={`Open details for ${getGameTitle(game, index)}`}
                             disabled={!canNavigateToGame}
-                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => {
                               if (gameId) navigate(`/games/${gameId}`);
                             }}
@@ -422,7 +443,7 @@ export function AdminPage() {
                             type="button"
                             aria-label={`Track ${getGameTitle(game, index)}`}
                             disabled={!canNavigateToGame}
-                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-md border border-slate-300 p-2 text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => {
                               if (gameId) navigate(`/games/${gameId}/track`);
                             }}
@@ -451,7 +472,12 @@ export function AdminPage() {
 
           {activeTab === 'teams' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">One-off Teams</h2>
+              <h2
+                className="text-lg text-slate-900"
+                style={{ fontFamily: "'Archivo Black', sans-serif" }}
+              >
+                One-off Teams
+              </h2>
               <p className="mt-1 text-sm text-slate-600">
                 Standalone teams and their games, managed independently from any league.
               </p>

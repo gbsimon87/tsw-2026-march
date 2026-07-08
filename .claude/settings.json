@@ -98,7 +98,12 @@
       "Bash(ENV_FILE=/Users/simoncordova/Desktop/Simon/tsw-2026-march/env/server/.env.production node src/scripts/backfill-game-finalscore.js --dry-run)",
       "Bash(awk 'NR<=1673 && /^async function|^function/ {name=$0; line=NR} END{}' src/modules/leagues/leagues.service.js)",
       "Bash(awk -F: '$1<1673')",
-      "Bash(awk -F: '$1<1892')"
+      "Bash(awk -F: '$1<1892')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/home)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_resize",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "Bash(curl -s http://localhost:4000/api/health)"
     ],
     "additionalDirectories": ["/private/tmp"]
   },
