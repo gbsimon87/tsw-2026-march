@@ -9,10 +9,11 @@
 > [`permissions.md`](./permissions.md) (authorization matrix),
 > [`billing.md`](./billing.md), [`security.md`](./security.md),
 > [`posthog-implementation.md`](./posthog-implementation.md). Active work
-> trackers: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
-> (performance/hardening, OPT-###) and
-> [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md)
-> (targeted bug fixes + architecture review, TSW-###).
+> tracker: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
+> (performance/hardening, OPT-###). The separate `project-improvement-plan/`
+> initiative (targeted bug fixes TSW-001–005) finished 2026-07-08 and was
+> folded into this file's §4/§5/§11 and removed — see git history if the
+> original tracker/investigation detail is ever needed.
 
 ---
 
@@ -167,6 +168,17 @@ is not enforced. Real authorization is ownership + **league role**, checked by
 
 **The full matrix lives in [`permissions.md`](./permissions.md).**
 
+**Lesson (from TSW-001):** every "does this user have {team|league}
+affiliation?" gate in `leagues.service.js` ORs in `ownerUserId === userId`
+alongside the active-manager/member checks, because league creation never
+auto-inserts a `LeagueManager` row for the owner (ownership and the manager
+role are deliberately separate). A gate outside `leagues.service.js` that
+reimplements this question from scratch is at risk of forgetting that
+OR-clause — that's exactly what happened in `billing.service.js`'s
+`assertFeedPostingAllowed`, which locked out pure league owners with no team
+of their own. When adding a new affiliation gate, reuse or mirror an
+existing `leagues.service.js` helper rather than writing the check fresh.
+
 ---
 
 ## 5. Database structure & key collections
@@ -211,6 +223,21 @@ is not enforced. Real authorization is ownership + **league role**, checked by
   schema — a stale co-tracker save throws `VersionError` → translated to `409`.
 - Connection pool: `maxPoolSize` (env `MONGO_MAX_POOL_SIZE`, default 10),
   `serverSelectionTimeoutMS: 5000`, retry loop on connect.
+- **Lesson (from TSW-004):** feed card snapshot builders
+  (`buildGameCardSnapshot`/`buildPlayerCardSnapshot`/`buildTeamCardSnapshot`
+  in `feed.service.js`) are meant to produce the exact same shape as their
+  live-compute fallback, per the OPT-017 compute-once-persist-as-snapshot
+  pattern — but `buildGameCardSnapshot` once silently omitted a `recap`
+  field the live path did produce, so cards rendered `0-0` only after
+  round-tripping through the persisted-snapshot path (not on first render,
+  which is what made it easy to miss in testing). When adding or changing a
+  snapshot builder, verify its output against every field the consuming
+  component actually reads, not just against what the author remembered to
+  include — a snapshot test asserting the exact key set is the cheapest
+  guard against this recurring, since the codebase is plain JS (no shared
+  type to catch it automatically). `Game.boxScore`/`Game.gameSummary`
+  frozen fields (OPT-012) follow the same pattern and deserve the same
+  check if ever extended.
 
 ### Stat model (`modules/shared/stats.constants.js`)
 
@@ -478,6 +505,19 @@ redesigned too — don't spread the new palette opportunistically.
 - **Duplicated route lists**: `PostHogRouteTracker` maintains its own hardcoded
   route-pattern list that must stay in sync with `AppRouter`.
 - **No path aliases**, deep relative imports (client).
+- **No refresh trigger for player/team feed-card snapshots**: `Post`'s
+  `game_card` snapshots get re-resolved via `refreshGameCardPostsForGame`
+  when a game's score changes post-completion, but `player_card`/`team_card`
+  snapshots are computed once at share time and never automatically
+  refreshed — if the underlying player/team stats change afterward, the
+  shared card silently goes stale. No refresh trigger exists for these two
+  card types (found during the TSW-004 investigation, not yet scheduled).
+- **Swallowed-error pattern may recur elsewhere on the client**: the
+  "Share to Pulse" handler in `GameDetailPage.jsx` used to catch a server
+  error and discard its real message in favor of a generic string (fixed as
+  part of TSW-001 — see below) — worth checking whether other client
+  mutation handlers do the same thing, since it makes bugs in those paths
+  very hard to diagnose without direct server-log/network-tab access.
 
 **Limitations / assumptions**
 
@@ -510,50 +550,44 @@ test suite's ~20 pre-existing failures (test-drift, not live bugs — discovered
 2026-07-07, not yet triaged). Consult the tracker before starting any
 optimisation work.
 
-**Separate initiative — targeted bug fixes & architecture review**:
-`docs/project-improvement-plan/00_IMPLEMENTATION_TRACKER.md` tracks 5
-investigated issues (`TSW-001`–`TSW-005`), started 2026-07-08 — **all 5 are
-now done.** `TSW-002` (Key Moments + Top Performers mobile scroll — neither
-was built as a horizontal scroller, unlike the working Highlights section),
-`TSW-003` (prod nav title falling back to a repo-name-shaped string),
-`TSW-004` (shared game cards rendering 0-0 — the card snapshot builder
-silently omitted the `recap` field the display components read from),
-`TSW-001` (Share to Pulse failing for league owners — not a permission-chain
-bug as first suspected; `billing.service.js`'s feed-posting gate was missing
-a `League.exists({ownerUserId})` check present in every other league
-authorization helper), `TSW-005` (FeedComposer now supports sharing
-league-scoped games/teams/players, not just standalone ones — shipped as an
-additive extension, not a rewrite, per the investigation's verdict).
-`TSW-005` had two same-day follow-ups after initial ship: search/sharing was
-widened from "leagues the poster belongs to" to **any public league**
-(`League.isPublic && status === 'active'`, no membership check at all, via
-`leagues.service.js`'s `listPublicLeagues`/new `isLeaguePublic` helpers) —
-matching how standalone teams/games were already globally
-searchable/shareable; and a gap discovered while testing that widening was
-closed — the write-side `create*CardPostForUser` functions had no privacy
-check at all (only search did), so a direct API call could share a private
-league's entity even though it could never be found via search. See the
-tracker's task cards for full root-cause detail and any deferred sub-scopes
-(card staleness refresh, league profile-page linking for feed cards) left as
-tracked follow-up work. This tracker is independent of the OPT-### one;
-neither modifies the other.
+**Closed initiative — targeted bug fixes & architecture review (`TSW-001`–`005`,
+2026-07-08)**: a separate, now-finished initiative that investigated and
+shipped fixes for 5 reported issues; its tracker folder
+(`docs/project-improvement-plan/`) has been removed since every finding is
+now folded into this file. Summary: `TSW-002` (Key Moments + Top Performers
+mobile scroll — neither was built as a horizontal scroller, unlike the
+working Highlights section), `TSW-003` (prod nav title falling back to a
+repo-name-shaped string), `TSW-004` (shared game cards rendering 0-0 — see
+the snapshot-shape lesson in §5), `TSW-001` (Share to Pulse failing for
+league owners — see the owner-OR-check lesson in §4), `TSW-005` (FeedComposer
+now supports sharing league-scoped games/teams/players, shipped as an
+additive extension; same day, widened to cover any public league, not just
+the poster's own — see the `Post`/`isLeaguePublic` notes in §5 and §4 — and
+closed a write-side gap where private-league entities could be shared
+directly even though search already excluded them). Deferred, still-open
+follow-ups: player/team card staleness refresh (§11 above) and league
+player/team profile routes for feed-card linking (`playerUrl`/`teamUrl` stay
+`null` for league cards today — the existing league profile routes are
+slug-based, not ID-based, and the card snapshot only carries IDs; fixing
+this means denormalizing `leagueSlug`/`teamSlug` into the snapshot too, not
+a one-line route swap).
 
 ---
 
 ## 12. Where to start (by question)
 
-| I need to understand…                   | Start here                                                                                                         |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
-| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                             |
-| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                              |
-| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
-| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
-| API surface                             | [`api.md`](./api.md)                                                                                               |
-| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                             |
-| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                               |
-| Billing                                 | [`billing.md`](./billing.md)                                                                                       |
-| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
-| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
-| Bug fix / arch review history           | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |
-| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                             |
+| I need to understand…                   | Start here                                                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                  |
+| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                             |
+| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                              |
+| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                |
+| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                               |
+| API surface                             | [`api.md`](./api.md)                                                                               |
+| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                             |
+| Authorization rules                     | [`permissions.md`](./permissions.md)                                                               |
+| Billing                                 | [`billing.md`](./billing.md)                                                                       |
+| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md) |
+| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md) |
+| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                    |
+| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                             |
