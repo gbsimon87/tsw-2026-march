@@ -66,7 +66,7 @@ function TeamCardContent({ imageSrc, teamCard }) {
 export function TeamCardPost({ teamCard, interactive = true }) {
   const [imageSrc, setImageSrc] = useState(() => getTeamCardImage(teamCard));
 
-  if (!interactive) {
+  if (!interactive || !teamCard.teamUrl) {
     return (
       <article>
         <TeamCardContent

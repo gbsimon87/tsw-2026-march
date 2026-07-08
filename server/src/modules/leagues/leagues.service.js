@@ -21,6 +21,7 @@ const {
   saveLeague,
   createLeagueTeam,
   listLeagueTeams,
+  findLeagueTeamById,
   findLeagueTeamByIdAndLeague,
   findLeagueTeamByLeagueAndSlug,
   saveLeagueTeam,
@@ -1054,6 +1055,73 @@ async function getPublicLeaguePlayerBySlug(
     games: gameRows,
     highlights,
     sharedEventIds,
+  };
+}
+
+// TSW-005: userId-scoped access check for feed-sharing league entities. Any
+// active league member/manager/owner can share that league's games/teams/
+// players to the feed — deliberately looser than assertLeagueManagerOrOwner
+// (which is for editing) since sharing is a lower-stakes, read-derived action.
+async function canShareLeague(userId, leagueId) {
+  const { leagues } = await listLeaguesForUser(userId);
+  return leagues.some((league) => String(league.id) === String(leagueId));
+}
+
+// TSW-005: card-snapshot-sized league team getter — an ID-keyed sibling to
+// getPublicLeagueTeamBySlug, deliberately NOT reusing that function because it
+// also loads full roster/games/standings for a team profile page (far more
+// than buildTeamCardSnapshot reads: just team.{id,name,logo,colors} and a
+// gamesCount/points/fg2/fg3/ft summary). Aggregates the team's own events
+// across its completed league games via the same summarizeEvents() helper
+// teams.service.js's getPublicTeam uses, so both card types compute summaries
+// the same way.
+async function getPublicLeagueTeamById(leagueTeamId) {
+  const team = await findLeagueTeamById(leagueTeamId);
+  if (!team) {
+    throw new ApiError(404, 'League team not found');
+  }
+
+  const games = await listLeagueGamesByLeagueId(team.leagueId);
+  const teamGames = games.filter(
+    (game) => getLeagueGameSnapshotForTeam(game, team._id).side !== null
+  );
+  const completedTeamGames = teamGames.filter((game) => game.status === 'completed');
+  const ownEvents = completedTeamGames.flatMap((game) => {
+    const { eventFilter } = getLeagueGameSnapshotForTeam(game, team._id);
+    return (game.events || []).filter(eventFilter);
+  });
+
+  return {
+    team: sanitizeLeagueTeam(team),
+    summary: { gamesCount: completedTeamGames.length, ...summarizeEvents(ownEvents) },
+  };
+}
+
+// TSW-005: card-snapshot-sized league player getter — an ID-keyed sibling to
+// getPublicLeaguePlayerBySlug, reusing the same buildLeaguePlayerGameRows/
+// buildLeaguePlayerSummary helpers that function already relies on, minus the
+// profile-page-only fields (highlights, sharedEventIds, isMe).
+async function getPublicLeaguePlayerById(leaguePlayerId) {
+  const player = await findLeaguePlayerById(leaguePlayerId);
+  if (!player) {
+    throw new ApiError(404, 'League player not found');
+  }
+  const team = await findLeagueTeamById(player.leagueTeamId);
+  if (!team) {
+    throw new ApiError(404, 'League team not found');
+  }
+
+  const [games, allTeams] = await Promise.all([
+    listLeagueGamesByLeagueId(team.leagueId),
+    listLeagueTeams(team.leagueId),
+  ]);
+  const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
+  const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
+
+  return {
+    team: sanitizeLeagueTeam(team),
+    player: sanitizeLeaguePlayer(player),
+    summary: buildLeaguePlayerSummary(gameRows),
   };
 }
 
@@ -2310,6 +2378,11 @@ module.exports = {
   listTeamsForLeagueViewer,
   getLeagueTeamForUser,
   getPublicLeagueTeamBySlug,
+  // TSW-005: card-snapshot-sized ID-keyed getters + access check, for the feed
+  // module's league-scoped game_card/player_card/team_card support.
+  canShareLeague,
+  getPublicLeagueTeamById,
+  getPublicLeaguePlayerById,
   updateLeagueTeamForLeague,
   archiveLeagueTeamForLeague,
   uploadLeagueLogo,

@@ -184,22 +184,41 @@ export function FeedComposer({
           caption: caption.trim() || undefined,
         });
       } else if (activeTab === 'player') {
-        if (!selectedPlayer.teamId || !selectedPlayer.playerId) {
-          throw new Error('Select a player');
+        if (selectedPlayer.source === 'league') {
+          if (!selectedPlayer.leagueTeamId || !selectedPlayer.leaguePlayerId) {
+            throw new Error('Select a player');
+          }
+          result = await feedApi.createPlayerCardPost({
+            leagueTeamId: selectedPlayer.leagueTeamId,
+            leaguePlayerId: selectedPlayer.leaguePlayerId,
+            caption: caption.trim() || undefined,
+          });
+        } else {
+          if (!selectedPlayer.teamId || !selectedPlayer.playerId) {
+            throw new Error('Select a player');
+          }
+          result = await feedApi.createPlayerCardPost({
+            teamId: selectedPlayer.teamId,
+            playerId: selectedPlayer.playerId,
+            caption: caption.trim() || undefined,
+          });
         }
-        result = await feedApi.createPlayerCardPost({
-          teamId: selectedPlayer.teamId,
-          playerId: selectedPlayer.playerId,
-          caption: caption.trim() || undefined,
-        });
       } else if (activeTab === 'team') {
         if (!selectedTeamId) {
           throw new Error('Select a team');
         }
-        result = await feedApi.createTeamCardPost({
-          teamId: selectedTeamId,
-          caption: caption.trim() || undefined,
-        });
+        const selectedTeamOption = options.teams.find((team) => team.id === selectedTeamId);
+        if (selectedTeamOption?.source === 'league') {
+          result = await feedApi.createTeamCardPost({
+            leagueTeamId: selectedTeamOption.leagueTeamId,
+            caption: caption.trim() || undefined,
+          });
+        } else {
+          result = await feedApi.createTeamCardPost({
+            teamId: selectedTeamId,
+            caption: caption.trim() || undefined,
+          });
+        }
       }
 
       onCreated(result.post);
@@ -377,6 +396,7 @@ export function FeedComposer({
               {options.games.map((game) => (
                 <option key={game.id} value={game.id}>
                   {game.title || `${game.team?.name || 'Game'} - ${game.opponent || ''}`}
+                  {game.source === 'league' ? ' (League)' : ''}
                 </option>
               ))}
             </select>
@@ -402,16 +422,30 @@ export function FeedComposer({
                 const nextPlayer = options.players.find(
                   (player) => player.id === event.target.value
                 );
-                setSelectedPlayer({
-                  playerId: nextPlayer?.id || '',
-                  teamId: nextPlayer?.team?.id || '',
-                });
+                if (nextPlayer?.source === 'league') {
+                  setSelectedPlayer({
+                    playerId: '',
+                    teamId: '',
+                    leaguePlayerId: nextPlayer?.leaguePlayerId || nextPlayer?.id || '',
+                    leagueTeamId: nextPlayer?.team?.leagueTeamId || '',
+                    source: 'league',
+                  });
+                } else {
+                  setSelectedPlayer({
+                    playerId: nextPlayer?.id || '',
+                    teamId: nextPlayer?.team?.id || '',
+                    leaguePlayerId: '',
+                    leagueTeamId: '',
+                    source: 'standalone',
+                  });
+                }
               }}
             >
               <option value="">Select player</option>
               {options.players.map((player) => (
                 <option key={player.id} value={player.id}>
                   {player.displayName} - {player.team.name}
+                  {player.source === 'league' ? ' (League)' : ''}
                 </option>
               ))}
             </select>
@@ -439,6 +473,7 @@ export function FeedComposer({
               {options.teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
+                  {team.source === 'league' ? ' (League)' : ''}
                 </option>
               ))}
             </select>

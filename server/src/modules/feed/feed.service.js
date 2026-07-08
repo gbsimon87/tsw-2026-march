@@ -26,9 +26,24 @@ const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { findUserById, findUsersByIds } = require('../auth/auth.repository');
-const { findGameById, listCompletedGames } = require('../games/games.repository');
+const {
+  findGameById,
+  listCompletedGames,
+  listLeagueGamesByLeagueId,
+} = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
-const { findLeaguePlayerById } = require('../leagues/leagues.repository');
+const {
+  findLeaguePlayerById,
+  findLeagueTeamById,
+  listLeagueTeams,
+  listLeaguePlayers,
+} = require('../leagues/leagues.repository');
+const {
+  listLeaguesForUser,
+  canShareLeague,
+  getPublicLeagueTeamById,
+  getPublicLeaguePlayerById,
+} = require('../leagues/leagues.service');
 const { listTeams } = require('../teams/teams.repository');
 const { getPublicPlayer, getPublicTeam } = require('../teams/teams.service');
 
@@ -168,14 +183,20 @@ function buildGameCardSnapshot(payload) {
 }
 
 function buildPlayerCardSnapshot(payload) {
-  const playerImage = payload.player.image ?? null;
+  // TSW-005: league payloads (getPublicLeaguePlayerById) use sanitizeLeaguePlayer's
+  // shape — no `image` field, avatarUrl instead — while standalone payloads
+  // (getPublicPlayer) use `image`. Normalise here so both feed the same snapshot shape.
+  const isLeaguePlayer = Boolean(payload.player.leagueTeamId);
+  const playerImage = (isLeaguePlayer ? payload.player.avatarUrl : payload.player.image) ?? null;
   const teamLogo = payload.team.logo ?? null;
   const imageFallback = playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder';
 
   return {
-    teamId: payload.team.id,
+    teamId: isLeaguePlayer ? null : payload.team.id,
+    leagueTeamId: isLeaguePlayer ? payload.team.id : null,
     teamName: payload.team.name,
-    playerId: payload.player.id,
+    playerId: isLeaguePlayer ? null : payload.player.id,
+    leaguePlayerId: isLeaguePlayer ? payload.player.id : null,
     playerName: payload.player.displayName,
     jerseyNumber: payload.player.jerseyNumber ?? null,
     playerImage,
@@ -188,13 +209,18 @@ function buildPlayerCardSnapshot(payload) {
       reboundsPerGame: payload.summary.reboundsPerGame,
       assistsPerGame: payload.summary.assistsPerGame,
     },
-    playerUrl: `/teams/${payload.team.id}/players/${payload.player.id}`,
+    playerUrl: isLeaguePlayer ? null : `/teams/${payload.team.id}/players/${payload.player.id}`,
   };
 }
 
 function buildTeamCardSnapshot(payload) {
+  // TSW-005: sanitizeLeagueTeam's output has a leagueId field; standalone
+  // getPublicTeam's team shape doesn't — used as the discriminator here.
+  const isLeagueTeam = Boolean(payload.team.leagueId);
+
   return {
-    teamId: payload.team.id,
+    teamId: isLeagueTeam ? null : payload.team.id,
+    leagueTeamId: isLeagueTeam ? payload.team.id : null,
     teamName: payload.team.name,
     teamLogo: payload.team.logo ?? null,
     teamColors: payload.team.colors ?? [],
@@ -205,7 +231,7 @@ function buildTeamCardSnapshot(payload) {
       fg3: payload.summary.fg3,
       ft: payload.summary.ft,
     },
-    teamUrl: `/teams/${payload.team.id}`,
+    teamUrl: isLeagueTeam ? null : `/teams/${payload.team.id}`,
   };
 }
 
@@ -241,10 +267,9 @@ async function resolvePlayerCardPayload(post, { refresh = false } = {}) {
     };
   }
 
-  const payload = await getPublicPlayer(
-    String(post.playerCard.teamId),
-    String(post.playerCard.playerId)
-  );
+  const payload = post.playerCard.leaguePlayerId
+    ? await getPublicLeaguePlayerById(String(post.playerCard.leaguePlayerId))
+    : await getPublicPlayer(String(post.playerCard.teamId), String(post.playerCard.playerId));
   const snapshot = buildPlayerCardSnapshot(payload);
   persistCardSnapshot(post, 'playerCard', snapshot);
   return { image: null, gameCard: null, playerCard: snapshot, teamCard: null };
@@ -255,7 +280,9 @@ async function resolveTeamCardPayload(post, { refresh = false } = {}) {
     return { image: null, gameCard: null, playerCard: null, teamCard: post.teamCard.cardSnapshot };
   }
 
-  const payload = await getPublicTeam(String(post.teamCard.teamId));
+  const payload = post.teamCard.leagueTeamId
+    ? await getPublicLeagueTeamById(String(post.teamCard.leagueTeamId))
+    : await getPublicTeam(String(post.teamCard.teamId));
   const snapshot = buildTeamCardSnapshot(payload);
   persistCardSnapshot(post, 'teamCard', snapshot);
   return { image: null, gameCard: null, playerCard: null, teamCard: snapshot };
@@ -548,6 +575,21 @@ async function createGameCardPostForUser(userId, input) {
     throw new ApiError(404, 'Game not found');
   }
 
+  // TSW-005: league games are shareable by any active member/manager/owner of
+  // that league (see canShareLeague's doc comment for why this is looser than
+  // the edit-time canManageLeagueGame check).
+  if (game.gameContext === 'league') {
+    const canShare = await canShareLeague(userId, game.leagueId);
+    if (!canShare) {
+      throw new ApiError(403, 'You must be a member of this league to share its games');
+    }
+  }
+
+  const trackedLeagueTeamId =
+    game.gameContext === 'league'
+      ? game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId || null
+      : null;
+
   const post = await createPost({
     creatorUserId: userId,
     type: 'game_card',
@@ -555,6 +597,7 @@ async function createGameCardPostForUser(userId, input) {
     gameCard: {
       gameId: payload.gameId,
       teamId: game.teamId || null,
+      leagueTeamId: trackedLeagueTeamId,
     },
   });
 
@@ -563,6 +606,39 @@ async function createGameCardPostForUser(userId, input) {
 
 async function createPlayerCardPostForUser(userId, input) {
   const payload = createPlayerCardPostSchema.parse(input);
+  const isLeaguePlayer = Boolean(payload.leagueTeamId && payload.leaguePlayerId);
+
+  if (isLeaguePlayer) {
+    ensureObjectId(payload.leagueTeamId, 'league team id');
+    ensureObjectId(payload.leaguePlayerId, 'league player id');
+
+    const leagueTeam = await findLeagueTeamById(payload.leagueTeamId);
+    if (!leagueTeam) {
+      throw new ApiError(404, 'League team not found');
+    }
+    const canShare = await canShareLeague(userId, leagueTeam.leagueId);
+    if (!canShare) {
+      throw new ApiError(403, 'You must be a member of this league to share its players');
+    }
+
+    // OPT-017: reused for the denormalised snapshot below, same pattern as
+    // the standalone path.
+    const publicPayload = await getPublicLeaguePlayerById(payload.leaguePlayerId);
+
+    const post = await createPost({
+      creatorUserId: userId,
+      type: 'player_card',
+      caption: sanitizeCaption(payload.caption),
+      playerCard: {
+        leagueTeamId: payload.leagueTeamId,
+        leaguePlayerId: payload.leaguePlayerId,
+        cardSnapshot: buildPlayerCardSnapshot(publicPayload),
+      },
+    });
+
+    return sanitizePost(post, userId);
+  }
+
   ensureObjectId(payload.teamId, 'team id');
   ensureObjectId(payload.playerId, 'player id');
 
@@ -587,6 +663,35 @@ async function createPlayerCardPostForUser(userId, input) {
 
 async function createTeamCardPostForUser(userId, input) {
   const payload = createTeamCardPostSchema.parse(input);
+  const isLeagueTeam = Boolean(payload.leagueTeamId);
+
+  if (isLeagueTeam) {
+    ensureObjectId(payload.leagueTeamId, 'league team id');
+
+    const leagueTeam = await findLeagueTeamById(payload.leagueTeamId);
+    if (!leagueTeam) {
+      throw new ApiError(404, 'League team not found');
+    }
+    const canShare = await canShareLeague(userId, leagueTeam.leagueId);
+    if (!canShare) {
+      throw new ApiError(403, 'You must be a member of this league to share its teams');
+    }
+
+    const publicPayload = await getPublicLeagueTeamById(payload.leagueTeamId);
+
+    const post = await createPost({
+      creatorUserId: userId,
+      type: 'team_card',
+      caption: sanitizeCaption(payload.caption),
+      teamCard: {
+        leagueTeamId: payload.leagueTeamId,
+        cardSnapshot: buildTeamCardSnapshot(publicPayload),
+      },
+    });
+
+    return sanitizePost(post, userId);
+  }
+
   ensureObjectId(payload.teamId, 'team id');
 
   const publicPayload = await getPublicTeam(payload.teamId);
@@ -630,17 +735,33 @@ async function deletePostForUser(userId, postId) {
   return { deleted: true };
 }
 
-async function listShareableGames(query = {}) {
-  const games = await listCompletedGames();
-  const teams = await listTeams();
+// TSW-005: userId's leagues, needed by all three listShareable* functions to
+// additively surface league entities alongside the existing standalone-only
+// (one-off team/game) results. Returns [] for an unauthenticated caller
+// (listFeedPosts-style anonymous reads don't hit these lookup endpoints today,
+// but this keeps the function safe if that ever changes).
+async function listUserLeagues(userId) {
+  if (!userId) {
+    return [];
+  }
+  const { leagues } = await listLeaguesForUser(userId);
+  return leagues;
+}
+
+async function listShareableGames(userId, query = {}) {
+  const [games, teams, userLeagues] = await Promise.all([
+    listCompletedGames(),
+    listTeams(),
+    listUserLeagues(userId),
+  ]);
   const teamsById = new Map(teams.map((team) => [String(team._id), team]));
 
-  return games
+  const standaloneResults = games
     .filter((game) => isPubliclyViewableGame(game))
     .filter((game) => matchesQuery(game.opponent || game.title, query.q))
-    .slice(0, query.limit || 10)
     .map((game) => ({
       id: String(game._id),
+      source: 'standalone',
       title: game.title,
       opponent: game.opponent ?? null,
       team: teamsById.has(String(game.teamId))
@@ -651,23 +772,74 @@ async function listShareableGames(query = {}) {
         : null,
     }))
     .filter((game) => game.team);
+
+  const leagueGamesByLeague = await Promise.all(
+    userLeagues.map((league) => listLeagueGamesByLeagueId(league.id))
+  );
+  const leagueTeamsByLeague = await Promise.all(
+    userLeagues.map((league) => listLeagueTeams(league.id))
+  );
+  const leagueResults = userLeagues.flatMap((league, index) => {
+    const leagueTeamsById = new Map(
+      leagueTeamsByLeague[index].map((team) => [String(team._id), team])
+    );
+    return leagueGamesByLeague[index]
+      .filter((game) => game.status === 'completed' && isPubliclyViewableGame(game))
+      .filter((game) => matchesQuery(game.title, query.q))
+      .map((game) => {
+        const trackedTeamId =
+          game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId;
+        const trackedTeam = leagueTeamsById.get(String(trackedTeamId));
+        return {
+          id: String(game._id),
+          source: 'league',
+          leagueId: league.id,
+          title: game.title,
+          opponent: null,
+          team: trackedTeam
+            ? { leagueTeamId: String(trackedTeam._id), name: trackedTeam.name }
+            : null,
+        };
+      })
+      .filter((game) => game.team);
+  });
+
+  return [...standaloneResults, ...leagueResults].slice(0, query.limit || 10);
 }
 
-async function listShareableTeams(query = {}) {
-  const teams = await listTeams();
+async function listShareableTeams(userId, query = {}) {
+  const [teams, userLeagues] = await Promise.all([listTeams(), listUserLeagues(userId)]);
 
-  return teams
+  const standaloneResults = teams
     .filter((team) => matchesQuery(team.name, query.q))
-    .slice(0, query.limit || 10)
     .map((team) => ({
       id: String(team._id),
+      source: 'standalone',
       name: team.name,
     }));
+
+  const leagueTeamsByLeague = await Promise.all(
+    userLeagues.map((league) => listLeagueTeams(league.id))
+  );
+  const leagueResults = userLeagues.flatMap((league, index) =>
+    leagueTeamsByLeague[index]
+      .filter((team) => team.status === 'active')
+      .filter((team) => matchesQuery(team.name, query.q))
+      .map((team) => ({
+        id: String(team._id),
+        source: 'league',
+        leagueId: league.id,
+        leagueTeamId: String(team._id),
+        name: team.name,
+      }))
+  );
+
+  return [...standaloneResults, ...leagueResults].slice(0, query.limit || 10);
 }
 
-async function listShareablePlayers(query = {}) {
-  const teams = await listTeams();
-  const players = [];
+async function listShareablePlayers(userId, query = {}) {
+  const [teams, userLeagues] = await Promise.all([listTeams(), listUserLeagues(userId)]);
+  const standaloneResults = [];
 
   for (const team of teams) {
     for (const player of team.players || []) {
@@ -679,8 +851,9 @@ async function listShareablePlayers(query = {}) {
         continue;
       }
 
-      players.push({
+      standaloneResults.push({
         id: String(player._id),
+        source: 'standalone',
         displayName: player.displayName,
         jerseyNumber: player.jerseyNumber ?? null,
         team: {
@@ -691,7 +864,31 @@ async function listShareablePlayers(query = {}) {
     }
   }
 
-  return players.slice(0, query.limit || 10);
+  const leagueTeamsByLeague = await Promise.all(
+    userLeagues.map((league) => listLeagueTeams(league.id))
+  );
+  const leaguePlayersByTeam = await Promise.all(
+    leagueTeamsByLeague.flat().map((team) => listLeaguePlayers(team._id))
+  );
+  const leagueTeamsFlat = leagueTeamsByLeague.flat();
+  const leagueResults = leagueTeamsFlat.flatMap((team, index) =>
+    leaguePlayersByTeam[index]
+      .filter((player) => player.isActive)
+      .filter((player) => matchesQuery(`${player.displayName} ${team.name}`, query.q))
+      .map((player) => ({
+        id: String(player._id),
+        source: 'league',
+        leaguePlayerId: String(player._id),
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        team: {
+          leagueTeamId: String(team._id),
+          name: team.name,
+        },
+      }))
+  );
+
+  return [...standaloneResults, ...leagueResults].slice(0, query.limit || 10);
 }
 
 function findSnapshotPlayer(game, playerId) {
@@ -789,6 +986,8 @@ module.exports = {
   listShareableTeams,
   sanitizePost,
   refreshGameCardPostsForGame,
-  // TSW-004: exported for direct unit testing of the snapshot shape.
+  // TSW-004/TSW-005: exported for direct unit testing of the snapshot shapes.
   buildGameCardSnapshot,
+  buildPlayerCardSnapshot,
+  buildTeamCardSnapshot,
 };
