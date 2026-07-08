@@ -169,7 +169,11 @@ const FEED_CAPTIONS = [
   'Team effort all the way.',
 ];
 
-const MIN_HIGHLIGHT_POSTS = 20;
+// Each highlight clip is a distinct (videoUrl, videoTimestamp) pair rendered
+// as a ~10s clip (HighlightClipPostCard/FullScreenHighlightClipPost embed
+// videoTimestamp-5s..+5s) — "50 different videos" means 50 distinct clips,
+// not 50 distinct YouTube uploads (only the 4 supplied URLs exist as sources).
+const MIN_HIGHLIGHT_POSTS = 50;
 
 function log(...args) {
   console.log(...args);

@@ -8,7 +8,9 @@
 > file-path map), [`api.md`](./api.md) (endpoint reference),
 > [`permissions.md`](./permissions.md) (authorization matrix),
 > [`billing.md`](./billing.md), [`security.md`](./security.md),
-> [`posthog-implementation.md`](./posthog-implementation.md). Active work
+> [`posthog-implementation.md`](./posthog-implementation.md),
+> [`demo-data-generation/`](./demo-data-generation/) (demo account seed
+> plan, decisions, live tracker). Active work
 > tracker: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
 > (performance/hardening, OPT-###). The separate `project-improvement-plan/`
 > initiative (targeted bug fixes TSW-001–005) finished 2026-07-08 and was
@@ -473,6 +475,24 @@ redesigned too — don't spread the new palette opportunistically.
   `backfill-game-finalscore`, `backfill-league-standings`,
   `backfill-team-season-summaries`, `backfill-participant-slug`. Run with
   `ENV_FILE=../env/server/.env.development node src/scripts/<name>.js`.
+- **Demo account seeding** (`pnpm --filter server seed:demo`, 2026-07-08):
+  `server/src/scripts/seed-demo-account.js` populates a realistic demo
+  account (`testuser@gmail.com` / `password1!2@3#`) — 3 leagues (owner/
+  manager/player role split across them, per [`permissions.md`](./permissions.md)),
+  5 `LeagueTeam`s × 8 `LeaguePlayer`s per league, ≥3 completed games per team
+  with full stat events, `Game.videoUrl` + per-event `videoTimestamp` on
+  every game (so replay highlights are demonstrable — no other seed data
+  does this), and 50 `highlight_clip` + a supporting mix of
+  `image`/`game_card`/`player_card`/`team_card` posts in Demo League's Pulse
+  feed, authored by 5 different accounts. Unlike `seed.js`/`pnpm seed`
+  (destructive, dev-only, full reset every run), this script is **additive
+  and idempotent** — every entity is keyed by a natural key and
+  checked-before-created, so it's safe to re-run and is designed to
+  eventually run against production behind an `ALLOW_DEMO_SEED=true` guard.
+  A companion `pnpm --filter server db:reset-dev` (`reset-dev-database.js`)
+  drops every collection in the connected dev database first if a clean
+  slate is wanted — hard-refused outside dev. Full plan, decisions, and a
+  live implementation tracker: [`demo-data-generation/`](./demo-data-generation/).
 - **Deployment**: Render blueprint (`render.yaml`) — 4 services (API + client ×
   dev/prod). Secrets injected via the Render dashboard, never in `render.yaml`.
   See [`deployment-render.md`](./deployment-render.md) and
@@ -591,3 +611,4 @@ a one-line route swap).
 | Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md) |
 | Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                    |
 | Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                             |
+| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)             |

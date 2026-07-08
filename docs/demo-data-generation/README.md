@@ -108,12 +108,18 @@ account's activity log, the script also:
    password `password1!2@3#`) and claims each onto a distinct `LeaguePlayer`
    slot in **Demo League** — same direct-claim mechanism used for the demo
    user's own profile (see [`DECISIONS.md`](./DECISIONS.md)).
-2. Generates at least 20 `type: 'highlight_clip'` posts, round-robining
-   across **all 8** Demo League games (not exhausting one game's ~225
-   highlight-eligible events before moving on) and across the 5 available
-   posters (the demo user + 4 teammates), each with a realistic caption and
-   the same YouTube `videoUrl`/`videoTimestamp` pairing the game/event
-   already carries.
+2. Generates at least 50 `type: 'highlight_clip'` posts (`MIN_HIGHLIGHT_POSTS`
+   in the script), round-robining across **all 8** Demo League games (not
+   exhausting one game's ~225 highlight-eligible events before moving on)
+   and across the 5 available posters (the demo user + 4 teammates), each
+   with a realistic caption and the same YouTube `videoUrl`/`videoTimestamp`
+   pairing the game/event already carries. Each clip is a distinct
+   `(videoUrl, videoTimestamp)` pair — "50 different highlights" means 50
+   distinct clips/moments, not 50 different YouTube uploads (only the 4
+   supplied URLs exist as video sources). `HighlightClipPostCard`/
+   `FullScreenHighlightClipPost` already embed each clip as
+   `videoTimestamp − 5s` to `videoTimestamp + 5s` (a fixed ~10-second window)
+   with no changes needed — that logic pre-existed this seeding work.
 3. Generates a supporting mix of `game_card`, `player_card`, `team_card`, and
    `image` posts (also spread across posters), so the feed's other post
    types — including the full-screen game/player/team card renderers already
@@ -279,11 +285,13 @@ results. In summary:
   clips, each correctly pairing the game's `videoUrl` with its own event's
   `videoTimestamp`.
 - Feed content: `listFeedPosts` (the exact function `GET /api/v1/feed`
-  calls) was called directly for the demo user and returned all 29 seeded
+  calls) was called directly for the demo user and returned all 59 seeded
   posts, correctly resolved — `highlight_clip` with its YouTube URL passing
   `isSafeYouTubeUrl`, `game_card`/`player_card`/`team_card` with live-computed
   `cardSnapshot` stats (points, shooting splits, per-game averages), team
-  colors, and names. Verified 20 highlight posts span all 8 Demo League games
-  (not just one) and all 5 available posters (demo user + 4 teammates). No
+  colors, and names. Verified 50 highlight posts span all 8 Demo League games
+  (6–7 per game, not concentrated on one) and all 5 available posters (demo
+  user + 4 teammates), with no duplicate `highlightClip.eventId` values. No
   `client/` changes were needed — `FeedPage.jsx`/`FeedList.jsx` already
-  render every post type generically.
+  render every post type generically, and the ~10-second clip window is
+  already computed client-side from a single `videoTimestamp`.
