@@ -411,6 +411,31 @@ now satisfied since TSW-004 shipped).
   33/273). Full client suite baseline unchanged at 20 pre-existing
   failures/118 passed. Lint clean on every touched file. `pnpm build`
   succeeds. Committed `d2c35b0`.
+- **Follow-up widening (2026-07-08, same day):** user reported the composer's
+  search still only surfaced leagues they personally belonged to — as a
+  league admin, they saw zero games/teams/players for their own league. Root
+  cause: `listShareableGames/Teams/Players` scoped league results to
+  `listLeaguesForUser(userId)` (member/owner/manager-only), and
+  `createGameCardPostForUser`/`createPlayerCardPostForUser`/
+  `createTeamCardPostForUser` gated actual sharing on `canShareLeague`
+  (same membership check). Per explicit user decision (superseding the
+  Decisions log entry below), **both search and sharing are now fully
+  public**: any logged-in user can search for and post a card about any
+  public league's game/team/player, exactly like standalone entities already
+  worked. Changes: `listUserLeagues(userId)` → `listAllPublicLeagues()`
+  (calls `leagues.service.js`'s existing `listPublicLeagues()`, which already
+  filtered `isPublic: true, status: 'active'` for a "browse public leagues"
+  feature — reused rather than reimplemented); removed the `canShareLeague`
+  gate and the now-unused `canShareLeague` function itself from
+  `leagues.service.js` (dead code once nothing calls it — its own 3 unit
+  tests removed too). Updated 10 tests in `feed.service.test.js` accordingly
+  (membership-reject cases deleted, "for any user" replacing "for an active
+  member" in surviving test names). Full server suite still 33/285 passing
+  (net -6 tests: -3 `canShareLeague` unit tests, -3 reject-for-non-member
+  cases that no longer apply — no coverage gap, the removed behavior no
+  longer exists). No client changes needed — `FeedComposer.jsx` already
+  branched generically on `source === 'league'`, unaware of the
+  membership gate either way.
 
 ---
 
@@ -419,15 +444,16 @@ now satisfied since TSW-004 shipped).
 Record every scope/architecture decision here with a date and rationale.
 
 - **2026-07-08 — TSW-005: league entity sharing requires active league
-  membership, not team-management rights.** When scoping who can share a
+  membership, not team-management rights.** ~~When scoping who can share a
   league game/team/player to the feed, chose "any active member/manager/
   owner of that league" over "only managers of the specific team(s)
-  involved" (both were viable — asked the user directly since this is a new
-  authorization surface, not a bug fix with an obviously-correct existing
-  pattern to mirror). **Why:** sharing is a lower-stakes, read-derived
-  action than editing a game or managing a team, so the looser bound is
-  appropriate; also keeps `canShareLeague` simple (one `listLeaguesForUser`
-  lookup) instead of requiring per-entity ownership resolution.
+  involved"~~ **Superseded same day** — see the follow-up widening in
+  TSW-005's Completion notes above: the user clarified search/sharing should
+  be fully public (any user, any public league), not member-scoped.
+  `canShareLeague` was removed entirely rather than left as dead code.
+  Kept here for history — the "lower-stakes read-derived action" reasoning
+  was sound for the member-scoped version, it just turned out the intended
+  scope was public, not member-only.
 - **2026-07-08 — TSW-005: league player/team profile linking deferred, not
   bundled into this pass.** League cards' `playerUrl`/`teamUrl` snapshot
   fields are `null` (no route exists yet for a league player/team profile
@@ -497,10 +523,15 @@ introduced during this initiative.
   `getPublicLeagueTeamBySlug`/`getPublicLeaguePlayerBySlug` (which load full
   profile-page data: roster, games, standings). Reuse the same underlying
   aggregation helpers so both paths compute stats identically.
-- ✅ **built (TSW-005, 2026-07-08)** `canShareLeague(userId, leagueId)` in
-  `leagues.service.js` — the feed module's access check for league entity
-  sharing (any active member/manager/owner), reusing `listLeaguesForUser`
-  rather than a new query.
+- ⚠️ **built then removed same day (TSW-005, 2026-07-08)**
+  `canShareLeague(userId, leagueId)` was added to `leagues.service.js` as
+  the feed module's access check for league entity sharing (any active
+  member/manager/owner), then removed hours later once the user clarified
+  search/sharing should be public, not member-scoped (see the follow-up
+  widening in TSW-005's Completion notes and the superseded Decisions log
+  entry). `feed.service.js` now calls the pre-existing
+  `listPublicLeagues()` (filters `isPublic: true, status: 'active'`) instead
+  of `listLeaguesForUser(userId)` for its league lookups.
 - ✅ **changed (TSW-001, 2026-07-08)** `assertFeedPostingAllowed` in
   `server/src/modules/billing/billing.service.js` now also checks
   `League.exists({ ownerUserId: userId })` alongside the existing

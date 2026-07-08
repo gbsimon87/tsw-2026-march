@@ -44,14 +44,12 @@ jest.mock('../../modules/teams/teams.service', () => ({
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeaguePlayerById: jest.fn(),
-  findLeagueTeamById: jest.fn(),
   listLeagueTeams: jest.fn(() => Promise.resolve([])),
   listLeaguePlayers: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../modules/leagues/leagues.service', () => ({
-  listLeaguesForUser: jest.fn(() => Promise.resolve({ leagues: [] })),
-  canShareLeague: jest.fn(),
+  listPublicLeagues: jest.fn(() => Promise.resolve({ leagues: [] })),
   getPublicLeagueTeamById: jest.fn(),
   getPublicLeaguePlayerById: jest.fn(),
 }));
@@ -79,14 +77,9 @@ const {
 const { getPublicGame } = require('../../modules/games/games.service');
 const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
 const { getPublicTeam, getPublicPlayer } = require('../../modules/teams/teams.service');
+const { listLeagueTeams, listLeaguePlayers } = require('../../modules/leagues/leagues.repository');
 const {
-  findLeagueTeamById,
-  listLeagueTeams,
-  listLeaguePlayers,
-} = require('../../modules/leagues/leagues.repository');
-const {
-  listLeaguesForUser,
-  canShareLeague,
+  listPublicLeagues,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
 } = require('../../modules/leagues/leagues.service');
@@ -623,23 +616,7 @@ describe('feed service', () => {
       expect(snapshot.teamUrl).toBeNull();
     });
 
-    test('createGameCardPostForUser rejects a league game share from a non-member', async () => {
-      findGameById.mockResolvedValue({
-        _id: '0120a4f9196a5f9eb9f523f3',
-        gameContext: 'league',
-        leagueId: '377fd569971eedeba8fbea28',
-        status: 'completed',
-        scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
-      });
-      canShareLeague.mockResolvedValue(false);
-
-      await expect(
-        service.createGameCardPostForUser('user-1', { gameId: '0120a4f9196a5f9eb9f523f3' })
-      ).rejects.toMatchObject({ statusCode: 403 });
-      expect(createPost).not.toHaveBeenCalled();
-    });
-
-    test('createGameCardPostForUser shares a league game for an active member', async () => {
+    test('createGameCardPostForUser shares a league game for any user', async () => {
       findGameById.mockResolvedValue({
         _id: '0120a4f9196a5f9eb9f523f3',
         gameContext: 'league',
@@ -648,7 +625,6 @@ describe('feed service', () => {
         status: 'completed',
         scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
       });
-      canShareLeague.mockResolvedValue(true);
       createPost.mockResolvedValue({ _id: 'post-1', type: 'game_card', creatorUserId: 'user-1' });
 
       await service.createGameCardPostForUser('user-1', { gameId: '0120a4f9196a5f9eb9f523f3' });
@@ -663,28 +639,7 @@ describe('feed service', () => {
       );
     });
 
-    test('createPlayerCardPostForUser rejects a league player share from a non-member', async () => {
-      findLeagueTeamById.mockResolvedValue({
-        _id: '2e13ff6bcb41415413eaf71a',
-        leagueId: '377fd569971eedeba8fbea28',
-      });
-      canShareLeague.mockResolvedValue(false);
-
-      await expect(
-        service.createPlayerCardPostForUser('user-1', {
-          leagueTeamId: '2e13ff6bcb41415413eaf71a',
-          leaguePlayerId: '73c99ccbbdad0ab009f59815',
-        })
-      ).rejects.toMatchObject({ statusCode: 403 });
-      expect(createPost).not.toHaveBeenCalled();
-    });
-
-    test('createPlayerCardPostForUser shares a league player for an active member', async () => {
-      findLeagueTeamById.mockResolvedValue({
-        _id: '2e13ff6bcb41415413eaf71a',
-        leagueId: '377fd569971eedeba8fbea28',
-      });
-      canShareLeague.mockResolvedValue(true);
+    test('createPlayerCardPostForUser shares a league player for any user', async () => {
       getPublicLeaguePlayerById.mockResolvedValue({
         team: {
           id: '2e13ff6bcb41415413eaf71a',
@@ -718,25 +673,7 @@ describe('feed service', () => {
       );
     });
 
-    test('createTeamCardPostForUser rejects a league team share from a non-member', async () => {
-      findLeagueTeamById.mockResolvedValue({
-        _id: '2e13ff6bcb41415413eaf71a',
-        leagueId: '377fd569971eedeba8fbea28',
-      });
-      canShareLeague.mockResolvedValue(false);
-
-      await expect(
-        service.createTeamCardPostForUser('user-1', { leagueTeamId: '2e13ff6bcb41415413eaf71a' })
-      ).rejects.toMatchObject({ statusCode: 403 });
-      expect(createPost).not.toHaveBeenCalled();
-    });
-
-    test('createTeamCardPostForUser shares a league team for an active member', async () => {
-      findLeagueTeamById.mockResolvedValue({
-        _id: '2e13ff6bcb41415413eaf71a',
-        leagueId: '377fd569971eedeba8fbea28',
-      });
-      canShareLeague.mockResolvedValue(true);
+    test('createTeamCardPostForUser shares a league team for any user', async () => {
       getPublicLeagueTeamById.mockResolvedValue({
         team: {
           id: '2e13ff6bcb41415413eaf71a',
@@ -769,7 +706,7 @@ describe('feed service', () => {
 
       await service.createTeamCardPostForUser('user-1', { teamId: '83f1535f99ab0bf4e9d02dfd' });
 
-      expect(canShareLeague).not.toHaveBeenCalled();
+      expect(getPublicLeagueTeamById).not.toHaveBeenCalled();
       expect(createPost).toHaveBeenCalledWith(
         expect.objectContaining({
           teamCard: expect.objectContaining({ teamId: '83f1535f99ab0bf4e9d02dfd' }),
@@ -777,10 +714,10 @@ describe('feed service', () => {
       );
     });
 
-    test('listShareableGames additively includes an active league membership game', async () => {
+    test('listShareableGames additively includes a public league game', async () => {
       listCompletedGames.mockResolvedValue([]);
       listTeams.mockResolvedValue([]);
-      listLeaguesForUser.mockResolvedValue({
+      listPublicLeagues.mockResolvedValue({
         leagues: [{ id: '377fd569971eedeba8fbea28', name: 'City League' }],
       });
       listLeagueGamesByLeagueId.mockResolvedValue([
@@ -805,9 +742,9 @@ describe('feed service', () => {
       expect(games[0]).toMatchObject({ source: 'league', leagueId: '377fd569971eedeba8fbea28' });
     });
 
-    test('listShareableTeams additively includes an active league team', async () => {
+    test('listShareableTeams additively includes a public league team', async () => {
       listTeams.mockResolvedValue([]);
-      listLeaguesForUser.mockResolvedValue({
+      listPublicLeagues.mockResolvedValue({
         leagues: [{ id: '377fd569971eedeba8fbea28', name: 'City League' }],
       });
       listLeagueTeams.mockResolvedValue([
@@ -824,9 +761,9 @@ describe('feed service', () => {
       });
     });
 
-    test('listShareablePlayers additively includes an active league player', async () => {
+    test('listShareablePlayers additively includes a public league player', async () => {
       listTeams.mockResolvedValue([]);
-      listLeaguesForUser.mockResolvedValue({
+      listPublicLeagues.mockResolvedValue({
         leagues: [{ id: '377fd569971eedeba8fbea28', name: 'City League' }],
       });
       listLeagueTeams.mockResolvedValue([{ _id: '2e13ff6bcb41415413eaf71a', name: 'Rockets' }]);
@@ -843,9 +780,10 @@ describe('feed service', () => {
       });
     });
 
-    test('listShareable* return only standalone results for an unauthenticated caller', async () => {
+    test('listShareable* also surface public league entities for an unauthenticated caller', async () => {
       listCompletedGames.mockResolvedValue([]);
       listTeams.mockResolvedValue([]);
+      listPublicLeagues.mockResolvedValue({ leagues: [] });
 
       const [games, teams, players] = await Promise.all([
         service.listShareableGames(null, {}),
@@ -856,7 +794,7 @@ describe('feed service', () => {
       expect(games).toEqual([]);
       expect(teams).toEqual([]);
       expect(players).toEqual([]);
-      expect(listLeaguesForUser).not.toHaveBeenCalled();
+      expect(listPublicLeagues).toHaveBeenCalled();
     });
   });
 });

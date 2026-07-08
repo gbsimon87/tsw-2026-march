@@ -34,13 +34,11 @@ const {
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const {
   findLeaguePlayerById,
-  findLeagueTeamById,
   listLeagueTeams,
   listLeaguePlayers,
 } = require('../leagues/leagues.repository');
 const {
-  listLeaguesForUser,
-  canShareLeague,
+  listPublicLeagues,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
 } = require('../leagues/leagues.service');
@@ -575,16 +573,6 @@ async function createGameCardPostForUser(userId, input) {
     throw new ApiError(404, 'Game not found');
   }
 
-  // TSW-005: league games are shareable by any active member/manager/owner of
-  // that league (see canShareLeague's doc comment for why this is looser than
-  // the edit-time canManageLeagueGame check).
-  if (game.gameContext === 'league') {
-    const canShare = await canShareLeague(userId, game.leagueId);
-    if (!canShare) {
-      throw new ApiError(403, 'You must be a member of this league to share its games');
-    }
-  }
-
   const trackedLeagueTeamId =
     game.gameContext === 'league'
       ? game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId || null
@@ -611,15 +599,6 @@ async function createPlayerCardPostForUser(userId, input) {
   if (isLeaguePlayer) {
     ensureObjectId(payload.leagueTeamId, 'league team id');
     ensureObjectId(payload.leaguePlayerId, 'league player id');
-
-    const leagueTeam = await findLeagueTeamById(payload.leagueTeamId);
-    if (!leagueTeam) {
-      throw new ApiError(404, 'League team not found');
-    }
-    const canShare = await canShareLeague(userId, leagueTeam.leagueId);
-    if (!canShare) {
-      throw new ApiError(403, 'You must be a member of this league to share its players');
-    }
 
     // OPT-017: reused for the denormalised snapshot below, same pattern as
     // the standalone path.
@@ -667,15 +646,6 @@ async function createTeamCardPostForUser(userId, input) {
 
   if (isLeagueTeam) {
     ensureObjectId(payload.leagueTeamId, 'league team id');
-
-    const leagueTeam = await findLeagueTeamById(payload.leagueTeamId);
-    if (!leagueTeam) {
-      throw new ApiError(404, 'League team not found');
-    }
-    const canShare = await canShareLeague(userId, leagueTeam.leagueId);
-    if (!canShare) {
-      throw new ApiError(403, 'You must be a member of this league to share its teams');
-    }
 
     const publicPayload = await getPublicLeagueTeamById(payload.leagueTeamId);
 
@@ -735,24 +705,20 @@ async function deletePostForUser(userId, postId) {
   return { deleted: true };
 }
 
-// TSW-005: userId's leagues, needed by all three listShareable* functions to
-// additively surface league entities alongside the existing standalone-only
-// (one-off team/game) results. Returns [] for an unauthenticated caller
-// (listFeedPosts-style anonymous reads don't hit these lookup endpoints today,
-// but this keeps the function safe if that ever changes).
-async function listUserLeagues(userId) {
-  if (!userId) {
-    return [];
-  }
-  const { leagues } = await listLeaguesForUser(userId);
+// TSW-005 (widened): any public league's games/teams/players are searchable
+// and shareable by any user, not just members of that league — matches how
+// standalone teams/games are already globally searchable. Membership is no
+// longer required to search or to create a card post.
+async function listAllPublicLeagues() {
+  const { leagues } = await listPublicLeagues();
   return leagues;
 }
 
 async function listShareableGames(userId, query = {}) {
-  const [games, teams, userLeagues] = await Promise.all([
+  const [games, teams, publicLeagues] = await Promise.all([
     listCompletedGames(),
     listTeams(),
-    listUserLeagues(userId),
+    listAllPublicLeagues(),
   ]);
   const teamsById = new Map(teams.map((team) => [String(team._id), team]));
 
@@ -774,12 +740,12 @@ async function listShareableGames(userId, query = {}) {
     .filter((game) => game.team);
 
   const leagueGamesByLeague = await Promise.all(
-    userLeagues.map((league) => listLeagueGamesByLeagueId(league.id))
+    publicLeagues.map((league) => listLeagueGamesByLeagueId(league.id))
   );
   const leagueTeamsByLeague = await Promise.all(
-    userLeagues.map((league) => listLeagueTeams(league.id))
+    publicLeagues.map((league) => listLeagueTeams(league.id))
   );
-  const leagueResults = userLeagues.flatMap((league, index) => {
+  const leagueResults = publicLeagues.flatMap((league, index) => {
     const leagueTeamsById = new Map(
       leagueTeamsByLeague[index].map((team) => [String(team._id), team])
     );
@@ -808,7 +774,7 @@ async function listShareableGames(userId, query = {}) {
 }
 
 async function listShareableTeams(userId, query = {}) {
-  const [teams, userLeagues] = await Promise.all([listTeams(), listUserLeagues(userId)]);
+  const [teams, publicLeagues] = await Promise.all([listTeams(), listAllPublicLeagues()]);
 
   const standaloneResults = teams
     .filter((team) => matchesQuery(team.name, query.q))
@@ -819,9 +785,9 @@ async function listShareableTeams(userId, query = {}) {
     }));
 
   const leagueTeamsByLeague = await Promise.all(
-    userLeagues.map((league) => listLeagueTeams(league.id))
+    publicLeagues.map((league) => listLeagueTeams(league.id))
   );
-  const leagueResults = userLeagues.flatMap((league, index) =>
+  const leagueResults = publicLeagues.flatMap((league, index) =>
     leagueTeamsByLeague[index]
       .filter((team) => team.status === 'active')
       .filter((team) => matchesQuery(team.name, query.q))
@@ -838,7 +804,7 @@ async function listShareableTeams(userId, query = {}) {
 }
 
 async function listShareablePlayers(userId, query = {}) {
-  const [teams, userLeagues] = await Promise.all([listTeams(), listUserLeagues(userId)]);
+  const [teams, publicLeagues] = await Promise.all([listTeams(), listAllPublicLeagues()]);
   const standaloneResults = [];
 
   for (const team of teams) {
@@ -865,7 +831,7 @@ async function listShareablePlayers(userId, query = {}) {
   }
 
   const leagueTeamsByLeague = await Promise.all(
-    userLeagues.map((league) => listLeagueTeams(league.id))
+    publicLeagues.map((league) => listLeagueTeams(league.id))
   );
   const leaguePlayersByTeam = await Promise.all(
     leagueTeamsByLeague.flat().map((team) => listLeaguePlayers(team._id))

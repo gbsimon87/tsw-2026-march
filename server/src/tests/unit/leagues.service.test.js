@@ -82,7 +82,6 @@ const {
   getPublicLeagueLeaders,
   getPublicLeagueBySlug,
   recomputeLeagueAggregates,
-  canShareLeague,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
 } = require('../../modules/leagues/leagues.service');
@@ -579,28 +578,6 @@ describe('TSW-005 — league feed-sharing support', () => {
     listLeaguesByIds.mockResolvedValue([]);
     listLeaguesByManager.mockResolvedValue([]);
     listLeagueMembershipsForUser.mockResolvedValue([]);
-  });
-
-  test('canShareLeague is true for the league owner', async () => {
-    listLeaguesByOwner.mockResolvedValue([
-      { _id: 'league-1', ownerUserId: 'owner-1', createdAt: new Date() },
-    ]);
-
-    await expect(canShareLeague('owner-1', 'league-1')).resolves.toBe(true);
-  });
-
-  test('canShareLeague is true for an active league team member', async () => {
-    listLeaguesByOwner.mockResolvedValue([]);
-    listLeagueMembershipsForUser.mockResolvedValue([{ leagueId: 'league-1', status: 'active' }]);
-    listLeaguesByIds.mockResolvedValue([
-      { _id: 'league-1', ownerUserId: 'owner-1', createdAt: new Date() },
-    ]);
-
-    await expect(canShareLeague('player-1', 'league-1')).resolves.toBe(true);
-  });
-
-  test('canShareLeague is false for a user with no relationship to the league', async () => {
-    await expect(canShareLeague('stranger-1', 'league-1')).resolves.toBe(false);
   });
 
   test("getPublicLeagueTeamById aggregates only the team's own events across its completed games", async () => {

@@ -1058,15 +1058,6 @@ async function getPublicLeaguePlayerBySlug(
   };
 }
 
-// TSW-005: userId-scoped access check for feed-sharing league entities. Any
-// active league member/manager/owner can share that league's games/teams/
-// players to the feed — deliberately looser than assertLeagueManagerOrOwner
-// (which is for editing) since sharing is a lower-stakes, read-derived action.
-async function canShareLeague(userId, leagueId) {
-  const { leagues } = await listLeaguesForUser(userId);
-  return leagues.some((league) => String(league.id) === String(leagueId));
-}
-
 // TSW-005: card-snapshot-sized league team getter — an ID-keyed sibling to
 // getPublicLeagueTeamBySlug, deliberately NOT reusing that function because it
 // also loads full roster/games/standings for a team profile page (far more
@@ -2378,9 +2369,8 @@ module.exports = {
   listTeamsForLeagueViewer,
   getLeagueTeamForUser,
   getPublicLeagueTeamBySlug,
-  // TSW-005: card-snapshot-sized ID-keyed getters + access check, for the feed
-  // module's league-scoped game_card/player_card/team_card support.
-  canShareLeague,
+  // TSW-005: card-snapshot-sized ID-keyed getters, for the feed module's
+  // league-scoped game_card/player_card/team_card support.
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
   updateLeagueTeamForLeague,
