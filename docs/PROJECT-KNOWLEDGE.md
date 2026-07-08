@@ -8,7 +8,11 @@
 > file-path map), [`api.md`](./api.md) (endpoint reference),
 > [`permissions.md`](./permissions.md) (authorization matrix),
 > [`billing.md`](./billing.md), [`security.md`](./security.md),
-> [`posthog-implementation.md`](./posthog-implementation.md).
+> [`posthog-implementation.md`](./posthog-implementation.md). Active work
+> trackers: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
+> (performance/hardening, OPT-###) and
+> [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md)
+> (targeted bug fixes + architecture review, TSW-###).
 
 ---
 
@@ -169,22 +173,22 @@ is not enforced. Real authorization is ownership + **league role**, checked by
 
 15 collections, all defined inline in repository files:
 
-| Collection                    | Owner module | Notes                                                                             |
-| ----------------------------- | ------------ | --------------------------------------------------------------------------------- |
-| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields |
-| `Session`                     | auth         | hashed refresh tokens; TTL index                                                  |
-| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                   |
-| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`           |
-| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013)                               |
-| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**                       |
-| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`            |
-| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth)                 |
-| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league                                                     |
-| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role`                                           |
-| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow                                                   |
-| `LeagueManager`               | leagues      | league-wide manager grants                                                        |
-| `LeagueStandings`             | leagues      | materialized standings (OPT-010)                                                  |
-| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011)                                          |
+| Collection                    | Owner module | Notes                                                                                                                                                                                                          |
+| ----------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                              |
+| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                               |
+| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                |
+| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                        |
+| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013)                                                                                                                                                            |
+| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**                                                                                                                                                    |
+| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive |
+| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth)                                                                                                                                              |
+| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league                                                                                                                                                                                  |
+| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role`                                                                                                                                                                        |
+| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow                                                                                                                                                                                |
+| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                     |
+| `LeagueStandings`             | leagues      | materialized standings (OPT-010)                                                                                                                                                                               |
+| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011)                                                                                                                                                                       |
 
 ### Notable design choices
 
@@ -293,11 +297,15 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 - **Mutations use no `useMutation`** — they are plain async `*Api` calls; cache
   updates are manual `queryClient.setQueryData` (e.g. feed optimistic insert,
   auth writes). **No `invalidateQueries` anywhere.**
-- ⚠️ **Data-fetch split-brain (known debt)**: TanStack Query is wired into only
-  ~6 call sites (AuthContext, FeedPage `useInfiniteQuery`, GameDetailPage, the 3
-  public league pages). **~22 pages still fetch imperatively** with
-  `useEffect + useState + Promise.all`. When adding a new data page, prefer
-  `useQuery`; migrating the imperative pages is the tracked "OPT-014b" follow-up.
+- ⚠️ **Data-fetch split-brain (known debt, shrinking)**: TanStack Query is wired
+  into ~11 call sites (AuthContext, FeedPage `useInfiniteQuery`, GameDetailPage,
+  the 3 public league pages, plus `GamesListPage`/`TeamsPage`/`LeaguesPage`/
+  `MySportyPage`/`OpponentPlaceholderPage` migrated 2026-07-07). **~15 pages
+  still fetch imperatively**, most notably `GameTrackPage` (the big one,
+  deliberately last) and a mix of admin/CRUD + billing-flow pages. When adding
+  a new data page, prefer `useQuery`; migrating the rest is the tracked
+  "OPT-014b" follow-up (see its card for the exact remaining list and why each
+  one is riskier than a plain read-swap).
 
 ---
 
@@ -322,8 +330,9 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 - **Named exports everywhere** (lazy loader unwraps `.then(m => ({default: m.X}))`).
 - Zod for all boundary validation; forms are hand-rolled (`useAuthForm` pattern),
   **not** react-hook-form.
-- Tailwind utility classes inline (slate/emerald/amber/violet palette); no CSS
-  modules; `components/ui` is bespoke (no shadcn/Radix/`cn()`).
+- Tailwind utility classes inline; no CSS modules; `components/ui` is bespoke
+  (no shadcn/Radix/`cn()`). Two palettes coexist — see §9.1 for which pages use
+  which and why.
 - Accessibility is taken seriously (`aria-label`, `inert`, focus management,
   `useId`) — maintain it.
 - **No path aliases** — imports are deep relative chains (`../../../lib/...`).
@@ -336,6 +345,88 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
   [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 - Pre-PR checks: `pnpm check-env && pnpm lint && pnpm test && pnpm build` (also
   the CI job in `.github/workflows/ci.yml`).
+
+### 9.1 Frontend visual design system ("scoreboard" redesign, 2026-07-08)
+
+A subset of client pages were redesigned away from the original generic
+slate/sky-blue admin-dashboard look toward a basketball-specific visual
+identity. **This redesign is partial** — it only touches the pages listed
+below. Everything else (admin CRUD flows, billing pages, game tracking, most
+team pages) still uses the original light/slate/sky-blue look via `PageHeader`.
+Treat the two as coexisting design languages, not one replacing the other,
+until/unless the remaining pages are explicitly redesigned too.
+
+**Token system**
+
+| Token           | Value                                                                | Use                                                                         |
+| --------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Ink (dark card) | `#141414`                                                            | Hero/header card backgrounds                                                |
+| Brand orange    | `#F4A300`                                                            | Eyebrows, stat numerals, accent underlines, hover states                    |
+| Court green     | `#1B4332`                                                            | Secondary accent — section eyebrows, link hover, buttons                    |
+| Warm page bg    | `#F7F5F0`                                                            | Page background on redesigned pages (replaces `slate-50`)                   |
+| Display face    | `'Archivo Black', sans-serif` (inline `style`, not a Tailwind class) | Headlines, section titles — always paired with a `#F4A300` eyebrow above it |
+| Data/mono face  | `'IBM Plex Mono', monospace` (inline `style`)                        | Scoreboard-style numerals: stat lines, jersey numbers, "GP" counts          |
+| Body face       | Inter (`index.css` default, now actually loaded — see below)         | Body copy, unchanged                                                        |
+
+Archivo Black + IBM Plex Mono are loaded via a Google Fonts `<link>` in
+[`client/index.html`](../client/index.html) (Inter was already declared in
+`globals.css` but was never linked — that's fixed too, no visible effect since
+it matches the system-sans fallback).
+
+**Recurring page shape** (Home, About, Contact, MySportyPage, AuthPage, the 3
+public league pages, PublicLeaguePlayerPage, PublicLeagueTeamPage,
+AdminLeaguePage):
+
+1. A dark (`#141414`) header/hero card with a faint repeating-vertical-line
+   texture (`opacity-[0.07]` background image), an orange all-caps eyebrow,
+   an Archivo Black `<h1>`, and white/60% description text.
+2. White `rounded-2xl border border-slate-200` content sections below, each
+   with an eyebrow (`text-[#1B4332]`) + Archivo Black `<h2>` header pattern,
+   replacing the old plain `text-xl font-semibold` headers.
+3. Cards/list items use `bg-slate-50/60` with `hover:border-[#F4A300]/60
+hover:bg-white` instead of the old plain slate hover.
+4. Any stat/score/count gets the mono face + orange color instead of a plain
+   bold slate number — this is the "scoreboard" motif and the closest thing to
+   a signature element (see `StatReadout` in `HomePage.jsx` and the jersey-badge
+   pattern in `PublicLeaguePlayerPage.jsx`/`MySportyPage.jsx`).
+5. Primary buttons: `bg-[#141414]` with `hover:bg-[#1B4332]` (replaces
+   `bg-slate-900 hover:bg-slate-700`). Links: `underline decoration-[#F4A300]
+decoration-2 underline-offset-4` with `hover:text-[#1B4332]` (replaces
+   `text-sky-700 hover:underline`).
+
+**`DarkPageHeader` component** — [`client/src/components/DarkPageHeader.jsx`](../client/src/components/DarkPageHeader.jsx)
+factors out step 1 above as a shared component with the same prop shape as
+`PageHeader` (`eyebrow`, `title`, `titleAriaLabel`, `description`, `media`,
+`children`, `className`, plus a `size="hero"` variant for the bigger Home/
+About/Contact headline). It's a straight swap wherever the header is a plain
+eyebrow+title+description(+static media) block: `HomePage`, `AboutPage`,
+`ContactPage`, `PublicLeaguePage`, `PublicLeagueStandingsPage`,
+`PublicLeagueGamesPage`.
+
+**Deliberately left as bespoke inline JSX, not `DarkPageHeader`**, because
+their header content doesn't fit a generic eyebrow/title/description/media
+shape: `AuthPage` (no card, no media — just a centered heading above the form
+card), `MySportyPage` and `AdminLeaguePage` (interactive avatar/logo upload
+control in the media slot, not passive image; `AdminLeaguePage` additionally
+has inline click-to-edit title JSX), `PublicLeaguePlayerPage` and
+`PublicLeagueTeamPage` (two-column layout with a stat grid or compound
+logo+text eyebrow, not a plain string). If a future change makes these more
+uniform, revisit whether `DarkPageHeader` should grow render-prop/slot support
+— it wasn't worth the added complexity for five one-off headers.
+
+**`LeagueStandingsTable`** (`features/leagues/components/LeagueStandingsTable.jsx`)
+team-name links were switched from `sky-700` to `#1B4332`/`#F4A300` — this is
+shared by `AdminLeaguePage` too, so the admin (non-redesigned) page picked up
+the new link color as a side effect; everything else on that page is still the
+old palette.
+
+**When adding a new page or extending one of the pages above**: match the
+existing pattern on that specific page (check the file, not just this doc —
+some accent choices are per-section, e.g. league pages use `#1B4332` eyebrows
+throughout, game/player pages mix in mono stat numerals). When adding to a
+page **not** in the list above, keep using the original slate/sky-blue/
+`PageHeader` look unless the user explicitly asks for that page to be
+redesigned too — don't spread the new palette opportunistically.
 
 ---
 
@@ -366,8 +457,9 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 
 **Known debt / inconsistencies**
 
-- **Data-fetch split-brain** (client): ~22 pages bypass TanStack Query
-  (§8). No `useMutation`/`invalidateQueries`.
+- **Data-fetch split-brain** (client): ~15 pages bypass TanStack Query
+  (§8), down from ~22 after the 2026-07-07 OPT-014b pass. No
+  `useMutation`/`invalidateQueries`.
 - **Unused/partial fields**: `User.roles` (never enforced) and
   `User.league*` billing fields duplicate `League` state (League is the source
   of truth) — a partial/abandoned migration.
@@ -400,28 +492,68 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
 - Single-instance assumption: the credential rate limiter uses an in-memory
   store (per-process, not shared) — revisit if the app goes multi-instance.
 
-**Active optimisation project**: the `docs/application-audit/` folder — headed by
-[`000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
-— is the living tracker for the performance/hardening work (OPT-###). Most
-backend items are done and committed; the open items are browser-gated frontend
-work (React Query migration, GameTrackPage decomposition, client
-infinite-scroll) and prod-data-gated migrations. Consult it before starting
+**Active optimisation project**: `docs/application-audit/000-OPTIMISATION-TRACKER.md`
+is the **sole surviving file** in that folder and the living tracker for the
+performance/hardening work (OPT-###, 27 tasks) — the 30 original audit
+documents it was built from were removed 2026-07-07 once every finding was
+addressed (their "Source:" citations remain in the tracker as historical
+pointers only). 22 tasks are done and committed; 1 is won't-fix (`OPT-025`,
+investigated and found unsafe to ship — the prod backfill half is real and
+done); 1 is deferred (`OPT-021`, its risky part needs real mobile-device
+testing). Two remain open: `OPT-007` (5 index candidates await a ~1wk Atlas
+usage observation — no code left to write, waiting on data) and `OPT-014b`
+(React Query migration — 5 clean read-only pages done 2026-07-07;
+mutation/polling-heavy pages like `BillingSuccessPage`'s poll loop and the
+two large untested Public pages remain, plus `GameTrackPage`'s decomposition,
+deliberately last as the biggest/riskiest file). `OPT-026` tracks the client
+test suite's ~20 pre-existing failures (test-drift, not live bugs — discovered
+2026-07-07, not yet triaged). Consult the tracker before starting any
 optimisation work.
+
+**Separate initiative — targeted bug fixes & architecture review**:
+`docs/project-improvement-plan/00_IMPLEMENTATION_TRACKER.md` tracks 5
+investigated issues (`TSW-001`–`TSW-005`), started 2026-07-08 — **all 5 are
+now done.** `TSW-002` (Key Moments + Top Performers mobile scroll — neither
+was built as a horizontal scroller, unlike the working Highlights section),
+`TSW-003` (prod nav title falling back to a repo-name-shaped string),
+`TSW-004` (shared game cards rendering 0-0 — the card snapshot builder
+silently omitted the `recap` field the display components read from),
+`TSW-001` (Share to Pulse failing for league owners — not a permission-chain
+bug as first suspected; `billing.service.js`'s feed-posting gate was missing
+a `League.exists({ownerUserId})` check present in every other league
+authorization helper), `TSW-005` (FeedComposer now supports sharing
+league-scoped games/teams/players, not just standalone ones — shipped as an
+additive extension, not a rewrite, per the investigation's verdict).
+`TSW-005` had two same-day follow-ups after initial ship: search/sharing was
+widened from "leagues the poster belongs to" to **any public league**
+(`League.isPublic && status === 'active'`, no membership check at all, via
+`leagues.service.js`'s `listPublicLeagues`/new `isLeaguePublic` helpers) —
+matching how standalone teams/games were already globally
+searchable/shareable; and a gap discovered while testing that widening was
+closed — the write-side `create*CardPostForUser` functions had no privacy
+check at all (only search did), so a direct API call could share a private
+league's entity even though it could never be found via search. See the
+tracker's task cards for full root-cause detail and any deferred sub-scopes
+(card staleness refresh, league profile-page linking for feed cards) left as
+tracked follow-up work. This tracker is independent of the OPT-### one;
+neither modifies the other.
 
 ---
 
 ## 12. Where to start (by question)
 
-| I need to understand…          | Start here                                                                                         |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| Product scope & features       | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                  |
-| Fast file-path orientation     | [`app-overview.md`](./app-overview.md)                                                             |
-| Routing / page composition     | `client/src/app/router/AppRouter.jsx`                                                              |
-| Live game behavior             | `client/src/features/games/pages/GameTrackPage.jsx`                                                |
-| Derived stats / recap logic    | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                               |
-| API surface                    | [`api.md`](./api.md)                                                                               |
-| Persistence schemas            | `server/src/modules/*/*.repository.js`                                                             |
-| Authorization rules            | [`permissions.md`](./permissions.md)                                                               |
-| Billing                        | [`billing.md`](./billing.md)                                                                       |
-| Deploy & env                   | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md) |
-| Performance/optimisation state | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md) |
+| I need to understand…                   | Start here                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
+| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                             |
+| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                              |
+| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
+| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
+| API surface                             | [`api.md`](./api.md)                                                                                               |
+| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                             |
+| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                               |
+| Billing                                 | [`billing.md`](./billing.md)                                                                                       |
+| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
+| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
+| Bug fix / arch review history           | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |
+| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                             |

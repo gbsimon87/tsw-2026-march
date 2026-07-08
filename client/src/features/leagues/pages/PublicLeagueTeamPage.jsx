@@ -7,7 +7,6 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
-import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
@@ -86,7 +85,7 @@ const PLAYER_STATS_COLUMNS = [
         />
         <Link
           to={row.playerHref}
-          className="truncate font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-sky-700 hover:decoration-sky-500"
+          className="truncate font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-[#1B4332] hover:decoration-[#F4A300]"
         >
           {row.displayName}
         </Link>
@@ -260,28 +259,23 @@ export function PublicLeagueTeamPage() {
   const visibleTabs = TABS;
 
   return (
-    <main className="space-y-6">
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <PageHeader
-        eyebrow={
-          <span className="inline-flex items-center gap-2">
-            <CloudinaryImage
-              src={getLeagueHeaderImage(league)}
-              alt={`${league.name} logo`}
-              width={20}
-              height={20}
-              loading="eager"
-              decoding="async"
-              srcSetWidths={[20, 40, 60]}
-              sizes="20px"
-              className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-            />
-            <span>{league.name}</span>
-          </span>
-        }
-        title={team.name}
-        description={`Rank: ${team.standingsPosition || 'N/A'}`}
-        media={
+
+      {/* Team card header */}
+      <section
+        aria-label={team.name}
+        className="relative overflow-hidden rounded-2xl bg-[#141414] p-5 md:p-8"
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(90deg, #fff 0, #fff 1px, transparent 1px, transparent 64px)',
+          }}
+        />
+        <div className="relative flex items-center gap-4">
           <CloudinaryImage
             src={team.logo?.url || teamPlaceholder}
             alt={`${team.name} logo`}
@@ -291,10 +285,38 @@ export function PublicLeagueTeamPage() {
             decoding="async"
             srcSetWidths={[64, 128, 192]}
             sizes="64px"
-            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
+            className="h-16 w-16 shrink-0 rounded-full border-2 border-white/10 bg-white object-cover"
           />
-        }
-      />
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#F4A300]">
+              <CloudinaryImage
+                src={getLeagueHeaderImage(league)}
+                alt={`${league.name} logo`}
+                width={16}
+                height={16}
+                loading="eager"
+                decoding="async"
+                srcSetWidths={[16, 32]}
+                sizes="16px"
+                className="h-4 w-4 shrink-0 rounded-full border border-white/10 bg-white object-cover"
+              />
+              {league.name}
+            </span>
+            <h1
+              className="mt-2 truncate text-2xl text-white md:text-3xl"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              {team.name}
+            </h1>
+            <p className="mt-1 text-sm text-white/60">
+              Rank:{' '}
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                {team.standingsPosition || 'N/A'}
+              </span>
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div
@@ -311,7 +333,7 @@ export function PublicLeagueTeamPage() {
                 index < visibleTabs.length - 1 ? 'border-r border-slate-200' : ''
               } ${
                 activeTab === tab.id
-                  ? 'bg-slate-900 text-white'
+                  ? 'bg-[#141414] text-white'
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
             >
@@ -324,7 +346,12 @@ export function PublicLeagueTeamPage() {
         <div className="p-5">
           {activeTab === 'stats' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Player Stats</h2>
+              <h2
+                className="text-lg text-slate-900"
+                style={{ fontFamily: "'Archivo Black', sans-serif" }}
+              >
+                Player Stats
+              </h2>
               {playerStatsRows.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-600">No player stats yet.</p>
               ) : (
@@ -353,7 +380,12 @@ export function PublicLeagueTeamPage() {
 
           {activeTab === 'games' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">League Games</h2>
+              <h2
+                className="text-lg text-slate-900"
+                style={{ fontFamily: "'Archivo Black', sans-serif" }}
+              >
+                League Games
+              </h2>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 {(team.games || []).length === 0 ? (
                   <p className="text-sm text-slate-600">No league games yet.</p>
@@ -366,7 +398,12 @@ export function PublicLeagueTeamPage() {
 
           {activeTab === 'join' ? (
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Are you on this team?</h2>
+              <h2
+                className="text-lg text-slate-900"
+                style={{ fontFamily: "'Archivo Black', sans-serif" }}
+              >
+                Are you on this team?
+              </h2>
               <p className="mt-1 text-sm text-slate-600">
                 Claim your player profile to unlock your personal{' '}
                 <span className="font-medium text-slate-900">My Sporty</span> — your stats, game
@@ -375,11 +412,11 @@ export function PublicLeagueTeamPage() {
               <form onSubmit={submitJoinRequest} className="mt-5 space-y-4">
                 <fieldset className="space-y-2">
                   <legend className="text-sm font-medium text-slate-700">I want to join as</legend>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 transition hover:border-[#F4A300]/60 hover:bg-white">
                     <input
                       type="checkbox"
                       aria-label="Player — claim my profile"
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#141414]"
                       checked={rolePlayer}
                       onChange={(e) => setRolePlayer(e.target.checked)}
                     />
@@ -392,11 +429,11 @@ export function PublicLeagueTeamPage() {
                       </p>
                     </div>
                   </label>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 transition hover:border-[#F4A300]/60 hover:bg-white">
                     <input
                       type="checkbox"
                       aria-label="Team Manager"
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-slate-900"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#141414]"
                       checked={roleTeamManager}
                       onChange={(e) => setRoleTeamManager(e.target.checked)}
                     />
@@ -415,7 +452,7 @@ export function PublicLeagueTeamPage() {
                     </span>
                     <select
                       required
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F4A300]/30"
                       value={requestedLeaguePlayerId}
                       onChange={(event) => setRequestedLeaguePlayerId(event.target.value)}
                     >
@@ -438,7 +475,7 @@ export function PublicLeagueTeamPage() {
                 ) : null}
                 <button
                   type="submit"
-                  className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                  className="rounded-xl bg-[#141414] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
                 >
                   Submit Request
                 </button>

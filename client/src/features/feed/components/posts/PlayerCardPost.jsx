@@ -95,7 +95,7 @@ export function PlayerCardPost({ playerCard, interactive = true }) {
     () => playerCard?.playerImage?.url || playerCard?.teamLogo?.url || null
   );
 
-  if (!interactive) {
+  if (!interactive || !playerCard.playerUrl) {
     return (
       <article>
         <PlayerCardContent

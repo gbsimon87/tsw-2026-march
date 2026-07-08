@@ -77,6 +77,10 @@ export function FullScreenTeamCard({ teamCard }) {
     </div>
   );
 
+  if (!teamCard.teamUrl) {
+    return <div className="block h-full w-full">{inner}</div>;
+  }
+
   return (
     <Link to={teamCard.teamUrl} className="block h-full w-full focus:outline-none">
       {inner}

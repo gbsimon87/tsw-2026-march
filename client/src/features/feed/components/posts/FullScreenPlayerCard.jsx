@@ -91,6 +91,10 @@ export function FullScreenPlayerCard({ playerCard }) {
     </div>
   );
 
+  if (!playerCard.playerUrl) {
+    return <div className="block h-full w-full">{inner}</div>;
+  }
+
   return (
     <Link to={playerCard.playerUrl} className="block h-full w-full focus:outline-none">
       {inner}

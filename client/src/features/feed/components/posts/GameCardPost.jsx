@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { getGameCardLogo } from '../../cardImage';
 import {
   ShareCardClamp,
   ShareCardHeader,
@@ -8,7 +7,7 @@ import {
   ShareCardShell,
   ShareCardStatPill,
 } from '../cards/ShareCardPrimitives';
-import { buildInitials, formatCompactDate } from './cardUtils';
+import { buildGameCardDisplay, buildInitials, formatCompactDate } from './cardUtils';
 
 function buildSummaryLine(gameCard) {
   const topPerformer = gameCard?.recap?.topPerformers?.[0];
@@ -25,29 +24,19 @@ function buildSummaryLine(gameCard) {
 }
 
 export function GameCardPost({ gameCard }) {
-  const isDualTeam = !!gameCard?.participants;
   const teamColors = gameCard?.teamColors || [];
-  const statusLabel = gameCard?.recap?.statusLabel || 'Final';
-
-  const homeName = isDualTeam
-    ? gameCard?.recap?.home?.name || gameCard?.participants?.home?.displayName || 'Home'
-    : gameCard.teamName || 'Team';
-  const awayName = isDualTeam
-    ? gameCard?.recap?.away?.name || gameCard?.participants?.away?.displayName || 'Away'
-    : gameCard?.recap?.opponent?.name || gameCard?.opponent || 'Opponent';
-  const homePoints = isDualTeam
-    ? (gameCard?.recap?.home?.points ?? 0)
-    : (gameCard?.recap?.team?.points ?? 0);
-  const awayPoints = isDualTeam
-    ? (gameCard?.recap?.away?.points ?? 0)
-    : (gameCard?.recap?.opponent?.points ?? 0);
-
-  const homeLogo = isDualTeam
-    ? getGameCardLogo({ teamLogo: gameCard?.participants?.home?.logo })
-    : getGameCardLogo(gameCard);
-  const awayLogo = isDualTeam
-    ? getGameCardLogo({ teamLogo: gameCard?.participants?.away?.logo })
-    : null;
+  const {
+    isDualTeam,
+    statusLabel,
+    homeName,
+    awayName,
+    homePoints,
+    awayPoints,
+    homeLogo,
+    awayLogo,
+    homeIsWinner,
+    awayIsWinner,
+  } = buildGameCardDisplay(gameCard);
 
   return (
     <Link
@@ -68,13 +57,13 @@ export function GameCardPost({ gameCard }) {
                 name: homeName,
                 points: homePoints,
                 logo: homeLogo,
-                isWinner: homePoints > awayPoints,
+                isWinner: homeIsWinner,
               },
               {
                 name: awayName,
                 points: awayPoints,
                 logo: awayLogo,
-                isWinner: awayPoints > homePoints,
+                isWinner: awayIsWinner,
               },
             ].map((side) => (
               <div key={side.name} className="flex items-center gap-3">

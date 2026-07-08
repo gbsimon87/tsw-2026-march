@@ -19,19 +19,44 @@ const imageSchema = new mongoose.Schema(
 // those functions stay the single source of truth. Null for pre-existing posts
 // and anything created before this snapshot existed; feed.service.js falls
 // back to the live resolve in that case (self-healing, reversible).
+// TSW-005: gameId already covers league games too (Game.gameContext:'league'
+// games are still Game docs, just with a leagueId set) — no new field needed
+// there. teamId is the one-off/standalone team; leagueTeamId is the sibling
+// field for a league game's tracked team, mutually exclusive with teamId.
 const gameCardSchema = new mongoose.Schema(
   {
     gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, default: null },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: false,
+      default: null,
+    },
     cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }
 );
 
+// TSW-005: leagueTeamId/leaguePlayerId are the league-sourced sibling of
+// teamId/playerId — mutually exclusive (a card is either standalone or
+// league-sourced), enforced in feed.validation.js / feed.service.js, not here.
 const playerCardSchema = new mongoose.Schema(
   {
-    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
-    playerId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, default: null },
+    playerId: { type: mongoose.Schema.Types.ObjectId, required: false, default: null },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: false,
+      default: null,
+    },
+    leaguePlayerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeaguePlayer',
+      required: false,
+      default: null,
+    },
     cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }
@@ -39,7 +64,13 @@ const playerCardSchema = new mongoose.Schema(
 
 const teamCardSchema = new mongoose.Schema(
   {
-    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, default: null },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: false,
+      default: null,
+    },
     cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }

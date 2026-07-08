@@ -2,16 +2,19 @@
 
 > **The single source of truth for the TSW optimisation project.**
 
-> Created 2026-07-04 from the [Application Audit](./README.md). This file sorts
-> first in the folder on purpose — it is the entry point for all optimisation
-> work.
-
-> 🛑 **STANDING INSTRUCTION (2026-07-06): do not `git commit` any work on this
-> project until the user explicitly says so.** The user wants to run manual
-> testing first. Finish implementation + automated verification (tests/build)
-> and leave changes uncommitted in the working tree; wait for explicit
-> go-ahead before committing. This applies to OPT-014 and all subsequent
-> tasks until the user lifts the restriction.
+> Created 2026-07-04 from a full-codebase performance & architecture audit
+> (server + client + live dev-DB inspection). This file sorts first in the
+> folder on purpose — it is the entry point for all optimisation work. The
+> original 30 audit documents that informed this tracker (`01-*.md`–`30-*.md`
+>
+> - their `README.md`) were **removed 2026-07-07** once every finding they
+>   described had been addressed or explicitly deferred — they described a
+>   pre-optimisation snapshot of the app that no longer matches the code.
+>   **"Source:" citations below** (e.g. "30 H1", "24 #1") **are historical
+>   pointers into those now-deleted documents** — kept for traceability of _why_
+>   each task exists, not resolvable links. The completion notes on each task
+>   card are the authoritative record of what was actually wrong and what
+>   changed.
 
 ---
 
@@ -80,23 +83,23 @@ added during OPT-022, OPT-014b split out from OPT-014):
 ## 🗺️ How the project is organised
 
 Work is grouped into **dependency waves**, not just impact tiers. The impact
-tiers (High/Medium/Low) and the per-item detail live in
-[30-optimisation-roadmap](./30-optimisation-roadmap.md); this tracker adds the
-**ordering and dependency graph** so foundational work lands before its
+tiers (High/Medium/Low) and the original per-item detail lived in doc 30 of the
+now-removed audit set (see the note at the top of this file); this tracker adds
+the **ordering and dependency graph** so foundational work lands before its
 consumers and rework is minimised.
 
 **Ordering principles:**
 
 1. **Shared utilities before consumers** — `cloudinaryUrl.js` and
    `statSummary.js` exist before the code that uses them.
-2. **Index hygiene alongside query rewrites** ([19](./19-indexing-strategy.md))
+2. **Index hygiene alongside query rewrites** (19)
    — drops/adds land so rewrites hit the right indexes. _Verify with
    `$indexStats` in prod before dropping._
 3. **Denormalised fields before their readers** — `Game.finalScore` +
    `eventCount` before list endpoints stop loading events and before standings
    materialisation reuses them.
 4. **DB materialisation before caching / client stat consumers** — caching
-   comes _after_ data-consistency is established ([27](./27-caching-opportunities.md)).
+   comes _after_ data-consistency is established (27).
 5. **Backend contract changes before frontend consumers** — slim-delta
    event-append before GameTrackPage optimistic updates; server pagination
    before client virtualised lists.
@@ -562,14 +565,14 @@ Record every architectural / scope decision here with a date and rationale.
 - **2026-07-04 — Redis deferred.** No Redis until one of: multi-instance rate
   limiting, a job queue, or cross-instance cache coherence becomes real. DB
   materialisation + React Query + HTTP caching cover current needs
-  ([27](./27-caching-opportunities.md) §5).
+  (27 §5).
 - **2026-07-04 — Materialisation fallback stays canonical.** For OPT-010/011,
   the live read-time compute path remains the source of truth: reads do
   compute-on-miss + persist (self-backfilling), so the change is reversible and
-  needs no migration script ([28](./28-computation-optimisation.md)).
+  needs no migration script (28).
 - **2026-07-04 — No aggregation-pipeline rewrite of stat loops.** The fix is to
   stop computing on read (materialise), not to translate JS loops into `$group`
-  ([24](./24-database-audit.md) #1). Aggregation stays for ad-hoc reads
+  (24 #1). Aggregation stays for ad-hoc reads
   (event/roster counts, shareable search).
 - **2026-07-04 — Tie-break rule: RESOLVED (2026-07-07, OPT-024).** Product
   decision: the league format doesn't allow ties. Implemented as a hard
@@ -578,7 +581,7 @@ Record every architectural / scope decision here with a date and rationale.
   reach a `completed` league game at all. See OPT-024's card for full detail.
 - **2026-07-04 — Index drops gated on verification.** No prod index drop
   (OPT-007) until `$indexStats` shows a verification window of zero ops on the
-  candidate ([19](./19-indexing-strategy.md) §Process).
+  candidate (19 §Process).
 - **2026-07-06 — Team-page player stats stay on live compute.** Considered
   materialising `getPublicLeagueTeamBySlug`'s per-team stats (`buildLeagueTeamPlayerStats`)
   as part of OPT-011 alongside leaders, but its output includes zero-game roster
@@ -907,7 +910,7 @@ env.NODE_ENV !== 'production'`. New `scripts/migrate-drop-dead-indexes.js`
 
 - **Measure before + after every task.** Route p95 from existing pino logs;
   bundle size via `pnpm vite build --mode production`; client `web-vitals` →
-  PostHog ([25](./25-performance-audit.md) §Measurement). Record the numbers in
+  PostHog (25 §Measurement). Record the numbers in
   the task's completion notes.
 - **Read-only DB verification before index drops** — `$indexStats` for a week,
   then drop via migration; disable prod `autoIndex` (OPT-007).
@@ -1760,7 +1763,7 @@ days · **L** 1–2 weeks.
   base branch) [x] Suspense fallback (`SportsLoader`) on lazy boundaries
   [x] initial bundle measurably smaller [x] DashboardPage removed with no
   broken imports.
-- **Source:** [30](./30-optimisation-roadmap.md) H1, [29](./29-frontend-optimisation.md) §1.
+- **Source:** 30 H1, 29 §1.
 - **Completion notes (2026-07-05):**
   - **What:** `AppRouter.jsx` — all routes except the app shell, `HomePage`,
     `NotFoundPage`, and the default `/pulse` `FeedPage` converted to
@@ -1812,7 +1815,7 @@ days · **L** 1–2 weeks.
   [x] `f_auto,q_auto` present on delivered URLs [x] thumbnail has `f_auto`
   [x] no double-application on already-transformed URLs [x] all 171 server
   tests pass (no broken images/shapes).
-- **Source:** [30](./30-optimisation-roadmap.md) H2, [26](./26-cloudinary-optimisation.md) §Image.
+- **Source:** 30 H2, 26 §Image.
 - **Completion notes (2026-07-05):**
   - **What:** new `server/src/modules/shared/cloudinaryUrl.js` exporting
     `transformCloudinaryUrl(url, {w})` (adds `f_auto,q_auto`, optional
@@ -1866,7 +1869,7 @@ days · **L** 1–2 weeks.
   set (no CLS) [x] lazy everywhere except hero/first card [~] videos
   `preload="metadata"` (feed video posts use `<video>` elsewhere; image srcset
   is the focus here — video delivery handled by OPT-009).
-- **Source:** [30](./30-optimisation-roadmap.md) H2, [26](./26-cloudinary-optimisation.md) §2–3, [29](./29-frontend-optimisation.md) §4.
+- **Source:** 30 H2, 26 §2–3, 29 §4.
 - **Completion notes:** 2026-07-05
   - Created `client/src/features/media/CloudinaryImage.jsx` — `forwardRef`
     component generating `srcset`/`sizes` for Cloudinary URLs, explicit
@@ -1913,7 +1916,7 @@ days · **L** 1–2 weeks.
   IXSCAN not COLLSCAN; verify limits/sorting.
 - **Validation checklist:** [x] identical response shape [x] no events loaded
   [x] indexed queries [x] response parity on dev data.
-- **Source:** [30](./30-optimisation-roadmap.md) H5, [23](./23-api-audit.md) #1.
+- **Source:** 30 H5, 23 #1.
 - **Completion notes:** 2026-07-05
   - Added `listPublicCompletedGames(limit)` to games.repository.js with `.select('-events -rosterSnapshot -boxScore')` and `.limit(limit)` — removes heavy documents from public queries
   - Updated three public endpoints in teams.service.js: `getPublicOpponentBySlug`, `listPublicExploreGames`, `listPublicTeams` to use the optimized method with appropriate buffers (500 for opponent search, 2× for explore dedup, 500 for teams)
@@ -1940,7 +1943,7 @@ days · **L** 1–2 weeks.
 - **Testing:** response parity; query-count instrumentation before/after.
 - **Validation checklist:** [x] identical responses [x] teams/games fetched once
   [x] no behaviour change.
-- **Source:** [30](./30-optimisation-roadmap.md) M2, [23](./23-api-audit.md) #7.
+- **Source:** 30 M2, 23 #7.
 - **Completion notes:** 2026-07-05
   - Added an optional pre-fetch escape hatch to `getLeagueStandings(leagueId, {teams, games})`
     and `listLeagueGames(leagueId, {teams, games})` — when the caller already has
@@ -1981,7 +1984,7 @@ days · **L** 1–2 weeks.
   standings/stat output exactly on dev data.
 - **Validation checklist:** [x] all callers migrated [x] output identical to
   pre-refactor [x] no duplicate stat logic remains.
-- **Source:** [30](./30-optimisation-roadmap.md) L4, [28](./28-computation-optimisation.md) §Recompute.
+- **Source:** 30 L4, 28 §Recompute.
 - **Completion notes:** 2026-07-05
   - `shared/statSummary.js` already existed (team-level summaries). This task
     eliminated the remaining **per-player box-score line** duplication.
@@ -2029,7 +2032,7 @@ days · **L** 1–2 weeks.
   the `indexStats` action, which is correct least-privilege posture) [ ] prod
   autoIndex off (code ships `autoIndex:false` for prod; takes effect on next
   prod deploy).
-- **Source:** [30](./30-optimisation-roadmap.md) M5, [19](./19-indexing-strategy.md).
+- **Source:** 30 M5, 19.
 - **Completion notes:** Split into two halves after investigating what's
   actually provable from static analysis vs. what genuinely needs live
   traffic data:
@@ -2131,7 +2134,7 @@ days · **L** 1–2 weeks.
   [x] eventCount accurate [~] lists project events out (fast-path uses fields;
   `.select('-events')` projection is a documented follow-up, see below)
   [x] backfill/compute-on-read for pre-existing games.
-- **Source:** [30](./30-optimisation-roadmap.md) H3/#5, [28](./28-computation-optimisation.md) step 1, [24](./24-database-audit.md) #3.
+- **Source:** 30 H3/#5, 28 step 1, 24 #3.
 - **Completion notes:** 2026-07-05
   - **Schema:** added `Game.finalScore {home, away}` (embedded, nullable) and
     `Game.eventCount` (Number, nullable) to `games.repository.js`.
@@ -2180,7 +2183,7 @@ days · **L** 1–2 weeks.
   after eager completes; delete → destroy awaited and logged.
 - **Validation checklist:** [x] non-blocking upload [x] playback fallback works
   [x] destroys awaited/logged [x] video delivered with `f_auto`.
-- **Source:** [30](./30-optimisation-roadmap.md) H2/M4, [26](./26-cloudinary-optimisation.md) §Video/API.
+- **Source:** 30 H2/M4, 26 §Video/API.
 - **Completion notes:** 2026-07-05
   - **Non-blocking upload:** `cloudinary.client.js` `uploadVideoBuffer` now sets
     `eager_async: true` (was `false`) — the upload response returns as soon as the
@@ -2233,7 +2236,7 @@ updatedAt}`). Add `recomputeLeagueAggregates(leagueId)` that **reuses the
 - **Validation checklist:** [x] materialised == live on all dev leagues
   [x] all write triggers recompute [x] compute-on-miss backfills [x] recompute
   is post-response, guarded [x] reversible (live path intact).
-- **Source:** [30](./30-optimisation-roadmap.md) H3, [28](./28-computation-optimisation.md) step 2, [24](./24-database-audit.md) §Proposed collections.
+- **Source:** 30 H3, 28 step 2, 24 §Proposed collections.
 - **Completion notes:** 2026-07-06
   - **Collection:** `leaguestandings` schema (`{leagueId unique+indexed, rows:[Mixed],
 timestamps}`) + `findLeagueStandings` / `upsertLeagueStandings` /
@@ -2294,7 +2297,7 @@ fg2m/a, fg3m/a, ftm/a, updatedAt}`), updated by the same
   leader ordering matches live compute.
 - **Validation checklist:** [x] per-player parity [x] leaders/DPOY/fantasy match
   [x] scoring stays read-time [x] backfill on miss.
-- **Source:** [30](./30-optimisation-roadmap.md) H3, [28](./28-computation-optimisation.md) step 3.
+- **Source:** 30 H3, 28 step 3.
 - **Completion notes:** 2026-07-06
   - **Collection:** `leagueplayerstats` schema (`{leagueId, leagueTeamId,
 leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
@@ -2365,7 +2368,7 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
   parity for live games.
 - **Validation checklist:** [x] frozen == live at completion [~] one pass for
   live (not done, see scope decision) [x] edit-after-finish refreezes.
-- **Source:** [30](./30-optimisation-roadmap.md) H3, [28](./28-computation-optimisation.md) step 4.
+- **Source:** 30 H3, 28 step 4.
 - **Completion notes:** 2026-07-06 — **scoped down from the original 4-field ask.**
   - **Frozen: `boxScore` + `gameSummary` only.** Added `Game.boxScore`/`gameSummary`
     (Mixed, nullable) to the schema. `finishGameForUser` resolves team context
@@ -2422,7 +2425,7 @@ leaguePlayerId} compound-unique+indexed`, raw OPT-006 stat-line fields +
 - **Testing:** summary parity vs live compute; recompute on completion.
 - **Validation checklist:** [x] parity [x] recompute on completion [x] fallback
   on miss.
-- **Source:** [30](./30-optimisation-roadmap.md) (H3 family), [28](./28-computation-optimisation.md) step 5.
+- **Source:** 30 (H3 family), 28 step 5.
 - **Completion notes:** 2026-07-06
   - **Collection:** `teamseasonsummaries` schema (`{teamId unique+indexed,
 summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary`/
@@ -2483,7 +2486,7 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
 - **Description:** Add `QueryClientProvider`; migrate page-by-page to keyed
   queries (`['auth','me']` staleTime 5m, `['publicLeague',slug]`, `['league',id]`,
   `['game',id]`, `['teams']/['games']/['leagues']`, `useInfiniteQuery(['feed'])`
-  per [29](./29-frontend-optimisation.md) §2). Mutations use `setQueryData` with
+  per 29 §2). Mutations use `setQueryData` with
   the already-returned authoritative payloads (kills refetch-whole-league-after-
   mutation).
 - **Reason:** No cache; refetch on every mount; same league fetched by 6 pages;
@@ -2499,7 +2502,7 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
   AuthContext login/logout/register/update) [x] feed uses `useInfiniteQuery`
   [x] no regressions per page (verified — see notes) [~] **not all ~25 pages
   migrated — 20 remain, tracked below.**
-- **Source:** [30](./30-optimisation-roadmap.md) H4, [29](./29-frontend-optimisation.md) §2, [27](./27-caching-opportunities.md).
+- **Source:** 30 H4, 29 §2, 27.
 - **Completion notes:** 2026-07-06
   - **Added `@tanstack/react-query@^5.101.2`** to `client/package.json`.
     `client/src/app/providers/queryClient.js` creates the singleton
@@ -2657,7 +2660,7 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
 - **Validation checklist:** [x] 5 clean read-only pages migrated + verified
   [ ] NewGamePage [ ] BillingSuccessPage (poll loop) [ ] PricingPage
   [ ] PublicPlayerPage (+ tests first) [ ] PublicTeamPage (+ tests first).
-- **Source:** follow-up to OPT-014 ([30](./30-optimisation-roadmap.md) H4).
+- **Source:** follow-up to OPT-014 (30 H4).
 - **Completion notes:** see "Done this pass" above.
 
 ---
@@ -2683,7 +2686,7 @@ summary: Mixed, timestamps}`) + `findTeamSeasonSummary`/`upsertTeamSeasonSummary
   [x] slim response [~] `$push` used (scoped — see notes) [~] single pass
   (already ~2, not touched further) [x] tracker handles new shape (verified —
   no client code changes needed, see notes).
-- **Source:** [30](./30-optimisation-roadmap.md) M1, [23](./23-api-audit.md) #4.
+- **Source:** 30 M1, 23 #4.
 - **Completion notes:** 2026-07-06
   - **Concurrency safety (the "also fixes the lineup-clobber race" half):**
     enabled Mongoose's native `optimisticConcurrency: true` on the Game schema
@@ -2762,7 +2765,7 @@ again.")` — a clear, retryable conflict instead of the previous silent
   [ ] handlers stabilised with `useCallback` — **not done, see notes**
   [ ] optimistic updates using OPT-015's slim delta — **not done, see notes**
   [x] no functional regression (test suite + build unchanged).
-- **Source:** [30](./30-optimisation-roadmap.md) M7, [29](./29-frontend-optimisation.md) §3.
+- **Source:** 30 M7, 29 §3.
 - **Completion notes:** 2026-07-06 — **heavily scoped down; only the one
   explicitly-named, mechanically-safe fix was made.**
   - **What was done:** `onCourtPlayers` and `benchPlayers` (the two arrays the
@@ -2836,7 +2839,7 @@ again.")` — a clear, retryable conflict instead of the previous silent
   card refresh path works.
 - **Validation checklist:** [x] `$in` creator batch [x] card data denormalised at
   write [x] refresh path for stale [x] card content unchanged.
-- **Source:** [30](./30-optimisation-roadmap.md) M3, [23](./23-api-audit.md) #3.
+- **Source:** 30 M3, 23 #3.
 - **Completion notes:** 2026-07-06
   - **Creator batching (S):** `findUsersByIds` (`$in`) in `auth.repository.js`;
     `listFeedPosts` resolves every post's creator with **one** query instead of
@@ -2927,7 +2930,7 @@ again.")` — a clear, retryable conflict instead of the previous silent
   if a single owner's list ever approaches ~50 items. Same
   premature-at-this-scale reasoning as OPT-025. (Separately, these pages do need
   the React Query migration regardless — that's OPT-014b, being done now.)
-- **Source:** [30](./30-optimisation-roadmap.md) M6, [23](./23-api-audit.md) #9/#10.
+- **Source:** 30 M6, 23 #9/#10.
 - **Completion notes:** 2026-07-07 — **scope: backend-complete + client
   backward-compat** (chosen with the user; client infinite-scroll/virtualisation
   deferred to a follow-up, like OPT-014b).
@@ -2995,7 +2998,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   authed responses [x] ETag on completed game detail (Express weak ETags,
   active — verified not disabled) [x] **security:** no `Set-Cookie` on
   cacheable anonymous responses (CSRF interaction found + fixed).
-- **Source:** [30](./30-optimisation-roadmap.md) M8, [27](./27-caching-opportunities.md).
+- **Source:** 30 M8, 27.
 - **Completion notes:** 2026-07-06
   - **New `publicCache.middleware.js`** — sets
     `Cache-Control: public, max-age=30, stale-while-revalidate=300` +
@@ -3062,7 +3065,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
 - **Validation checklist:** [x] AI post-response + lock TTL (+ retry-on-cleared)
   [x] email async [x] webhook idempotent via atomic gated `$push`/`$slice`
   [x] no request-path blocking.
-- **Source:** [30](./30-optimisation-roadmap.md) M4, [23](./23-api-audit.md), [09](./09-payment-webhooks.md).
+- **Source:** 30 M4, 23, 09.
 - **Completion notes:** 2026-07-06 — three independent sub-items:
   - **(a) AI summary post-response + TTL + retry-on-cleared.**
     `finishGameForUser` no longer `await`s `buildPersistedGameSummary`
@@ -3146,7 +3149,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   videos unmount; near-end still triggers load.
 - **Validation checklist:** [ ] windowing works both modes [ ] videos unmount
   off-screen [ ] scroll throttled [ ] cards memoised.
-- **Source:** [30](./30-optimisation-roadmap.md) L1, [29](./29-frontend-optimisation.md) §3.
+- **Source:** 30 L1, 29 §3.
 - **Completion notes:** —
 
 ---
@@ -3175,7 +3178,7 @@ stale-while-revalidate=300` on the public routers (which never personalise);
   (3 queries, callers individually verified)
   [x] validation — **no gap found**, already 100% covered by OPT-018 + existing
   feed validation.
-- **Source:** [30](./30-optimisation-roadmap.md) L2/L3/L5/L8, [22](./22-known-technical-debt.md).
+- **Source:** 30 L2/L3/L5/L8, 22.
 - **Completion notes:** 2026-07-07
   - **Item 1 — `participant.slug` schema fix: a real bug, not just hygiene.**
     `games.service.js` always tried to persist `slug: context.homeTeam.slug`
@@ -3268,7 +3271,7 @@ createCheckoutSession`) has no UI caller (superseded by
   limiter trips; Stripe calls use pinned version.
 - **Validation checklist:** [x] graceful shutdown [x] DB-ping health [x] pool/
   timeout set [x] Stripe pinned [x] login limiter.
-- **Source:** [30](./30-optimisation-roadmap.md) L6, [21](./21-deployment-notes.md), [24](./24-database-audit.md) §7.
+- **Source:** 30 L6, 21, 24 §7.
 - **Completion notes:** All five sub-items shipped (commit on branch `dev`):
   1. **Graceful shutdown** (`server.js`) — `bootstrap` now captures the
      `http.Server` from `app.listen` and `registerGracefulShutdown` traps
@@ -3334,7 +3337,7 @@ createCheckoutSession`) has no UI caller (superseded by
   verify distinctId on authed events.
 - **Validation checklist:** [x] tie rule decided & encoded [x] `publicOnly`
   behaviour decided [x] contact input escaped [x] distinctId bound.
-- **Source:** [30](./30-optimisation-roadmap.md) L7/L9, [22](./22-known-technical-debt.md).
+- **Source:** 30 L7/L9, 22.
 - **Decisions (from product owner, 2026-07-07):** (1) **Ties are not allowed**
   — the league format has no draws. (2) **Private leagues** should be
   invisible to the general public, but visible to any of their own members —
@@ -3436,7 +3439,7 @@ finalScore)` rejects (422) a league game finishing tied, checked in
   list queries — **not implemented, see below** [x] scores identical (n/a —
   no projection shipped, no scores changed) [x] detail endpoints still load
   events (unchanged, nothing touched).
-- **Source:** [30](./30-optimisation-roadmap.md) H3/#5, [28](./28-computation-optimisation.md) step 1.
+- **Source:** 30 H3/#5, 28 step 1.
 - **Completion notes:** Prod backfill completed and verified (see gating
   requirement above) — **that part of the task is genuinely done and stays
   done regardless of the code-projection decision below.**

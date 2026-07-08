@@ -35,6 +35,18 @@ export function AuthPage() {
 
   return (
     <div className="mx-auto max-w-sm py-10">
+      <div className="mb-6 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#F4A300]">
+          The Sporty Way
+        </p>
+        <h1
+          className="mt-2 text-3xl text-slate-900"
+          style={{ fontFamily: "'Archivo Black', sans-serif" }}
+        >
+          {isRegister ? 'Join the roster.' : 'Welcome back.'}
+        </h1>
+      </div>
+
       {verifyEmail ? (
         <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           Check your inbox and verify your email before signing in.
@@ -51,14 +63,14 @@ export function AuthPage() {
         </p>
       ) : null}
 
-      <div className="rounded-xl border border-slate-100 bg-white p-8 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-7 flex rounded-lg bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => goToLogin()}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${
               !isRegister
-                ? 'bg-white text-slate-900 shadow-sm'
+                ? 'bg-[#141414] text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -69,7 +81,7 @@ export function AuthPage() {
             onClick={goToRegister}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${
               isRegister
-                ? 'bg-white text-slate-900 shadow-sm'
+                ? 'bg-[#141414] text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >

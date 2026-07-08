@@ -9,6 +9,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   saveLeague: jest.fn(),
   createLeagueTeam: jest.fn(),
   listLeagueTeams: jest.fn(),
+  findLeagueTeamById: jest.fn(),
   findLeagueTeamByIdAndLeague: jest.fn(),
   findLeagueTeamByLeagueAndSlug: jest.fn(),
   saveLeagueTeam: jest.fn(),
@@ -33,6 +34,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   listLeaguePlayerStats: jest.fn(),
   replaceLeaguePlayerStats: jest.fn(),
   findActiveLeagueManager: jest.fn(),
+  listLeaguesByManager: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -61,6 +63,11 @@ const {
   replaceLeaguePlayerStats,
   findActiveLeagueManager,
   listLeagueMembershipsForUser,
+  listLeaguesByOwner,
+  listLeaguesByIds,
+  listLeaguesByManager,
+  findLeagueTeamById,
+  findLeaguePlayerById,
 } = require('../../modules/leagues/leagues.repository');
 const { listLeagueGamesByLeagueId } = require('../../modules/games/games.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../../modules/shared/stats.constants');
@@ -75,6 +82,9 @@ const {
   getPublicLeagueLeaders,
   getPublicLeagueBySlug,
   recomputeLeagueAggregates,
+  isLeaguePublic,
+  getPublicLeagueTeamById,
+  getPublicLeaguePlayerById,
 } = require('../../modules/leagues/leagues.service');
 
 function buildLeagueTeam(id, name) {
@@ -559,5 +569,99 @@ describe('private league visibility on public-slug routes (OPT-024)', () => {
 
     const league = await getPublicLeagueBySlug('secret-league', null);
     expect(league.slug).toBe('secret-league');
+  });
+});
+
+describe('TSW-005 — league feed-sharing support', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    listLeaguesByOwner.mockResolvedValue([]);
+    listLeaguesByIds.mockResolvedValue([]);
+    listLeaguesByManager.mockResolvedValue([]);
+    listLeagueMembershipsForUser.mockResolvedValue([]);
+  });
+
+  test('isLeaguePublic is true for a public, active league', async () => {
+    findLeagueById.mockResolvedValue({ _id: 'league-1', isPublic: true, status: 'active' });
+
+    await expect(isLeaguePublic('league-1')).resolves.toBe(true);
+  });
+
+  test('isLeaguePublic is false for a private league', async () => {
+    findLeagueById.mockResolvedValue({ _id: 'league-1', isPublic: false, status: 'active' });
+
+    await expect(isLeaguePublic('league-1')).resolves.toBe(false);
+  });
+
+  test('isLeaguePublic is false for an archived league even if isPublic is true', async () => {
+    findLeagueById.mockResolvedValue({ _id: 'league-1', isPublic: true, status: 'archived' });
+
+    await expect(isLeaguePublic('league-1')).resolves.toBe(false);
+  });
+
+  test('isLeaguePublic is false when the league does not exist', async () => {
+    findLeagueById.mockResolvedValue(null);
+
+    await expect(isLeaguePublic('missing-league')).resolves.toBe(false);
+  });
+
+  test("getPublicLeagueTeamById aggregates only the team's own events across its completed games", async () => {
+    findLeagueTeamById.mockResolvedValue(buildLeagueTeam('team-a', 'Alpha'));
+    listLeagueGamesByLeagueId.mockResolvedValue([
+      {
+        _id: 'g1',
+        status: 'completed',
+        trackingMode: 'dual_team',
+        homeLeagueTeamId: 'team-a',
+        awayLeagueTeamId: 'team-b',
+        homeRosterSnapshot: [{ _id: 'p1', leaguePlayerId: 'lp1', displayName: 'Alex' }],
+        awayRosterSnapshot: [{ _id: 'p2', leaguePlayerId: 'lp2', displayName: 'Sam' }],
+        events: [
+          { teamSide: TEAM_SIDES.HOME, playerId: 'p1', statType: STAT_TYPES.FG3_MADE },
+          { teamSide: TEAM_SIDES.AWAY, playerId: 'p2', statType: STAT_TYPES.FG2_MADE },
+        ],
+      },
+    ]);
+
+    const result = await getPublicLeagueTeamById('team-a');
+
+    expect(result.team.name).toBe('Alpha');
+    expect(result.summary.gamesCount).toBe(1);
+    // Only team-a's (home) events should count — the away team's FG2_MADE
+    // must not leak into team-a's aggregate.
+    expect(result.summary.points).toBe(3);
+  });
+
+  test('getPublicLeaguePlayerById returns a card-sized summary for a league player', async () => {
+    findLeaguePlayerById.mockResolvedValue({
+      _id: 'lp1',
+      leagueTeamId: 'team-a',
+      displayName: 'Alex',
+      jerseyNumber: 7,
+      position: 'PG',
+      isActive: true,
+      claimedByUserId: null,
+    });
+    findLeagueTeamById.mockResolvedValue(buildLeagueTeam('team-a', 'Alpha'));
+    listLeagueTeams.mockResolvedValue([buildLeagueTeam('team-a', 'Alpha')]);
+    listLeagueGamesByLeagueId.mockResolvedValue([
+      {
+        _id: 'g1',
+        status: 'completed',
+        trackingMode: 'dual_team',
+        homeLeagueTeamId: 'team-a',
+        awayLeagueTeamId: 'team-b',
+        homeRosterSnapshot: [{ _id: 'p1', leaguePlayerId: 'lp1', displayName: 'Alex' }],
+        awayRosterSnapshot: [],
+        events: [{ teamSide: TEAM_SIDES.HOME, playerId: 'p1', statType: STAT_TYPES.FG3_MADE }],
+      },
+    ]);
+
+    const result = await getPublicLeaguePlayerById('lp1');
+
+    expect(result.player.displayName).toBe('Alex');
+    expect(result.team.name).toBe('Alpha');
+    expect(result.summary.gamesCount).toBe(1);
+    expect(result.summary.pointsPerGame).toBe(3);
   });
 });

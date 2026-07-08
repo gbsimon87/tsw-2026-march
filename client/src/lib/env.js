@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  VITE_APP_NAME: z.string().default('tsw-2026-march'),
+  // TSW-003: never default to a repo/package-name-shaped string — if
+  // VITE_APP_NAME is unset (e.g. not configured in the Render dashboard for
+  // a given service), this is what surfaces in user-facing copy.
+  VITE_APP_NAME: z.string().default('The Sporty Way'),
   VITE_APP_ENV: z.enum(['development', 'production']).default('development'),
   VITE_API_BASE_URL: z.string().url().optional(),
   VITE_ENABLE_ANALYTICS: z

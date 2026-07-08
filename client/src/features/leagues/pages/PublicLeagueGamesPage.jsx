@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
-import { PageHeader } from '../../../components/PageHeader';
+import { DarkPageHeader } from '../../../components/DarkPageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
@@ -45,9 +45,11 @@ export function PublicLeagueGamesPage() {
   ];
 
   return (
-    <main className="space-y-8">
+    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <PageHeader
+
+      <DarkPageHeader
+        titleAriaLabel={league.name}
         eyebrow="Public League Games"
         title={league.name}
         description={`${league.seasonLabel || 'Season TBD'} schedule and completed results.`}
@@ -61,24 +63,27 @@ export function PublicLeagueGamesPage() {
             decoding="async"
             srcSetWidths={[64, 128, 192]}
             sizes="64px"
-            className="h-16 w-16 rounded-full border border-slate-200 bg-white object-cover"
+            className="h-16 w-16 shrink-0 rounded-full border-2 border-white/10 bg-white object-cover"
           />
         }
       >
-        <div className="flex flex-wrap gap-3 text-sm">
-          <Link to={`/league/${league.slug}`} className="font-medium text-sky-700 hover:underline">
+        <div className="flex flex-wrap gap-4 text-sm">
+          <Link
+            to={`/league/${league.slug}`}
+            className="font-semibold text-white/80 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#F4A300]"
+          >
             League overview
           </Link>
           <Link
             to={`/league/${league.slug}/standings`}
-            className="font-medium text-sky-700 hover:underline"
+            className="font-semibold text-white/80 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#F4A300]"
           >
             League standings
           </Link>
         </div>
-      </PageHeader>
+      </DarkPageHeader>
 
-      <section>
+      <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
         {games.length === 0 ? (
           <p className="text-sm text-slate-600">No league games yet.</p>
         ) : (

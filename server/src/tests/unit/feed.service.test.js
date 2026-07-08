@@ -23,10 +23,13 @@ jest.mock('../../modules/auth/auth.repository', () => ({
 jest.mock('../../modules/games/games.repository', () => ({
   findGameById: jest.fn(),
   listCompletedGames: jest.fn(),
+  listLeagueGamesByLeagueId: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../modules/games/games.service', () => ({
   getPublicGame: jest.fn(),
+  canAccessGame: jest.fn(),
+  HIGHLIGHT_STAT_TYPES: [],
 }));
 
 jest.mock('../../modules/teams/teams.repository', () => ({
@@ -37,6 +40,20 @@ jest.mock('../../modules/teams/teams.repository', () => ({
 jest.mock('../../modules/teams/teams.service', () => ({
   getPublicPlayer: jest.fn(),
   getPublicTeam: jest.fn(),
+}));
+
+jest.mock('../../modules/leagues/leagues.repository', () => ({
+  findLeaguePlayerById: jest.fn(),
+  findLeagueTeamById: jest.fn(),
+  listLeagueTeams: jest.fn(() => Promise.resolve([])),
+  listLeaguePlayers: jest.fn(() => Promise.resolve([])),
+}));
+
+jest.mock('../../modules/leagues/leagues.service', () => ({
+  listPublicLeagues: jest.fn(() => Promise.resolve({ leagues: [] })),
+  isLeaguePublic: jest.fn(() => Promise.resolve(true)),
+  getPublicLeagueTeamById: jest.fn(),
+  getPublicLeaguePlayerById: jest.fn(),
 }));
 
 const {
@@ -54,10 +71,25 @@ const {
   destroyVideo,
 } = require('../../modules/feed/cloudinary.client');
 const { findUserById, findUsersByIds } = require('../../modules/auth/auth.repository');
-const { listCompletedGames } = require('../../modules/games/games.repository');
+const {
+  findGameById,
+  listCompletedGames,
+  listLeagueGamesByLeagueId,
+} = require('../../modules/games/games.repository');
 const { getPublicGame } = require('../../modules/games/games.service');
 const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
 const { getPublicTeam, getPublicPlayer } = require('../../modules/teams/teams.service');
+const {
+  findLeagueTeamById,
+  listLeagueTeams,
+  listLeaguePlayers,
+} = require('../../modules/leagues/leagues.repository');
+const {
+  listPublicLeagues,
+  isLeaguePublic,
+  getPublicLeagueTeamById,
+  getPublicLeaguePlayerById,
+} = require('../../modules/leagues/leagues.service');
 const service = require('../../modules/feed/feed.service');
 
 describe('feed service', () => {
@@ -476,13 +508,376 @@ describe('feed service', () => {
     findTeamById.mockResolvedValue({ _id: 't1', name: 'TSW Blue' });
 
     const [games, teams, players] = await Promise.all([
-      service.listShareableGames({}),
-      service.listShareableTeams({}),
-      service.listShareablePlayers({}),
+      service.listShareableGames(null, {}),
+      service.listShareableTeams(null, {}),
+      service.listShareablePlayers(null, {}),
     ]);
 
     expect(games).toHaveLength(1);
     expect(teams).toHaveLength(1);
     expect(players).toHaveLength(1);
+  });
+
+  // TSW-004: buildGameCardSnapshot omitted `recap` entirely, so every card
+  // that went through the persisted-snapshot path (as opposed to the live
+  // getPublicGame() fallback) rendered 0-0 — FullScreenGameCard/GameCardPost
+  // read every score field from gameCard.recap.*. buildGameCardSnapshot's
+  // `payload` argument IS a getPublicGame() return value, which already
+  // computes `recap` — the fix is copying it through, not recomputing it.
+  describe('buildGameCardSnapshot (TSW-004)', () => {
+    test('includes recap for a standalone (one-sided) game', () => {
+      const payload = {
+        game: { id: 'g1', trackingMode: 'one_sided', opponent: 'Falcons' },
+        team: { id: 't1', name: 'TSW Blue', logo: null, colors: ['#123456'] },
+        participants: null,
+        recap: {
+          statusLabel: 'Final',
+          team: { id: 't1', name: 'TSW Blue', points: 58 },
+          opponent: { name: 'Falcons', points: 51 },
+          teamStats: { points: 58, reb: 30, ast: 12 },
+        },
+      };
+
+      const snapshot = service.buildGameCardSnapshot(payload);
+
+      expect(snapshot.recap).toBe(payload.recap);
+      expect(snapshot.recap.team.points).toBe(58);
+      expect(snapshot.recap.opponent.points).toBe(51);
+      expect(snapshot.participants).toBeNull();
+    });
+
+    test('includes recap AND participants for a dual-team (league) game', () => {
+      const payload = {
+        game: { id: 'g2', trackingMode: 'dual_team', opponent: null },
+        team: null,
+        participants: {
+          home: { displayName: 'Home Team', logo: null },
+          away: { displayName: 'Away Team', logo: null },
+        },
+        recap: {
+          statusLabel: 'Final',
+          home: { name: 'Home Team', points: 64 },
+          away: { name: 'Away Team', points: 59 },
+        },
+      };
+
+      const snapshot = service.buildGameCardSnapshot(payload);
+
+      expect(snapshot.recap).toBe(payload.recap);
+      expect(snapshot.recap.home.points).toBe(64);
+      expect(snapshot.recap.away.points).toBe(59);
+      // Consumers (FullScreenGameCard/GameCardPost) detect dual-team mode via
+      // `!!gameCard?.participants` — this was ALSO missing from the old
+      // snapshot, so every cached dual-team card rendered as if it were
+      // standalone (wrong recap branch) on top of the 0-0 bug.
+      expect(snapshot.participants).toBe(payload.participants);
+    });
+  });
+
+  describe('TSW-005 — league-scoped card support', () => {
+    test('buildPlayerCardSnapshot normalises a league player payload', () => {
+      const payload = {
+        team: {
+          id: '2e13ff6bcb41415413eaf71a',
+          leagueId: '377fd569971eedeba8fbea28',
+          name: 'Rockets',
+          logo: null,
+          colors: [],
+        },
+        player: {
+          id: '73c99ccbbdad0ab009f59815',
+          leagueTeamId: '2e13ff6bcb41415413eaf71a',
+          displayName: 'Sam',
+          jerseyNumber: 7,
+          avatarUrl: 'https://example.com/sam.png',
+        },
+        summary: { gamesCount: 3, pointsPerGame: 12, reboundsPerGame: 4, assistsPerGame: 2 },
+      };
+
+      const snapshot = service.buildPlayerCardSnapshot(payload);
+
+      expect(snapshot.teamId).toBeNull();
+      expect(snapshot.leagueTeamId).toBe('2e13ff6bcb41415413eaf71a');
+      expect(snapshot.playerId).toBeNull();
+      expect(snapshot.leaguePlayerId).toBe('73c99ccbbdad0ab009f59815');
+      expect(snapshot.playerImage).toBe('https://example.com/sam.png');
+      expect(snapshot.playerUrl).toBeNull();
+    });
+
+    test('buildTeamCardSnapshot normalises a league team payload', () => {
+      const payload = {
+        team: {
+          id: '2e13ff6bcb41415413eaf71a',
+          leagueId: '377fd569971eedeba8fbea28',
+          name: 'Rockets',
+          logo: null,
+          colors: [],
+        },
+        summary: { gamesCount: 5, points: 300, fg2: {}, fg3: {}, ft: {} },
+      };
+
+      const snapshot = service.buildTeamCardSnapshot(payload);
+
+      expect(snapshot.teamId).toBeNull();
+      expect(snapshot.leagueTeamId).toBe('2e13ff6bcb41415413eaf71a');
+      expect(snapshot.teamUrl).toBeNull();
+    });
+
+    test('createGameCardPostForUser shares a league game for any user', async () => {
+      findGameById.mockResolvedValue({
+        _id: '0120a4f9196a5f9eb9f523f3',
+        gameContext: 'league',
+        leagueId: '377fd569971eedeba8fbea28',
+        trackedLeagueTeamId: '2e13ff6bcb41415413eaf71a',
+        status: 'completed',
+        scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'game_card', creatorUserId: 'user-1' });
+
+      await service.createGameCardPostForUser('user-1', { gameId: '0120a4f9196a5f9eb9f523f3' });
+
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gameCard: expect.objectContaining({
+            gameId: '0120a4f9196a5f9eb9f523f3',
+            leagueTeamId: '2e13ff6bcb41415413eaf71a',
+          }),
+        })
+      );
+    });
+
+    test('createPlayerCardPostForUser shares a league player for any user', async () => {
+      findLeagueTeamById.mockResolvedValue({
+        _id: '2e13ff6bcb41415413eaf71a',
+        leagueId: '377fd569971eedeba8fbea28',
+      });
+      getPublicLeaguePlayerById.mockResolvedValue({
+        team: {
+          id: '2e13ff6bcb41415413eaf71a',
+          leagueId: '377fd569971eedeba8fbea28',
+          name: 'Rockets',
+          logo: null,
+          colors: [],
+        },
+        player: {
+          id: '73c99ccbbdad0ab009f59815',
+          leagueTeamId: '2e13ff6bcb41415413eaf71a',
+          displayName: 'Sam',
+          jerseyNumber: 7,
+        },
+        summary: { gamesCount: 1, pointsPerGame: 10, reboundsPerGame: 2, assistsPerGame: 1 },
+      });
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'player_card', creatorUserId: 'user-1' });
+
+      await service.createPlayerCardPostForUser('user-1', {
+        leagueTeamId: '2e13ff6bcb41415413eaf71a',
+        leaguePlayerId: '73c99ccbbdad0ab009f59815',
+      });
+
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          playerCard: expect.objectContaining({
+            leagueTeamId: '2e13ff6bcb41415413eaf71a',
+            leaguePlayerId: '73c99ccbbdad0ab009f59815',
+          }),
+        })
+      );
+    });
+
+    test('createTeamCardPostForUser shares a league team for any user', async () => {
+      findLeagueTeamById.mockResolvedValue({
+        _id: '2e13ff6bcb41415413eaf71a',
+        leagueId: '377fd569971eedeba8fbea28',
+      });
+      getPublicLeagueTeamById.mockResolvedValue({
+        team: {
+          id: '2e13ff6bcb41415413eaf71a',
+          leagueId: '377fd569971eedeba8fbea28',
+          name: 'Rockets',
+          logo: null,
+          colors: [],
+        },
+        summary: { gamesCount: 2, points: 100, fg2: {}, fg3: {}, ft: {} },
+      });
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'team_card', creatorUserId: 'user-1' });
+
+      await service.createTeamCardPostForUser('user-1', {
+        leagueTeamId: '2e13ff6bcb41415413eaf71a',
+      });
+
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teamCard: expect.objectContaining({ leagueTeamId: '2e13ff6bcb41415413eaf71a' }),
+        })
+      );
+    });
+
+    test('standalone create paths are unaffected when no league fields are provided', async () => {
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'team_card', creatorUserId: 'user-1' });
+      getPublicTeam.mockResolvedValue({
+        team: { id: '83f1535f99ab0bf4e9d02dfd', name: 'TSW Blue', logo: null, colors: [] },
+        summary: { gamesCount: 1, points: 50, fg2: {}, fg3: {}, ft: {} },
+      });
+
+      await service.createTeamCardPostForUser('user-1', { teamId: '83f1535f99ab0bf4e9d02dfd' });
+
+      expect(getPublicLeagueTeamById).not.toHaveBeenCalled();
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teamCard: expect.objectContaining({ teamId: '83f1535f99ab0bf4e9d02dfd' }),
+        })
+      );
+    });
+
+    test('listShareableGames additively includes a public league game', async () => {
+      listCompletedGames.mockResolvedValue([]);
+      listTeams.mockResolvedValue([]);
+      listPublicLeagues.mockResolvedValue({
+        leagues: [{ id: '377fd569971eedeba8fbea28', name: 'City League' }],
+      });
+      listLeagueGamesByLeagueId.mockResolvedValue([
+        {
+          _id: 'lg1',
+          title: 'Rockets vs Bulls',
+          status: 'completed',
+          gameContext: 'league',
+          homeLeagueTeamId: '2e13ff6bcb41415413eaf71a',
+          awayLeagueTeamId: '532bb5a08a3223d8f3b7d927',
+          scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ]);
+      listLeagueTeams.mockResolvedValue([
+        { _id: '2e13ff6bcb41415413eaf71a', name: 'Rockets' },
+        { _id: '532bb5a08a3223d8f3b7d927', name: 'Bulls' },
+      ]);
+
+      const games = await service.listShareableGames('user-1', {});
+
+      expect(games).toHaveLength(1);
+      expect(games[0]).toMatchObject({ source: 'league', leagueId: '377fd569971eedeba8fbea28' });
+    });
+
+    test('listShareableGames/Teams/Players never surface a private league (listPublicLeagues is the sole gate)', async () => {
+      // listPublicLeagues itself filters { isPublic: true, status: 'active' } at
+      // the repository layer (leagues.repository.js) — a private league never
+      // makes it into the `leagues` array these functions iterate, so it's
+      // impossible for its games/teams/players to be queried at all.
+      listCompletedGames.mockResolvedValue([]);
+      listTeams.mockResolvedValue([]);
+      listPublicLeagues.mockResolvedValue({ leagues: [] });
+
+      const [games, teams, players] = await Promise.all([
+        service.listShareableGames('user-1', {}),
+        service.listShareableTeams('user-1', {}),
+        service.listShareablePlayers('user-1', {}),
+      ]);
+
+      expect(games).toEqual([]);
+      expect(teams).toEqual([]);
+      expect(players).toEqual([]);
+      expect(listLeagueGamesByLeagueId).not.toHaveBeenCalled();
+      expect(listLeagueTeams).not.toHaveBeenCalled();
+      expect(listLeaguePlayers).not.toHaveBeenCalled();
+    });
+
+    test('createGameCardPostForUser rejects sharing a game from a private (non-public) league', async () => {
+      findGameById.mockResolvedValue({
+        _id: '0120a4f9196a5f9eb9f523f3',
+        gameContext: 'league',
+        leagueId: '377fd569971eedeba8fbea28',
+        status: 'completed',
+        scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      isLeaguePublic.mockResolvedValue(false);
+
+      await expect(
+        service.createGameCardPostForUser('user-1', { gameId: '0120a4f9196a5f9eb9f523f3' })
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('createPlayerCardPostForUser rejects sharing a player from a private (non-public) league', async () => {
+      findLeagueTeamById.mockResolvedValue({
+        _id: '2e13ff6bcb41415413eaf71a',
+        leagueId: '377fd569971eedeba8fbea28',
+      });
+      isLeaguePublic.mockResolvedValue(false);
+
+      await expect(
+        service.createPlayerCardPostForUser('user-1', {
+          leagueTeamId: '2e13ff6bcb41415413eaf71a',
+          leaguePlayerId: '73c99ccbbdad0ab009f59815',
+        })
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('createTeamCardPostForUser rejects sharing a team from a private (non-public) league', async () => {
+      findLeagueTeamById.mockResolvedValue({
+        _id: '2e13ff6bcb41415413eaf71a',
+        leagueId: '377fd569971eedeba8fbea28',
+      });
+      isLeaguePublic.mockResolvedValue(false);
+
+      await expect(
+        service.createTeamCardPostForUser('user-1', { leagueTeamId: '2e13ff6bcb41415413eaf71a' })
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('listShareableTeams additively includes a public league team', async () => {
+      listTeams.mockResolvedValue([]);
+      listPublicLeagues.mockResolvedValue({
+        leagues: [{ id: '377fd569971eedeba8fbea28', name: 'City League' }],
+      });
+      listLeagueTeams.mockResolvedValue([
+        { _id: '2e13ff6bcb41415413eaf71a', name: 'Rockets', status: 'active' },
+      ]);
+
+      const teams = await service.listShareableTeams('user-1', {});
+
+      expect(teams).toHaveLength(1);
+      expect(teams[0]).toMatchObject({
+        source: 'league',
+        leagueId: '377fd569971eedeba8fbea28',
+        leagueTeamId: '2e13ff6bcb41415413eaf71a',
+      });
+    });
+
+    test('listShareablePlayers additively includes a public league player', async () => {
+      listTeams.mockResolvedValue([]);
+      listPublicLeagues.mockResolvedValue({
+        leagues: [{ id: '377fd569971eedeba8fbea28', name: 'City League' }],
+      });
+      listLeagueTeams.mockResolvedValue([{ _id: '2e13ff6bcb41415413eaf71a', name: 'Rockets' }]);
+      listLeaguePlayers.mockResolvedValue([
+        { _id: '73c99ccbbdad0ab009f59815', displayName: 'Sam', jerseyNumber: 7, isActive: true },
+      ]);
+
+      const players = await service.listShareablePlayers('user-1', {});
+
+      expect(players).toHaveLength(1);
+      expect(players[0]).toMatchObject({
+        source: 'league',
+        leaguePlayerId: '73c99ccbbdad0ab009f59815',
+      });
+    });
+
+    test('listShareable* also surface public league entities for an unauthenticated caller', async () => {
+      listCompletedGames.mockResolvedValue([]);
+      listTeams.mockResolvedValue([]);
+      listPublicLeagues.mockResolvedValue({ leagues: [] });
+
+      const [games, teams, players] = await Promise.all([
+        service.listShareableGames(null, {}),
+        service.listShareableTeams(null, {}),
+        service.listShareablePlayers(null, {}),
+      ]);
+
+      expect(games).toEqual([]);
+      expect(teams).toEqual([]);
+      expect(players).toEqual([]);
+      expect(listPublicLeagues).toHaveBeenCalled();
+    });
   });
 });

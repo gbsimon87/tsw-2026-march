@@ -8,7 +8,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
-  League: { findOne: jest.fn(), create: jest.fn() },
+  League: { findOne: jest.fn(), create: jest.fn(), exists: jest.fn() },
   LeagueManager: { exists: jest.fn() },
   LeagueTeamMember: { exists: jest.fn() },
   findLeagueById: jest.fn(),
@@ -49,11 +49,17 @@ jest.mock('stripe', () =>
 );
 
 const {
+  Team,
   findTeamByIdAndOwner,
   listTeamsByOwner,
   saveTeam,
   claimTeamWebhookEvent,
 } = require('../../modules/teams/teams.repository');
+const {
+  League,
+  LeagueManager,
+  LeagueTeamMember,
+} = require('../../modules/leagues/leagues.repository');
 const { updateUserPlan } = require('../../modules/auth/auth.repository');
 const {
   isTeamActive,
@@ -65,6 +71,7 @@ const {
   createTeamCheckoutSession,
   createCustomerPortalSession,
   handleWebhookEvent,
+  assertFeedPostingAllowed,
 } = require('../../modules/billing/billing.service');
 
 function buildTeam(overrides = {}) {
@@ -428,6 +435,55 @@ describe('createCustomerPortalSession', () => {
     findTeamByIdAndOwner.mockResolvedValue(buildTeam({ stripeCustomerId: null }));
     await expect(createCustomerPortalSession('user-1', 'team-1')).rejects.toMatchObject({
       statusCode: 400,
+    });
+  });
+});
+
+// ─── Feed affiliation gate (TSW-001) ───────────────────────────────────────────
+
+describe('assertFeedPostingAllowed', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('allows a user who owns a team', async () => {
+    Team.exists.mockResolvedValue(true);
+    League.exists.mockResolvedValue(false);
+    LeagueManager.exists.mockResolvedValue(false);
+    LeagueTeamMember.exists.mockResolvedValue(false);
+    await expect(assertFeedPostingAllowed('user-1')).resolves.toBeUndefined();
+  });
+
+  test('allows a league owner with no team and no LeagueManager row', async () => {
+    Team.exists.mockResolvedValue(false);
+    League.exists.mockResolvedValue(true);
+    LeagueManager.exists.mockResolvedValue(false);
+    LeagueTeamMember.exists.mockResolvedValue(false);
+    await expect(assertFeedPostingAllowed('user-1')).resolves.toBeUndefined();
+  });
+
+  test('allows an active league manager', async () => {
+    Team.exists.mockResolvedValue(false);
+    League.exists.mockResolvedValue(false);
+    LeagueManager.exists.mockResolvedValue(true);
+    LeagueTeamMember.exists.mockResolvedValue(false);
+    await expect(assertFeedPostingAllowed('user-1')).resolves.toBeUndefined();
+  });
+
+  test('allows an active league team member', async () => {
+    Team.exists.mockResolvedValue(false);
+    League.exists.mockResolvedValue(false);
+    LeagueManager.exists.mockResolvedValue(false);
+    LeagueTeamMember.exists.mockResolvedValue(true);
+    await expect(assertFeedPostingAllowed('user-1')).resolves.toBeUndefined();
+  });
+
+  test('throws 403 for a user with no team or league affiliation', async () => {
+    Team.exists.mockResolvedValue(false);
+    League.exists.mockResolvedValue(false);
+    LeagueManager.exists.mockResolvedValue(false);
+    LeagueTeamMember.exists.mockResolvedValue(false);
+    await expect(assertFeedPostingAllowed('user-1')).rejects.toMatchObject({
+      statusCode: 403,
+      message: 'You must be part of a team or league to post',
     });
   });
 });

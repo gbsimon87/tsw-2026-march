@@ -67,19 +67,19 @@ async function remove(req, res) {
 
 async function listShareableGames(req, res) {
   const query = shareableLookupSchema.parse(req.query);
-  const games = await service.listShareableGames(query);
+  const games = await service.listShareableGames(req.auth?.userId || null, query);
   res.status(200).json({ games });
 }
 
 async function listShareablePlayers(req, res) {
   const query = shareableLookupSchema.parse(req.query);
-  const players = await service.listShareablePlayers(query);
+  const players = await service.listShareablePlayers(req.auth?.userId || null, query);
   res.status(200).json({ players });
 }
 
 async function listShareableTeams(req, res) {
   const query = shareableLookupSchema.parse(req.query);
-  const teams = await service.listShareableTeams(query);
+  const teams = await service.listShareableTeams(req.auth?.userId || null, query);
   res.status(200).json({ teams });
 }
 
