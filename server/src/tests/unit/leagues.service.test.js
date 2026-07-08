@@ -82,6 +82,7 @@ const {
   getPublicLeagueLeaders,
   getPublicLeagueBySlug,
   recomputeLeagueAggregates,
+  isLeaguePublic,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
 } = require('../../modules/leagues/leagues.service');
@@ -578,6 +579,30 @@ describe('TSW-005 — league feed-sharing support', () => {
     listLeaguesByIds.mockResolvedValue([]);
     listLeaguesByManager.mockResolvedValue([]);
     listLeagueMembershipsForUser.mockResolvedValue([]);
+  });
+
+  test('isLeaguePublic is true for a public, active league', async () => {
+    findLeagueById.mockResolvedValue({ _id: 'league-1', isPublic: true, status: 'active' });
+
+    await expect(isLeaguePublic('league-1')).resolves.toBe(true);
+  });
+
+  test('isLeaguePublic is false for a private league', async () => {
+    findLeagueById.mockResolvedValue({ _id: 'league-1', isPublic: false, status: 'active' });
+
+    await expect(isLeaguePublic('league-1')).resolves.toBe(false);
+  });
+
+  test('isLeaguePublic is false for an archived league even if isPublic is true', async () => {
+    findLeagueById.mockResolvedValue({ _id: 'league-1', isPublic: true, status: 'archived' });
+
+    await expect(isLeaguePublic('league-1')).resolves.toBe(false);
+  });
+
+  test('isLeaguePublic is false when the league does not exist', async () => {
+    findLeagueById.mockResolvedValue(null);
+
+    await expect(isLeaguePublic('missing-league')).resolves.toBe(false);
   });
 
   test("getPublicLeagueTeamById aggregates only the team's own events across its completed games", async () => {

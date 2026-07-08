@@ -34,11 +34,13 @@ const {
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const {
   findLeaguePlayerById,
+  findLeagueTeamById,
   listLeagueTeams,
   listLeaguePlayers,
 } = require('../leagues/leagues.repository');
 const {
   listPublicLeagues,
+  isLeaguePublic,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
 } = require('../leagues/leagues.service');
@@ -573,6 +575,10 @@ async function createGameCardPostForUser(userId, input) {
     throw new ApiError(404, 'Game not found');
   }
 
+  if (game.gameContext === 'league' && !(await isLeaguePublic(game.leagueId))) {
+    throw new ApiError(404, 'Game not found');
+  }
+
   const trackedLeagueTeamId =
     game.gameContext === 'league'
       ? game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId || null
@@ -599,6 +605,11 @@ async function createPlayerCardPostForUser(userId, input) {
   if (isLeaguePlayer) {
     ensureObjectId(payload.leagueTeamId, 'league team id');
     ensureObjectId(payload.leaguePlayerId, 'league player id');
+
+    const leagueTeam = await findLeagueTeamById(payload.leagueTeamId);
+    if (!leagueTeam || !(await isLeaguePublic(leagueTeam.leagueId))) {
+      throw new ApiError(404, 'League player not found');
+    }
 
     // OPT-017: reused for the denormalised snapshot below, same pattern as
     // the standalone path.
@@ -646,6 +657,11 @@ async function createTeamCardPostForUser(userId, input) {
 
   if (isLeagueTeam) {
     ensureObjectId(payload.leagueTeamId, 'league team id');
+
+    const leagueTeam = await findLeagueTeamById(payload.leagueTeamId);
+    if (!leagueTeam || !(await isLeaguePublic(leagueTeam.leagueId))) {
+      throw new ApiError(404, 'League team not found');
+    }
 
     const publicPayload = await getPublicLeagueTeamById(payload.leagueTeamId);
 

@@ -436,6 +436,27 @@ now satisfied since TSW-004 shipped).
   longer exists). No client changes needed — `FeedComposer.jsx` already
   branched generically on `source === 'league'`, unaware of the
   membership gate either way.
+- **Follow-up gap closed (2026-07-08, same day, after the widening above):**
+  the widening above fixed _search_ to be public-league-scoped
+  (`listPublicLeagues`), but the write-side `createGameCardPostForUser`/
+  `createPlayerCardPostForUser`/`createTeamCardPostForUser` had **no league
+  visibility check at all** — a direct API call with a private league's
+  `gameId`/`leagueTeamId`/`leaguePlayerId` would have succeeded even though
+  it could never be found via search. User explicitly asked to confirm
+  private leagues (and their games/teams/players) are excluded from the
+  composer end-to-end, which surfaced this write-side gap during test
+  writing (not found by inspection alone). Added `isLeaguePublic(leagueId)`
+  to `leagues.service.js` (viewer-agnostic — `isPublic && status ===
+'active'`, no membership fallback, unlike `assertLeagueVisible`) and wired
+  it into all three creation functions: `createGameCardPostForUser` checks
+  `game.leagueId` when `game.gameContext === 'league'`;
+  `createPlayerCardPostForUser`/`createTeamCardPostForUser` resolve
+  `leagueTeamId → leagueId` via `findLeagueTeamById` first. All three 404
+  ("not found", not 403 — consistent with how a private league is invisible
+  rather than forbidden). Added 4 new `isLeaguePublic` unit tests in
+  `leagues.service.test.js`, 4 new reject-tests + 1 never-queries-a-private-
+  league test in `feed.service.test.js`. Full server suite: 33/293 passing
+  (was 33/285).
 
 ---
 
@@ -532,6 +553,14 @@ introduced during this initiative.
   entry). `feed.service.js` now calls the pre-existing
   `listPublicLeagues()` (filters `isPublic: true, status: 'active'`) instead
   of `listLeaguesForUser(userId)` for its league lookups.
+- ✅ **built (TSW-005, 2026-07-08)** `isLeaguePublic(leagueId)` in
+  `leagues.service.js` — viewer-agnostic public/active check (`isPublic &&
+status === 'active'`, no membership fallback), distinct from the existing
+  `assertLeagueVisible` (which falls back to membership for private
+  leagues, since it's for viewer-facing routes). Used by
+  `feed.service.js`'s three card-creation functions to reject sharing from a
+  private league at write-time, closing the gap left by the search-side-only
+  fix above.
 - ✅ **changed (TSW-001, 2026-07-08)** `assertFeedPostingAllowed` in
   `server/src/modules/billing/billing.service.js` now also checks
   `League.exists({ ownerUserId: userId })` alongside the existing

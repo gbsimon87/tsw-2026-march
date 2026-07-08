@@ -260,6 +260,15 @@ async function assertLeagueExists(leagueId) {
   return league;
 }
 
+// TSW-005 (follow-up): viewer-agnostic public-visibility check, for callers
+// (e.g. feed.service.js) that need "is this league public" without any
+// membership logic — unlike assertLeagueVisible, which falls back to
+// membership for private leagues.
+async function isLeaguePublic(leagueId) {
+  const league = await findLeagueById(leagueId);
+  return Boolean(league && league.isPublic && league.status === 'active');
+}
+
 // OPT-024: shared by assertLeagueViewer (private-league management routes)
 // and assertLeagueVisible (public-slug routes) — a user is "in" a league as
 // its owner, an active league manager, or via any leagueTeamMember record
@@ -2369,8 +2378,9 @@ module.exports = {
   listTeamsForLeagueViewer,
   getLeagueTeamForUser,
   getPublicLeagueTeamBySlug,
-  // TSW-005: card-snapshot-sized ID-keyed getters, for the feed module's
-  // league-scoped game_card/player_card/team_card support.
+  // TSW-005: card-snapshot-sized ID-keyed getters + visibility check, for
+  // the feed module's league-scoped game_card/player_card/team_card support.
+  isLeaguePublic,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
   updateLeagueTeamForLeague,
