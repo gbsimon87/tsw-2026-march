@@ -429,19 +429,22 @@ optimisation work.
 
 **Separate initiative — targeted bug fixes & architecture review**:
 `docs/project-improvement-plan/00_IMPLEMENTATION_TRACKER.md` tracks 5
-investigated issues (`TSW-001`–`TSW-005`), started 2026-07-08. 3 are done:
-`TSW-002` (Key Moments mobile scroll — it was never built as a horizontal
-scroller, unlike the working Highlights section), `TSW-003` (prod nav title
-falling back to a repo-name-shaped string), `TSW-004` (shared game cards
-rendering 0-0 — the card snapshot builder silently omitted the `recap` field
-the display components read from). `TSW-001` (Share to Pulse failing for
-League Admins — the permission chain is actually correct; the real bug is a
-swallowed client error masking the true cause) needs a quick look at a real
-failed request in production before its fix can be finalized. `TSW-005`
-(extending FeedComposer to support league-scoped teams/games/players, not
-just standalone ones) is investigated and scoped as an additive change, not a
-rewrite — largest remaining task. This tracker is independent of the OPT-###
-one; neither modifies the other.
+investigated issues (`TSW-001`–`TSW-005`), started 2026-07-08 — **all 5 are
+now done.** `TSW-002` (Key Moments + Top Performers mobile scroll — neither
+was built as a horizontal scroller, unlike the working Highlights section),
+`TSW-003` (prod nav title falling back to a repo-name-shaped string),
+`TSW-004` (shared game cards rendering 0-0 — the card snapshot builder
+silently omitted the `recap` field the display components read from),
+`TSW-001` (Share to Pulse failing for league owners — not a permission-chain
+bug as first suspected; `billing.service.js`'s feed-posting gate was missing
+a `League.exists({ownerUserId})` check present in every other league
+authorization helper), `TSW-005` (FeedComposer now supports sharing
+league-scoped games/teams/players, not just standalone ones — shipped as an
+additive extension, not a rewrite, per the investigation's verdict). See the
+tracker's task cards for full root-cause detail and any deferred sub-scopes
+(card staleness refresh, league profile-page linking for feed cards) left as
+tracked follow-up work. This tracker is independent of the OPT-### one;
+neither modifies the other.
 
 ---
 
@@ -460,4 +463,4 @@ one; neither modifies the other.
 | Billing                        | [`billing.md`](./billing.md)                                                                                       |
 | Deploy & env                   | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
 | Performance/optimisation state | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
-| Open bug fixes / arch review   | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |
+| Bug fix / arch review history  | [`project-improvement-plan/00_IMPLEMENTATION_TRACKER.md`](./project-improvement-plan/00_IMPLEMENTATION_TRACKER.md) |

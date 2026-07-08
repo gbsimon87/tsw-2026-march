@@ -56,6 +56,12 @@ or a follow-up task, depending on how much design the refresh trigger needs
 
 ## Partial/hinted league-awareness in `feed.service.js` not used by the composer
 
+**Resolved by TSW-005 (2026-07-08).** `listShareableGames/Teams/Players` now
+query league entities via `leagues.service.js`'s `listLeaguesForUser`, and
+`feed.service.js` imports `findLeagueTeamById`/`listLeagueTeams`/
+`listLeaguePlayers` alongside the existing `findLeaguePlayerById`. No longer
+an inconsistency — kept below for history.
+
 **Found in:** `feed.service.js:31` imports `findLeaguePlayerById` from
 `leagues.repository` for use elsewhere in the file (rendering an existing
 highlight-clip/player-card that references a league player), but the

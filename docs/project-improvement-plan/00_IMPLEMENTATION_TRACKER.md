@@ -34,24 +34,27 @@
 
 ## 📊 Status dashboard
 
-- **Overall status:** `TSW-001`, `TSW-002`, `TSW-003`, and `TSW-004` are done,
-  tested, and committed (`TSW-002` is also mobile-verified by the user,
-  2026-07-08). `TSW-005` is the only remaining task (Ready, largest, ordered
-  last).
+- **Overall status:** All 5 tasks are done, tested, and committed. `TSW-002`
+  is also mobile-verified by the user (2026-07-08). This initiative's
+  original 5-task scope is complete — see each task's Completion notes for
+  deferred sub-scopes (player/team card staleness, league profile-page
+  linking) that remain open as candidate follow-up work, not blockers.
 - **Counts by status:**
 
-| Status          | Count                                          |
-| --------------- | ---------------------------------------------- |
-| Not Started     | 0                                              |
-| Investigating   | 0                                              |
-| Ready           | 1 (`TSW-005`)                                  |
-| In Progress     | 0                                              |
-| Blocked         | 0                                              |
-| Awaiting Review | 0                                              |
-| Completed       | 4 (`TSW-001`, `TSW-002`, `TSW-003`, `TSW-004`) |
+| Status          | Count                                                     |
+| --------------- | --------------------------------------------------------- |
+| Not Started     | 0                                                         |
+| Investigating   | 0                                                         |
+| Ready           | 0                                                         |
+| In Progress     | 0                                                         |
+| Blocked         | 0                                                         |
+| Awaiting Review | 0                                                         |
+| Completed       | 5 (`TSW-001`, `TSW-002`, `TSW-003`, `TSW-004`, `TSW-005`) |
 
-- **Recommended next task:** `TSW-005` (the only remaining task, no
-  remaining blockers — its soft dependency on `TSW-004` is satisfied).
+- **Recommended next task:** none — all 5 tasks complete. See
+  [`02_ARCHITECTURE_NOTES.md`](./02_ARCHITECTURE_NOTES.md) for durable
+  follow-up candidates surfaced along the way (card staleness refresh,
+  league player/team profile routes for feed-card linking).
 
 ---
 
@@ -74,7 +77,7 @@ now satisfied since TSW-004 shipped).
 | TSW-002 | Key Moments mobile scroll            | Medium   | S          | Low    | ✅ Completed | none                      |
 | TSW-003 | Production nav title                 | Low      | XS         | Low    | ✅ Completed | none                      |
 | TSW-004 | FullScreen component stat rendering  | High     | S          | Low    | ✅ Completed | none                      |
-| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | Ready        | soft: TSW-004 (satisfied) |
+| TSW-005 | FeedComposer league scope            | Medium   | L          | Medium | ✅ Completed | soft: TSW-004 (satisfied) |
 
 ---
 
@@ -349,7 +352,65 @@ now satisfied since TSW-004 shipped).
   referencing a league team, league game, or league player, and it renders
   correctly everywhere a standalone post would; no regression to existing
   standalone posting.
-- **Completion notes:** —
+- **Completion notes (2026-07-08):** shipped as scoped — additive, not a
+  rewrite. `listShareableGames/Teams/Players` now query league entities too
+  (scoped via `leagues.service.js`'s existing `listLeaguesForUser(userId)`,
+  reused rather than reimplemented), tagged `source: 'league'` on each result
+  so the composer can distinguish them from standalone results. Required
+  first threading `userId` through the controller → service call chain for
+  these three endpoints, which had never taken a userId before (they were
+  fully unscoped/global lookups pre-TSW-005 — a pre-existing gap, not
+  something this task introduced or was in scope to fix for the standalone
+  path).
+  `game_card` needed **zero** schema/snapshot changes — `getPublicGame()` and
+  `buildGameCardSnapshot()` already fully handled league games via the
+  existing `participants`/`recap` fields (confirmed by investigation before
+  writing any code). `player_card`/`team_card` gained sibling
+  `leagueTeamId`/`leaguePlayerId` fields alongside `teamId`/`playerId`
+  (mutually exclusive, enforced via a Zod `.refine` in `feed.validation.js`
+  and schema comments in `feed.repository.js`), backed by two new
+  card-snapshot-sized getters in `leagues.service.js` —
+  `getPublicLeagueTeamById`/`getPublicLeaguePlayerById` — deliberately NOT
+  reusing the existing slug-keyed `getPublicLeagueTeamBySlug`/
+  `getPublicLeaguePlayerBySlug` functions, since those load full
+  roster/games/standings for a team profile page (far more than a card
+  snapshot reads); the new getters reuse the same underlying helpers
+  (`sanitizeLeagueTeam`, `sanitizeLeaguePlayer`, `buildLeaguePlayerGameRows`,
+  `buildLeaguePlayerSummary`, `summarizeEvents`) so both paths compute
+  aggregates identically.
+  Access control: sharing a league game/team/player requires active league
+  membership (`canShareLeague(userId, leagueId)`, new function reusing
+  `listLeaguesForUser`) — deliberately looser than the edit-time
+  `canManageLeagueGame`/`assertLeagueManagerOrOwner` checks, since sharing is
+  a lower-stakes, read-derived action (per explicit user decision during
+  scoping — "any active member of that league", not "only managers of the
+  specific teams playing"). See the Decisions log entry on authorization
+  gate consistency this surfaced.
+  Client: `FeedComposer.jsx`'s option labels append `" (League)"` for
+  league-sourced results; `submit()` branches the `player`/`team` tabs'
+  payload on the selected option's `source` field (the `game` tab needed no
+  submit change — `gameId` is universal). Also fixed 4 render components
+  (`PlayerCardPost.jsx`, `TeamCardPost.jsx`, `FullScreenPlayerCard.jsx`,
+  `FullScreenTeamCard.jsx`) that previously wrapped their content in an
+  unconditional `<Link to={playerUrl/teamUrl}>` — league cards' `playerUrl`/
+  `teamUrl` are intentionally `null` (no league player/team profile route
+  exists yet, see deferred sub-scope below), so all four now fall back to a
+  non-clickable wrapper when the URL is null. The two FullScreen variants had
+  **zero** existing null-guard at all (a latent bug for any future null
+  value, not just league cards) — this fix closes that gap generally.
+  **Deferred sub-scope, not done this pass:** league player/team profile
+  routes for the feed to link to (`playerUrl`/`teamUrl` stay `null` for
+  league cards) — out of scope for TSW-005 itself (linking targets a route
+  that doesn't exist yet); tracked as a follow-up in
+  [`02_ARCHITECTURE_NOTES.md`](./02_ARCHITECTURE_NOTES.md).
+  Implementation split: server-side (schema, validation, service, 30 new
+  unit tests across `feed.service.test.js`/`leagues.service.test.js`) done
+  directly; client-side (`FeedComposer.jsx` wiring + the 4 render-component
+  null-guards) delegated to Sonnet with a fully-specified contract, diff
+  reviewed before commit. Full server suite: 33 suites/291 tests pass (was
+  33/273). Full client suite baseline unchanged at 20 pre-existing
+  failures/118 passed. Lint clean on every touched file. `pnpm build`
+  succeeds. Committed `d2c35b0`.
 
 ---
 
@@ -357,6 +418,26 @@ now satisfied since TSW-004 shipped).
 
 Record every scope/architecture decision here with a date and rationale.
 
+- **2026-07-08 — TSW-005: league entity sharing requires active league
+  membership, not team-management rights.** When scoping who can share a
+  league game/team/player to the feed, chose "any active member/manager/
+  owner of that league" over "only managers of the specific team(s)
+  involved" (both were viable — asked the user directly since this is a new
+  authorization surface, not a bug fix with an obviously-correct existing
+  pattern to mirror). **Why:** sharing is a lower-stakes, read-derived
+  action than editing a game or managing a team, so the looser bound is
+  appropriate; also keeps `canShareLeague` simple (one `listLeaguesForUser`
+  lookup) instead of requiring per-entity ownership resolution.
+- **2026-07-08 — TSW-005: league player/team profile linking deferred, not
+  bundled into this pass.** League cards' `playerUrl`/`teamUrl` snapshot
+  fields are `null` (no route exists yet for a league player/team profile
+  reachable from the feed). Chose to ship the sharing capability now and
+  defer the linking UX rather than block TSW-005 on designing a new route.
+  **Why:** the two are separable — a user can already see a league card's
+  name/stats/logo in the feed without it being clickable; making it
+  clickable is additive follow-up work, not a blocker for the core feature.
+  See [`02_ARCHITECTURE_NOTES.md`](./02_ARCHITECTURE_NOTES.md) for the
+  tracked follow-up.
 - **2026-07-08 — TSW-001's original root-cause hypothesis was wrong; the
   swallowed-error fix is what actually found the real bug.** Static code
   tracing pointed at `canManageLeagueGame`/`videoUrl`/`videoTimestamp` as
@@ -403,6 +484,23 @@ Record every scope/architecture decision here with a date and rationale.
 Log new patterns, shared components/hooks, or schema changes as they're
 introduced during this initiative.
 
+- ✅ **changed (TSW-005, 2026-07-08)** `Post`'s `playerCard`/`teamCard`
+  sub-schemas (`feed.repository.js`) gained optional `leagueTeamId`/
+  `leaguePlayerId` fields (refs `LeagueTeam`/`LeaguePlayer`) alongside the
+  existing `teamId`/`playerId` — mutually exclusive per card, enforced at
+  the Zod/service layer, not the schema. `gameCardSchema` also gained
+  `leagueTeamId` (tracks which league team a shared league game was shared
+  from) but needed no `gameId` change — one `Game` doc covers both contexts.
+- ✅ **built (TSW-005, 2026-07-08)** `getPublicLeagueTeamById(leagueTeamId)`
+  / `getPublicLeaguePlayerById(leaguePlayerId)` in `leagues.service.js` —
+  card-snapshot-sized ID-keyed siblings to the existing slug-keyed
+  `getPublicLeagueTeamBySlug`/`getPublicLeaguePlayerBySlug` (which load full
+  profile-page data: roster, games, standings). Reuse the same underlying
+  aggregation helpers so both paths compute stats identically.
+- ✅ **built (TSW-005, 2026-07-08)** `canShareLeague(userId, leagueId)` in
+  `leagues.service.js` — the feed module's access check for league entity
+  sharing (any active member/manager/owner), reusing `listLeaguesForUser`
+  rather than a new query.
 - ✅ **changed (TSW-001, 2026-07-08)** `assertFeedPostingAllowed` in
   `server/src/modules/billing/billing.service.js` now also checks
   `League.exists({ ownerUserId: userId })` alongside the existing

@@ -123,3 +123,40 @@ scope-aware branch.
 **Why this is worth recording:** if a future task assumes "just add a filter"
 will make a standalone-only feature league-aware, this note should redirect
 them to actually check which collection(s) are involved first.
+
+**Update (TSW-005, shipped):** confirmed additive, not a rewrite, exactly as
+predicted — `listShareableGames/Teams/Players` now merge standalone + league
+results in-service (`Promise.all` over `listUserLeagues` + the existing
+per-collection queries), tagged `source: 'standalone' | 'league'` per item.
+No shared query was needed or attempted.
+
+---
+
+## Follow-up: league player/team profile routes for feed-card linking (deferred from TSW-005)
+
+**Discovered during:** TSW-005 implementation.
+
+**The gap:** shared league player/team cards render fine in the feed (name,
+stats, logo — via `getPublicLeagueTeamById`/`getPublicLeaguePlayerById`), but
+their `playerUrl`/`teamUrl` snapshot fields are `null`, so they're
+intentionally non-clickable. Standalone cards link to `/teams/:teamId` and
+`/teams/:teamId/players/:playerId`; the equivalent league routes
+(`/league/:leagueSlug/teams/:teamSlug` and .../players/:leaguePlayerId, per
+`leagues.controller.js`) are **slug-based**, not ID-based — the feed card
+snapshot only carries `leagueTeamId`/`leaguePlayerId` (IDs), not the
+league/team slugs needed to build those URLs.
+
+**Why this matters:** if this is picked up as a follow-up task, the fix is
+NOT simply pointing `playerUrl`/`teamUrl` at the existing slug routes — the
+card snapshot would need to also carry `leagueSlug`/`teamSlug` (denormalised
+at snapshot-build time, same OPT-017 pattern already used for everything
+else in these snapshots), or the league detail pages would need an
+ID-based route/redirect. Scope this as its own small task rather than
+assuming it's a one-line fix.
+
+**Where the null-guard already exists:** `PlayerCardPost.jsx`,
+`TeamCardPost.jsx`, `FullScreenPlayerCard.jsx`, `FullScreenTeamCard.jsx` all
+already fall back to a non-clickable wrapper when `playerUrl`/`teamUrl` is
+`null` (shipped as part of TSW-005) — so wiring real URLs through later is a
+pure additive change to the snapshot builders, no render-component changes
+needed.
