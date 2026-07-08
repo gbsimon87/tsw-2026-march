@@ -173,22 +173,22 @@ is not enforced. Real authorization is ownership + **league role**, checked by
 
 15 collections, all defined inline in repository files:
 
-| Collection                    | Owner module | Notes                                                                             |
-| ----------------------------- | ------------ | --------------------------------------------------------------------------------- |
-| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields |
-| `Session`                     | auth         | hashed refresh tokens; TTL index                                                  |
-| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                   |
-| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`           |
-| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013)                               |
-| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**                       |
-| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`            |
-| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth)                 |
-| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league                                                     |
-| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role`                                           |
-| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow                                                   |
-| `LeagueManager`               | leagues      | league-wide manager grants                                                        |
-| `LeagueStandings`             | leagues      | materialized standings (OPT-010)                                                  |
-| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011)                                          |
+| Collection                    | Owner module | Notes                                                                                                                                                                                                          |
+| ----------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                              |
+| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                               |
+| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                |
+| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                        |
+| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013)                                                                                                                                                            |
+| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**                                                                                                                                                    |
+| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive |
+| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth)                                                                                                                                              |
+| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league                                                                                                                                                                                  |
+| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role`                                                                                                                                                                        |
+| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow                                                                                                                                                                                |
+| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                     |
+| `LeagueStandings`             | leagues      | materialized standings (OPT-010)                                                                                                                                                                               |
+| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011)                                                                                                                                                                       |
 
 ### Notable design choices
 
@@ -440,7 +440,16 @@ bug as first suspected; `billing.service.js`'s feed-posting gate was missing
 a `League.exists({ownerUserId})` check present in every other league
 authorization helper), `TSW-005` (FeedComposer now supports sharing
 league-scoped games/teams/players, not just standalone ones — shipped as an
-additive extension, not a rewrite, per the investigation's verdict). See the
+additive extension, not a rewrite, per the investigation's verdict).
+`TSW-005` had two same-day follow-ups after initial ship: search/sharing was
+widened from "leagues the poster belongs to" to **any public league**
+(`League.isPublic && status === 'active'`, no membership check at all, via
+`leagues.service.js`'s `listPublicLeagues`/new `isLeaguePublic` helpers) —
+matching how standalone teams/games were already globally
+searchable/shareable; and a gap discovered while testing that widening was
+closed — the write-side `create*CardPostForUser` functions had no privacy
+check at all (only search did), so a direct API call could share a private
+league's entity even though it could never be found via search. See the
 tracker's task cards for full root-cause detail and any deferred sub-scopes
 (card staleness refresh, league profile-page linking for feed cards) left as
 tracked follow-up work. This tracker is independent of the OPT-### one;
