@@ -29,6 +29,7 @@ const { TEAM_SIDES } = require('../modules/shared/stats.constants');
 require('../modules/auth/auth.repository');
 require('../modules/games/games.repository');
 require('../modules/leagues/leagues.repository');
+require('../modules/feed/feed.repository');
 
 const {
   randomInt,
@@ -45,6 +46,7 @@ const League = mongoose.model('League');
 const LeagueTeam = mongoose.model('LeagueTeam');
 const LeaguePlayer = mongoose.model('LeaguePlayer');
 const LeagueTeamMember = mongoose.model('LeagueTeamMember');
+const Post = mongoose.model('Post');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -136,6 +138,38 @@ const LEAGUE_BLUEPRINTS = [
     ],
   },
 ];
+
+// Synthetic Demo League teammates so The Pulse feed shows posts from more
+// than one account. Each is claimed onto a distinct LeaguePlayer slot (deterministic
+// team/jersey targets below) — same trusted-script direct-claim pattern used
+// for the demo user's own profile claim.
+const DEMO_LEAGUE_TEAMMATES = [
+  { email: 'demo-teammate-1@tsw.demo', name: 'Jordan Hayes', teamIndex: 0, jerseyNumber: 2 },
+  { email: 'demo-teammate-2@tsw.demo', name: 'Riley Morgan', teamIndex: 0, jerseyNumber: 3 },
+  { email: 'demo-teammate-3@tsw.demo', name: 'Tessa Coleman', teamIndex: 1, jerseyNumber: 1 },
+  { email: 'demo-teammate-4@tsw.demo', name: 'Miles Griffin', teamIndex: 2, jerseyNumber: 1 },
+];
+
+const FEED_IMAGE_URLS = [
+  'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1519861531473-9200262188bf?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1200&q=80',
+];
+
+const FEED_CAPTIONS = [
+  'Big game energy tonight.',
+  'Proud of this squad.',
+  'Strong performance from the team.',
+  'What a finish.',
+  'Great night on the court.',
+  'Locked in from start to finish.',
+  'That one is going in the highlight reel.',
+  'Team effort all the way.',
+];
+
+const MIN_HIGHLIGHT_POSTS = 20;
 
 function log(...args) {
   console.log(...args);
@@ -268,30 +302,30 @@ async function upsertLeaguePlayers(league, leagueTeam, blueprints) {
   return { players, createdCount };
 }
 
-async function claimPlayerForDemoUser(leaguePlayer, demoUserId) {
+async function claimPlayerForUser(leaguePlayer, userId, userLabel) {
   if (!leaguePlayer) return false;
 
-  const alreadyClaimedByDemo = await LeaguePlayer.findOne({
+  const alreadyClaimedByUser = await LeaguePlayer.findOne({
     _id: leaguePlayer._id,
-    claimedByUserId: demoUserId,
+    claimedByUserId: userId,
   });
-  if (alreadyClaimedByDemo) {
-    log(`  player profile ${leaguePlayer.displayName}: already claimed by demo user, skipping`);
+  if (alreadyClaimedByUser) {
+    log(`  player profile ${leaguePlayer.displayName}: already claimed by ${userLabel}, skipping`);
     return false;
   }
 
   if (DRY_RUN) {
-    log(`  [dry-run] would claim player profile ${leaguePlayer.displayName} for demo user`);
+    log(`  [dry-run] would claim player profile ${leaguePlayer.displayName} for ${userLabel}`);
     return true;
   }
 
   const result = await LeaguePlayer.updateOne(
     { _id: leaguePlayer._id, claimedByUserId: null },
-    { $set: { claimedByUserId: demoUserId } }
+    { $set: { claimedByUserId: userId } }
   );
 
   if (result.modifiedCount > 0) {
-    log(`  player profile ${leaguePlayer.displayName}: claimed for demo user`);
+    log(`  player profile ${leaguePlayer.displayName}: claimed for ${userLabel}`);
     return true;
   }
 
@@ -466,7 +500,7 @@ async function seedLeague(blueprint, demoUser) {
 
   const { league } = await upsertLeague(blueprint, ownerUserId);
   if (DRY_RUN && !league) {
-    return;
+    return null;
   }
 
   const leagueTeamsWithPlayers = [];
@@ -489,7 +523,7 @@ async function seedLeague(blueprint, demoUser) {
   }
 
   if (DRY_RUN) {
-    return;
+    return null;
   }
 
   // Claim a player profile + add the demo user's league role, on the team
@@ -497,7 +531,7 @@ async function seedLeague(blueprint, demoUser) {
   if (demoUser) {
     const demoTeam = leagueTeamsWithPlayers[blueprint.demoUserTeamIndex];
     const claimTarget = demoTeam?.players?.[0];
-    await claimPlayerForDemoUser(claimTarget, demoUser._id);
+    await claimPlayerForUser(claimTarget, demoUser._id, 'demo user');
 
     await upsertLeagueTeamMember({
       leagueId: league._id,
@@ -517,6 +551,214 @@ async function seedLeague(blueprint, demoUser) {
   log(
     `  summary: teams=${leagueTeamsWithPlayers.length} newPlayers=${playerCreatedCount} newGames=${gamesCreated}`
   );
+
+  return { league, leagueTeamsWithPlayers };
+}
+
+// Claims each Demo League teammate onto a distinct LeaguePlayer slot (deterministic
+// team/jersey targets from DEMO_LEAGUE_TEAMMATES) so The Pulse feed can show posts
+// authored by more than just the demo account. Same trusted-script direct-claim
+// pattern as the demo user's own profile claim, reused per teammate.
+async function seedDemoLeagueTeammates(leagueTeamsWithPlayers) {
+  const teammates = [];
+
+  for (const teammate of DEMO_LEAGUE_TEAMMATES) {
+    const { user } = await upsertUser({
+      email: teammate.email,
+      name: teammate.name,
+      password: 'password1!2@3#',
+      plan: 'free',
+    });
+    if (DRY_RUN || !user) continue;
+
+    const team = leagueTeamsWithPlayers[teammate.teamIndex];
+    const leaguePlayer = team?.players?.find(
+      (player) => player.jerseyNumber === teammate.jerseyNumber
+    );
+    await claimPlayerForUser(leaguePlayer, user._id, teammate.name);
+
+    teammates.push({ user, leaguePlayer, team: team?.team });
+  }
+
+  return teammates;
+}
+
+// Deterministic pick — same (gameIndex, playerIndex) pair always yields the
+// same poster/index into a shared pool, so reseeding produces identical posts.
+function pickPoster(posters, index) {
+  return posters[index % posters.length];
+}
+
+// Builds >= MIN_HIGHLIGHT_POSTS highlight_clip posts spread across multiple
+// Demo League games and posters, plus a supporting mix of image/game_card/
+// player_card/team_card posts, so The Pulse feed looks like an active,
+// multi-user community rather than one account's activity log. Inserted
+// directly via Mongoose (same trust level as seed.js's own Post.insertMany),
+// bypassing createHighlightClipPostForUser's ownership/claim assertion since a
+// seed script isn't a real user's browser session.
+async function seedDemoLeagueFeedPosts({ league, leagueTeamsWithPlayers, demoUser, teammates }) {
+  const posters = [demoUser, ...teammates.map((teammate) => teammate.user)].filter(Boolean);
+  if (posters.length === 0) {
+    log('  no posters available, skipping feed post generation');
+    return { createdCount: 0 };
+  }
+
+  const games = await Game.find({ leagueId: league._id }).sort({ scheduledAt: 1 });
+  if (games.length === 0) {
+    log('  no games found for feed post generation, skipping');
+    return { createdCount: 0 };
+  }
+
+  const existingHighlightCount = await Post.countDocuments({
+    type: 'highlight_clip',
+    'highlightClip.gameId': { $in: games.map((game) => game._id) },
+  });
+  const existingOtherCount = await Post.countDocuments({
+    type: { $in: ['image', 'game_card', 'player_card', 'team_card'] },
+    creatorUserId: { $in: posters.map((poster) => poster._id) },
+  });
+
+  if (existingHighlightCount >= MIN_HIGHLIGHT_POSTS && existingOtherCount > 0) {
+    log(
+      `  feed posts: already have ${existingHighlightCount} highlight + ${existingOtherCount} other posts, skipping`
+    );
+    return { createdCount: 0 };
+  }
+
+  const postsToInsert = [];
+  let postIndex = 0;
+
+  if (existingHighlightCount < MIN_HIGHLIGHT_POSTS) {
+    let highlightCount = existingHighlightCount;
+
+    // Round-robin across games (one candidate event per game per pass) so
+    // highlights are spread across multiple games rather than exhausting the
+    // first game's (much longer) event list before moving to the next.
+    const gameHighlightQueues = games.map((game) => ({
+      game,
+      events: (game.events || []).filter(
+        (event) =>
+          HIGHLIGHT_STAT_TYPES.has(event.statType) && typeof event.videoTimestamp === 'number'
+      ),
+      cursor: 0,
+    }));
+
+    let exhaustedQueues = 0;
+    while (highlightCount < MIN_HIGHLIGHT_POSTS && exhaustedQueues < gameHighlightQueues.length) {
+      exhaustedQueues = 0;
+
+      for (const queue of gameHighlightQueues) {
+        if (highlightCount >= MIN_HIGHLIGHT_POSTS) break;
+
+        if (queue.cursor >= queue.events.length) {
+          exhaustedQueues += 1;
+          continue;
+        }
+
+        const event = queue.events[queue.cursor];
+        queue.cursor += 1;
+
+        const existingClip = await Post.findOne({ 'highlightClip.eventId': String(event._id) });
+        if (existingClip) continue;
+
+        const { game } = queue;
+        const poster = pickPoster(posters, postIndex);
+        postIndex += 1;
+
+        const rosterPlayer = [
+          ...(game.homeRosterSnapshot || []),
+          ...(game.awayRosterSnapshot || []),
+        ].find((player) => String(player._id) === String(event.playerId));
+
+        postsToInsert.push({
+          creatorUserId: poster._id,
+          type: 'highlight_clip',
+          caption: pickPoster(FEED_CAPTIONS, postIndex),
+          highlightClip: {
+            gameId: game._id,
+            eventId: String(event._id),
+            videoUrl: game.videoUrl,
+            videoTimestamp: event.videoTimestamp,
+            statType: event.statType,
+            playerId: event.playerId ? String(event.playerId) : null,
+            playerName: rosterPlayer?.displayName || null,
+            gameTitle: game.title,
+          },
+        });
+        highlightCount += 1;
+      }
+    }
+  }
+
+  if (existingOtherCount === 0) {
+    const [firstGame, secondGame] = games;
+    const firstTeam = leagueTeamsWithPlayers[0];
+    const secondTeam = leagueTeamsWithPlayers[1];
+
+    if (firstGame) {
+      postsToInsert.push({
+        creatorUserId: pickPoster(posters, postIndex)._id,
+        type: 'game_card',
+        caption: pickPoster(FEED_CAPTIONS, (postIndex += 1)),
+        gameCard: { gameId: firstGame._id, leagueTeamId: firstGame.homeLeagueTeamId },
+      });
+    }
+    if (secondGame) {
+      postsToInsert.push({
+        creatorUserId: pickPoster(posters, (postIndex += 1))._id,
+        type: 'game_card',
+        caption: pickPoster(FEED_CAPTIONS, postIndex),
+        gameCard: { gameId: secondGame._id, leagueTeamId: secondGame.awayLeagueTeamId },
+      });
+    }
+    if (firstTeam?.players?.[0]) {
+      postsToInsert.push({
+        creatorUserId: pickPoster(posters, (postIndex += 1))._id,
+        type: 'player_card',
+        caption: pickPoster(FEED_CAPTIONS, postIndex),
+        playerCard: {
+          leagueTeamId: firstTeam.team._id,
+          leaguePlayerId: firstTeam.players[0]._id,
+        },
+      });
+    }
+    if (secondTeam?.team) {
+      postsToInsert.push({
+        creatorUserId: pickPoster(posters, (postIndex += 1))._id,
+        type: 'team_card',
+        caption: pickPoster(FEED_CAPTIONS, postIndex),
+        teamCard: { leagueTeamId: secondTeam.team._id },
+      });
+    }
+    for (const imageUrl of FEED_IMAGE_URLS) {
+      postsToInsert.push({
+        creatorUserId: pickPoster(posters, (postIndex += 1))._id,
+        type: 'image',
+        caption: pickPoster(FEED_CAPTIONS, postIndex),
+        image: {
+          url: imageUrl,
+          publicId: `demo/image/${postIndex}`,
+          width: 1200,
+          height: 800,
+          mimeType: 'image/jpeg',
+        },
+      });
+    }
+  }
+
+  if (postsToInsert.length === 0) {
+    log('  feed posts: nothing new to create');
+    return { createdCount: 0 };
+  }
+
+  if (DRY_RUN) {
+    log(`  [dry-run] would create ${postsToInsert.length} feed posts`);
+    return { createdCount: postsToInsert.length };
+  }
+
+  const created = await Post.insertMany(postsToInsert, { ordered: true });
+  log(`  feed posts: created ${created.length}`);
+  return { createdCount: created.length };
 }
 
 async function main() {
@@ -541,8 +783,23 @@ async function main() {
       forceCredentials: true,
     });
 
+    let demoLeagueResult = null;
     for (const blueprint of LEAGUE_BLUEPRINTS) {
-      await seedLeague(blueprint, demoUser);
+      const result = await seedLeague(blueprint, demoUser);
+      if (blueprint.slug === 'demo-league') {
+        demoLeagueResult = result;
+      }
+    }
+
+    if (demoLeagueResult && demoUser) {
+      log('Demo League feed content:');
+      const teammates = await seedDemoLeagueTeammates(demoLeagueResult.leagueTeamsWithPlayers);
+      await seedDemoLeagueFeedPosts({
+        league: demoLeagueResult.league,
+        leagueTeamsWithPlayers: demoLeagueResult.leagueTeamsWithPlayers,
+        demoUser,
+        teammates,
+      });
     }
 
     log('');

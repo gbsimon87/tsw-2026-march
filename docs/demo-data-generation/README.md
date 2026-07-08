@@ -21,6 +21,14 @@ pnpm --filter server exec node src/scripts/seed-demo-account.js --dry-run   # pr
 
 Login after seeding: `testuser@gmail.com` / `password1!2@3#`.
 
+To reset the dev database to a clean slate first (recommended before a fresh
+demo seed, so no unrelated manual-testing data lingers alongside it):
+
+```bash
+pnpm --filter server db:reset-dev   # DEV ONLY — drops every collection, see below
+pnpm --filter server seed:demo
+```
+
 ## How this differs from `pnpm seed`
 
 `server/src/scripts/seed.js` (the existing `pnpm seed` command) is a **dev-only,
@@ -91,6 +99,38 @@ event whose `statType` is highlight-eligible (`FG2_MADE`, `FG2_MISS`,
 real, varied highlight clips for every seeded game, which no existing seed
 data does.
 
+### The Pulse feed content (Demo League only)
+
+To make The Pulse feel like an active, multi-user community rather than one
+account's activity log, the script also:
+
+1. Creates 4 synthetic "teammate" users (`demo-teammate-1..4@tsw.demo`,
+   password `password1!2@3#`) and claims each onto a distinct `LeaguePlayer`
+   slot in **Demo League** — same direct-claim mechanism used for the demo
+   user's own profile (see [`DECISIONS.md`](./DECISIONS.md)).
+2. Generates at least 20 `type: 'highlight_clip'` posts, round-robining
+   across **all 8** Demo League games (not exhausting one game's ~225
+   highlight-eligible events before moving on) and across the 5 available
+   posters (the demo user + 4 teammates), each with a realistic caption and
+   the same YouTube `videoUrl`/`videoTimestamp` pairing the game/event
+   already carries.
+3. Generates a supporting mix of `game_card`, `player_card`, `team_card`, and
+   `image` posts (also spread across posters), so the feed's other post
+   types — including the full-screen game/player/team card renderers already
+   built into `FeedList.jsx` — have real content to display.
+
+This stage only targets Demo League (the league the task specifically called
+out); the other two leagues don't get feed posts. `cardSnapshot` fields are
+left `null` on inserted cards, matching `seed.js`'s existing pattern — the
+read-time `resolve*CardPayload` functions in `feed.service.js` self-heal them
+on first read (OPT-017 compute-on-miss), so no snapshot needs to be
+precomputed by the seed script.
+
+No `client/` code changes were needed: `FeedPage.jsx`/`FeedList.jsx` already
+render every post type generically (including full-screen `game_card`/
+`player_card`/`team_card`/`highlight_clip` variants on mobile), so seeding
+the right `Post` documents was sufficient to populate the feed.
+
 ## How the seed process works (file-by-file)
 
 - **`server/src/scripts/seed.js`** — modified to add a `require.main ===
@@ -125,7 +165,7 @@ module` guard around its existing `main()` call (so `require()`-ing it no
    b. Upsert the `League` doc, keyed by slug.
    c. Upsert 5 `LeagueTeam`s, keyed by slug.
    d. Upsert 8 `LeaguePlayer`s per team, keyed by `(leagueTeamId,
-   jerseyNumber)`.
+jerseyNumber)`.
    e. Claim one `LeaguePlayer` on the blueprint's designated team for the
    demo user (skipped if already claimed by anyone), and upsert a
    `LeagueTeamMember` row for the demo user's role.
@@ -140,14 +180,16 @@ module` guard around its existing `main()` call (so `require()`-ing it no
 Every entity is keyed by a natural, deterministic key and is
 checked-before-created:
 
-| Entity           | Key                                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| User             | `email`                                                                                                                   |
-| League           | `slug`                                                                                                                    |
-| LeagueTeam       | `slug`                                                                                                                    |
-| LeaguePlayer     | `(leagueTeamId, jerseyNumber)`                                                                                            |
-| LeagueTeamMember | `(leagueId, leagueTeamId, userId)` (via `findOneAndUpdate` upsert)                                                        |
-| Game             | league-level count check (skips generating a league's whole game schedule if it already has the expected number of games) |
+| Entity                                       | Key                                                                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| User                                         | `email`                                                                                                                   |
+| League                                       | `slug`                                                                                                                    |
+| LeagueTeam                                   | `slug`                                                                                                                    |
+| LeaguePlayer                                 | `(leagueTeamId, jerseyNumber)`                                                                                            |
+| LeagueTeamMember                             | `(leagueId, leagueTeamId, userId)` (via `findOneAndUpdate` upsert)                                                        |
+| Game                                         | league-level count check (skips generating a league's whole game schedule if it already has the expected number of games) |
+| Post (highlight_clip)                        | `highlightClip.eventId` (checked per-event before insert; also enforced by the schema's unique-sparse index)              |
+| Post (image/game_card/player_card/team_card) | count check per creator set (skips the whole "other posts" batch if any already exist)                                    |
 
 Re-running the script is verified to be a clean no-op (see
 [`TRACKER.md`](./TRACKER.md) for the verification log).
@@ -176,14 +218,42 @@ ALLOW_DEMO_SEED=true ENV_FILE=../env/server/.env.production node src/scripts/see
 ALLOW_DEMO_SEED=true ENV_FILE=../env/server/.env.production node src/scripts/seed-demo-account.js            # then apply
 ```
 
+## Resetting the dev database
+
+`server/src/scripts/reset-dev-database.js` (new) drops every collection in
+the connected database, one collection at a time (Atlas users are commonly
+scoped without the `dropDatabase` privilege, so a single `dropDatabase()`
+call isn't reliable — confirmed the hard way against the dev Atlas cluster).
+It hard-refuses to run if `NODE_ENV` is `production`, and separately refuses
+if `MONGO_DB_NAME` doesn't look like a dev/test database name — there is no
+production use case for this script, unlike `seed-demo-account.js`, which is
+designed to eventually run there.
+
+```bash
+pnpm --filter server db:reset-dev              # drop every collection
+pnpm --filter server exec node src/scripts/reset-dev-database.js --dry-run   # list collections only
+```
+
+This was needed because the dev Atlas database had accumulated data beyond
+disposable seed output — a real imported league (`we-ball-saturday`), a
+personal manual-testing league, and several real-looking user accounts with
+standalone teams. Rather than write cleanup logic that tries to distinguish
+"demo data" from "someone's real manual testing" (fragile and easy to get
+wrong), the agreed approach was to wipe the dev database entirely and
+reseed from scratch — see [`DECISIONS.md`](./DECISIONS.md) for the full
+reasoning and what was lost.
+
 ## Existing seed files — disposition
 
 - `server/src/scripts/seed.js` — kept, unchanged in behavior (only gained a
-  `require.main` guard + exports). Still the right tool for resetting a dev
-  DB to a clean baseline.
+  `require.main` guard + exports). Still the right tool for populating a
+  freshly-reset dev DB with generic sample data (10 users/teams/games).
 - `server/src/scripts/seed-we-ball-saturday.js` — unrelated: a one-off real
   game-data importer from TSV files for a specific real league. Not touched,
-  not obsolete.
+  not obsolete — but note its target data (the `we-ball-saturday` league) was
+  deleted along with everything else in the dev DB reset described above, and
+  would need to be re-imported from its source TSV files if still needed in
+  dev.
 - `server/src/scripts/backfill-*.js` — unrelated maintenance/migration
   scripts tied to specific `OPT-###` tickets. Not touched.
 
@@ -208,3 +278,12 @@ results. In summary:
   `getGameForUser` was called on a seeded game and returned 225 highlight
   clips, each correctly pairing the game's `videoUrl` with its own event's
   `videoTimestamp`.
+- Feed content: `listFeedPosts` (the exact function `GET /api/v1/feed`
+  calls) was called directly for the demo user and returned all 29 seeded
+  posts, correctly resolved — `highlight_clip` with its YouTube URL passing
+  `isSafeYouTubeUrl`, `game_card`/`player_card`/`team_card` with live-computed
+  `cardSnapshot` stats (points, shooting splits, per-game averages), team
+  colors, and names. Verified 20 highlight posts span all 8 Demo League games
+  (not just one) and all 5 available posters (demo user + 4 teammates). No
+  `client/` changes were needed — `FeedPage.jsx`/`FeedList.jsx` already
+  render every post type generically.

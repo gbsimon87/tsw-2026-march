@@ -115,6 +115,108 @@ rather than invoking it automatically, to keep the two scripts' concerns
 separate (one seeds data, the other warms caches) and avoid coupling the
 demo script's exit code to an unrelated maintenance script's success.
 
+## Why the dev database was wiped entirely instead of surgically cleaning "non-demo" data
+
+The task initially asked to "clean the dev database, keep only the 3 demo
+leagues." Investigating first turned up more than disposable seed junk: a
+real imported league (`we-ball-saturday`, owned by `y.simon.cordova@gmail.com`,
+built from actual TSV game data per `seed-we-ball-saturday.js`), a personal
+manual-testing league (`dev-test-league`, owned by
+`simon.cordova@creative-cx.com` — the requester's own account), and 2
+standalone teams (Toronto Raptors, Milwaukee Bucks) owned by other
+real-looking accounts. Surgically preserving "real" data while deleting
+"seed" data would have required guessing at ownership/intent with no
+reliable signal to distinguish them (both look like ordinary user-created
+records — there's no `isSeed` flag). Asked directly, the requester chose the
+simpler and safer path: wipe the entire dev database first, then reseed from
+a known-clean state. This trades "some possibly-wanted manual-testing data is
+gone" for "the resulting dev DB is unambiguous and fully reproducible from
+seed scripts" — the right tradeoff for a dev environment, and explicitly not
+something `reset-dev-database.js` will do to production (hard-refused).
+
+## Why `reset-dev-database.js` drops collections one at a time instead of calling `dropDatabase()`
+
+The first implementation called `mongoose.connection.dropDatabase()`, which
+failed against the dev Atlas cluster with `MongoServerError: user is not
+allowed to do action [dropDatabase] on [tsw_2026_dev.]` — the configured
+Atlas database user has collection-level write access but not the
+database-admin privilege `dropDatabase` requires. Iterating each collection
+via `.drop()` achieves the same end state without needing an elevated role,
+and is arguably safer anyway (it can't accidentally drop the database itself
+or any Atlas-managed system collections outside the target database).
+
+## Why highlight/video content uses the existing YouTube `highlight_clip` post type, not a new Cloudinary upload path
+
+The task's original phrasing asked for highlights to be uploaded to
+Cloudinary and stored as Cloudinary URLs. Investigating the existing feed
+code found that `type: 'highlight_clip'` posts are YouTube-iframe-only
+(`HighlightClipPostCard.jsx`/`FullScreenHighlightClipPost.jsx` both extract a
+YouTube video ID and embed via iframe; `isSafeYouTubeUrl` rejects any
+non-YouTube host at read time) — Cloudinary-hosted video would need the
+separate `type: 'video'` post shape (`VideoPostCard.jsx`, native `<video>`
+tag), which is a different, unrelated post type. Cloudinary also has no
+built-in way to fetch a YouTube watch-page URL directly (it can fetch-upload
+an arbitrary direct file URL, e.g. `.mp4`, but not a YouTube page — YouTube
+blocks that at the platform level), so satisfying the original ask would have
+required sourcing entirely different (non-YouTube) sample video files just to
+have something Cloudinary could ingest.
+
+Asked directly, the requester dropped the Cloudinary requirement and
+confirmed the 4 originally-supplied YouTube URLs should be used via the
+existing `highlight_clip` mechanism instead — which is also the more
+consistent choice, since the games themselves already use those same YouTube
+URLs as their `Game.videoUrl` (see the "Video / highlights" section of
+`README.md`); a highlight clip is just that same URL plus one event's
+`videoTimestamp`, expressed as a shareable Pulse post. No Cloudinary upload
+code was written. If real Cloudinary-hosted video highlights are wanted in
+the future, that's tracked as a future improvement in `TRACKER.md`.
+
+## Why highlight-clip posts are inserted directly instead of via `createHighlightClipPostForUser`
+
+`createHighlightClipPostForUser` (`feed.service.js`) enforces
+`assertCanShareHighlightClip`, which requires the poster to either manage the
+game or be the specific claimed player on that specific event. Enforcing
+that for seed data would mean every highlight could only ever be posted by
+whichever single teammate happens to be claimed on that exact event's
+`playerId` — far too restrictive to produce 20+ varied posts from 5 different
+posters. Since this is a trusted, server-side seed script (the same trust
+level `seed.js` already operates at for all its `Post.insertMany` calls),
+highlight posts are inserted directly via Mongoose, with the event's
+existing `HIGHLIGHT_STAT_TYPES` membership and `videoTimestamp` presence
+still checked (mirroring the service's own validation), but the
+ownership/claim assertion intentionally skipped. The schema's unique-sparse
+index on `highlightClip.eventId` is still respected (checked before each
+insert) so the same event is never shared twice, matching real usage.
+
+## Why highlights round-robin across games instead of filling from the first game
+
+The first implementation iterated games in order and filled from each game's
+full highlight-eligible event list before moving to the next — since a
+single Demo League game has ~225 such events (far more than the 20-post
+target), all 20 highlights came from the very first game, contradicting the
+"come from multiple games" requirement. Caught by the requester in review
+before this was documented as "verified." Fixed with a round-robin queue
+(one candidate event pulled from each game per pass, cycling through all
+games until the target count is reached) so highlights are guaranteed to
+spread across as many games as needed to hit the target, rather than being
+front-loaded onto whichever game happens to be processed first. Verified:
+regenerating with the fix produced 20 highlights spanning all 8 Demo League
+games (2–3 per game) instead of 20 from one game.
+
+## Why the "full-screen game/team/player cards" requirement needed no new client code
+
+Investigating `FeedList.jsx`'s post-type dispatch found that full-screen
+renderers for `game_card` (`FullScreenGameCard.jsx`), `player_card`
+(`FullScreenPlayerCard.jsx`), `team_card` (`FullScreenTeamCard.jsx`), and
+`highlight_clip` (`FullScreenHighlightClipPost.jsx`) already existed and were
+already wired into the mobile snap-scroll dispatch, built on the same shared
+`cardUtils.js` helpers and server-side `cardSnapshot` shapes as the
+already-working normal-mode cards. Asked directly, the requester confirmed
+the actual gap was simply a lack of seeded content of those types — not a
+missing UI feature — so no `client/` files were changed for this
+requirement; seeding `game_card`/`player_card`/`team_card` posts (alongside
+the highlight clips) was sufficient.
+
 ## Open question for a human maintainer before a production run
 
 None of the choices above are provisional — they were all either directly
