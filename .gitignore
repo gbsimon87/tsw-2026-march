@@ -25,3 +25,6 @@ Google App Passwords
 
 # Database backups
 backups/
+
+# Claude
+.claude/settings.json

@@ -103,9 +103,19 @@
       "mcp__plugin_playwright_playwright__browser_navigate",
       "mcp__plugin_playwright_playwright__browser_resize",
       "mcp__plugin_playwright_playwright__browser_take_screenshot",
-      "Bash(curl -s http://localhost:4000/api/health)"
+      "Bash(curl -s http://localhost:4000/api/health)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/seed-demo-account.js --dry-run)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/seed-demo-account.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:4000/api/v1/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173)",
+      "mcp__plugin_playwright_playwright__browser_tabs",
+      "Bash(curl -s -D - -o /dev/null http://localhost:4000/api/v1/health)",
+      "Bash(ls /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/../client/src/features/feed/components/posts/)",
+      "Read(//Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src/features/feed/components/posts//**)"
     ],
-    "additionalDirectories": ["/private/tmp"]
+    "additionalDirectories": [
+      "/private/tmp"
+    ]
   },
   "hooks": {
     "PreToolUse": [
