@@ -217,6 +217,56 @@ missing UI feature — so no `client/` files were changed for this
 requirement; seeding `game_card`/`player_card`/`team_card` posts (alongside
 the highlight clips) was sufficient.
 
+## Why `server/src/scripts/` was pared down to just `seed.js` + `seed-demo-account.js` (plus unrelated backfill/migration tooling)
+
+Once the demo account was working end-to-end, the requester asked to remove
+unnecessary seeding-related files. Working through this in stages:
+
+1. **First pass deleted everything except `seed-demo-account.js`** — this
+   broke it immediately, since it `require()`s helper functions from
+   `seed.js`. Two options were considered: inline those functions directly
+   into `seed-demo-account.js` (fully self-contained, zero file
+   dependencies) or restore `seed.js` as a kept dependency. The requester
+   chose to restore `seed.js` and explicitly keep whatever
+   `seed-demo-account.js` depends on, rather than duplicate the ~250 lines of
+   name-pool/event-generation logic into a second file — avoiding
+   duplication was judged more valuable than having a single script with an
+   in-repo dependency of exactly one file.
+2. **The same first pass also deleted the 4 `backfill-*.js` scripts and
+   `migrate-drop-dead-indexes.js`.** This was caught before committing by
+   checking `docs/application-audit/000-OPTIMISATION-TRACKER.md`, which
+   shows these are **not** dead/historical files — `OPT-007`'s tracker entry
+   literally says "Recommended next task: Run `migrate-drop-dead-indexes.js`"
+   and `backfill-game-finalscore.js` is listed as an unresolved production
+   gating requirement. Deleting them would have silently removed live,
+   still-needed optimization tooling under the guise of "seeding cleanup" —
+   a scope creep the requester had not asked for and would not have wanted.
+   Flagged explicitly and restored once confirmed.
+3. **`server/src/scripts/reset-dev-database.js`** (the one-time dev-DB-wipe
+   helper from an earlier session) and **`seed-we-ball-saturday.js` + its 2
+   `.tsv` source files** (an unrelated, pre-existing real-league data
+   importer) were both confirmed independently as genuinely safe to remove:
+   neither is a dependency of `seed-demo-account.js`, neither is referenced
+   by the optimization tracker, and — for the reset script specifically —
+   `seed-demo-account.js`'s own additive/idempotent design means a
+   standing "wipe the whole dev DB" script isn't part of the normal workflow
+   going forward (it served its one-time purpose in Session 2 and is no
+   longer needed).
+
+Net result: `server/src/scripts/` holds exactly `seed.js`,
+`seed-demo-account.js`, the 4 `backfill-*.js` scripts, and
+`migrate-drop-dead-indexes.js` — everything either directly needed by the
+demo-seeding feature or independently justified as live, unrelated
+production tooling. `server/package.json`'s `"seed:we-ball"` and
+`"db:reset-dev"` entries were removed to match; `"seed"` and `"seed:demo"`
+remain.
+
+**Lesson for future cleanup requests in this repo:** always check
+`docs/application-audit/000-OPTIMISATION-TRACKER.md` before deleting
+anything under `server/src/scripts/` — several files there look like
+one-off maintenance scripts but are actually tracked, unfinished production
+prerequisites (`OPT-007`, `OPT-008`, etc.), not disposable artifacts.
+
 ## Open question for a human maintainer before a production run
 
 None of the choices above are provisional — they were all either directly

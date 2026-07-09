@@ -489,9 +489,12 @@ redesigned too — don't spread the new palette opportunistically.
   and idempotent** — every entity is keyed by a natural key and
   checked-before-created, so it's safe to re-run and is designed to
   eventually run against production behind an `ALLOW_DEMO_SEED=true` guard.
-  A companion `pnpm --filter server db:reset-dev` (`reset-dev-database.js`)
-  drops every collection in the connected dev database first if a clean
-  slate is wanted — hard-refused outside dev. Full plan, decisions, and a
+  Its only dependency is `seed.js` (reused player-name/game-event
+  generation helpers) — `server/src/scripts/` was pared down to just those
+  two seed-related files plus the unrelated backfill/migration scripts
+  above; a one-time dev-DB-reset helper and an unrelated real-league TSV
+  importer that used to live there were removed once no longer needed (see
+  `demo-data-generation/TRACKER.md` Session 4). Full plan, decisions, and a
   live implementation tracker: [`demo-data-generation/`](./demo-data-generation/).
 - **Deployment**: Render blueprint (`render.yaml`) — 4 services (API + client ×
   dev/prod). Secrets injected via the Render dashboard, never in `render.yaml`.

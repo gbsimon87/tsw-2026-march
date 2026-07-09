@@ -21,13 +21,11 @@ pnpm --filter server exec node src/scripts/seed-demo-account.js --dry-run   # pr
 
 Login after seeding: `testuser@gmail.com` / `password1!2@3#`.
 
-To reset the dev database to a clean slate first (recommended before a fresh
-demo seed, so no unrelated manual-testing data lingers alongside it):
-
-```bash
-pnpm --filter server db:reset-dev   # DEV ONLY — drops every collection, see below
-pnpm --filter server seed:demo
-```
+> A one-time `reset-dev-database.js` script was used earlier in this
+> feature's development to wipe the dev Atlas database before the first
+> demo seed (see `TRACKER.md`/`DECISIONS.md` for that history) but was
+> removed afterward since it isn't needed going forward — `seed-demo-account.js`
+> is additive/idempotent and doesn't require a clean slate to run correctly.
 
 ## How this differs from `pnpm seed`
 
@@ -153,7 +151,7 @@ module` guard around its existing `main()` call (so `require()`-ing it no
   Also imports `computeGameFinalScore` and `HIGHLIGHT_STAT_TYPES` directly
   from `games.service.js` (both already-exported, no changes needed there).
 - **`server/package.json`** — adds a `seed:demo` script entry alongside the
-  existing `seed`/`seed:we-ball` entries.
+  existing `seed` entry.
 - **No changes needed** to `games.service.js`, `leagues.service.js`,
   `leagues.repository.js`, or `stats.constants.js` — every field and
   function this script needs (`videoUrl`, `videoTimestamp`, `claimedByUserId`,
@@ -224,48 +222,36 @@ ALLOW_DEMO_SEED=true ENV_FILE=../env/server/.env.production node src/scripts/see
 ALLOW_DEMO_SEED=true ENV_FILE=../env/server/.env.production node src/scripts/seed-demo-account.js            # then apply
 ```
 
-## Resetting the dev database
+## Existing seed files — disposition (current state)
 
-`server/src/scripts/reset-dev-database.js` (new) drops every collection in
-the connected database, one collection at a time (Atlas users are commonly
-scoped without the `dropDatabase` privilege, so a single `dropDatabase()`
-call isn't reliable — confirmed the hard way against the dev Atlas cluster).
-It hard-refuses to run if `NODE_ENV` is `production`, and separately refuses
-if `MONGO_DB_NAME` doesn't look like a dev/test database name — there is no
-production use case for this script, unlike `seed-demo-account.js`, which is
-designed to eventually run there.
-
-```bash
-pnpm --filter server db:reset-dev              # drop every collection
-pnpm --filter server exec node src/scripts/reset-dev-database.js --dry-run   # list collections only
-```
-
-This was needed because the dev Atlas database had accumulated data beyond
-disposable seed output — a real imported league (`we-ball-saturday`), a
-personal manual-testing league, and several real-looking user accounts with
-standalone teams. Rather than write cleanup logic that tries to distinguish
-"demo data" from "someone's real manual testing" (fragile and easy to get
-wrong), the agreed approach was to wipe the dev database entirely and
-reseed from scratch — see [`DECISIONS.md`](./DECISIONS.md) for the full
-reasoning and what was lost.
-
-## Existing seed files — disposition
+`server/src/scripts/` now contains exactly two seed-related files plus the
+unrelated backfill/migration tooling:
 
 - `server/src/scripts/seed.js` — kept, unchanged in behavior (only gained a
-  `require.main` guard + exports). Still the right tool for populating a
-  freshly-reset dev DB with generic sample data (10 users/teams/games).
-- `server/src/scripts/seed-we-ball-saturday.js` — unrelated: a one-off real
-  game-data importer from TSV files for a specific real league. Not touched,
-  not obsolete — but note its target data (the `we-ball-saturday` league) was
-  deleted along with everything else in the dev DB reset described above, and
-  would need to be re-imported from its source TSV files if still needed in
-  dev.
-- `server/src/scripts/backfill-*.js` — unrelated maintenance/migration
-  scripts tied to specific `OPT-###` tickets. Not touched.
+  `require.main` guard + exports for `seed-demo-account.js` to reuse). Still
+  the right tool for `pnpm seed`'s dev-only, destructive 10-user reset.
+- `server/src/scripts/seed-demo-account.js` — this feature's script, the only
+  other file it depends on being `seed.js` (see the file-by-file section
+  above).
+- `server/src/scripts/backfill-*.js` and `migrate-drop-dead-indexes.js` —
+  unrelated maintenance/migration scripts tied to specific, still-active
+  `OPT-###` tickets (see
+  [`application-audit/000-OPTIMISATION-TRACKER.md`](../application-audit/000-OPTIMISATION-TRACKER.md)).
+  Not touched by this feature.
 
-No seed scripts were removed — there was no duplicate or obsolete seed logic
-to clean up; the gap was the _absence_ of an additive/production-safe path,
-which this new script fills.
+Two files that existed earlier in this feature's development have since
+been removed as no longer needed — see [`TRACKER.md`](./TRACKER.md) Session
+4 and [`DECISIONS.md`](./DECISIONS.md) for the full history of each:
+
+- `server/src/scripts/reset-dev-database.js` — a one-time dev-DB-wipe
+  helper used once to clear accumulated non-demo data from the dev Atlas
+  database before the first demo seed. Removed since `seed-demo-account.js`
+  is additive/idempotent and doesn't need a clean slate to run correctly —
+  it isn't part of the ongoing workflow.
+- `server/src/scripts/seed-we-ball-saturday.js` (+ its `we-ball-game-*.tsv`
+  source files) — an unrelated, pre-existing real-league data importer, not
+  a dependency of `seed-demo-account.js`. Removed as part of narrowing
+  `server/src/scripts/` down to only what the demo-seeding feature needs.
 
 ## Verification
 
