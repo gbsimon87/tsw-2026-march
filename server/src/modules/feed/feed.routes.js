@@ -24,6 +24,7 @@ const videoUpload = multer({
 const feedRouter = Router();
 
 feedRouter.get('/', asyncHandler(controller.list));
+feedRouter.get('/discoverable/players', asyncHandler(controller.listDiscoverablePlayers));
 feedRouter.get('/shareable/games', asyncHandler(controller.listShareableGames));
 feedRouter.get('/shareable/players', asyncHandler(controller.listShareablePlayers));
 feedRouter.get('/shareable/teams', asyncHandler(controller.listShareableTeams));

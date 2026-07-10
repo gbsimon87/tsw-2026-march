@@ -873,6 +873,84 @@ async function listShareablePlayers(userId, query = {}) {
   return [...standaloneResults, ...leagueResults].slice(0, query.limit || 10);
 }
 
+async function listDiscoverablePlayers(query = {}) {
+  const [teams, publicLeagues] = await Promise.all([listTeams(), listAllPublicLeagues()]);
+  const standaloneResults = [];
+
+  for (const team of teams) {
+    for (const player of team.players || []) {
+      if (!player.isActive) {
+        continue;
+      }
+
+      const label = `${player.displayName} ${team.name}`;
+      if (!matchesQuery(label, query.q)) {
+        continue;
+      }
+
+      standaloneResults.push({
+        id: String(player._id),
+        source: 'standalone',
+        sourceLabel: 'Public team',
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        profileHref: `/teams/${String(team._id)}/players/${String(player._id)}`,
+        team: {
+          id: String(team._id),
+          name: team.name,
+          profileHref: `/teams/${String(team._id)}`,
+        },
+        league: null,
+      });
+    }
+  }
+
+  const leagueTeamsByLeague = await Promise.all(
+    publicLeagues.map((league) => listLeagueTeams(league.id))
+  );
+  const leagueTeamEntries = publicLeagues.flatMap((league, leagueIndex) =>
+    leagueTeamsByLeague[leagueIndex]
+      .filter((team) => team.status === 'active')
+      .map((team) => ({ league, team }))
+  );
+  const leaguePlayersByTeam = await Promise.all(
+    leagueTeamEntries.map(({ team }) => listLeaguePlayers(team._id))
+  );
+  const leagueResults = leagueTeamEntries.flatMap(({ league, team }, index) =>
+    leaguePlayersByTeam[index]
+      .filter((player) => player.isActive)
+      .filter((player) =>
+        matchesQuery(`${player.displayName} ${team.name} ${league.name}`, query.q)
+      )
+      .map((player) => ({
+        id: String(player._id),
+        source: 'league',
+        sourceLabel: 'Public league',
+        leaguePlayerId: String(player._id),
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        profileHref: `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`,
+        team: {
+          leagueTeamId: String(team._id),
+          name: team.name,
+          profileHref: `/league/${league.slug}/teams/${team.slug}`,
+        },
+        league: {
+          id: league.id,
+          name: league.name,
+          slug: league.slug,
+          profileHref: `/league/${league.slug}`,
+        },
+      }))
+  );
+
+  return [...standaloneResults, ...leagueResults]
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .slice(0, query.limit || 48);
+}
+
 function findSnapshotPlayer(game, playerId) {
   const playerIdStr = String(playerId);
   for (const roster of [game.rosterSnapshot, game.homeRosterSnapshot, game.awayRosterSnapshot]) {
@@ -966,6 +1044,7 @@ module.exports = {
   listShareableGames,
   listShareablePlayers,
   listShareableTeams,
+  listDiscoverablePlayers,
   sanitizePost,
   refreshGameCardPostsForGame,
   // TSW-004/TSW-005: exported for direct unit testing of the snapshot shapes.

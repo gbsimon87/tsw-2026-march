@@ -42,6 +42,18 @@ export const feedApi = {
     const suffix = q ? `?q=${encodeURIComponent(q)}` : '';
     return apiClient.get(`/feed/shareable/players${suffix}`);
   },
+  listDiscoverablePlayers({ q, limit } = {}) {
+    const searchParams = new URLSearchParams();
+    if (q) {
+      searchParams.set('q', q);
+    }
+    if (limit) {
+      searchParams.set('limit', String(limit));
+    }
+
+    const suffix = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    return apiClient.get(`/feed/discoverable/players${suffix}`);
+  },
   listShareableTeams(q) {
     const suffix = q ? `?q=${encodeURIComponent(q)}` : '';
     return apiClient.get(`/feed/shareable/teams${suffix}`);

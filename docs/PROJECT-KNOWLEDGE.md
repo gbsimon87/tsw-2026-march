@@ -34,6 +34,10 @@ Core capabilities:
   public league/team/player pages. League games track **both** teams at once.
 - A public social feed — **"The Pulse"** (route `/pulse`) — with image posts and
   shareable game/player/team/highlight cards.
+- **Player discovery** on `/home` (`DiscoverablePlayers` component, 2026-07-10):
+  a debounced (400ms) search over active players from public standalone teams
+  and public league teams, backed by `GET /feed/discoverable/players`
+  (`feed.service.js#listDiscoverablePlayers`, no auth required).
 - **Team-scoped and League-scoped Pro billing** gating replay, public shot maps,
   and highlight clips.
 
@@ -327,9 +331,10 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
   updates are manual `queryClient.setQueryData` (e.g. feed optimistic insert,
   auth writes). **No `invalidateQueries` anywhere.**
 - ⚠️ **Data-fetch split-brain (known debt, shrinking)**: TanStack Query is wired
-  into ~11 call sites (AuthContext, FeedPage `useInfiniteQuery`, GameDetailPage,
-  the 3 public league pages, plus `GamesListPage`/`TeamsPage`/`LeaguesPage`/
-  `MySportyPage`/`OpponentPlaceholderPage` migrated 2026-07-07). **~15 pages
+  into ~12 call sites (AuthContext, FeedPage `useInfiniteQuery`, GameDetailPage,
+  the 3 public league pages, `DiscoverablePlayers` (2026-07-10), plus
+  `GamesListPage`/`TeamsPage`/`LeaguesPage`/`MySportyPage`/
+  `OpponentPlaceholderPage` migrated 2026-07-07). **~15 pages
   still fetch imperatively**, most notably `GameTrackPage` (the big one,
   deliberately last) and a mix of admin/CRUD + billing-flow pages. When adding
   a new data page, prefer `useQuery`; migrating the rest is the tracked

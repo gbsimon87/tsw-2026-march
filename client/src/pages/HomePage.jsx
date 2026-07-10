@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import CloudinaryImage from '../features/media/CloudinaryImage';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
+import { DiscoverablePlayers } from '../features/players/components/DiscoverablePlayers';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
 import { SportsLoader } from '../components/SportsLoader';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
@@ -275,6 +276,8 @@ export function HomePage() {
           </ul>
         )}
       </section>
+
+      <DiscoverablePlayers />
 
       {/* Audience sections */}
       {homeAudienceSections.map((section) => {

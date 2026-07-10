@@ -1,6 +1,10 @@
 const { ApiError } = require('../../utils/apiError');
 const service = require('./feed.service');
-const { listFeedSchema, shareableLookupSchema } = require('./feed.validation');
+const {
+  listFeedSchema,
+  shareableLookupSchema,
+  discoverablePlayersSchema,
+} = require('./feed.validation');
 const { assertFeedPostingAllowed } = require('../billing/billing.service');
 
 function requireAuthUserId(req) {
@@ -77,6 +81,12 @@ async function listShareablePlayers(req, res) {
   res.status(200).json({ players });
 }
 
+async function listDiscoverablePlayers(req, res) {
+  const query = discoverablePlayersSchema.parse(req.query);
+  const players = await service.listDiscoverablePlayers(query);
+  res.status(200).json({ players });
+}
+
 async function listShareableTeams(req, res) {
   const query = shareableLookupSchema.parse(req.query);
   const teams = await service.listShareableTeams(req.auth?.userId || null, query);
@@ -92,6 +102,7 @@ module.exports = {
   createTeamCard,
   createHighlightClip,
   remove,
+  listDiscoverablePlayers,
   listShareableGames,
   listShareablePlayers,
   listShareableTeams,
