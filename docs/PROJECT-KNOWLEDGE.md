@@ -407,7 +407,7 @@ Archivo Black + IBM Plex Mono are loaded via a Google Fonts `<link>` in
 `globals.css` but was never linked — that's fixed too, no visible effect since
 it matches the system-sans fallback).
 
-**Recurring page shape** (Home, About, Contact, MySportyPage, AuthPage, the 3
+**Recurring page shape** (Home, Contact, MySportyPage, AuthPage, the 3
 public league pages, PublicLeaguePlayerPage, PublicLeagueTeamPage,
 AdminLeaguePage):
 
@@ -432,10 +432,9 @@ decoration-2 underline-offset-4` with `hover:text-[#1B4332]` (replaces
 factors out step 1 above as a shared component with the same prop shape as
 `PageHeader` (`eyebrow`, `title`, `titleAriaLabel`, `description`, `media`,
 `children`, `className`, plus a `size="hero"` variant for the bigger Home/
-About/Contact headline). It's a straight swap wherever the header is a plain
-eyebrow+title+description(+static media) block: `HomePage`, `AboutPage`,
-`ContactPage`, `PublicLeaguePage`, `PublicLeagueStandingsPage`,
-`PublicLeagueGamesPage`.
+Contact headline). It's a straight swap wherever the header is a plain
+eyebrow+title+description(+static media) block: `HomePage`, `ContactPage`,
+`PublicLeaguePage`, `PublicLeagueStandingsPage`, `PublicLeagueGamesPage`.
 
 **Deliberately left as bespoke inline JSX, not `DarkPageHeader`**, because
 their header content doesn't fit a generic eyebrow/title/description/media
@@ -444,9 +443,24 @@ card), `MySportyPage` and `AdminLeaguePage` (interactive avatar/logo upload
 control in the media slot, not passive image; `AdminLeaguePage` additionally
 has inline click-to-edit title JSX), `PublicLeaguePlayerPage` and
 `PublicLeagueTeamPage` (two-column layout with a stat grid or compound
-logo+text eyebrow, not a plain string). If a future change makes these more
-uniform, revisit whether `DarkPageHeader` should grow render-prop/slot support
-— it wasn't worth the added complexity for five one-off headers.
+logo+text eyebrow, not a plain string), and `AboutPage` (2026-07-10 redesign —
+hero pairs the manifesto copy with a `BoxScoreProof` component, a real
+box-score table with staggered `motion-safe:animate-row-in` row reveal, as
+supporting proof rather than a passive media slot; see the page for the
+`row-in` keyframe added to `tailwind.config.js`). If a future change makes
+these more uniform, revisit whether `DarkPageHeader` should grow render-prop/
+slot support — it wasn't worth the added complexity for six one-off headers.
+
+**HomePage tabs (2026-07-10)**: the Featured Leagues / Featured Teams /
+Discover Players sections are switchable tabs via the shared
+[`Tabs`](../client/src/components/Tabs.jsx) component (previously only used
+by `GameDetailPage`/`PublicLeagueTeamPage`), each with its own local text
+search filter (Leagues/Teams filter client-side over already-fetched data;
+Players hits `GET /feed/discoverable/players` with a 400ms debounce — see §1).
+The old three-audience-card image sections (Players/Coaches/Family) were
+removed from `HomePage` and folded into `AboutPage`'s "Who it's for" section
+instead, one row per audience pairing the image with copy (no separate
+duplicate card grid).
 
 **`LeagueStandingsTable`** (`features/leagues/components/LeagueStandingsTable.jsx`)
 team-name links were switched from `sky-700` to `#1B4332`/`#F4A300` — this is
@@ -599,6 +613,18 @@ player/team profile routes for feed-card linking (`playerUrl`/`teamUrl` stay
 slug-based, not ID-based, and the card snapshot only carries IDs; fixing
 this means denormalizing `leagueSlug`/`teamSlug` into the snapshot too, not
 a one-line route swap).
+
+**Since then (2026-07-10)**: `GameRecapPanel.jsx`'s Highlights and Key
+Moments sections were merged — Key Moments (text cards) now only renders
+when a game has zero video highlights, instead of always showing alongside
+them; the two are mutually exclusive under one "Highlights" heading.
+Selection logic for each (`buildGameHighlights`/`buildKeyMoments` in
+`games.service.js`/`gameRecap.service.js`) is unchanged and deliberately
+kept separate, since highlight selection is expected to become manually
+curated by league owners/team managers in a future release. Separately,
+`PublicLeaguePage.jsx`'s MVP Standings and Defensive Player of the Season
+tables now link each row's team name to its team page (when `teamSlug` is
+present), matching the existing Player-column link pattern.
 
 ---
 

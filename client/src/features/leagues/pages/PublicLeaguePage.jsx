@@ -83,7 +83,16 @@ const LEADERS_COLUMNS = [
           sizes="20px"
           className="h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
         />
-        <span className="text-slate-600">{row.teamName || '—'}</span>
+        {row.teamSlug ? (
+          <Link
+            to={`/league/${row.leagueSlug}/teams/${row.teamSlug}`}
+            className="text-slate-600 underline decoration-slate-300 underline-offset-4 transition hover:text-[#1B4332] hover:decoration-[#F4A300]"
+          >
+            {row.teamName || '—'}
+          </Link>
+        ) : (
+          <span className="text-slate-600">{row.teamName || '—'}</span>
+        )}
       </span>
     ),
   },

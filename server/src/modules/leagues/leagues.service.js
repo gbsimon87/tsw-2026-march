@@ -898,10 +898,13 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsByI
       scheduledAt: game.scheduledAt ?? null,
       completedAt: game.completedAt ?? null,
       createdAt: game.createdAt ?? null,
-      opponent:
-        String(game.homeLeagueTeamId) === String(leagueTeamId)
-          ? game.awayTeamName
-          : game.homeTeamName,
+      opponent: (() => {
+        const opponentTeamId =
+          String(game.homeLeagueTeamId) === String(leagueTeamId)
+            ? String(game.awayLeagueTeamId)
+            : String(game.homeLeagueTeamId);
+        return teamsById.get(opponentTeamId)?.name || null;
+      })(),
       opponentLogoUrl: (() => {
         const opponentTeamId =
           String(game.homeLeagueTeamId) === String(leagueTeamId)
