@@ -118,7 +118,7 @@ describe('AdminLeaguePage', () => {
     renderPage();
 
     // Managers live under the Managers tab (default tab is Games).
-    fireEvent.click(await screen.findByRole('button', { name: 'Managers' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Managers' }));
 
     expect(await screen.findByText('League Managers')).toBeInTheDocument();
     expect(screen.getByText('Jordan Admin')).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('AdminLeaguePage', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     expect(await screen.findByRole('button', { name: 'Complete Season' })).toBeInTheDocument();
   });
@@ -155,7 +155,7 @@ describe('AdminLeaguePage', () => {
     // Default league in beforeEach has viewerRole 'league_manager' and user-1.
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     // The Season section renders, but no owner-only Complete Season button.
     expect(await screen.findByText('Season')).toBeInTheDocument();
@@ -176,7 +176,7 @@ describe('AdminLeaguePage', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Complete Season' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Yes, complete season' }));
 
@@ -202,7 +202,7 @@ describe('AdminLeaguePage', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     const labelInput = await screen.findByPlaceholderText(/New season label/i);
     fireEvent.change(labelInput, { target: { value: 'Fall 2026' } });

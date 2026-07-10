@@ -22,11 +22,12 @@
     "commitlint:range": "commitlint --from=HEAD~1 --to=HEAD"
   },
   "devDependencies": {
-    "@eslint/js": "^9.14.0",
     "@commitlint/cli": "^19.6.1",
     "@commitlint/config-conventional": "^19.6.0",
+    "@eslint/js": "^9.14.0",
     "eslint": "^9.14.0",
     "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^15.11.0",

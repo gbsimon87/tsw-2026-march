@@ -1,55 +1,366 @@
-<!-- These ideas were generated on July 9th -->
+# Product Opportunities by User Segment
 
-Coaches / Team Managers
-They already get live tracking, rosters, box scores, replay, shot maps, and public team/player pages. The next layer of value is helping them turn raw stats into decisions.
-High-value additions:
-Post-game coach report: automatic summary of what changed the game: best lineup stretch, scoring droughts, turnover runs, rebound gaps, foul trouble, top performers.
-Season trends: player and team trends over time, not just totals: last 5 games, shooting zones, turnovers per game, rebounding split, usage.
-Lineup analytics: which five-player groups outscored opponents, rebounded best, or gave up runs.
-Practice focus suggestions: “Team shot 2/14 from left wing threes over last 3 games” or “Opponents scored 18 second-chance points.”
-Opponent scouting notes: simple notes and tendencies attached to opponent pages.
-CSV/PDF exports: for coaches who need to send stats to parents, schools, or staff.
-Best monetizable benefit: “TSW does the post-game breakdown for you.”
-Players
-Players currently benefit from public profiles, per-game logs, averages, and shareable cards. The bigger opportunity is making TSW feel like a player identity and development profile.
-High-value additions:
-Unified player profile across teams/leagues: one player can claim/merge appearances from multiple rosters.
-Player development dashboard: trend lines for PPG/RPG/APG, shooting splits, turnovers, fouls, and role over time.
-Highlight/stat correction requests: players can request a missed stat with video timestamp; managers approve.
-Recruiting/share profile: clean public player page with stats, game logs, clips, team history, measurables, and contact/social links.
-Personal milestones: season high, career high, double-double, first 20-point game, etc.
-Player badges: top scorer, most improved, defensive impact, clutch performance, streaks.
-Best player benefit: “Build your basketball resume automatically from real games.”
-League Organizers
-Leagues already have teams, standings, rosters, join requests, public pages, managers, and scheduling. The next value is reducing admin work and making the league look more professional.
-High-value additions:
-Schedule generation: round-robin, balanced home/away, venue/time-slot constraints.
-Announcements: league-wide, team-specific, or game-specific posts.
-Discipline/admin tools: fouls, technicals, suspensions, eligibility, roster lock dates.
-Officials/table-staff workflow: assign scorekeepers, refs, or game admins to fixtures.
-League reports: top scorers, leaders, team rankings, weekly recap, player of the week.
-Registration and payments: team fees, player fees, waivers, roster caps.
-Public league homepage polish: sponsor slots, fixtures, standings, leaders, recent results, announcements.
-Best organizer benefit: “Run the league from one place and give it a professional public presence.”
-Parents / Fans / Community
-The Pulse and public pages already point in this direction. The next benefit is making following a team or player effortless.
-High-value additions:
-Follow teams/players/leagues: personalized feed, notifications, recent results.
-Game day pages: upcoming matchup, roster, live score, post-game recap.
-Shareable visual cards: final score, top performer, milestone, standings update.
-Photo/video collections: attach media to games, teams, or players.
-Email/SMS updates: final score, next game, weekly recap.
-Best fan benefit: “Follow local basketball like a real sports platform.”
-Semi-Pro / Competitive Clubs
-This group would pay for analysis and presentation quality.
-High-value additions:
-Advanced shot charts: by game, season, player, lineup, opponent, zone.
-Video-linked events: click a shot/turnover/rebound and jump to the YouTube timestamp.
-Scouting packs: exportable player/team reports for coaches or recruiters.
-Roster comparison: player efficiency, shooting profile, usage, trends.
-Private team notes: coaching-only comments on games and players.
-Best club benefit: “Turn every tracked game into film-backed performance analysis.”
-If I had to prioritize the next three product bets, I’d choose:
-Unified player profiles across teams/leagues
-Post-game auto reports with season trends
-Stat correction requests with video timestamps and manager approval
+## Coaches / Team Managers
+
+### Current Value
+
+- Live tracking
+- Rosters
+- Box scores
+- Replay
+- Shot maps
+- Public team/player pages
+
+### Opportunity
+
+Help coaches turn raw statistics into actionable decisions.
+
+### High-Value Features
+
+#### Post-Game Coach Reports
+
+- Automatic summary of what changed the game
+- Best lineup stretches
+- Scoring droughts
+- Turnover runs
+- Rebounding gaps
+- Foul trouble
+- Top performers
+
+#### Season Trends
+
+- Player and team trends over time
+- Last 5 games
+- Shooting zones
+- Turnovers per game
+- Rebounding splits
+- Usage trends
+
+#### Lineup Analytics
+
+- Best-performing five-player lineups
+- Net scoring impact
+- Rebounding effectiveness
+- Lineups that prevented or allowed runs
+
+#### Practice Focus Suggestions
+
+Examples:
+
+- "Team shot 2/14 from left-wing threes over the last 3 games."
+- "Opponents scored 18 second-chance points."
+
+#### Opponent Scouting
+
+- Opponent tendencies
+- Scouting notes attached to opponent pages
+
+#### Export Tools
+
+- CSV exports
+- PDF reports
+- Easy sharing with parents, schools, and coaching staff
+
+### Core Value Proposition
+
+> **"TSW does the post-game breakdown for you."**
+
+---
+
+## Players
+
+### Current Value
+
+- Public player profiles
+- Per-game logs
+- Season averages
+- Shareable stat cards
+
+### Opportunity
+
+Transform TSW into a player's basketball identity and development platform.
+
+### High-Value Features
+
+#### Unified Player Profiles
+
+- Merge appearances across multiple teams and leagues
+- One permanent basketball profile
+
+#### Development Dashboard
+
+Track trends over time:
+
+- PPG
+- RPG
+- APG
+- Shooting splits
+- Turnovers
+- Fouls
+- Player role
+
+#### Stat Correction Requests
+
+- Players request corrections
+- Include video timestamps
+- Managers review and approve
+
+#### Recruiting Profile
+
+Public player page including:
+
+- Stats
+- Game logs
+- Video clips
+- Team history
+- Measurables
+- Contact/social links
+
+#### Personal Milestones
+
+Examples:
+
+- Season high
+- Career high
+- First 20-point game
+- Double-double
+- Other achievements
+
+#### Player Badges
+
+Examples:
+
+- Top Scorer
+- Most Improved
+- Defensive Impact
+- Clutch Performer
+- Streaks
+
+### Core Value Proposition
+
+> **"Build your basketball résumé automatically from real games."**
+
+---
+
+## League Organizers
+
+### Current Value
+
+- Teams
+- Standings
+- Rosters
+- Join requests
+- Public league pages
+- Managers
+- Scheduling
+
+### Opportunity
+
+Reduce administration while creating a more professional league experience.
+
+### High-Value Features
+
+#### Schedule Generation
+
+- Round robin
+- Balanced home/away
+- Venue constraints
+- Time-slot constraints
+
+#### Announcements
+
+- League-wide
+- Team-specific
+- Game-specific
+
+#### Administration Tools
+
+- Fouls
+- Technicals
+- Suspensions
+- Eligibility
+- Roster lock dates
+
+#### Officials Workflow
+
+Assign:
+
+- Referees
+- Scorekeepers
+- Table staff
+- Game administrators
+
+#### League Reports
+
+- Top scorers
+- Statistical leaders
+- Team rankings
+- Weekly recap
+- Player of the Week
+
+#### Registration & Payments
+
+- Team fees
+- Player fees
+- Waivers
+- Roster caps
+
+#### Public League Homepage
+
+- Sponsors
+- Fixtures
+- Standings
+- Leaders
+- Recent results
+- Announcements
+
+### Core Value Proposition
+
+> **"Run the league from one place and give it a professional public presence."**
+
+---
+
+## Parents / Fans / Community
+
+### Current Value
+
+- Pulse feed
+- Public pages
+
+### Opportunity
+
+Make following local basketball effortless.
+
+### High-Value Features
+
+#### Follow System
+
+- Teams
+- Players
+- Leagues
+- Personalized feed
+- Notifications
+- Recent results
+
+#### Game Day Pages
+
+- Upcoming matchup
+- Rosters
+- Live score
+- Post-game recap
+
+#### Shareable Graphics
+
+- Final score
+- Top performer
+- Milestones
+- Standings updates
+
+#### Media Galleries
+
+- Photos
+- Videos
+- Game media
+- Team media
+- Player media
+
+#### Notifications
+
+- Email updates
+- SMS updates
+- Final scores
+- Next game reminders
+- Weekly recaps
+
+### Core Value Proposition
+
+> **"Follow local basketball like a real sports platform."**
+
+---
+
+## Semi-Pro / Competitive Clubs
+
+### Opportunity
+
+Provide premium analytics and presentation-quality tools.
+
+### High-Value Features
+
+#### Advanced Shot Charts
+
+Filter by:
+
+- Game
+- Season
+- Player
+- Lineup
+- Opponent
+- Court zone
+
+#### Video-Linked Events
+
+Jump directly from:
+
+- Shot
+- Turnover
+- Rebound
+- Other events
+
+...to the corresponding YouTube timestamp.
+
+#### Scouting Packs
+
+Exportable reports for:
+
+- Players
+- Teams
+- Coaches
+- Recruiters
+
+#### Roster Comparison
+
+Compare:
+
+- Efficiency
+- Shooting profile
+- Usage
+- Trends
+
+#### Private Team Notes
+
+- Coaching-only comments
+- Game notes
+- Player observations
+
+### Core Value Proposition
+
+> **"Turn every tracked game into film-backed performance analysis."**
+
+---
+
+# Priority Product Bets
+
+## 1. Unified Player Profiles
+
+One player profile across teams and leagues.
+
+**Why:** Creates long-term player identity, improves retention, and increases profile sharing.
+
+---
+
+## 2. Post-Game Auto Reports + Season Trends
+
+Automatic game summaries paired with trend analysis.
+
+**Why:** Saves coaches significant time while surfacing insights they wouldn't otherwise find.
+
+---
+
+## 3. Stat Correction Workflow
+
+Player-requested stat corrections with:
+
+- Video timestamps
+- Manager approval
+
+**Why:** Improves data quality, player engagement, and trust in the platform.

@@ -123,7 +123,11 @@
       "Bash(curl -s -c cookies.txt -X POST __TRACKED_VAR__/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"email\":\"testuser@gmail.com\",\"password\":\"password1!2@3#\"}' -i)",
       "Bash(python3 -m json.tool)",
       "Bash(curl -s -c stranger.txt -X POST __TRACKED_VAR__/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"email\":\"user1@user1.com\",\"password\":\"password\"}' -w '\\\\nLOGIN_STATUS=%{http_code}\\\\n')",
-      "Bash(kill 86046)"
+      "Bash(kill 86046)",
+      "Bash(ENV_FILE=../env/server/.env.development node -e \"require\\('./src/modules/leagues/leagues.service.js'\\); require\\('./src/modules/games/games.service.js'\\); console.log\\('both modules load cleanly'\\)\")",
+      "Bash(MONGO_URI=\"mongodb://127.0.0.1:27017\" MONGO_DB_NAME=\"tsw_seed_verify_$\\(date +%s\\)\" ENV_FILE=../env/server/.env.development node src/scripts/seed-demo-account.js)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\([r for r in d['rules'] if 'a11y' in r][:20]\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(len\\([r for r in d['rules'] if 'a11y' in r]\\), 'a11y rules loaded'\\)\")"
     ],
     "additionalDirectories": [
       "/private/tmp"

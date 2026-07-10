@@ -29,6 +29,7 @@ const { TEAM_SIDES } = require('../modules/shared/stats.constants');
 require('../modules/auth/auth.repository');
 require('../modules/games/games.repository');
 require('../modules/leagues/leagues.repository');
+require('../modules/leagues/seasons.repository');
 require('../modules/feed/feed.repository');
 
 const {
@@ -43,6 +44,7 @@ const { computeGameFinalScore, HIGHLIGHT_STAT_TYPES } = require('../modules/game
 const User = mongoose.model('User');
 const Game = mongoose.model('Game');
 const League = mongoose.model('League');
+const Season = mongoose.model('Season');
 const LeagueTeam = mongoose.model('LeagueTeam');
 const LeaguePlayer = mongoose.model('LeaguePlayer');
 const LeagueTeamMember = mongoose.model('LeagueTeamMember');
@@ -226,12 +228,13 @@ async function upsertLeague(blueprint, ownerUserId) {
   let league = await League.findOne({ slug: blueprint.slug });
   if (league) {
     log(`  league ${blueprint.slug}: already exists, skipping`);
-    return { league, created: false };
+    const season = league.currentSeasonId ? await Season.findById(league.currentSeasonId) : null;
+    return { league, season, created: false };
   }
 
   if (DRY_RUN) {
-    log(`  [dry-run] would create league ${blueprint.slug}`);
-    return { league: null, created: true };
+    log(`  [dry-run] would create league ${blueprint.slug} with an active season`);
+    return { league: null, season: null, created: true };
   }
 
   league = await League.create({
@@ -247,8 +250,23 @@ async function upsertLeague(blueprint, ownerUserId) {
     currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
     cancelAtPeriodEnd: false,
   });
-  log(`  league ${blueprint.slug}: created`);
-  return { league, created: true };
+
+  // League Seasons: every league needs a resolvable currentSeasonId (see
+  // docs/league-seasons/000-SEASONS-TRACKER.md) — new seeded leagues get one
+  // active season upfront, matching what backfill-league-seasons.js produces
+  // for pre-existing leagues.
+  const season = await Season.create({
+    leagueId: league._id,
+    label: blueprint.seasonLabel,
+    status: 'active',
+    startedAt: league.createdAt,
+    createdByUserId: ownerUserId,
+  });
+  league.currentSeasonId = season._id;
+  await league.save();
+
+  log(`  league ${blueprint.slug}: created (season "${season.label}")`);
+  return { league, season, created: true };
 }
 
 async function upsertLeagueTeam(league, teamName, index, slug) {
@@ -396,7 +414,7 @@ function breakTieIfNeeded(finalScore) {
   return finalScore;
 }
 
-function buildDemoLeagueGames(ownerUserId, league, leagueTeamsWithPlayers, startDate) {
+function buildDemoLeagueGames(ownerUserId, league, seasonId, leagueTeamsWithPlayers, startDate) {
   const games = [];
 
   FIVE_TEAM_SCHEDULE.forEach(([homeIndex, awayIndex], gameIndex) => {
@@ -430,6 +448,7 @@ function buildDemoLeagueGames(ownerUserId, league, leagueTeamsWithPlayers, start
       gameContext: 'league',
       trackingMode: 'dual_team',
       leagueId: league._id,
+      seasonId,
       homeLeagueTeamId: home.team._id,
       awayLeagueTeamId: away.team._id,
       trackedLeagueTeamId: home.team._id,
@@ -459,7 +478,7 @@ function buildDemoLeagueGames(ownerUserId, league, leagueTeamsWithPlayers, start
   return games;
 }
 
-async function seedLeagueGames(league, leagueTeamsWithPlayers, ownerUserId) {
+async function seedLeagueGames(league, seasonId, leagueTeamsWithPlayers, ownerUserId) {
   const existingCount = await Game.countDocuments({ leagueId: league._id });
   const expectedCount = FIVE_TEAM_SCHEDULE.length;
 
@@ -479,7 +498,13 @@ async function seedLeagueGames(league, leagueTeamsWithPlayers, ownerUserId) {
   startDate.setHours(0, 0, 0, 0);
   startDate.setMonth(startDate.getMonth() - 3);
 
-  const games = buildDemoLeagueGames(ownerUserId, league, leagueTeamsWithPlayers, startDate);
+  const games = buildDemoLeagueGames(
+    ownerUserId,
+    league,
+    seasonId,
+    leagueTeamsWithPlayers,
+    startDate
+  );
 
   const created = await Game.insertMany(games, { ordered: true });
   log(`  games for league ${league.slug}: created ${created.length}`);
@@ -502,7 +527,7 @@ async function seedLeague(blueprint, demoUser) {
     ownerUserId = commissioner?._id;
   }
 
-  const { league } = await upsertLeague(blueprint, ownerUserId);
+  const { league, season } = await upsertLeague(blueprint, ownerUserId);
   if (DRY_RUN && !league) {
     return null;
   }
@@ -548,6 +573,7 @@ async function seedLeague(blueprint, demoUser) {
 
   const { createdCount: gamesCreated } = await seedLeagueGames(
     league,
+    season?._id || league.currentSeasonId,
     leagueTeamsWithPlayers,
     ownerUserId
   );

@@ -25,14 +25,14 @@ describe('Modal', () => {
   test('closes on backdrop click and locks body scroll', () => {
     const onClose = vi.fn();
 
-    const { container } = render(
+    render(
       <Modal open onClose={onClose} title="Create Post">
         <p>Composer</p>
       </Modal>
     );
 
     expect(document.body.style.overflow).toBe('hidden');
-    fireEvent.click(container.firstChild);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close dialog' })[0]);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

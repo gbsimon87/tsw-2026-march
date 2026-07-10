@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 
@@ -72,6 +72,13 @@ export function AdminLeagueTeamPage() {
   const [teamNameInput, setTeamNameInput] = useState('');
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const [isUpdatingTeamName, setIsUpdatingTeamName] = useState(false);
+  const teamNameInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isEditingTeamName) {
+      teamNameInputRef.current?.focus();
+    }
+  }, [isEditingTeamName]);
   const [playerName, setPlayerName] = useState('');
   const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -222,6 +229,7 @@ export function AdminLeagueTeamPage() {
               {isEditingTeamName ? (
                 <>
                   <input
+                    ref={teamNameInputRef}
                     autoComplete="off"
                     type="text"
                     required
@@ -241,7 +249,6 @@ export function AdminLeagueTeamPage() {
                         setIsEditingTeamName(false);
                       }
                     }}
-                    autoFocus
                   />
                   <button
                     type="button"

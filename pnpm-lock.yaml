@@ -22,6 +22,9 @@ importers:
       eslint-config-prettier:
         specifier: ^9.1.0
         version: 9.1.2(eslint@9.39.4(jiti@2.6.1))
+      eslint-plugin-jsx-a11y:
+        specifier: ^6.10.2
+        version: 6.10.2(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-react:
         specifier: ^7.37.2
         version: 7.37.5(eslint@9.39.4(jiti@2.6.1))
@@ -2106,6 +2109,12 @@ packages:
       }
     engines: { node: '>=12' }
 
+  ast-types-flow@0.0.8:
+    resolution:
+      {
+        integrity: sha512-OH/2E5Fg20h2aPrbe+QL8JZQFko0YZaF+j4mnQ7BGhfavO7OpSLa8a0y9sBwomHdSbkhTS8TQNayBfnW5DwbvQ==,
+      }
+
   async-function@1.0.0:
     resolution:
       {
@@ -2140,6 +2149,20 @@ packages:
     resolution:
       {
         integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==,
+      }
+    engines: { node: '>= 0.4' }
+
+  axe-core@4.12.1:
+    resolution:
+      {
+        integrity: sha512-s7iGf5GaVMxEG0ENN9x+xTr7GFZCb1ZP/1uATUpCEK2X78nDB3RwbtFCo9pGAf9ru+VwoQ464DkaLEeRM08wJA==,
+      }
+    engines: { node: '>=4' }
+
+  axobject-query@4.1.0:
+    resolution:
+      {
+        integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==,
       }
     engines: { node: '>= 0.4' }
 
@@ -2771,6 +2794,12 @@ packages:
       }
     engines: { node: '>=12' }
 
+  damerau-levenshtein@1.0.8:
+    resolution:
+      {
+        integrity: sha512-sdQSFB7+llfUcQHUQO3+B8ERRj0Oa4w9POWMI/puGtuf7gFywGmkaLCElnudfTiKZV+NvHqL0ifzdrI8Ro7ESA==,
+      }
+
   dargs@8.1.0:
     resolution:
       {
@@ -3029,6 +3058,12 @@ packages:
         integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==,
       }
 
+  emoji-regex@9.2.2:
+    resolution:
+      {
+        integrity: sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==,
+      }
+
   encodeurl@2.0.0:
     resolution:
       {
@@ -3174,6 +3209,15 @@ packages:
     hasBin: true
     peerDependencies:
       eslint: '>=7.0.0'
+
+  eslint-plugin-jsx-a11y@6.10.2:
+    resolution:
+      {
+        integrity: sha512-scB3nz4WmG75pV8+3eRUQOHZlNSUhFNq37xnpgRkCCELU3XMvXAxLk1eqWWyE22Ki4Q01Fnsw9BA3cJHDPgn2Q==,
+      }
+    engines: { node: '>=4.0' }
+    peerDependencies:
+      eslint: ^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9
 
   eslint-plugin-react-hooks@5.2.0:
     resolution:
@@ -4578,6 +4622,19 @@ packages:
         integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==,
       }
     engines: { node: '>=6' }
+
+  language-subtag-registry@0.3.23:
+    resolution:
+      {
+        integrity: sha512-0K65Lea881pHotoGEa5gDlMxt3pctLi2RplBb7Ezh4rRdLEOtgi7n4EwK9lamnUCkKBqaeKRVebTq6BAxSkpXQ==,
+      }
+
+  language-tags@1.0.9:
+    resolution:
+      {
+        integrity: sha512-MbjN408fEndfiQXbFQ1vnd+1NoLDsnQW41410oQBXiyXDMYH5z505juWa4KUE1LqxRC7DgOgZDbKLxHIwm27hA==,
+      }
+    engines: { node: '>=0.10' }
 
   leven@3.1.0:
     resolution:
@@ -6325,6 +6382,13 @@ packages:
         integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==,
       }
     engines: { node: '>=18' }
+
+  string.prototype.includes@2.0.1:
+    resolution:
+      {
+        integrity: sha512-o7+c9bW6zpAdJHTtujeePODAhkuicdAryFsfVKwA+wGw89wJ4GTY484WTucM9hLtDEOpOvI+aHnzqnC5lHp4Rg==,
+      }
+    engines: { node: '>= 0.4' }
 
   string.prototype.matchall@4.0.12:
     resolution:
@@ -8327,6 +8391,8 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
+  ast-types-flow@0.0.8: {}
+
   async-function@1.0.0: {}
 
   asynckit@0.4.0: {}
@@ -8345,6 +8411,10 @@ snapshots:
   available-typed-arrays@1.0.7:
     dependencies:
       possible-typed-array-names: 1.1.0
+
+  axe-core@4.12.1: {}
+
+  axobject-query@4.1.0: {}
 
   babel-jest@29.7.0(@babel/core@7.29.0):
     dependencies:
@@ -8725,6 +8795,8 @@ snapshots:
 
   d3-timer@3.0.1: {}
 
+  damerau-levenshtein@1.0.8: {}
+
   dargs@8.1.0: {}
 
   data-urls@5.0.0:
@@ -8842,6 +8914,8 @@ snapshots:
   emoji-regex@10.6.0: {}
 
   emoji-regex@8.0.0: {}
+
+  emoji-regex@9.2.2: {}
 
   encodeurl@2.0.0: {}
 
@@ -8998,6 +9072,25 @@ snapshots:
   eslint-config-prettier@9.1.2(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
       eslint: 9.39.4(jiti@2.6.1)
+
+  eslint-plugin-jsx-a11y@6.10.2(eslint@9.39.4(jiti@2.6.1)):
+    dependencies:
+      aria-query: 5.3.2
+      array-includes: 3.1.9
+      array.prototype.flatmap: 1.3.3
+      ast-types-flow: 0.0.8
+      axe-core: 4.12.1
+      axobject-query: 4.1.0
+      damerau-levenshtein: 1.0.8
+      emoji-regex: 9.2.2
+      eslint: 9.39.4(jiti@2.6.1)
+      hasown: 2.0.2
+      jsx-ast-utils: 3.3.5
+      language-tags: 1.0.9
+      minimatch: 3.1.5
+      object.fromentries: 2.0.8
+      safe-regex-test: 1.1.0
+      string.prototype.includes: 2.0.1
 
   eslint-plugin-react-hooks@5.2.0(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
@@ -10083,6 +10176,12 @@ snapshots:
 
   kleur@3.0.3: {}
 
+  language-subtag-registry@0.3.23: {}
+
+  language-tags@1.0.9:
+    dependencies:
+      language-subtag-registry: 0.3.23
+
   leven@3.1.0: {}
 
   levn@0.4.1:
@@ -11108,6 +11207,12 @@ snapshots:
       emoji-regex: 10.6.0
       get-east-asian-width: 1.5.0
       strip-ansi: 7.2.0
+
+  string.prototype.includes@2.0.1:
+    dependencies:
+      call-bind: 1.0.8
+      define-properties: 1.2.1
+      es-abstract: 1.24.1
 
   string.prototype.matchall@4.0.12:
     dependencies:
