@@ -1384,7 +1384,7 @@ export function GameTrackPage() {
   const eventPickerShellClass =
     'fixed inset-0 z-[60] flex items-stretch justify-center bg-slate-950/35 p-2 backdrop-blur-[1px] sm:p-3';
   const eventPickerPanelClass =
-    'flex h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
+    'relative z-10 flex h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
   const eventPickerBodyClass = 'flex h-full min-h-0 w-full flex-col';
   const eventPickerGridClass =
     'mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),minmax(12rem,0.78fr)] landscape:grid-rows-none md:grid-cols-[minmax(0,1fr),minmax(13rem,0.8fr)]';
@@ -2880,7 +2880,7 @@ export function GameTrackPage() {
                   {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
                       stop-propagation guard only, not an interactive control. */}
                   <div
-                    className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+                    className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="mb-4 flex items-center justify-between gap-3">
@@ -3081,7 +3081,7 @@ export function GameTrackPage() {
             {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
                 stop-propagation guard only, not an interactive control. */}
             <div
-              className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+              className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <p className="text-base font-semibold text-slate-900">Finish tracking?</p>
