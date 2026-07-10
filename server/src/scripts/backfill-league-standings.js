@@ -53,12 +53,19 @@ async function main() {
 
   await connectDb();
 
-  const leagues = await League.find({}).select('_id name');
+  // League Seasons (docs/league-seasons/000-SEASONS-TRACKER.md): standings/
+  // player-stats are now scoped per (league, season) — this script only
+  // (re)computes each league's CURRENT season. Leagues without a
+  // currentSeasonId yet haven't run backfill-league-seasons.js — skip them.
+  const leagues = await League.find({ currentSeasonId: { $ne: null } }).select(
+    '_id name currentSeasonId'
+  );
   let processed = 0;
 
   for (const league of leagues) {
-    const liveStandings = await computeLeagueStandings(league._id);
-    const livePlayerStats = await computeLeaguePlayerStats(league._id);
+    const seasonId = league.currentSeasonId;
+    const liveStandings = await computeLeagueStandings(league._id, seasonId);
+    const livePlayerStats = await computeLeaguePlayerStats(league._id, seasonId);
 
     if (dryRun) {
       console.log(
@@ -67,8 +74,11 @@ async function main() {
       );
       console.log(`  ${livePlayerStats.length} player-stat rows would be persisted`);
     } else {
-      const persistedStandings = await recomputeLeagueAggregates(league._id);
-      const persistedPlayerStats = await LeaguePlayerStats.find({ leagueId: league._id }).lean();
+      const persistedStandings = await recomputeLeagueAggregates(league._id, seasonId);
+      const persistedPlayerStats = await LeaguePlayerStats.find({
+        leagueId: league._id,
+        seasonId,
+      }).lean();
 
       const standingsMatch = JSON.stringify(persistedStandings) === JSON.stringify(liveStandings);
       const playerStatsMatch =

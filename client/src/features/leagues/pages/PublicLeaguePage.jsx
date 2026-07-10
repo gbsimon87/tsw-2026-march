@@ -1,8 +1,10 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { leaguesApi } from '../api/leaguesApi';
 import { usePublicLeague } from '../hooks/usePublicLeague';
+import { SeasonSelect } from '../components/SeasonSelect';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
@@ -176,18 +178,20 @@ const DPOY_COLUMNS = [
 
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
+  const [selectedSeasonId, setSelectedSeasonId] = useState(null);
   const {
     data: league,
     isLoading: isLeagueLoading,
     isError: isLeagueError,
-  } = usePublicLeague(leagueSlug);
+  } = usePublicLeague(leagueSlug, selectedSeasonId);
+  const activeSeasonId = selectedSeasonId || league?.currentSeason?.id || null;
   const {
     data: leadersData,
     isLoading: isLeadersLoading,
     isError: isLeadersError,
   } = useQuery({
-    queryKey: ['publicLeagueLeaders', leagueSlug],
-    queryFn: () => leaguesApi.getPublicLeagueLeaders(leagueSlug),
+    queryKey: ['publicLeagueLeaders', leagueSlug, activeSeasonId],
+    queryFn: () => leaguesApi.getPublicLeagueLeaders(leagueSlug, activeSeasonId),
     enabled: Boolean(leagueSlug),
   });
 
@@ -195,11 +199,13 @@ export function PublicLeaguePage() {
   const dpoyLeaders = leadersData?.dpoyLeaders || [];
   const isLoading = isLeagueLoading || isLeadersLoading;
   const error = isLeagueError || isLeadersError ? 'Failed to load league' : '';
+  const seasons = useMemo(() => league?.seasons || [], [league]);
+  const selectedSeason = seasons.find((season) => season.id === activeSeasonId);
 
   useDocumentMeta({
     title: league ? `${league.name} — League Standings & Games` : undefined,
     description: league
-      ? `${league.seasonLabel || 'Season TBD'} • Public league standings and game results.`
+      ? `${selectedSeason?.label || league.seasonLabel || 'Season TBD'} • Public league standings and game results.`
       : undefined,
     image: league ? resolveShareImage(league.logo?.url) : undefined,
     url: league ? `${window.location.origin}/league/${league.slug}` : undefined,
@@ -224,7 +230,7 @@ export function PublicLeaguePage() {
         titleAriaLabel={league.name}
         eyebrow="League"
         title={league.name}
-        description={`${league.seasonLabel || 'Season TBD'} • Public league standings and game results.`}
+        description={`${selectedSeason?.label || league.seasonLabel || 'Season TBD'} • Public league standings and game results.`}
         media={
           <CloudinaryImage
             src={getLeagueHeaderImage(league)}
@@ -238,7 +244,13 @@ export function PublicLeaguePage() {
             className="h-16 w-16 shrink-0 rounded-full border-2 border-white/10 bg-white object-cover"
           />
         }
-      />
+      >
+        <SeasonSelect
+          seasons={seasons}
+          selectedSeasonId={activeSeasonId}
+          onChange={setSelectedSeasonId}
+        />
+      </DarkPageHeader>
 
       <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
         <header className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">

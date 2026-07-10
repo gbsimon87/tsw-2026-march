@@ -8,6 +8,7 @@ const {
   addManagerSchema,
   updateMemberSchema,
   createJoinRequestSchema,
+  createSeasonSchema,
 } = require('./leagues.validation');
 const leaguesService = require('./leagues.service');
 const { ApiError } = require('../../utils/apiError');
@@ -52,14 +53,19 @@ async function listPublic(req, res) {
 
 async function getById(req, res) {
   const userId = requireAuthUserId(req);
-  const league = await leaguesService.getLeagueForUser(userId, req.params.leagueId);
+  const league = await leaguesService.getLeagueForUser(
+    userId,
+    req.params.leagueId,
+    req.query.seasonId || undefined
+  );
   res.status(200).json({ league });
 }
 
 async function getPublicBySlug(req, res) {
   const league = await leaguesService.getPublicLeagueBySlug(
     req.params.leagueSlug,
-    req.auth?.userId || null
+    req.auth?.userId || null,
+    req.query.seasonId || undefined
   );
   res.status(200).json({ league });
 }
@@ -104,7 +110,8 @@ async function getPublicTeam(req, res) {
   const result = await leaguesService.getPublicLeagueTeamBySlug(
     req.params.leagueSlug,
     req.params.teamSlug,
-    req.auth?.userId || null
+    req.auth?.userId || null,
+    req.query.seasonId || undefined
   );
   res.status(200).json(result);
 }
@@ -351,7 +358,11 @@ async function cancelJoin(req, res) {
 
 async function standings(req, res) {
   const userId = requireAuthUserId(req);
-  const league = await leaguesService.getLeagueForUser(userId, req.params.leagueId);
+  const league = await leaguesService.getLeagueForUser(
+    userId,
+    req.params.leagueId,
+    req.query.seasonId || undefined
+  );
   const standings = league.standings || [];
   res.status(200).json({ standings });
 }
@@ -359,14 +370,19 @@ async function standings(req, res) {
 async function publicStandings(req, res) {
   const league = await leaguesService.getPublicLeagueBySlug(
     req.params.leagueSlug,
-    req.auth?.userId || null
+    req.auth?.userId || null,
+    req.query.seasonId || undefined
   );
   res.status(200).json({ standings: league.standings });
 }
 
 async function games(req, res) {
   const userId = requireAuthUserId(req);
-  const league = await leaguesService.getLeagueForUser(userId, req.params.leagueId);
+  const league = await leaguesService.getLeagueForUser(
+    userId,
+    req.params.leagueId,
+    req.query.seasonId || undefined
+  );
   const games = league.games || [];
   res.status(200).json({ games });
 }
@@ -374,7 +390,8 @@ async function games(req, res) {
 async function publicGames(req, res) {
   const league = await leaguesService.getPublicLeagueBySlug(
     req.params.leagueSlug,
-    req.auth?.userId || null
+    req.auth?.userId || null,
+    req.query.seasonId || undefined
   );
   res.status(200).json({ games: league.games });
 }
@@ -383,9 +400,41 @@ async function getPublicLeaders(req, res) {
   const result = await leaguesService.getPublicLeagueLeaders(
     req.params.leagueSlug,
     10,
-    req.auth?.userId || null
+    req.auth?.userId || null,
+    req.query.seasonId || undefined
   );
   res.status(200).json(result);
+}
+
+async function createSeasonHandler(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = createSeasonSchema.parse(req.body);
+  const season = await leaguesService.createSeasonForLeague(userId, req.params.leagueId, payload);
+  res.status(201).json({ season });
+}
+
+async function listSeasonsHandler(req, res) {
+  const userId = requireAuthUserId(req);
+  const seasons = await leaguesService.listSeasonsForLeague(userId, req.params.leagueId);
+  res.status(200).json({ seasons });
+}
+
+async function completeSeasonHandler(req, res) {
+  const userId = requireAuthUserId(req);
+  const season = await leaguesService.completeSeasonForUser(
+    userId,
+    req.params.leagueId,
+    req.params.seasonId
+  );
+  res.status(200).json({ season });
+}
+
+async function listPublicSeasonsHandler(req, res) {
+  const seasons = await leaguesService.listPublicSeasonsForLeague(
+    req.params.leagueSlug,
+    req.auth?.userId || null
+  );
+  res.status(200).json({ seasons });
 }
 
 module.exports = {
@@ -429,4 +478,8 @@ module.exports = {
   listLeagueManagers,
   addLeagueManager,
   removeLeagueManager,
+  createSeason: createSeasonHandler,
+  listSeasons: listSeasonsHandler,
+  completeSeason: completeSeasonHandler,
+  listPublicSeasons: listPublicSeasonsHandler,
 };

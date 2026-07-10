@@ -102,30 +102,52 @@ export const leaguesApi = {
       `/leagues/${leagueId}/teams/${leagueTeamId}/join-requests/${requestId}/cancel`
     );
   },
-  getStandings(leagueId) {
-    return apiClient.get(`/leagues/${leagueId}/standings`);
+  getStandings(leagueId, seasonId) {
+    return apiClient.get(
+      `/leagues/${leagueId}/standings${seasonId ? `?seasonId=${seasonId}` : ''}`
+    );
   },
-  getGames(leagueId) {
-    return apiClient.get(`/leagues/${leagueId}/games`);
+  getGames(leagueId, seasonId) {
+    return apiClient.get(`/leagues/${leagueId}/games${seasonId ? `?seasonId=${seasonId}` : ''}`);
   },
-  getPublicBySlug(leagueSlug) {
-    return apiClient.get(`/public/leagues/${leagueSlug}`);
+  listSeasons(leagueId) {
+    return apiClient.get(`/leagues/${leagueId}/seasons`);
   },
-  getPublicStandings(leagueSlug) {
-    return apiClient.get(`/public/leagues/${leagueSlug}/standings`);
+  createSeason(leagueId, payload) {
+    return apiClient.post(`/leagues/${leagueId}/seasons`, payload);
   },
-  getPublicGames(leagueSlug) {
-    return apiClient.get(`/public/leagues/${leagueSlug}/games`);
+  completeSeason(leagueId, seasonId) {
+    return apiClient.post(`/leagues/${leagueId}/seasons/${seasonId}/complete`);
   },
-  getPublicTeam(leagueSlug, teamSlug) {
-    return apiClient.get(`/public/leagues/${leagueSlug}/teams/${teamSlug}`);
+  getPublicBySlug(leagueSlug, seasonId) {
+    return apiClient.get(`/public/leagues/${leagueSlug}${seasonId ? `?seasonId=${seasonId}` : ''}`);
+  },
+  getPublicStandings(leagueSlug, seasonId) {
+    return apiClient.get(
+      `/public/leagues/${leagueSlug}/standings${seasonId ? `?seasonId=${seasonId}` : ''}`
+    );
+  },
+  getPublicGames(leagueSlug, seasonId) {
+    return apiClient.get(
+      `/public/leagues/${leagueSlug}/games${seasonId ? `?seasonId=${seasonId}` : ''}`
+    );
+  },
+  getPublicTeam(leagueSlug, teamSlug, seasonId) {
+    return apiClient.get(
+      `/public/leagues/${leagueSlug}/teams/${teamSlug}${seasonId ? `?seasonId=${seasonId}` : ''}`
+    );
   },
   getPublicPlayer(leagueSlug, teamSlug, leaguePlayerId) {
     return apiClient.get(
       `/public/leagues/${leagueSlug}/teams/${teamSlug}/players/${leaguePlayerId}`
     );
   },
-  getPublicLeagueLeaders(leagueSlug) {
-    return apiClient.get(`/public/leagues/${leagueSlug}/leaders`);
+  getPublicLeagueLeaders(leagueSlug, seasonId) {
+    return apiClient.get(
+      `/public/leagues/${leagueSlug}/leaders${seasonId ? `?seasonId=${seasonId}` : ''}`
+    );
+  },
+  getPublicSeasons(leagueSlug) {
+    return apiClient.get(`/public/leagues/${leagueSlug}/seasons`);
   },
 };

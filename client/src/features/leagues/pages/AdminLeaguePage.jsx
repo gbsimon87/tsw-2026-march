@@ -127,6 +127,12 @@ export function AdminLeaguePage() {
   const [submittingTeamManagerId, setSubmittingTeamManagerId] = useState('');
   const [teamRequests, setTeamRequests] = useState({});
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [seasons, setSeasons] = useState([]);
+  const [isCompletingSeason, setIsCompletingSeason] = useState(false);
+  const [confirmCompleteSeasonId, setConfirmCompleteSeasonId] = useState('');
+  const [newSeasonLabel, setNewSeasonLabel] = useState('');
+  const [isCreatingSeason, setIsCreatingSeason] = useState(false);
+  const [seasonError, setSeasonError] = useState('');
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -168,6 +174,14 @@ export function AdminLeaguePage() {
   useEffect(() => {
     setLeagueNameInput(league?.name || '');
   }, [league?.name]);
+
+  useEffect(() => {
+    if (activeTab !== 'settings') return;
+    leaguesApi
+      .listSeasons(leagueId)
+      .then((response) => setSeasons(response.seasons || []))
+      .catch(() => {});
+  }, [activeTab, leagueId]);
 
   useEffect(() => {
     if (activeTab !== 'requests' || !league?.teams?.length) return;
@@ -335,6 +349,43 @@ export function AdminLeaguePage() {
       setError(submitError.message || 'Failed to update league visibility');
     } finally {
       setIsUpdatingLeague(false);
+    }
+  }
+
+  async function onCompleteSeason(seasonId) {
+    setConfirmCompleteSeasonId('');
+    setSeasonError('');
+    setIsCompletingSeason(true);
+    try {
+      const response = await leaguesApi.completeSeason(leagueId, seasonId);
+      setSeasons((current) =>
+        current.map((season) => (season.id === seasonId ? response.season : season))
+      );
+      const refreshed = await leaguesApi.getById(leagueId);
+      setLeague(refreshed.league);
+    } catch (submitError) {
+      setSeasonError(submitError.message || 'Failed to complete season');
+    } finally {
+      setIsCompletingSeason(false);
+    }
+  }
+
+  async function onCreateSeason(event) {
+    event.preventDefault();
+    const label = newSeasonLabel.trim();
+    if (!label) return;
+    setSeasonError('');
+    setIsCreatingSeason(true);
+    try {
+      const response = await leaguesApi.createSeason(leagueId, { label });
+      setSeasons((current) => [response.season, ...current]);
+      setNewSeasonLabel('');
+      const refreshed = await leaguesApi.getById(leagueId);
+      setLeague(refreshed.league);
+    } catch (submitError) {
+      setSeasonError(submitError.message || 'Failed to start new season');
+    } finally {
+      setIsCreatingSeason(false);
     }
   }
 
@@ -518,7 +569,6 @@ export function AdminLeaguePage() {
                           setIsEditingLeagueName(false);
                         }
                       }}
-                      autoFocus
                     />
                     <button
                       type="button"
@@ -610,7 +660,7 @@ export function AdminLeaguePage() {
               </h1>
             )}
             <span className="mt-2 inline-flex flex-wrap items-center gap-2 text-sm text-white/60">
-              <span>{league.seasonLabel || 'Season TBD'}</span>
+              <span>{league.currentSeason?.label || league.seasonLabel || 'Season TBD'}</span>
               <span className="text-white/20">•</span>
               <span>{league.status}</span>
               <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-white/80">
@@ -1081,6 +1131,94 @@ export function AdminLeaguePage() {
                 Current visibility:{' '}
                 <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
               </p>
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <h2
+                  className="text-lg text-slate-900"
+                  style={{ fontFamily: "'Archivo Black', sans-serif" }}
+                >
+                  Season
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Complete the current season to freeze final standings as a permanent record, then
+                  start a new one. Teams and rosters carry over automatically.
+                </p>
+
+                {league.currentSeason ? (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <p className="font-medium text-slate-900">{league.currentSeason.label}</p>
+                      <p className="text-sm text-slate-500">
+                        {league.currentSeason.status === 'active' ? 'Active' : 'Completed'}
+                      </p>
+                    </div>
+                    {isOwner && league.currentSeason.status === 'active' ? (
+                      <button
+                        type="button"
+                        disabled={isCompletingSeason}
+                        onClick={() => setConfirmCompleteSeasonId(league.currentSeason.id)}
+                        className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50"
+                      >
+                        {isCompletingSeason ? 'Completing…' : 'Complete Season'}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">This league has no season yet.</p>
+                )}
+
+                {isOwner &&
+                (!league.currentSeason || league.currentSeason.status === 'completed') ? (
+                  <form onSubmit={onCreateSeason} className="mt-4 flex gap-2">
+                    <input
+                      autoComplete="off"
+                      type="text"
+                      maxLength={80}
+                      className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
+                      placeholder="New season label (e.g. 2026 Fall)"
+                      value={newSeasonLabel}
+                      onChange={(event) => setNewSeasonLabel(event.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isCreatingSeason || !newSeasonLabel.trim()}
+                      className="shrink-0 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
+                    >
+                      {isCreatingSeason ? 'Starting…' : 'Start New Season'}
+                    </button>
+                  </form>
+                ) : null}
+
+                {seasonError ? (
+                  <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                    {seasonError}
+                  </p>
+                ) : null}
+
+                {seasons.length > 0 ? (
+                  <div className="mt-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      Season History
+                    </h3>
+                    <div className="mt-3 divide-y divide-slate-200">
+                      {seasons.map((season) => (
+                        <div
+                          key={season.id}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                        >
+                          <span className="font-medium text-slate-800">{season.label}</span>
+                          <span className="text-slate-500">
+                            {season.status === 'active' ? 'Active' : 'Completed'}
+                            {season.completedAt
+                              ? ` · ${new Date(season.completedAt).toLocaleDateString()}`
+                              : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
@@ -1088,12 +1226,12 @@ export function AdminLeaguePage() {
       {confirmDeleteGameId ? (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
-          onClick={() => setConfirmDeleteGameId('')}
+          role="presentation"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setConfirmDeleteGameId('');
+          }}
         >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <p className="text-base font-semibold text-slate-900">Remove this game?</p>
             <p className="mt-1 text-sm text-slate-500">
               This will permanently delete the game and all its recorded stats. This cannot be
@@ -1114,6 +1252,43 @@ export function AdminLeaguePage() {
                 className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
               >
                 {deletingGameId === confirmDeleteGameId ? 'Removing…' : 'Yes, remove game'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {confirmCompleteSeasonId ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
+          role="presentation"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setConfirmCompleteSeasonId('');
+          }}
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-base font-semibold text-slate-900">Complete this season?</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Standings and stats will be frozen as a permanent record. No new games can be
+              scheduled until you start a new season. This cannot be undone.
+              {(league.games || []).some((game) => game.status !== 'completed')
+                ? ` ${(league.games || []).filter((game) => game.status !== 'completed').length} game(s) are still in progress and will not count toward final standings.`
+                : ''}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmCompleteSeasonId('')}
+                className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isCompletingSeason}
+                onClick={() => onCompleteSeason(confirmCompleteSeasonId)}
+                className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
+              >
+                {isCompletingSeason ? 'Completing…' : 'Yes, complete season'}
               </button>
             </div>
           </div>

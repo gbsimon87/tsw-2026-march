@@ -20,6 +20,16 @@ const leagueSchema = new mongoose.Schema(
     slug: { type: String, required: true, trim: true, unique: true, index: true },
     description: { type: String, trim: true, default: null },
     seasonLabel: { type: String, trim: true, default: null },
+    // Pointer to the League's active `Season` doc — denormalized so hot paths
+    // (game creation, standings/stats reads) resolve it in the same round trip
+    // as the League doc they already load. Null until backfill-league-seasons.js
+    // runs for leagues created before the Season feature shipped.
+    currentSeasonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Season',
+      default: null,
+      index: true,
+    },
     status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
     isPublic: { type: Boolean, default: true },
     logo: { type: logoSchema, default: null },
@@ -32,6 +42,10 @@ const leagueSchema = new mongoose.Schema(
     stripeCustomerId: { type: String, default: null },
     stripeSubscriptionId: { type: String, default: null },
     stripePriceId: { type: String, default: null },
+    // NOTE: this is Stripe billing cadence ('bill me once per season' vs
+    // monthly), unrelated to the `Season` entity (seasons.repository.js). A
+    // League's billingInterval can be 'season' while it has any number of
+    // Season documents — orthogonal concepts that share a word. Do not conflate.
     billingInterval: { type: String, enum: ['monthly', 'season', null], default: null },
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
@@ -160,13 +174,26 @@ const leagueStandingsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'League',
       required: true,
-      unique: true,
+      index: true,
+    },
+    // Nullable during the expand/backfill window (see
+    // scripts/backfill-league-seasons.js); every league ends up with a
+    // resolvable seasonId after that script runs.
+    seasonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Season',
+      default: null,
       index: true,
     },
     rows: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   { timestamps: true }
 );
+
+// Stage-1 (additive) index. The unique {leagueId, seasonId} compound index is
+// created by migrate-leaguestandings-season-index.js after the seasons
+// backfill runs — see docs/league-seasons/000-SEASONS-TRACKER.md.
+leagueStandingsSchema.index({ leagueId: 1, seasonId: 1 });
 
 // OPT-011: materialised per-player league aggregates. One doc per
 // (leagueId, leagueTeamId, leaguePlayerId) — raw accumulated totals only
@@ -177,6 +204,14 @@ const leagueStandingsSchema = new mongoose.Schema(
 const leaguePlayerStatsSchema = new mongoose.Schema(
   {
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },
+    // Nullable during the expand/backfill window — see leagueStandingsSchema's
+    // seasonId comment above for the same caveat.
+    seasonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Season',
+      default: null,
+      index: true,
+    },
     leagueTeamId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'LeagueTeam',
@@ -210,10 +245,10 @@ const leaguePlayerStatsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-leaguePlayerStatsSchema.index(
-  { leagueId: 1, leagueTeamId: 1, leaguePlayerId: 1 },
-  { unique: true }
-);
+// Stage-1 (additive) index. The unique {leagueId, seasonId, leagueTeamId,
+// leaguePlayerId} compound index (replacing this one) is created by
+// migrate-leaguestandings-season-index.js after the seasons backfill runs.
+leaguePlayerStatsSchema.index({ leagueId: 1, seasonId: 1, leagueTeamId: 1, leaguePlayerId: 1 });
 
 const League = mongoose.models.League || mongoose.model('League', leagueSchema);
 const LeagueTeam = mongoose.models.LeagueTeam || mongoose.model('LeagueTeam', leagueTeamSchema);
@@ -416,44 +451,62 @@ function saveLeagueManager(manager) {
   return manager.save();
 }
 
-// OPT-010: materialised standings read/write.
-function findLeagueStandings(leagueId) {
-  return LeagueStandings.findOne({ leagueId });
+// OPT-010: materialised standings read/write. seasonId scopes the doc to a
+// single season (see docs/league-seasons/000-SEASONS-TRACKER.md).
+function findLeagueStandings(leagueId, seasonId) {
+  return LeagueStandings.findOne({ leagueId, seasonId });
 }
 
-function upsertLeagueStandings(leagueId, rows) {
+function upsertLeagueStandings(leagueId, seasonId, rows) {
   return LeagueStandings.findOneAndUpdate(
-    { leagueId },
+    { leagueId, seasonId },
     { $set: { rows } },
     { new: true, upsert: true }
   );
 }
 
-function deleteLeagueStandings(leagueId) {
-  return LeagueStandings.deleteOne({ leagueId });
+function deleteLeagueStandings(leagueId, seasonId) {
+  return LeagueStandings.deleteOne({ leagueId, seasonId });
 }
 
-// OPT-011: materialised per-player league stats read/write.
-function listLeaguePlayerStats(leagueId) {
-  return LeaguePlayerStats.find({ leagueId }).lean();
+// OPT-011: materialised per-player league stats read/write. seasonId scopes
+// rows to a single season.
+function listLeaguePlayerStats(leagueId, seasonId) {
+  return LeaguePlayerStats.find({ leagueId, seasonId }).lean();
 }
 
-// Full replace: delete every row for the league, then insert the fresh set.
-// Simpler and just as correct as diffing, and this only ever runs on the
+// Full replace: delete every row for the league+season, then insert the fresh
+// set. Simpler and just as correct as diffing, and this only ever runs on the
 // post-response recompute path (never blocks a request).
-async function replaceLeaguePlayerStats(leagueId, rows) {
-  await LeaguePlayerStats.deleteMany({ leagueId });
+async function replaceLeaguePlayerStats(leagueId, seasonId, rows) {
+  await LeaguePlayerStats.deleteMany({ leagueId, seasonId });
   if (rows.length === 0) {
     return [];
   }
-  return LeaguePlayerStats.insertMany(
-    rows.map((row) => ({ ...row, leagueId })),
-    { ordered: false }
-  );
+
+  // Map rows and ensure all required fields are ObjectId-compatible strings
+  const docsToInsert = rows
+    .map((row) => {
+      if (!row.leagueTeamId || !row.leaguePlayerId) {
+        return null; // Skip rows with missing IDs
+      }
+      return {
+        ...row,
+        leagueId,
+        seasonId,
+      };
+    })
+    .filter((doc) => doc !== null);
+
+  if (docsToInsert.length === 0) {
+    return [];
+  }
+
+  return LeaguePlayerStats.insertMany(docsToInsert, { ordered: false });
 }
 
-function deleteLeaguePlayerStats(leagueId) {
-  return LeaguePlayerStats.deleteMany({ leagueId });
+function deleteLeaguePlayerStats(leagueId, seasonId) {
+  return LeaguePlayerStats.deleteMany({ leagueId, seasonId });
 }
 
 module.exports = {

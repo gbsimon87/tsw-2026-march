@@ -150,6 +150,11 @@ const gameSchema = new mongoose.Schema(
       index: true,
     },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
+    // Null for standalone games and for league games created before the
+    // Season feature shipped (see docs/league-seasons/000-SEASONS-TRACKER.md).
+    // New league games always have this set, resolved server-side from
+    // League.currentSeasonId — never client-supplied.
+    seasonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Season', default: null, index: true },
     // OPT-007: dropped `index: true` on homeLeagueTeamId/awayLeagueTeamId/
     // homeTeamId/awayTeamId — each already starts a compound index below
     // ({field:1, createdAt:-1}), which fully covers any field-only query.
@@ -335,8 +340,14 @@ async function listPublicCompletedGames(limit = 100) {
     .limit(limit);
 }
 
-async function listLeagueGamesByLeagueId(leagueId) {
-  return Game.find({ gameContext: 'league', leagueId }).sort({
+// seasonId undefined preserves pre-Season "all games ever" behavior; pass
+// null explicitly to match only legacy (pre-migration) games.
+async function listLeagueGamesByLeagueId(leagueId, seasonId) {
+  return Game.find({
+    gameContext: 'league',
+    leagueId,
+    ...(seasonId !== undefined ? { seasonId } : {}),
+  }).sort({
     scheduledAt: -1,
     completedAt: -1,
     createdAt: -1,

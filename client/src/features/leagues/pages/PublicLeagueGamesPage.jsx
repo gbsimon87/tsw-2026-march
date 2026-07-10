@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
@@ -8,27 +9,32 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { usePublicLeague } from '../hooks/usePublicLeague';
+import { SeasonSelect } from '../components/SeasonSelect';
 
 export function PublicLeagueGamesPage() {
   const { leagueSlug } = useParams();
+  const [selectedSeasonId, setSelectedSeasonId] = useState(null);
   const {
     data: league,
     isLoading: isLeagueLoading,
     isError: isLeagueError,
-  } = usePublicLeague(leagueSlug);
+  } = usePublicLeague(leagueSlug, selectedSeasonId);
+  const activeSeasonId = selectedSeasonId || league?.currentSeason?.id || null;
   const {
     data: gamesData,
     isLoading: isGamesLoading,
     isError: isGamesError,
   } = useQuery({
-    queryKey: ['publicLeagueGames', leagueSlug],
-    queryFn: () => leaguesApi.getPublicGames(leagueSlug),
+    queryKey: ['publicLeagueGames', leagueSlug, activeSeasonId],
+    queryFn: () => leaguesApi.getPublicGames(leagueSlug, activeSeasonId),
     enabled: Boolean(leagueSlug),
   });
 
   const games = gamesData?.games || [];
   const isLoading = isLeagueLoading || isGamesLoading;
   const error = isLeagueError || isGamesError ? 'Failed to load games' : '';
+  const seasons = useMemo(() => league?.seasons || [], [league]);
+  const selectedSeason = seasons.find((season) => season.id === activeSeasonId);
 
   if (isLoading) {
     return <SportsLoader label="Loading league games" fullPage />;
@@ -52,7 +58,7 @@ export function PublicLeagueGamesPage() {
         titleAriaLabel={league.name}
         eyebrow="Public League Games"
         title={league.name}
-        description={`${league.seasonLabel || 'Season TBD'} schedule and completed results.`}
+        description={`${selectedSeason?.label || league.seasonLabel || 'Season TBD'} schedule and completed results.`}
         media={
           <CloudinaryImage
             src={getLeagueHeaderImage(league)}
@@ -67,7 +73,7 @@ export function PublicLeagueGamesPage() {
           />
         }
       >
-        <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
           <Link
             to={`/league/${league.slug}`}
             className="font-semibold text-white/80 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#F4A300]"
@@ -80,6 +86,12 @@ export function PublicLeagueGamesPage() {
           >
             League standings
           </Link>
+          <SeasonSelect
+            seasons={seasons}
+            selectedSeasonId={activeSeasonId}
+            onChange={setSelectedSeasonId}
+            className="ml-auto"
+          />
         </div>
       </DarkPageHeader>
 

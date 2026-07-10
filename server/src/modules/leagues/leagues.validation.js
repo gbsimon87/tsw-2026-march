@@ -86,6 +86,10 @@ const createJoinRequestSchema = z
     }
   });
 
+const createSeasonSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+});
+
 module.exports = {
   createLeagueSchema,
   updateLeagueSchema,
@@ -96,4 +100,5 @@ module.exports = {
   addManagerSchema,
   updateMemberSchema,
   createJoinRequestSchema,
+  createSeasonSchema,
 };

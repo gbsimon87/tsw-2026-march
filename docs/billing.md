@@ -29,6 +29,8 @@ League Pro is billed per league, **monthly ($49/mo) or per season ($299/season)*
 
 > Display prices come from `client/src/features/billing/pages/PricingPage.jsx`; the actual amounts are set on the Stripe prices referenced by `STRIPE_PRICE_ID_TEAM_MONTHLY|SEASON` and `STRIPE_PRICE_ID_LEAGUE_MONTHLY|SEASON`.
 
+> **Naming collision to know:** `League.billingInterval` (`'monthly' | 'season' | null`) is Stripe **billing cadence** — unrelated to the `Season` entity introduced by the League Seasons feature (`server/src/modules/leagues/seasons.repository.js`, see [`docs/league-seasons/`](./league-seasons/)). A League's billing interval can be `'season'` while the League has any number of `Season` documents — these are orthogonal concepts that happen to share a word. Season creation/completion does not read or modify billing fields at all; it only checks the existing `canManageLeague` entitlement.
+
 ## Billing Scope
 
 Billing is **resource-scoped** — tied to a single Team or a single League, not a user account.

@@ -113,7 +113,17 @@
       "Bash(ls /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/../client/src/features/feed/components/posts/)",
       "Read(//Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src/features/feed/components/posts//**)",
       "Bash(git status *)",
-      "Bash(ENV_FILE=../env/server/.env.development node -e \"require\\('./src/modules/feed/feed.service.js'\\); require\\('./src/modules/feed/feed.controller.js'\\); require\\('./src/modules/feed/feed.routes.js'\\); console.log\\('ok'\\)\")"
+      "Bash(ENV_FILE=../env/server/.env.development node -e \"require\\('./src/modules/feed/feed.service.js'\\); require\\('./src/modules/feed/feed.controller.js'\\); require\\('./src/modules/feed/feed.routes.js'\\); console.log\\('ok'\\)\")",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-league-seasons.js --dry-run)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/backfill-league-seasons.js)",
+      "Bash(ENV_FILE=../env/server/.env.development node src/scripts/migrate-leaguestandings-season-index.js --dry-run)",
+      "Bash(xargs ls)",
+      "Bash(ENV_FILE=../env/server/.env.development PORT=4055 node src/server.js)",
+      "Bash(echo \"server pid: $!\")",
+      "Bash(curl -s -c cookies.txt -X POST __TRACKED_VAR__/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"email\":\"testuser@gmail.com\",\"password\":\"password1!2@3#\"}' -i)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -c stranger.txt -X POST __TRACKED_VAR__/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"email\":\"user1@user1.com\",\"password\":\"password\"}' -w '\\\\nLOGIN_STATUS=%{http_code}\\\\n')",
+      "Bash(kill 86046)"
     ],
     "additionalDirectories": [
       "/private/tmp"

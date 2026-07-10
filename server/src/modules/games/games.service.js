@@ -179,7 +179,7 @@ function clearAiSummaryAfterCompletedLeagueEdit(game) {
 // on delete/finish where the completed set changes.
 function scheduleLeagueRecomputeForGame(game) {
   if (game.gameContext === 'league' && game.leagueId) {
-    scheduleLeagueAggregateRecompute(game.leagueId);
+    scheduleLeagueAggregateRecompute(game.leagueId, game.seasonId);
   }
 }
 
@@ -277,6 +277,7 @@ function sanitizeGame(game, options = {}) {
     gameContext: game.gameContext || 'standalone',
     trackingMode: game.trackingMode || 'one_sided',
     leagueId: game.leagueId ? String(game.leagueId) : null,
+    seasonId: game.seasonId ? String(game.seasonId) : null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
     awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
@@ -986,6 +987,7 @@ async function createGameForUser(userId, payload) {
       gameContext: 'league',
       trackingMode: 'dual_team',
       leagueId: payload.leagueId,
+      seasonId: context.seasonId,
       homeLeagueTeamId: payload.homeLeagueTeamId,
       awayLeagueTeamId: payload.awayLeagueTeamId,
       trackedLeagueTeamId:
@@ -1035,6 +1037,7 @@ async function createGameForUser(userId, payload) {
       gameContext: 'league',
       trackingMode: 'one_sided',
       leagueId: payload.leagueId,
+      seasonId: context.seasonId,
       homeLeagueTeamId: payload.homeLeagueTeamId,
       awayLeagueTeamId: payload.awayLeagueTeamId,
       trackedLeagueTeamId: payload.trackedLeagueTeamId,
@@ -1683,6 +1686,7 @@ async function deleteGameForUser(userId, gameId) {
   // changes league standings or the team's season summary).
   const wasLeagueGame = game.gameContext === 'league';
   const leagueId = game.leagueId;
+  const seasonId = game.seasonId;
   const isStandaloneOneSided =
     game.gameContext === 'standalone' && game.trackingMode === 'one_sided';
   const teamId = game.teamId;
@@ -1690,7 +1694,7 @@ async function deleteGameForUser(userId, gameId) {
   await game.deleteOne();
 
   if (wasLeagueGame) {
-    scheduleLeagueAggregateRecompute(leagueId);
+    scheduleLeagueAggregateRecompute(leagueId, seasonId);
   }
   if (isStandaloneOneSided && teamId) {
     const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
