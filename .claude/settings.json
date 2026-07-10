@@ -111,7 +111,9 @@
       "mcp__plugin_playwright_playwright__browser_tabs",
       "Bash(curl -s -D - -o /dev/null http://localhost:4000/api/v1/health)",
       "Bash(ls /Users/simoncordova/Desktop/Simon/tsw-2026-march/server/../client/src/features/feed/components/posts/)",
-      "Read(//Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src/features/feed/components/posts//**)"
+      "Read(//Users/simoncordova/Desktop/Simon/tsw-2026-march/client/src/features/feed/components/posts//**)",
+      "Bash(git status *)",
+      "Bash(ENV_FILE=../env/server/.env.development node -e \"require\\('./src/modules/feed/feed.service.js'\\); require\\('./src/modules/feed/feed.controller.js'\\); require\\('./src/modules/feed/feed.routes.js'\\); console.log\\('ok'\\)\")"
     ],
     "additionalDirectories": [
       "/private/tmp"

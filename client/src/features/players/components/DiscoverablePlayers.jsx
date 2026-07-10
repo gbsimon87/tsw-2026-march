@@ -59,11 +59,8 @@ export function DiscoverablePlayers({ limit = 24 }) {
   const error = isError ? queryError?.message || 'Failed to load players' : '';
 
   return (
-    <section
-      aria-labelledby="discoverable-players-heading"
-      className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8"
-    >
-      <header className="gap-4 border-b border-slate-100 pb-4 md:flex md:items-end md:justify-between">
+    <div aria-labelledby="discoverable-players-heading">
+      <header className="gap-4 pb-4 md:flex md:items-end md:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
             Player discovery
@@ -142,6 +139,6 @@ export function DiscoverablePlayers({ limit = 24 }) {
           ))}
         </ul>
       )}
-    </section>
+    </div>
   );
 }
