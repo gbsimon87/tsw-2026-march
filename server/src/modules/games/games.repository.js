@@ -358,6 +358,15 @@ async function findGameByLeagueIdAndId(leagueId, gameId) {
   return Game.findOne({ _id: gameId, leagueId, gameContext: 'league' });
 }
 
+// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): lean id-only
+// lookup used when a league flips private, to find which games' auto-posts
+// need reversing — avoids loading full Game docs (events etc.) for a cleanup
+// pass that only needs ids.
+async function listLeagueGameIdsByLeagueId(leagueId) {
+  const games = await Game.find({ gameContext: 'league', leagueId }, { _id: 1 }).lean();
+  return games.map((g) => g._id);
+}
+
 async function saveGame(game) {
   return game.save();
 }
@@ -440,6 +449,7 @@ module.exports = {
   listCompletedGames,
   listPublicCompletedGames,
   listLeagueGamesByLeagueId,
+  listLeagueGameIdsByLeagueId,
   findGameByLeagueIdAndId,
   saveGame,
   claimGameSummaryGeneration,

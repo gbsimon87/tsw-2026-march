@@ -19,6 +19,11 @@ jest.mock('../../modules/teams/teams.service', () => ({
 
 jest.mock('../../modules/feed/feed.service', () => ({
   refreshGameCardPostsForGame: jest.fn(() => Promise.resolve()),
+  autoPublishForFinalizedGame: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../../config/env', () => ({
+  env: { AUTO_FEED_ENABLED: false },
 }));
 
 jest.mock('../../modules/billing/billing.service', () => ({
@@ -102,6 +107,8 @@ const {
   computeGameFinalScore,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
+const { autoPublishForFinalizedGame } = require('../../modules/feed/feed.service');
+const { env } = require('../../config/env');
 
 // The post-response schedulers (scheduleLeagueRecomputeForGame,
 // scheduleTeamSummaryRecomputeForGame, scheduleFeedCardRefreshForGame) fire
@@ -678,6 +685,79 @@ describe('games service finish summaries', () => {
     });
 
     expect(game.aiSummary).toBeNull();
+  });
+});
+
+describe('games service auto feed trigger', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+    buildGameRecap.mockReturnValue({
+      home: { name: 'Home Squad', points: 72 },
+      away: { name: 'Away Squad', points: 68 },
+      topPerformers: [],
+      keyMoments: [],
+    });
+    claimGameSummaryGeneration.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    env.AUTO_FEED_ENABLED = false;
+  });
+
+  test('does not call autoPublishForFinalizedGame when the feature flag is off', async () => {
+    env.AUTO_FEED_ENABLED = false;
+    const game = buildDualLeagueGame({
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await finishGameForUser('user-1', 'game-1');
+    await flushAsyncScheduler();
+
+    expect(autoPublishForFinalizedGame).not.toHaveBeenCalled();
+  });
+
+  test('calls autoPublishForFinalizedGame post-response when the feature flag is on', async () => {
+    env.AUTO_FEED_ENABLED = true;
+    const game = buildDualLeagueGame({
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    const result = await finishGameForUser('user-1', 'game-1');
+
+    // Fires post-response — not yet called synchronously with the finish result.
+    expect(result).toBeDefined();
+    expect(autoPublishForFinalizedGame).not.toHaveBeenCalled();
+
+    await flushAsyncScheduler();
+
+    expect(autoPublishForFinalizedGame).toHaveBeenCalledWith('game-1');
+  });
+
+  test('a failure in autoPublishForFinalizedGame does not affect the finish response', async () => {
+    env.AUTO_FEED_ENABLED = true;
+    autoPublishForFinalizedGame.mockRejectedValue(new Error('feed service down'));
+    const game = buildDualLeagueGame({
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
+    await flushAsyncScheduler();
   });
 });
 

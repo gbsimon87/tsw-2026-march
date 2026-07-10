@@ -5,6 +5,10 @@ jest.mock('../../modules/feed/feed.repository', () => ({
   deletePostById: jest.fn(),
   updatePostCardSnapshot: jest.fn(() => Promise.resolve()),
   listGameCardPostsByGameId: jest.fn(() => Promise.resolve([])),
+  findAutoGameCardPost: jest.fn(() => Promise.resolve(null)),
+  findPostByHighlightEventId: jest.fn(() => Promise.resolve(null)),
+  findSharedEventIds: jest.fn(() => Promise.resolve([])),
+  deleteAutoPostsForGameIds: jest.fn(() => Promise.resolve({ deletedCount: 0 })),
 }));
 
 jest.mock('../../modules/feed/cloudinary.client', () => ({
@@ -20,16 +24,21 @@ jest.mock('../../modules/auth/auth.repository', () => ({
   findUsersByIds: jest.fn(() => Promise.resolve([])),
 }));
 
+jest.mock('../../modules/auth/auth.service', () => ({
+  getSystemUserId: jest.fn(() => Promise.resolve('system-user-1')),
+}));
+
 jest.mock('../../modules/games/games.repository', () => ({
   findGameById: jest.fn(),
   listCompletedGames: jest.fn(),
   listLeagueGamesByLeagueId: jest.fn(() => Promise.resolve([])),
+  listLeagueGameIdsByLeagueId: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../modules/games/games.service', () => ({
   getPublicGame: jest.fn(),
   canAccessGame: jest.fn(),
-  HIGHLIGHT_STAT_TYPES: [],
+  HIGHLIGHT_STAT_TYPES: new Set(['FG2_MADE', 'FG3_MADE', 'FT_MADE', 'AST', 'STL', 'BLK']),
 }));
 
 jest.mock('../../modules/teams/teams.repository', () => ({
@@ -63,6 +72,9 @@ const {
   deletePostById,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
+  findAutoGameCardPost,
+  findSharedEventIds,
+  deleteAutoPostsForGameIds,
 } = require('../../modules/feed/feed.repository');
 const {
   uploadImageBuffer,
@@ -75,6 +87,7 @@ const {
   findGameById,
   listCompletedGames,
   listLeagueGamesByLeagueId,
+  listLeagueGameIdsByLeagueId,
 } = require('../../modules/games/games.repository');
 const { getPublicGame } = require('../../modules/games/games.service');
 const { findTeamById, listTeams } = require('../../modules/teams/teams.repository');
@@ -90,6 +103,7 @@ const {
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
 } = require('../../modules/leagues/leagues.service');
+const { getSystemUserId } = require('../../modules/auth/auth.service');
 const service = require('../../modules/feed/feed.service');
 
 describe('feed service', () => {
@@ -878,6 +892,237 @@ describe('feed service', () => {
       expect(teams).toEqual([]);
       expect(players).toEqual([]);
       expect(listPublicLeagues).toHaveBeenCalled();
+    });
+  });
+
+  describe('autoPublishForFinalizedGame', () => {
+    const publicLeagueGame = {
+      _id: 'game-1',
+      gameContext: 'league',
+      leagueId: 'league-1',
+      trackedLeagueTeamId: 'league-team-1',
+      status: 'completed',
+      videoUrl: null,
+      events: [],
+    };
+
+    test('publishes an auto game-card for a finalised public-league game', async () => {
+      findGameById.mockResolvedValue({ ...publicLeagueGame });
+      isLeaguePublic.mockResolvedValue(true);
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'game_card' });
+
+      await service.autoPublishForFinalizedGame('game-1');
+
+      expect(getSystemUserId).toHaveBeenCalled();
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          creatorUserId: 'system-user-1',
+          type: 'game_card',
+          gameCard: expect.objectContaining({ gameId: 'game-1', auto: true }),
+        })
+      );
+    });
+
+    test('does nothing for a private league game', async () => {
+      findGameById.mockResolvedValue({ ...publicLeagueGame });
+      isLeaguePublic.mockResolvedValue(false);
+
+      await service.autoPublishForFinalizedGame('game-1');
+
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('does nothing for a standalone game', async () => {
+      findGameById.mockResolvedValue({
+        ...publicLeagueGame,
+        gameContext: 'standalone',
+        leagueId: null,
+      });
+
+      await service.autoPublishForFinalizedGame('game-1');
+
+      expect(isLeaguePublic).not.toHaveBeenCalled();
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('does nothing for a game that is not completed', async () => {
+      findGameById.mockResolvedValue({ ...publicLeagueGame, status: 'in_progress' });
+
+      await service.autoPublishForFinalizedGame('game-1');
+
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('does nothing when the game cannot be found', async () => {
+      findGameById.mockResolvedValue(null);
+
+      await service.autoPublishForFinalizedGame('missing-game');
+
+      expect(createPost).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('autoCreateGameCardPost (idempotency)', () => {
+    const game = { _id: 'game-1', gameContext: 'league', trackedLeagueTeamId: 'league-team-1' };
+
+    test('does not create a second auto card if one already exists', async () => {
+      findAutoGameCardPost.mockResolvedValue({ _id: 'existing-post' });
+
+      const result = await service.autoCreateGameCardPost('system-user-1', game);
+
+      expect(createPost).not.toHaveBeenCalled();
+      expect(result).toEqual({ _id: 'existing-post' });
+    });
+
+    test('treats a concurrent duplicate-key error as a no-op, not a failure', async () => {
+      findAutoGameCardPost
+        .mockResolvedValueOnce(null) // first check: no existing auto card
+        .mockResolvedValueOnce({ _id: 'winner-post' }); // re-fetch after E11000
+      const duplicateKeyError = Object.assign(new Error('duplicate key'), { code: 11000 });
+      createPost.mockRejectedValue(duplicateKeyError);
+
+      const result = await service.autoCreateGameCardPost('system-user-1', game);
+
+      expect(result).toEqual({ _id: 'winner-post' });
+    });
+
+    test('rethrows non-duplicate-key errors', async () => {
+      findAutoGameCardPost.mockResolvedValue(null);
+      createPost.mockRejectedValue(new Error('mongo is down'));
+
+      await expect(service.autoCreateGameCardPost('system-user-1', game)).rejects.toThrow(
+        'mongo is down'
+      );
+    });
+  });
+
+  describe('autoCreateHighlightClipPosts', () => {
+    function makeEvent(overrides) {
+      return {
+        _id: 'event-1',
+        statType: 'FG3_MADE',
+        videoTimestamp: 42,
+        playerId: null,
+        ...overrides,
+      };
+    }
+
+    test('returns zero counts when the game has no linked video', async () => {
+      const game = { _id: 'game-1', videoUrl: null, events: [makeEvent({})] };
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', game);
+
+      expect(result).toEqual({ created: 0, skipped: 0, capped: false });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('creates a highlight_clip for each eligible, unshared event', async () => {
+      const game = {
+        _id: 'game-1',
+        videoUrl: 'https://youtube.com/watch?v=abc123',
+        title: 'Big Game',
+        events: [
+          makeEvent({ _id: 'e1', statType: 'FG3_MADE', videoTimestamp: 10 }),
+          makeEvent({ _id: 'e2', statType: 'AST', videoTimestamp: 20 }),
+          makeEvent({ _id: 'e3', statType: 'TOV', videoTimestamp: 30 }), // ineligible statType
+          makeEvent({ _id: 'e4', statType: 'FG2_MADE', videoTimestamp: null }), // no timestamp
+        ],
+      };
+      findSharedEventIds.mockResolvedValue([]);
+      createPost.mockResolvedValue({ _id: 'clip-post' });
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', game);
+
+      expect(result.created).toBe(2);
+      expect(result.skipped).toBe(0);
+      expect(result.capped).toBe(false);
+      expect(createPost).toHaveBeenCalledTimes(2);
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          creatorUserId: 'system-user-1',
+          type: 'highlight_clip',
+          highlightClip: expect.objectContaining({ gameId: 'game-1', eventId: 'e1' }),
+        })
+      );
+    });
+
+    test('skips events already shared (manually or by a prior auto run)', async () => {
+      const game = {
+        _id: 'game-1',
+        videoUrl: 'https://youtube.com/watch?v=abc123',
+        events: [
+          makeEvent({ _id: 'e1', statType: 'FG3_MADE', videoTimestamp: 10 }),
+          makeEvent({ _id: 'e2', statType: 'AST', videoTimestamp: 20 }),
+        ],
+      };
+      findSharedEventIds.mockResolvedValue(['e1']);
+      createPost.mockResolvedValue({ _id: 'clip-post' });
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', game);
+
+      expect(result.created).toBe(1);
+      expect(createPost).toHaveBeenCalledTimes(1);
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          highlightClip: expect.objectContaining({ eventId: 'e2' }),
+        })
+      );
+    });
+
+    test('caps highlight generation per game and reports the cap', async () => {
+      const events = Array.from({ length: 8 }, (_, i) =>
+        makeEvent({ _id: `e${i}`, statType: 'FG3_MADE', videoTimestamp: i })
+      );
+      const game = { _id: 'game-1', videoUrl: 'https://youtube.com/watch?v=abc123', events };
+      findSharedEventIds.mockResolvedValue([]);
+      createPost.mockResolvedValue({ _id: 'clip-post' });
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', game);
+
+      expect(result.created).toBe(5);
+      expect(result.capped).toBe(true);
+      expect(createPost).toHaveBeenCalledTimes(5);
+    });
+
+    test('treats a concurrent duplicate-key error per event as a skip, not a failure', async () => {
+      const game = {
+        _id: 'game-1',
+        videoUrl: 'https://youtube.com/watch?v=abc123',
+        events: [
+          makeEvent({ _id: 'e1', statType: 'FG3_MADE', videoTimestamp: 10 }),
+          makeEvent({ _id: 'e2', statType: 'AST', videoTimestamp: 20 }),
+        ],
+      };
+      findSharedEventIds.mockResolvedValue([]);
+      const duplicateKeyError = Object.assign(new Error('duplicate key'), { code: 11000 });
+      createPost.mockRejectedValueOnce(duplicateKeyError).mockResolvedValueOnce({ _id: 'clip-2' });
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', game);
+
+      expect(result.created).toBe(1);
+      expect(result.skipped).toBe(1);
+    });
+  });
+
+  describe('reverseAutoPostsForLeague (B2 — league goes private)', () => {
+    test('deletes auto posts for every game in the league', async () => {
+      listLeagueGameIdsByLeagueId.mockResolvedValue(['game-1', 'game-2']);
+      deleteAutoPostsForGameIds.mockResolvedValue({ deletedCount: 3 });
+
+      const result = await service.reverseAutoPostsForLeague('league-1');
+
+      expect(getSystemUserId).toHaveBeenCalled();
+      expect(deleteAutoPostsForGameIds).toHaveBeenCalledWith(['game-1', 'game-2'], 'system-user-1');
+      expect(result).toEqual({ deletedCount: 3 });
+    });
+
+    test('is a no-op when the league has no games', async () => {
+      listLeagueGameIdsByLeagueId.mockResolvedValue([]);
+
+      const result = await service.reverseAutoPostsForLeague('league-1');
+
+      expect(deleteAutoPostsForGameIds).not.toHaveBeenCalled();
+      expect(result).toEqual({ deletedCount: 0 });
     });
   });
 });

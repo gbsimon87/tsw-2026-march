@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema(
     googleId: { type: String, index: true },
     emailVerified: { type: Boolean, default: false },
     emailVerifiedAt: { type: Date },
-    authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
+    authProvider: { type: String, enum: ['local', 'google', 'system'], default: 'local' },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     leaguePlan: { type: String, enum: ['free', 'pro'], default: 'free' },
     leagueSubscriptionStatus: {
@@ -121,6 +121,28 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
   });
 }
 
+const SYSTEM_USER_EMAIL = 'system@tsw.internal';
+const SYSTEM_USER_NAME = 'TSW';
+
+// Reserved account that authors auto-generated feed content (see
+// docs/auto-feed-generation/000-TRACKER.md). Has no passwordHash and
+// authProvider:'system', so auth.service#login rejects it even without the
+// explicit guard there.
+async function findOrCreateSystemUser() {
+  let user = await User.findOne({ authProvider: 'system' });
+  if (user) {
+    return user;
+  }
+
+  return User.create({
+    email: SYSTEM_USER_EMAIL,
+    name: SYSTEM_USER_NAME,
+    authProvider: 'system',
+    emailVerified: false,
+    roles: ['system'],
+  });
+}
+
 async function upsertSession(input) {
   return Session.findOneAndUpdate(
     { sessionId: input.sessionId },
@@ -207,6 +229,7 @@ module.exports = {
   findUserById,
   findUsersByIds,
   findOrCreateGoogleUser,
+  findOrCreateSystemUser,
   upsertSession,
   findSessionById,
   deleteSessionById,

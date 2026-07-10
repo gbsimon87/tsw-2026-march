@@ -10,7 +10,9 @@
 > [`billing.md`](./billing.md), [`security.md`](./security.md),
 > [`posthog-implementation.md`](./posthog-implementation.md),
 > [`demo-data-generation/`](./demo-data-generation/) (demo account seed
-> plan, decisions, live tracker). Active work
+> plan, decisions, live tracker),
+> [`auto-feed-generation/`](./auto-feed-generation/) (Auto Feed Generation
+> plan + live tracker, in progress). Active work
 > tracker: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
 > (performance/hardening, OPT-###). The separate `project-improvement-plan/`
 > initiative (targeted bug fixes TSW-001–005) finished 2026-07-08 and was
@@ -155,6 +157,12 @@ Features wrap it in singleton `*Api` objects (e.g. `authApi`, `billingApi`).
 - Client session state lives in [`AuthContext.jsx`](../client/src/app/store/AuthContext.jsx)
   as a TanStack Query (`['auth','me']`). On every auth transition it calls
   `purgePrivateCache()` to evict the prior user's permission-scoped cache.
+- **`authProvider: 'system'`** (added for Auto Feed Generation) is a third
+  provider value alongside `local`/`google`, reserved for a single account
+  (`getSystemUserId()` in `auth.service.js`, created via
+  `server/src/scripts/ensure-system-user.js`) that authors auto-generated feed
+  content. It has no `passwordHash` and `login()` explicitly rejects
+  `authProvider === 'system'` — never reachable via any login path.
 
 ### Authorization (resource + league-role based, enforced in services)
 
@@ -627,23 +635,41 @@ curated by league owners/team managers in a future release. Separately,
 tables now link each row's team name to its team page (when `teamSlug` is
 present), matching the existing Player-column link pattern.
 
+**Auto Feed Generation (in progress, `feature/auto-feed-generation`)**: when a
+game in a **public, active league** is finalised, the backend now
+auto-publishes a `game_card` recap post and eligible `highlight_clip` posts
+to The Pulse — gated behind an `AUTO_FEED_ENABLED` env flag (default off, not
+yet enabled in any environment). Standalone games and private-league games are
+never auto-published; the single enforcement point is
+`feed.service.js#autoPublishForFinalizedGame`'s `isLeaguePublic()` check, the
+same helper manual share endpoints already use. Auto posts are authored by a
+new reserved system `User` (`authProvider: 'system'`, unauthenticatable — see
+§4). If a league later flips from public to private, `updateLeagueForUser`
+best-effort-reverses (deletes) that league's auto-generated posts via
+`reverseAutoPostsForLeague`, leaving any user's manually-shared posts alone.
+No new background infrastructure was introduced — the trigger reuses the
+existing post-response `setImmediate` pattern from `finishGameForUser`. Full
+design, phased plan, and live task tracker:
+[`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md).
+
 ---
 
 ## 12. Where to start (by question)
 
-| I need to understand…                   | Start here                                                                                         |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                  |
-| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                             |
-| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                              |
-| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                |
-| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                               |
-| API surface                             | [`api.md`](./api.md)                                                                               |
-| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                             |
-| Authorization rules                     | [`permissions.md`](./permissions.md)                                                               |
-| Billing                                 | [`billing.md`](./billing.md)                                                                       |
-| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md) |
-| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md) |
-| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                    |
-| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                             |
-| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)             |
+| I need to understand…                   | Start here                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
+| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                             |
+| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                              |
+| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
+| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
+| API surface                             | [`api.md`](./api.md)                                                                                               |
+| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                             |
+| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                               |
+| Billing                                 | [`billing.md`](./billing.md)                                                                                       |
+| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
+| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
+| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                                    |
+| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                             |
+| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)                             |
+| Auto Feed Generation (in progress)      | §11 above ("Auto Feed Generation"), [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md) |

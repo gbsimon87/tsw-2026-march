@@ -765,11 +765,29 @@ async function updateLeagueForUser(userId, leagueId, payload) {
     league.seasonLabel = payload.seasonLabel?.trim() || null;
   }
 
+  const wasPublic = Boolean(league.isPublic);
   if (Object.prototype.hasOwnProperty.call(payload, 'isPublic')) {
     league.isPublic = Boolean(payload.isPublic);
   }
 
   await saveLeague(league);
+
+  // Auto Feed Generation (B2, docs/auto-feed-generation/000-TRACKER.md): a
+  // league flipping public -> private should reverse any auto-generated feed
+  // content, since it was only ever published because the league was public.
+  // Best-effort — a feed-side failure must not block the league update
+  // itself. Lazy require to avoid a cycle (feed.service.js requires
+  // leagues.service.js for isLeaguePublic).
+  if (wasPublic && !league.isPublic) {
+    const { reverseAutoPostsForLeague } = require('../feed/feed.service');
+    reverseAutoPostsForLeague(league._id).catch((error) => {
+      logger.error(
+        { err: error, leagueId: String(league._id) },
+        'Failed to reverse auto feed posts after league went private'
+      );
+    });
+  }
+
   return sanitizeLeague(league);
 }
 

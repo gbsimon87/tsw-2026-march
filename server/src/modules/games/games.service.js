@@ -4,6 +4,7 @@ const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
 const { buildCursorPage } = require('../../utils/pagination');
 const { logger } = require('../../config/logger');
+const { env } = require('../../config/env');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
   createGame,
@@ -214,6 +215,27 @@ function scheduleFeedCardRefreshForGame(gameId) {
       logger.error(
         { err: error, gameId: String(gameId) },
         'Post-response feed card refresh failed'
+      );
+    });
+  });
+}
+
+// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): after a
+// game finishes, offer it to the feed's auto-publish gate. Post-response,
+// non-blocking, errors logged not thrown — same shape as the other
+// finish-time schedulers above. The public-league restriction and all
+// publish/idempotency logic live in feed.service.js#autoPublishForFinalizedGame;
+// this scheduler only decides *when* to call it. Lazy require to avoid a
+// cycle — feed.service.js requires games.service.js for getPublicGame/
+// canAccessGame/HIGHLIGHT_STAT_TYPES.
+function scheduleAutoFeedForGame(gameId) {
+  if (!env.AUTO_FEED_ENABLED || !gameId) return;
+  setImmediate(() => {
+    const { autoPublishForFinalizedGame } = require('../feed/feed.service');
+    autoPublishForFinalizedGame(gameId).catch((error) => {
+      logger.error(
+        { err: error, gameId: String(gameId) },
+        'Post-response auto feed publish failed'
       );
     });
   });
@@ -1746,6 +1768,7 @@ async function finishGameForUser(userId, gameId) {
   scheduleLeagueRecomputeForGame(game);
   scheduleTeamSummaryRecomputeForGame(game);
   scheduleFeedCardRefreshForGame(game._id);
+  scheduleAutoFeedForGame(game._id);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
     // OPT-020: generate the summary off the request path (see

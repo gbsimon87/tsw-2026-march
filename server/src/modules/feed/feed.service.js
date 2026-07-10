@@ -5,7 +5,10 @@ const {
   listPosts,
   findPostById,
   deletePostById,
+  deleteAutoPostsForGameIds,
+  findAutoGameCardPost,
   findPostByHighlightEventId,
+  findSharedEventIds,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
 } = require('./feed.repository');
@@ -26,10 +29,12 @@ const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { findUserById, findUsersByIds } = require('../auth/auth.repository');
+const { getSystemUserId } = require('../auth/auth.service');
 const {
   findGameById,
   listCompletedGames,
   listLeagueGamesByLeagueId,
+  listLeagueGameIdsByLeagueId,
 } = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const {
@@ -1032,6 +1037,176 @@ async function createHighlightClipPostForUser(userId, input) {
   return sanitizePost(post, userId);
 }
 
+// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): creates the
+// system-authored game-card for a finalised public-league game. Mirrors
+// createGameCardPostForUser but skips the billing gate (the system user is
+// not a paying customer) and marks gameCard.auto so the partial unique index
+// on {gameCard.gameId, gameCard.auto:true} guarantees at most one per game.
+async function autoCreateGameCardPost(systemUserId, game) {
+  const existing = await findAutoGameCardPost(game._id);
+  if (existing) return existing;
+
+  const trackedLeagueTeamId =
+    game.gameContext === 'league'
+      ? game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId || null
+      : null;
+
+  try {
+    return await createPost({
+      creatorUserId: systemUserId,
+      type: 'game_card',
+      caption: null,
+      gameCard: {
+        gameId: game._id,
+        teamId: game.teamId || null,
+        leagueTeamId: trackedLeagueTeamId,
+        auto: true,
+      },
+    });
+  } catch (error) {
+    // E11000 from a concurrent finalise/retry racing this same game — another
+    // call already created the auto card, so treat it as a no-op, not a failure.
+    if (error?.code === 11000) {
+      return findAutoGameCardPost(game._id);
+    }
+    throw error;
+  }
+}
+
+// Per-game cap on auto-generated highlight clips so one video-rich game can't
+// flood the feed. Priority favors made shots (most exciting) over misses/
+// assists/steals. See docs/auto-feed-generation/000-TRACKER.md (B3).
+const AUTO_HIGHLIGHT_CAP = 5;
+const AUTO_HIGHLIGHT_PRIORITY = [
+  'FG3_MADE',
+  'FG2_MADE',
+  'AST',
+  'STL',
+  'BLK',
+  'FT_MADE',
+  'FG3_MISS',
+  'FG2_MISS',
+  'FT_MISS',
+];
+
+function rankAutoHighlightEvents(events) {
+  return [...events].sort((a, b) => {
+    const rankA = AUTO_HIGHLIGHT_PRIORITY.indexOf(a.statType);
+    const rankB = AUTO_HIGHLIGHT_PRIORITY.indexOf(b.statType);
+    return rankA - rankB;
+  });
+}
+
+// Auto Feed Generation: system-authored highlight_clip posts for a finalised
+// game's video-eligible events. No-op if the game has no linked video. Reuses
+// the same eligibility rule as manual highlight sharing (HIGHLIGHT_STAT_TYPES +
+// numeric videoTimestamp) and the existing findSharedEventIds dedup so events
+// already shared manually are never duplicated. Caps per game and logs when
+// capped rather than silently truncating.
+async function autoCreateHighlightClipPosts(systemUserId, game) {
+  if (!game.videoUrl) return { created: 0, skipped: 0, capped: false };
+
+  const eligibleEvents = (game.events || []).filter(
+    (ev) => HIGHLIGHT_STAT_TYPES.has(ev.statType) && typeof ev.videoTimestamp === 'number'
+  );
+  if (eligibleEvents.length === 0) return { created: 0, skipped: 0, capped: false };
+
+  const eventIds = eligibleEvents.map((ev) => String(ev._id));
+  const alreadySharedIds = new Set(await findSharedEventIds(eventIds));
+  const unsharedEvents = eligibleEvents.filter((ev) => !alreadySharedIds.has(String(ev._id)));
+
+  const ranked = rankAutoHighlightEvents(unsharedEvents);
+  const capped = ranked.length > AUTO_HIGHLIGHT_CAP;
+  const toCreate = ranked.slice(0, AUTO_HIGHLIGHT_CAP);
+
+  if (capped) {
+    logger.info(
+      { gameId: String(game._id), eligible: ranked.length, cap: AUTO_HIGHLIGHT_CAP },
+      'Auto feed: highlight clip generation capped for this game'
+    );
+  }
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const event of toCreate) {
+    const snapshotPlayer = event.playerId ? findSnapshotPlayer(game, event.playerId) : null;
+    try {
+      await createPost({
+        creatorUserId: systemUserId,
+        type: 'highlight_clip',
+        caption: null,
+        highlightClip: {
+          gameId: game._id,
+          eventId: String(event._id),
+          videoUrl: game.videoUrl,
+          videoTimestamp: event.videoTimestamp,
+          statType: event.statType,
+          playerId: event.playerId ? String(event.playerId) : null,
+          playerName: snapshotPlayer?.displayName ?? null,
+          gameTitle: game.title ?? null,
+        },
+      });
+      created += 1;
+    } catch (error) {
+      // E11000 on the unique highlightClip.eventId index — already shared
+      // (manually or by a concurrent auto-publish run). Not a failure.
+      if (error?.code === 11000) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return { created, skipped, capped };
+}
+
+// Auto Feed Generation entry point (docs/auto-feed-generation/000-TRACKER.md):
+// invoked post-response from games.service.js#scheduleAutoFeedForGame after a
+// game finishes. This is the SINGLE enforcement point for the public-league
+// restriction — private leagues and standalone games are never published,
+// using the same isLeaguePublic gate the manual share paths already use.
+async function autoPublishForFinalizedGame(gameId) {
+  const game = await findGameById(gameId);
+  if (!game || game.status !== 'completed') return;
+
+  if (game.gameContext !== 'league' || !(await isLeaguePublic(game.leagueId))) {
+    return;
+  }
+
+  const systemUserId = await getSystemUserId();
+  const gameCardPost = await autoCreateGameCardPost(systemUserId, game);
+  const highlightResult = await autoCreateHighlightClipPosts(systemUserId, game);
+
+  logger.info(
+    {
+      gameId: String(gameId),
+      leagueId: String(game.leagueId),
+      gameCardPostId: gameCardPost ? String(gameCardPost._id) : null,
+      highlightClipsCreated: highlightResult.created,
+      highlightClipsSkipped: highlightResult.skipped,
+      highlightClipsCapped: highlightResult.capped,
+    },
+    'Auto feed: publish complete for finalised public-league game'
+  );
+}
+
+// Auto Feed Generation (B2, docs/auto-feed-generation/000-TRACKER.md): reverse
+// (delete) auto-generated posts for a league that just flipped from public to
+// private. Only removes system-authored auto content — a user's own manual
+// game_card/highlight_clip shares for that league's games are left alone.
+// Called from leagues.service.js#updateLeagueForUser; a feed failure here
+// should not block the league update itself, so callers should treat this as
+// best-effort (see the try/catch at the call site).
+async function reverseAutoPostsForLeague(leagueId) {
+  const gameIds = await listLeagueGameIdsByLeagueId(leagueId);
+  if (gameIds.length === 0) return { deletedCount: 0 };
+
+  const systemUserId = await getSystemUserId();
+  return deleteAutoPostsForGameIds(gameIds, systemUserId);
+}
+
 module.exports = {
   listFeedPosts,
   createImagePostForUser,
@@ -1051,4 +1226,9 @@ module.exports = {
   buildGameCardSnapshot,
   buildPlayerCardSnapshot,
   buildTeamCardSnapshot,
+  // Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md).
+  autoPublishForFinalizedGame,
+  autoCreateGameCardPost,
+  autoCreateHighlightClipPosts,
+  reverseAutoPostsForLeague,
 };

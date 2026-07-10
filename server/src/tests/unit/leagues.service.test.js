@@ -60,6 +60,10 @@ jest.mock('../../modules/feed/cloudinary.client', () => ({
   isCloudinaryConfigured: jest.fn(() => true),
 }));
 
+jest.mock('../../modules/feed/feed.service', () => ({
+  reverseAutoPostsForLeague: jest.fn(() => Promise.resolve({ deletedCount: 0 })),
+}));
+
 const {
   findLeagueById,
   findLeagueBySlug,
@@ -76,7 +80,9 @@ const {
   listLeaguesByManager,
   findLeagueTeamById,
   findLeaguePlayerById,
+  saveLeague,
 } = require('../../modules/leagues/leagues.repository');
+const { reverseAutoPostsForLeague } = require('../../modules/feed/feed.service');
 const { listLeagueGamesByLeagueId } = require('../../modules/games/games.repository');
 const { listSeasonsByLeague } = require('../../modules/leagues/seasons.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../../modules/shared/stats.constants');
@@ -94,6 +100,7 @@ const {
   isLeaguePublic,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
+  updateLeagueForUser,
 } = require('../../modules/leagues/leagues.service');
 
 function buildLeagueTeam(id, name) {
@@ -750,5 +757,70 @@ describe('TSW-005 — league feed-sharing support', () => {
     expect(result.team.name).toBe('Alpha');
     expect(result.summary.gamesCount).toBe(1);
     expect(result.summary.pointsPerGame).toBe(3);
+  });
+});
+
+describe('auto feed reversal on league going private (B2)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    saveLeague.mockImplementation((league) => Promise.resolve(league));
+  });
+
+  function buildOwnedLeague(overrides = {}) {
+    return {
+      _id: 'league-1',
+      ownerUserId: 'user-1',
+      status: 'active',
+      isPublic: true,
+      ...overrides,
+    };
+  }
+
+  test('reverses auto posts when a public league is switched to private', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague());
+
+    await updateLeagueForUser('user-1', 'league-1', { isPublic: false });
+
+    // Fire-and-forget post-response call; awaiting flushes the microtask.
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).toHaveBeenCalledWith('league-1');
+  });
+
+  test('does not reverse anything when a private league stays private', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague({ isPublic: false }));
+
+    await updateLeagueForUser('user-1', 'league-1', { isPublic: false });
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).not.toHaveBeenCalled();
+  });
+
+  test('does not reverse anything when a public league stays public', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague({ isPublic: true }));
+
+    await updateLeagueForUser('user-1', 'league-1', { isPublic: true });
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).not.toHaveBeenCalled();
+  });
+
+  test('does not reverse anything when isPublic is not part of the update', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague({ isPublic: true }));
+
+    await updateLeagueForUser('user-1', 'league-1', { name: 'New Name' });
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).not.toHaveBeenCalled();
+  });
+
+  test('a reversal failure does not affect the league update response', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague());
+    reverseAutoPostsForLeague.mockRejectedValue(new Error('feed service down'));
+
+    await expect(
+      updateLeagueForUser('user-1', 'league-1', { isPublic: false })
+    ).resolves.toMatchObject({ isPublic: false });
+    await Promise.resolve();
   });
 });

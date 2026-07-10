@@ -62,6 +62,13 @@ const envSchema = z.object({
     .positive()
     .default(100 * 1024 * 1024),
   FEED_VIDEO_MAX_DURATION_SECONDS: z.coerce.number().int().positive().default(60),
+  // Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): gates
+  // auto-publishing game-card/highlight-clip posts for finalised public-league
+  // games. Defaults off so the feature ships dark until explicitly enabled.
+  AUTO_FEED_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 const parsed = envSchema.safeParse(process.env);
