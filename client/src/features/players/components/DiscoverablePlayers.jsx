@@ -106,37 +106,43 @@ export function DiscoverablePlayers({ limit = 24 }) {
         </p>
       ) : (
         <ul className="mt-4 grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-3">
-          {players.map((player) => (
-            <li key={`${player.source}-${player.id}`}>
-              <Link
-                to={player.profileHref}
-                className="group flex h-full gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#F4A300]/60 hover:bg-white"
-              >
-                <PlayerInitials name={player.displayName} />
-                <span className="min-w-0">
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold text-slate-900 group-hover:text-[#1B4332]">
-                      {player.displayName}
-                    </span>
-                    {player.jerseyNumber ? (
-                      <span
-                        className="text-xs font-semibold text-[#F4A300]"
-                        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                      >
-                        #{player.jerseyNumber}
+          {players.map((player) => {
+            const targetHref = player.claimedByUserId
+              ? `/players/${player.claimedByUserId}`
+              : player.profileHref;
+
+            return (
+              <li key={`${player.source}-${player.id}`}>
+                <Link
+                  to={targetHref}
+                  className="group flex h-full gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#F4A300]/60 hover:bg-white"
+                >
+                  <PlayerInitials name={player.displayName} />
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-semibold text-slate-900 group-hover:text-[#1B4332]">
+                        {player.displayName}
                       </span>
-                    ) : null}
+                      {player.jerseyNumber ? (
+                        <span
+                          className="text-xs font-semibold text-[#F4A300]"
+                          style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                        >
+                          #{player.jerseyNumber}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-1 block truncate text-sm text-slate-600">
+                      {player.team?.name || 'Unknown team'}
+                    </span>
+                    <span className="mt-1 inline-flex rounded-full text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      {player.league?.name || player.sourceLabel}
+                    </span>
                   </span>
-                  <span className="mt-1 block truncate text-sm text-slate-600">
-                    {player.team?.name || 'Unknown team'}
-                  </span>
-                  <span className="mt-1 inline-flex rounded-full text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    {player.league?.name || player.sourceLabel}
-                  </span>
-                </span>
-              </Link>
-            </li>
-          ))}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
