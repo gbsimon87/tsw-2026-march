@@ -1,8 +1,10 @@
-# Proposed PROJECT-KNOWLEDGE.md Updates (apply AFTER ship)
+# Proposed PROJECT-KNOWLEDGE.md Updates
 
-> **Do NOT edit `docs/PROJECT-KNOWLEDGE.md` until the Follow System has fully
-> shipped** (merged to `main`). This note stages the exact edits to fold in at
-> Phase 4, mirroring how "Public Unified Player Profiles v1" was documented.
+> **APPLIED 2026-07-11** — the §1, §3, §5, §11, and §12 edits below were folded
+> into `docs/PROJECT-KNOWLEDGE.md` once the feature was code-complete and
+> verified end-to-end on `feature/follow-system`. This file is kept as a record
+> of what changed. The "Also consider" items (`api.md`, `permissions.md`,
+> `app-overview.md`) remain optional follow-ups.
 
 ## §1 — What the app is
 
