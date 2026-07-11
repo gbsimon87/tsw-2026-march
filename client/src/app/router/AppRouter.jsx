@@ -61,6 +61,11 @@ const OpponentPlaceholderPage = lazy(() =>
     default: m.OpponentPlaceholderPage,
   }))
 );
+const PublicUserProfilePage = lazy(() =>
+  import('../../features/players/pages/PublicUserProfilePage').then((m) => ({
+    default: m.PublicUserProfilePage,
+  }))
+);
 const NewGamePage = lazy(() =>
   import('../../features/games/pages/NewGamePage').then((m) => ({ default: m.NewGamePage }))
 );
@@ -225,6 +230,7 @@ export function AppRouter() {
           />
           <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
           <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
+          <Route path="/players/:userId" element={<PublicUserProfilePage />} />
           <Route path="/teams/:teamId" element={<PublicTeamPage />} />
           <Route path="/leagues" element={<Navigate to="/admin" replace />} />
           <Route path="/leagues/new" element={<Navigate to="/pricing" replace />} />
