@@ -106,17 +106,10 @@ export function DiscoverablePlayers({ limit = 24 }) {
         </p>
       ) : (
         <ul className="mt-4 grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-3">
-          {players.map((player) => {
-            const targetHref = player.claimedByUserId
-              ? `/players/${player.claimedByUserId}`
-              : player.profileHref;
-
-            return (
-              <li key={`${player.source}-${player.id}`}>
-                <Link
-                  to={targetHref}
-                  className="group flex h-full gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#F4A300]/60 hover:bg-white"
-                >
+          {players.map((player) => (
+            <li key={`${player.source}-${player.id}`}>
+              <div className="group flex h-full flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#F4A300]/60 hover:bg-white">
+                <Link to={player.profileHref} className="flex gap-3">
                   <PlayerInitials name={player.displayName} />
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -140,9 +133,17 @@ export function DiscoverablePlayers({ limit = 24 }) {
                     </span>
                   </span>
                 </Link>
-              </li>
-            );
-          })}
+                {player.claimedByUserId ? (
+                  <Link
+                    to={`/players/${player.claimedByUserId}`}
+                    className="text-xs font-semibold text-slate-500 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
+                  >
+                    View full profile →
+                  </Link>
+                ) : null}
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </div>

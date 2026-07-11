@@ -1,5 +1,5 @@
-import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { DiscoverablePlayers } from './DiscoverablePlayers';
@@ -23,7 +23,11 @@ describe('DiscoverablePlayers link routing', () => {
     vi.clearAllMocks();
   });
 
-  test('routes a claimed result to the unified public profile', async () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  test('a claimed result still links its main card to its own per-context profileHref', async () => {
     feedApi.listDiscoverablePlayers.mockResolvedValue({
       players: [
         {
@@ -42,10 +46,32 @@ describe('DiscoverablePlayers link routing', () => {
     renderWithProviders(<DiscoverablePlayers />);
 
     const link = await waitFor(() => screen.getByText('Jamie Rivera').closest('a'));
-    expect(link).toHaveAttribute('href', '/players/user-1');
+    expect(link).toHaveAttribute('href', '/league/city-league/teams/hawks/players/lp-1');
   });
 
-  test('routes an unclaimed result to its per-context profileHref', async () => {
+  test('a claimed result also shows a secondary link to the unified public profile', async () => {
+    feedApi.listDiscoverablePlayers.mockResolvedValue({
+      players: [
+        {
+          source: 'league',
+          id: 'lp-1',
+          displayName: 'Jamie Rivera',
+          jerseyNumber: 7,
+          claimedByUserId: 'user-1',
+          profileHref: '/league/city-league/teams/hawks/players/lp-1',
+          team: { name: 'Hawks' },
+          league: { name: 'City League' },
+        },
+      ],
+    });
+
+    renderWithProviders(<DiscoverablePlayers />);
+
+    const unifiedLink = await waitFor(() => screen.getByText(/view full profile/i));
+    expect(unifiedLink.closest('a')).toHaveAttribute('href', '/players/user-1');
+  });
+
+  test('an unclaimed result links to its per-context profileHref and shows no unified link', async () => {
     feedApi.listDiscoverablePlayers.mockResolvedValue({
       players: [
         {
@@ -65,5 +91,6 @@ describe('DiscoverablePlayers link routing', () => {
 
     const link = await waitFor(() => screen.getByText('Alex Chen').closest('a'));
     expect(link).toHaveAttribute('href', '/teams/team-1/players/p-1');
+    expect(screen.queryByText(/view full profile/i)).not.toBeInTheDocument();
   });
 });
