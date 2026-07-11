@@ -17,6 +17,8 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeaguePlayerById: jest.fn(),
   findLeaguePlayerByIdAndTeam: jest.fn(),
   listLeaguePlayers: jest.fn(),
+  listLeaguePlayersByClaimedUser: jest.fn(),
+  listLeagueTeamsByIds: jest.fn(),
   saveLeaguePlayer: jest.fn(),
   createLeagueTeamMember: jest.fn(),
   findActiveLeagueTeamMember: jest.fn(),
@@ -80,6 +82,8 @@ const {
   listLeaguesByManager,
   findLeagueTeamById,
   findLeaguePlayerById,
+  listLeaguePlayersByClaimedUser,
+  listLeagueTeamsByIds,
   saveLeague,
 } = require('../../modules/leagues/leagues.repository');
 const { reverseAutoPostsForLeague } = require('../../modules/feed/feed.service');
@@ -101,6 +105,7 @@ const {
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
   updateLeagueForUser,
+  getMyLeagueProfiles,
 } = require('../../modules/leagues/leagues.service');
 
 function buildLeagueTeam(id, name) {
@@ -588,6 +593,78 @@ describe('league player stats materialisation (OPT-011)', () => {
       position: 'PG',
       teamName: 'Alpha',
       teamSlug: 'alpha',
+    });
+  });
+});
+
+describe('unified profile assembly (public player profiles)', () => {
+  test('getMyLeagueProfiles includes a stats summary per profile', async () => {
+    listLeaguePlayersByClaimedUser.mockResolvedValue([
+      {
+        _id: 'lp-1',
+        leagueId: 'league-1',
+        leagueTeamId: 'team-1',
+        displayName: 'Jamie Rivera',
+        jerseyNumber: 7,
+        position: 'PG',
+      },
+    ]);
+    listLeaguesByIds.mockResolvedValue([
+      { _id: 'league-1', slug: 'city-league', name: 'City League', currentSeasonId: 'season-1' },
+    ]);
+    listLeagueTeamsByIds.mockResolvedValue([{ _id: 'team-1', slug: 'hawks', name: 'Hawks' }]);
+    listLeagueMembershipsForUser.mockResolvedValue([{ leagueTeamId: 'team-1', role: 'player' }]);
+    listLeaguePlayerStats.mockResolvedValue([
+      {
+        leagueTeamId: 'team-1',
+        leaguePlayerId: 'lp-1',
+        gamesCount: 4,
+        points: 40,
+        reb: 20,
+        ast: 8,
+        stl: 4,
+        blk: 0,
+        tov: 4,
+        foul: 8,
+      },
+    ]);
+
+    const result = await getMyLeagueProfiles('user-1');
+
+    expect(result.profiles).toHaveLength(1);
+    expect(result.profiles[0].summary).toEqual({
+      gamesCount: 4,
+      pointsPerGame: 10,
+      reboundsPerGame: 5,
+      assistsPerGame: 2,
+    });
+  });
+
+  test('summary is zeroed when the player has no materialised games', async () => {
+    listLeaguePlayersByClaimedUser.mockResolvedValue([
+      {
+        _id: 'lp-2',
+        leagueId: 'league-1',
+        leagueTeamId: 'team-1',
+        displayName: 'No Games Yet',
+        jerseyNumber: null,
+        position: null,
+      },
+    ]);
+    listLeaguesByIds.mockResolvedValue([
+      { _id: 'league-1', slug: 'city-league', name: 'City League', currentSeasonId: 'season-1' },
+    ]);
+    listLeagueTeamsByIds.mockResolvedValue([{ _id: 'team-1', slug: 'hawks', name: 'Hawks' }]);
+    listLeagueMembershipsForUser.mockResolvedValue([]);
+    listLeaguePlayerStats.mockResolvedValue([]);
+
+    const result = await getMyLeagueProfiles('user-1');
+
+    expect(result.profiles[0].summary).toEqual({
+      gamesCount: 0,
+      pointsPerGame: 0,
+      reboundsPerGame: 0,
+      assistsPerGame: 0,
     });
   });
 });

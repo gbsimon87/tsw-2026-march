@@ -1114,10 +1114,10 @@ function buildLeaguePlayerSummary(gameRows) {
   };
 }
 
-async function getMyLeagueProfiles(userId) {
+async function assembleLeagueProfilesForUser(userId) {
   const players = await listLeaguePlayersByClaimedUser(userId);
   if (players.length === 0) {
-    return { profiles: [] };
+    return [];
   }
 
   const leagueIds = [...new Set(players.map((p) => String(p.leagueId)))];
@@ -1139,7 +1139,20 @@ async function getMyLeagueProfiles(userId) {
     helper: 'Helper',
   };
 
-  const profiles = players.map((player) => {
+  const statsByLeagueId = new Map();
+  await Promise.all(
+    leagueIds.map(async (leagueId) => {
+      const league = leaguesById.get(leagueId);
+      if (!league?.currentSeasonId) {
+        statsByLeagueId.set(leagueId, []);
+        return;
+      }
+      const rows = await getLeaguePlayerStats(league._id, league.currentSeasonId);
+      statsByLeagueId.set(leagueId, rows);
+    })
+  );
+
+  return players.map((player) => {
     const team = teamsById.get(String(player.leagueTeamId));
     const league = leaguesById.get(String(player.leagueId));
     const playerLabel =
@@ -1147,6 +1160,23 @@ async function getMyLeagueProfiles(userId) {
         ? `#${player.jerseyNumber} ${player.displayName}`
         : player.displayName;
     const memberRole = memberRoleByTeamId.get(String(player.leagueTeamId)) ?? null;
+
+    const statRows = statsByLeagueId.get(String(player.leagueId)) ?? [];
+    const statRow = statRows.find(
+      (row) =>
+        String(row.leagueTeamId) === String(player.leagueTeamId) &&
+        String(row.leaguePlayerId) === String(player._id)
+    );
+    const summary = league?.currentSeasonId
+      ? statRow
+        ? {
+            gamesCount: statRow.gamesCount,
+            pointsPerGame: deriveLeaguePlayerScores(statRow).ppg,
+            reboundsPerGame: deriveLeaguePlayerScores(statRow).rpg,
+            assistsPerGame: deriveLeaguePlayerScores(statRow).apg,
+          }
+        : { gamesCount: 0, pointsPerGame: 0, reboundsPerGame: 0, assistsPerGame: 0 }
+      : null;
 
     return {
       id: String(player._id),
@@ -1162,10 +1192,13 @@ async function getMyLeagueProfiles(userId) {
         team && league
           ? `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`
           : null,
+      summary,
     };
   });
+}
 
-  return { profiles };
+async function getMyLeagueProfiles(userId) {
+  return { profiles: await assembleLeagueProfilesForUser(userId) };
 }
 
 async function getPublicLeaguePlayerBySlug(
@@ -2598,6 +2631,7 @@ module.exports = {
   removeLeagueManagerById,
   getPublicLeagueLeaders,
   getMyLeagueProfiles,
+  assembleLeagueProfilesForUser,
   createSeasonForLeague,
   completeSeasonForUser,
   listSeasonsForLeague,
