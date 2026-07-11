@@ -9,6 +9,13 @@ vi.mock('../../feed/api/feedApi', () => ({
   feedApi: { listDiscoverablePlayers: vi.fn() },
 }));
 
+// FollowButton (rendered per claimed result) reads useAuth; default to a
+// logged-out viewer so it renders its "Log in to follow" CTA without needing a
+// real AuthProvider. These tests only assert link routing.
+vi.mock('../../../app/store/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}));
+
 function renderWithProviders(ui) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(

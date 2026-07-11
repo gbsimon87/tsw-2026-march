@@ -9,6 +9,12 @@ vi.mock('../api/playersApi', () => ({
   playersApi: { getPublicUserProfiles: vi.fn() },
 }));
 
+// FollowButton in the header reads useAuth; default to logged-out so it renders
+// its CTA without an AuthProvider. These tests assert the profile content.
+vi.mock('../../../app/store/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}));
+
 function renderAtUserId(userId) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },

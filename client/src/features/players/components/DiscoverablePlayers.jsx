@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { feedApi } from '../../feed/api/feedApi';
+import { FollowButton } from '../../follows/components/FollowButton';
 
 const SEARCH_DEBOUNCE_MS = 400;
 
@@ -134,12 +135,15 @@ export function DiscoverablePlayers({ limit = 24 }) {
                   </span>
                 </Link>
                 {player.claimedByUserId ? (
-                  <Link
-                    to={`/players/${player.claimedByUserId}`}
-                    className="text-xs font-semibold text-slate-500 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
-                  >
-                    View full profile →
-                  </Link>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Link
+                      to={`/players/${player.claimedByUserId}`}
+                      className="text-xs font-semibold text-slate-500 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
+                    >
+                      View full profile →
+                    </Link>
+                    <FollowButton targetUserId={player.claimedByUserId} size="compact" />
+                  </div>
                 ) : null}
               </div>
             </li>

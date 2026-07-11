@@ -131,6 +131,9 @@ const PublicLeaguePlayerPage = lazy(() =>
 const MySportyPage = lazy(() =>
   import('../../features/leagues/pages/MySportyPage').then((m) => ({ default: m.MySportyPage }))
 );
+const FollowingPage = lazy(() =>
+  import('../../features/follows/pages/FollowingPage').then((m) => ({ default: m.FollowingPage }))
+);
 const AboutPage = lazy(() =>
   import('../../pages/AboutPage').then((m) => ({ default: m.AboutPage }))
 );
@@ -312,6 +315,14 @@ export function AppRouter() {
             element={
               <ProtectedRoute>
                 <MySportyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/following"
+            element={
+              <ProtectedRoute>
+                <FollowingPage />
               </ProtectedRoute>
             }
           />

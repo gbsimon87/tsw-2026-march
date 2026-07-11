@@ -6,6 +6,7 @@ import { playersApi } from '../api/playersApi';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { FollowButton } from '../../follows/components/FollowButton';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 
 export function PublicUserProfilePage() {
@@ -62,7 +63,7 @@ export function PublicUserProfilePage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
-      <header className="flex items-center gap-4">
+      <header className="flex flex-wrap items-center gap-4">
         <CloudinaryImage
           src={user.avatarUrl || playerPlaceholder}
           alt=""
@@ -80,6 +81,9 @@ export function PublicUserProfilePage() {
         >
           {user.name}
         </h1>
+        <div className="ml-auto">
+          <FollowButton targetUserId={user.id} />
+        </div>
       </header>
 
       <ul className="grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-3">
