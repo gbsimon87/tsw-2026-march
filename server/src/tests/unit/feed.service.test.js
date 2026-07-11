@@ -1125,4 +1125,41 @@ describe('feed service', () => {
       expect(result).toEqual({ deletedCount: 0 });
     });
   });
+
+  describe('listDiscoverablePlayers', () => {
+    test('includes claimedByUserId on league-sourced results, null when unclaimed', async () => {
+      listPublicLeagues.mockResolvedValue({
+        leagues: [{ id: 'league-1', slug: 'city-league', name: 'City League' }],
+      });
+      listTeams.mockResolvedValue([]);
+      listLeagueTeams.mockResolvedValue([
+        { _id: 'team-1', slug: 'hawks', name: 'Hawks', status: 'active' },
+      ]);
+      listLeaguePlayers.mockResolvedValue([
+        {
+          _id: 'lp-1',
+          displayName: 'Jamie Rivera',
+          jerseyNumber: 7,
+          position: 'PG',
+          isActive: true,
+          claimedByUserId: 'user-1',
+        },
+        {
+          _id: 'lp-2',
+          displayName: 'Alex Chen',
+          jerseyNumber: 9,
+          position: 'SG',
+          isActive: true,
+          claimedByUserId: null,
+        },
+      ]);
+
+      const results = await service.listDiscoverablePlayers({});
+
+      const claimed = results.find((r) => r.id === 'lp-1');
+      const unclaimed = results.find((r) => r.id === 'lp-2');
+      expect(claimed.claimedByUserId).toBe('user-1');
+      expect(unclaimed.claimedByUserId).toBeNull();
+    });
+  });
 });

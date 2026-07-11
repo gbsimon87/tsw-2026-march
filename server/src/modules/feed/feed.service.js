@@ -900,6 +900,7 @@ async function listDiscoverablePlayers(query = {}) {
         displayName: player.displayName,
         jerseyNumber: player.jerseyNumber ?? null,
         position: player.position ?? null,
+        claimedByUserId: null,
         profileHref: `/teams/${String(team._id)}/players/${String(player._id)}`,
         team: {
           id: String(team._id),
@@ -936,6 +937,7 @@ async function listDiscoverablePlayers(query = {}) {
         displayName: player.displayName,
         jerseyNumber: player.jerseyNumber ?? null,
         position: player.position ?? null,
+        claimedByUserId: player.claimedByUserId ? String(player.claimedByUserId) : null,
         profileHref: `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`,
         team: {
           leagueTeamId: String(team._id),
