@@ -76,11 +76,17 @@ POST/DELETE require the global CSRF token (`csrfProtection` applies app-wide).
 
 ### API contract note
 
-Purely additive — no existing endpoint changes. The public profile response
+The `/follows/*` endpoints are purely additive. The public profile response
 (`GET /public/players/:userId`) stays unchanged and cacheable; button state comes
 from the separate `/follows/status` endpoint, not baked into the profile payload.
-(A future change that adds `isFollowing` into the profile response would be a
-contract change requiring the `api-contract-changes` workflow.)
+
+**One additive change to an existing endpoint** (2026-07-11): `sanitizeLeaguePlayer`
+now also returns `claimedUserId` (the claiming account's id, or `null`), so the
+FollowButton on `PublicLeaguePlayerPage` knows whom to follow. This is a
+low-risk optional-field addition — all existing consumers ignore it, and it
+reveals nothing new (the public unified profile already exposes the same claim
+linkage). It affects every caller of `sanitizeLeaguePlayer` (roster, team, and
+player public endpoints) additively.
 
 ## 4. Backend layering
 
@@ -123,6 +129,15 @@ New feature `client/src/features/follows/`:
 - `PublicUserProfilePage.jsx` (`/players/:userId`) — `<FollowButton>` in the header.
 - `DiscoverablePlayers.jsx` — compact `<FollowButton>` per result with
   `claimedByUserId` (batch status via `/follows/status`).
+- `PublicLeaguePlayerPage.jsx` (`/league/:slug/teams/:team/players/:id`) —
+  compact `<FollowButton variant="onDark">` in the dark hero header, shown only
+  when the league player is claimed (`player.claimedUserId` present). This
+  required exposing `claimedUserId` on the public league-player response — see
+  the API-contract note below.
+
+`FollowButton` takes a `variant="onDark"` for use on dark headers (orange fill
+instead of ink) and self-guards the own-account and logged-out cases, so it can
+be dropped onto any surface that has a target user id.
 
 **Routing** (`app/router/AppRouter.jsx`): lazy-import `FollowingPage`; add
 `<Route path="/following" element={<ProtectedRoute><FollowingPage/></ProtectedRoute>} />`

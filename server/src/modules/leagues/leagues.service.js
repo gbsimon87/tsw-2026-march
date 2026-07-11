@@ -179,6 +179,11 @@ function sanitizeLeaguePlayer(player, usersById = new Map(), options = {}) {
     position: normalizePosition(player.position),
     isActive: Boolean(player.isActive),
     isClaimed: Boolean(player.claimedByUserId),
+    // Public follow target (Follow System v1): the account that claimed this
+    // player, so a FollowButton on the public league-player page knows whom to
+    // follow. Null when unclaimed. Reveals nothing new — the public unified
+    // profile at /players/:userId already exposes this same claim linkage.
+    claimedUserId: player.claimedByUserId ? String(player.claimedByUserId) : null,
     claimedBadgeLabel: player.claimedByUserId ? 'Claimed profile' : null,
     avatarUrl: transformCloudinaryUrl(claimedUser?.avatar?.url || null),
     ...(options.includePrivateClaim

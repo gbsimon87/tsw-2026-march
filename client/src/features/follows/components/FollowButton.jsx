@@ -13,7 +13,13 @@ const baseClass =
 // follow (decision D6): logged-out visitors get a "Log in to follow" CTA, and
 // the button is hidden when viewing your own account. Mutations are plain async
 // followsApi calls + manual setQueryData (repo convention — no useMutation).
-export function FollowButton({ targetUserId, size = 'default', className = '' }) {
+export function FollowButton({
+  targetUserId,
+  size = 'default',
+  variant = 'default',
+  className = '',
+}) {
+  const onDark = variant === 'onDark';
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
@@ -32,11 +38,11 @@ export function FollowButton({ targetUserId, size = 'default', className = '' })
 
   // Logged-out: explicit CTA to sign in rather than a silent no-op.
   if (!user) {
+    const ctaClass = onDark
+      ? 'border border-white/30 text-white hover:border-[#F4A300] hover:text-[#F4A300]'
+      : 'border border-[#141414] text-[#141414] hover:bg-[#141414] hover:text-white';
     return (
-      <Link
-        to="/login"
-        className={`${baseClass} border border-[#141414] text-[#141414] hover:bg-[#141414] hover:text-white ${className}`}
-      >
+      <Link to="/login" className={`${baseClass} ${ctaClass} ${className}`}>
         Log in to follow
       </Link>
     );
@@ -85,9 +91,16 @@ export function FollowButton({ targetUserId, size = 'default', className = '' })
   }
 
   const sizeClass = size === 'compact' ? 'px-3 py-1 text-xs' : '';
-  const styleClass = isFollowing
-    ? 'border border-slate-300 bg-white text-slate-700 hover:border-[#F4A300] hover:text-[#141414]'
-    : 'bg-[#141414] text-white hover:bg-[#1B4332]';
+  let styleClass;
+  if (isFollowing) {
+    styleClass = onDark
+      ? 'border border-white/30 bg-white/5 text-white hover:border-[#F4A300] hover:text-[#F4A300]'
+      : 'border border-slate-300 bg-white text-slate-700 hover:border-[#F4A300] hover:text-[#141414]';
+  } else {
+    styleClass = onDark
+      ? 'bg-[#F4A300] text-[#141414] hover:bg-white'
+      : 'bg-[#141414] text-white hover:bg-[#1B4332]';
+  }
 
   return (
     <span className="inline-flex flex-col items-start gap-1">
@@ -102,7 +115,7 @@ export function FollowButton({ targetUserId, size = 'default', className = '' })
         {isFollowing ? 'Following' : 'Follow'}
       </button>
       {error ? (
-        <span role="alert" className="text-xs text-red-600">
+        <span role="alert" className={`text-xs ${onDark ? 'text-[#F4A300]' : 'text-red-600'}`}>
           {error}
         </span>
       ) : null}

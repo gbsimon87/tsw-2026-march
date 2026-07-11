@@ -11,6 +11,7 @@ import { StatsTable } from '../../teams/components/StatsTable';
 import { extractYouTubeVideoId } from '../../games/youtube';
 import { feedApi } from '../../feed/api/feedApi';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { FollowButton } from '../../follows/components/FollowButton';
 
 const HIGHLIGHT_LABELS = {
   FG2_MADE: '2PT Make',
@@ -371,6 +372,9 @@ export function PublicLeaguePlayerPage() {
                   {isSubmittingClaim ? 'Submitting…' : 'Claim this profile'}
                 </button>
               )}
+              {player.claimedUserId ? (
+                <FollowButton targetUserId={player.claimedUserId} size="compact" variant="onDark" />
+              ) : null}
             </div>
             {claimError ? <p className="mt-2 text-xs text-[#F4A300]">{claimError}</p> : null}
             <nav aria-label="Player affiliations" className="mt-3">
