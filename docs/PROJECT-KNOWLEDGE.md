@@ -39,7 +39,24 @@ Core capabilities:
 - **Player discovery** on `/home` (`DiscoverablePlayers` component, 2026-07-10):
   a debounced (400ms) search over active players from public standalone teams
   and public league teams, backed by `GET /feed/discoverable/players`
-  (`feed.service.js#listDiscoverablePlayers`, no auth required).
+  (`feed.service.js#listDiscoverablePlayers`, no auth required). Each result's
+  main card always links to its own per-team/-league profile page; a claimed
+  league player additionally gets a "View full profile" link to their public
+  unified profile (see below) — see §1's next bullet.
+- **Public unified player profiles** at `/players/:userId` (2026-07-11): a
+  public, discoverable page aggregating a user's **claimed league-player**
+  profiles (across every public league they're claimed in) as cards, each
+  with a stats summary (games played, PPG/RPG/APG). Public counterpart to the
+  existing private "My Sporty" page (`/my-sporty`) — both share the same
+  assembly logic (`leagues.service.js#assembleLeagueProfilesForUser`) and
+  client `ProfileCard` component
+  (`client/src/features/players/components/ProfileCard.jsx`); the public
+  variant additionally filters to `league.isPublic === true` and 404s if the
+  filtered list is empty (so it never reveals that a userId has only
+  private-league profiles). Backed by `GET /public/players/:userId`
+  (`leagues.controller.js#getPublicUserProfiles`, no auth required). **v1 is
+  league-only** — standalone (non-league) team players have no claim
+  mechanism yet and are out of scope; see §11.
 - **Team-scoped and League-scoped Pro billing** gating replay, public shot maps,
   and highlight clips.
 
@@ -199,23 +216,23 @@ existing `leagues.service.js` helper rather than writing the check fresh.
 
 16 collections, all defined inline in repository files:
 
-| Collection                    | Owner module | Notes                                                                                                                                                                                                                                                     |
-| ----------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                                                                         |
-| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                                                                          |
-| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                           |
-| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                   |
-| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                   |
-| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons)                                                                                                                                    |
-| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                            |
-| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                             |
-| `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/). |
-| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league — deliberately season-independent, carry over across seasons automatically                                                                                                                                                  |
-| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role` — season-independent                                                                                                                                                                                              |
-| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow; blocked when the league has no active season                                                                                                                                                                             |
-| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                                                                |
-| `LeagueStandings`             | leagues      | materialized standings (OPT-010), keyed `{leagueId, seasonId}` since League Seasons                                                                                                                                                                       |
-| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011), keyed `{leagueId, seasonId, leagueTeamId, leaguePlayerId}` since League Seasons                                                                                                                                 |
+| Collection                    | Owner module | Notes                                                                                                                                                                                                                                                                  |
+| ----------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                                                                                      |
+| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                                                                                       |
+| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                                        |
+| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                                |
+| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                                |
+| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons)                                                                                                                                                 |
+| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                                         |
+| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                                          |
+| `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/).              |
+| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league — deliberately season-independent, carry over across seasons automatically                                                                                                                                                               |
+| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role` — season-independent                                                                                                                                                                                                           |
+| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow; blocked when the league has no active season                                                                                                                                                                                          |
+| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                                                                             |
+| `LeagueStandings`             | leagues      | materialized standings (OPT-010), keyed `{leagueId, seasonId}` since League Seasons                                                                                                                                                                                    |
+| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011), keyed `{leagueId, seasonId, leagueTeamId, leaguePlayerId}` since League Seasons; also the stats source for unified player profiles (§1) — one `getLeaguePlayerStats` read-through per unique claimed league, not per profile |
 
 ### Notable design choices
 
@@ -623,6 +640,22 @@ slug-based, not ID-based, and the card snapshot only carries IDs; fixing
 this means denormalizing `leagueSlug`/`teamSlug` into the snapshot too, not
 a one-line route swap).
 
+**Public Unified Player Profiles v1, league-only (2026-07-11,
+`feature/unified-player-profiles`)**: shipped the public `/players/:userId`
+page described in §1. Deliberately deferred to follow-up work: (1)
+**standalone team-player claiming** — `team.players[]` has no
+`claimedByUserId` equivalent, so non-league games never appear on a unified
+profile; extending claiming there needs a team-owner-approves flow mirroring
+the existing league join-request flow; (2) **discovery-result dedup** — the
+homepage's `DiscoverablePlayers` search still lists one row per claimed
+slot (not one per person) since Task 6 deliberately didn't collapse them,
+each claimed row just gets an additional link to the shared unified page
+alongside its own per-context link; (3) no cross-context stat merging — each
+card on the unified page shows that league's own season averages, there is
+no combined-across-profiles number. Design spec and implementation plan:
+`docs/superpowers/specs/2026-07-11-public-unified-player-profiles-design.md`,
+`docs/superpowers/plans/2026-07-11-public-unified-player-profiles.md`.
+
 **Since then (2026-07-10)**: `GameRecapPanel.jsx`'s Highlights and Key
 Moments sections were merged — Key Moments (text cards) now only renders
 when a game has zero video highlights, instead of always showing alongside
@@ -656,20 +689,21 @@ design, phased plan, and live task tracker:
 
 ## 12. Where to start (by question)
 
-| I need to understand…                   | Start here                                                                                                         |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                  |
-| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                             |
-| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                              |
-| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                |
-| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                               |
-| API surface                             | [`api.md`](./api.md)                                                                                               |
-| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                             |
-| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                               |
-| Billing                                 | [`billing.md`](./billing.md)                                                                                       |
-| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                 |
-| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                 |
-| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                                    |
-| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                             |
-| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)                             |
-| Auto Feed Generation (in progress)      | §11 above ("Auto Feed Generation"), [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md) |
+| I need to understand…                   | Start here                                                                                                                        |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                                 |
+| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                                            |
+| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                                             |
+| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                               |
+| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                                              |
+| API surface                             | [`api.md`](./api.md)                                                                                                              |
+| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                                            |
+| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                                              |
+| Billing                                 | [`billing.md`](./billing.md)                                                                                                      |
+| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                                |
+| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                                |
+| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                                                   |
+| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                                            |
+| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)                                            |
+| Auto Feed Generation (in progress)      | §11 above ("Auto Feed Generation"), [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md)                |
+| Public unified player profiles (v1)     | §1 above, §11 ("Public Unified Player Profiles v1"), `docs/superpowers/specs/2026-07-11-public-unified-player-profiles-design.md` |
