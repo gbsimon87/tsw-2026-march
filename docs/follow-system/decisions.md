@@ -78,3 +78,33 @@ one-click links from each following-card to the user's `/players/:userId` profil
   a cleanup job or cascade is a future enhancement.)
 - **Q3:** When do we introduce public follower counts? (Deferred; likely alongside
   the personalized feed / notifications work.)
+
+## D8 — Follow button scope stays public-surface-only (found + fixed 2026-07-11)
+
+**Decision:** The follow button (and the `claimedUserId` field that powers it)
+only appears/resolves on **public** surfaces: the unified profile
+(`/players/:userId`), homepage discovery, and the public league-player page
+**when `league.isPublic`**. It is withheld — both server-side (`claimedUserId`
+nulled) and client-side (gated on `league.isPublic`) — on a private-league
+player page, even for an authorized viewer (owner/manager/roster member).
+**Why:** Adding the button to `PublicLeaguePlayerPage` required exposing
+`claimedUserId`, but that page is also reachable for **private** leagues by
+anyone `assertLeagueVisible` authorizes. Without this fix, a private-league
+viewer could follow someone via a linkage that was supposed to be a public-only
+feature. `isClaimed`/`claimedBadgeLabel` (pre-existing) still work unchanged —
+only the raw account id is withheld for private leagues. Found during a
+pre-merge security review; see the `follows.controller`/`leagues.service` tests
+for `getPublicLeaguePlayerBySlug`.
+
+## Follow-up fixes from the same review (performance, not scope)
+
+- **Parallelized `hasPublicProfile` check**: `listFollowing` computed each
+  followed user's `hasPublicProfile` sequentially in a loop; switched to
+  `Promise.all` so a page of N follows costs one round of concurrent lookups,
+  not N serialized ones.
+- **`FollowButton` gained `knownIsFollowing`**: lets a parent that already
+  knows (or has batch-fetched) a user's follow status skip the button's own
+  `GET /follows/status` call. `DiscoverablePlayers` now issues one batched
+  status request for every visible claimed result instead of one per card;
+  `FollowingPage` passes `knownIsFollowing` unconditionally, since every entry
+  on that page is by definition already followed — no fetch needed at all.

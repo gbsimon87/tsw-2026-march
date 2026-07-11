@@ -62,14 +62,21 @@ Core capabilities:
   (`/following`). Follows are **account-level** (keyed by `User._id`), so
   following one person covers all of their claimed player profiles at once —
   the natural fit given a user can own many `LeaguePlayer` profiles. Follow
-  buttons attach to the public unified profile (`/players/:userId`) and homepage
-  player discovery. Backed by `GET/POST/DELETE /follows/*`
-  (`server/src/modules/follows/`, all auth-required; follower identity always
-  from `req.auth.userId`). Private in v1 (no public follower counts). Schema is
-  **polymorphic-ready** (`Follow.targetType` enum starts at `['user']`), so
-  following teams/leagues later needs no migration. Deferred: teams/leagues
-  targets, public counts, a personalized feed, notifications, standalone
-  team-player follows. Design + trackers: [`follow-system/`](./follow-system/).
+  buttons attach to the public unified profile (`/players/:userId`), homepage
+  player discovery, and the public **league**-player page
+  (`PublicLeaguePlayerPage`, only when `league.isPublic` — see below). Backed
+  by `GET/POST/DELETE /follows/*` (`server/src/modules/follows/`, all
+  auth-required; follower identity always from `req.auth.userId`). Private in
+  v1 (no public follower counts). Schema is **polymorphic-ready**
+  (`Follow.targetType` enum starts at `['user']`), so following teams/leagues
+  later needs no migration. `listFollowing`'s per-user public-profile check is
+  fanned out with `Promise.all` (not sequential), and `FollowButton` accepts an
+  optional `knownIsFollowing` so a parent rendering many buttons (discovery
+  grid, the Following page itself) can batch/skip the status fetch instead of
+  each button independently calling `GET /follows/status`. Deferred:
+  teams/leagues targets, public counts, a personalized feed, notifications,
+  standalone team-player follows. Design + trackers:
+  [`follow-system/`](./follow-system/).
 - **Team-scoped and League-scoped Pro billing** gating replay, public shot maps,
   and highlight clips.
 
@@ -685,8 +692,31 @@ profiles); (6) no cascade on account deletion (following-list hydration
 tolerates missing users via `findUsersByIds`, so orphan follow rows are
 harmless but not cleaned up). The `hasPublicProfile`/`profileHref` fields on a
 following card reuse `assembleLeagueProfilesForUser`'s public-league filter, so
-they stay consistent with what `GET /public/players/:userId` returns. Design,
-phased plan, and live trackers: [`follow-system/`](./follow-system/).
+they stay consistent with what `GET /public/players/:userId` returns.
+
+**Follow-up security/perf pass (2026-07-11, same day)**: a review of the v1
+diff found and fixed three issues before merge. (1) **Private-league exposure
+gap**: adding a `FollowButton` to the public league-player page
+(`PublicLeaguePlayerPage`) required exposing `claimedUserId` on
+`sanitizeLeaguePlayer`'s output, but `assertLeagueVisible` also lets private-
+league members (owner/manager/team roster) view that same page — so an
+authorized private-league viewer could see (and follow) a claim id the v1 plan
+never intended to expose outside public surfaces. `getPublicLeaguePlayerBySlug`
+now nulls `claimedUserId` when `!league.isPublic` (client double-checks
+`league.isPublic` too); `isClaimed`/`claimedBadgeLabel` still work as before —
+only the actual account id is withheld. (2) **Sequential N+1**:
+`listFollowing`'s per-followed-user `hasPublicProfile` check ran one at a time
+in a `for` loop; switched to `Promise.all` (a regression test asserts the
+concurrency directly). (3) **Redundant/unbatched status fetches**:
+`DiscoverablePlayers` fired one `GET /follows/status` per claimed card instead
+of one batched call for the page, and `FollowingPage` fired a status check per
+card to re-derive "am I following them?" on a page whose entire premise is
+that you already are. `FollowButton` gained an optional `knownIsFollowing` prop
+so a parent can supply pre-fetched (or trivially-known) status and skip the
+button's own fetch; `DiscoverablePlayers` now batches once via `useFollowStatus`
+for all visible claimed ids, and `FollowingPage` passes `knownIsFollowing`
+unconditionally. Design, phased plan, and live trackers:
+[`follow-system/`](./follow-system/).
 
 **Since then (2026-07-10)**: `GameRecapPanel.jsx`'s Highlights and Key
 Moments sections were merged — Key Moments (text cards) now only renders
