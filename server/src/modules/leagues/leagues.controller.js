@@ -44,6 +44,12 @@ async function getMyProfiles(req, res) {
   res.status(200).json(result);
 }
 
+async function getPublicUserProfiles(req, res) {
+  const { userId } = req.params;
+  const result = await leaguesService.getPublicUserProfiles(userId);
+  res.status(200).json(result);
+}
+
 async function listPublic(req, res) {
   // OPT-018: single-source public list → real keyset pagination.
   const options = paginationQuerySchema.parse(req.query);
@@ -441,6 +447,7 @@ module.exports = {
   create,
   list,
   getMyProfiles,
+  getPublicUserProfiles,
   listPublic,
   getById,
   getPublicBySlug,

@@ -1205,6 +1205,25 @@ async function getMyLeagueProfiles(userId) {
   return { profiles: await assembleLeagueProfilesForUser(userId) };
 }
 
+async function getPublicUserProfiles(userId) {
+  const user = await findUserById(userId);
+  const allProfiles = await assembleLeagueProfilesForUser(userId);
+  const publicProfiles = allProfiles.filter((profile) => profile.league?.isPublic === true);
+
+  if (!user || publicProfiles.length === 0) {
+    throw new ApiError(404, 'Player not found');
+  }
+
+  return {
+    user: {
+      id: String(user._id),
+      name: user.name,
+      avatarUrl: transformCloudinaryUrl(user.avatar?.url || null),
+    },
+    profiles: publicProfiles,
+  };
+}
+
 async function getPublicLeaguePlayerBySlug(
   leagueSlug,
   teamSlug,
@@ -2636,6 +2655,7 @@ module.exports = {
   getPublicLeagueLeaders,
   getMyLeagueProfiles,
   assembleLeagueProfilesForUser,
+  getPublicUserProfiles,
   createSeasonForLeague,
   completeSeasonForUser,
   listSeasonsForLeague,

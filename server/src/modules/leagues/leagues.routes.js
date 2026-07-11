@@ -7,6 +7,7 @@ const controller = require('./leagues.controller');
 
 const leaguesRouter = Router();
 const publicLeaguesRouter = Router();
+const publicPlayersRouter = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -27,6 +28,8 @@ publicLeaguesRouter.get(
 );
 publicLeaguesRouter.get('/:leagueSlug/teams/:teamSlug', asyncHandler(controller.getPublicTeam));
 publicLeaguesRouter.get('/:leagueSlug', asyncHandler(controller.getPublicBySlug));
+
+publicPlayersRouter.get('/:userId', asyncHandler(controller.getPublicUserProfiles));
 
 leaguesRouter.use(authMiddleware);
 leaguesRouter.post('/', asyncHandler(controller.create));
@@ -116,4 +119,5 @@ leaguesRouter.post(
 module.exports = {
   leaguesRouter,
   publicLeaguesRouter,
+  publicPlayersRouter,
 };

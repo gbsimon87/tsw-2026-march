@@ -13,7 +13,11 @@ const {
   publicOpponentsRouter,
 } = require('../modules/teams/teams.routes');
 const { gamesRouter } = require('../modules/games/games.routes');
-const { leaguesRouter, publicLeaguesRouter } = require('../modules/leagues/leagues.routes');
+const {
+  leaguesRouter,
+  publicLeaguesRouter,
+  publicPlayersRouter,
+} = require('../modules/leagues/leagues.routes');
 
 const apiRouter = Router();
 
@@ -30,6 +34,7 @@ apiRouter.use('/health', healthRouter);
 apiRouter.use('/public/opponents', publicCacheMiddleware, publicOpponentsRouter);
 apiRouter.use('/public/leagues', publicCacheMiddleware, publicLeaguesRouter);
 apiRouter.use('/public/teams', publicCacheMiddleware, publicTeamsRouter);
+apiRouter.use('/public/players', publicCacheMiddleware, publicPlayersRouter);
 apiRouter.use('/leagues', leaguesRouter);
 apiRouter.use('/teams', teamsRouter);
 apiRouter.use('/games', gamesRouter);
