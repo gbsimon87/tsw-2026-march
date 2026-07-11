@@ -132,6 +132,72 @@ describe('follows.service', () => {
       expect(result.following).toEqual([]);
     });
 
+    test('preserves per-user order across multiple followed users', async () => {
+      const targetB = '507f1f77bcf86cd799439013';
+      repository.listFollowingByUser.mockResolvedValue([
+        { targetId: TARGET },
+        { targetId: targetB },
+      ]);
+      authRepository.findUsersByIds.mockResolvedValue([
+        { _id: TARGET, name: 'Jamie', avatar: null },
+        { _id: targetB, name: 'Blake', avatar: null },
+      ]);
+      // Different resolution order per user — regression guard for the
+      // parallelized hasPublicProfile check: results must still line up with
+      // the right user even if the underlying promises settle out of order.
+      leaguesService.assembleLeagueProfilesForUser.mockImplementation((userId) => {
+        if (String(userId) === TARGET) {
+          return new Promise((resolve) => setTimeout(() => resolve([]), 10));
+        }
+        return Promise.resolve([{ league: { isPublic: true } }]);
+      });
+
+      const result = await followsService.listFollowing(FOLLOWER, {});
+
+      expect(result.following).toEqual([
+        {
+          userId: TARGET,
+          name: 'Jamie',
+          avatarUrl: null,
+          hasPublicProfile: false,
+          profileHref: null,
+        },
+        {
+          userId: targetB,
+          name: 'Blake',
+          avatarUrl: null,
+          hasPublicProfile: true,
+          profileHref: `/players/${targetB}`,
+        },
+      ]);
+    });
+
+    test('fans out the per-user public-profile check concurrently, not sequentially', async () => {
+      const targetB = '507f1f77bcf86cd799439013';
+      repository.listFollowingByUser.mockResolvedValue([
+        { targetId: TARGET },
+        { targetId: targetB },
+      ]);
+      authRepository.findUsersByIds.mockResolvedValue([
+        { _id: TARGET, name: 'Jamie', avatar: null },
+        { _id: targetB, name: 'Blake', avatar: null },
+      ]);
+
+      let concurrentCalls = 0;
+      let maxConcurrentCalls = 0;
+      leaguesService.assembleLeagueProfilesForUser.mockImplementation(async () => {
+        concurrentCalls += 1;
+        maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        concurrentCalls -= 1;
+        return [];
+      });
+
+      await followsService.listFollowing(FOLLOWER, {});
+
+      expect(maxConcurrentCalls).toBe(2);
+    });
+
     test('applies keyset pagination when a limit is passed', async () => {
       // over-fetched limit+1 rows -> nextCursor is the last kept row's target
       repository.listFollowingByUser.mockResolvedValue([

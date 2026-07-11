@@ -80,22 +80,26 @@ async function listFollowing(followerUserId, options = {}) {
   const users = await findUsersByIds(targetIds);
   const usersById = new Map(users.map((user) => [String(user._id), user]));
 
-  const following = [];
-  for (const row of items) {
-    const user = usersById.get(String(row.targetId));
-    if (!user) continue;
+  // Durable follow (decision D5): show a minimal card even when the user has
+  // no public profile right now — profileHref just degrades to null. Fan the
+  // per-user public-profile check out in parallel rather than one at a time —
+  // each check is itself a few DB round trips, so a sequential loop here would
+  // turn a page of N follows into a serialized N * few-round-trips chain.
+  const hydratedUsers = items.map((row) => usersById.get(String(row.targetId))).filter(Boolean);
+  const publicProfileFlags = await Promise.all(
+    hydratedUsers.map((user) => userHasPublicProfile(user._id))
+  );
 
-    // Durable follow (decision D5): show a minimal card even when the user has
-    // no public profile right now — profileHref just degrades to null.
-    const hasPublicProfile = await userHasPublicProfile(user._id);
-    following.push({
+  const following = hydratedUsers.map((user, index) => {
+    const hasPublicProfile = publicProfileFlags[index];
+    return {
       userId: String(user._id),
       name: user.name,
       avatarUrl: transformCloudinaryUrl(user.avatar?.url || null),
       hasPublicProfile,
       profileHref: hasPublicProfile ? `/players/${String(user._id)}` : null,
-    });
-  }
+    };
+  });
 
   return { following, nextCursor };
 }

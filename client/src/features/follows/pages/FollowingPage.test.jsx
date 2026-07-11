@@ -97,4 +97,33 @@ describe('FollowingPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Boom'));
   });
+
+  test('never fetches follow status — every entry is already known to be followed', async () => {
+    followsApi.listFollowing.mockResolvedValue({
+      following: [
+        {
+          userId: 'target-1',
+          name: 'Jamie Rivera',
+          avatarUrl: null,
+          hasPublicProfile: true,
+          profileHref: '/players/target-1',
+        },
+        {
+          userId: 'target-2',
+          name: 'Alex Chen',
+          avatarUrl: null,
+          hasPublicProfile: false,
+          profileHref: null,
+        },
+      ],
+      nextCursor: null,
+    });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Unfollow this player' })).toHaveLength(2)
+    );
+    expect(followsApi.getStatuses).not.toHaveBeenCalled();
+  });
 });

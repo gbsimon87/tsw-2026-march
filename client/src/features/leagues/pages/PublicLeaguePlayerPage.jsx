@@ -372,7 +372,7 @@ export function PublicLeaguePlayerPage() {
                   {isSubmittingClaim ? 'Submitting…' : 'Claim this profile'}
                 </button>
               )}
-              {player.claimedUserId ? (
+              {player.claimedUserId && league.isPublic ? (
                 <FollowButton targetUserId={player.claimedUserId} size="compact" variant="onDark" />
               ) : null}
             </div>

@@ -13,11 +13,18 @@ const baseClass =
 // follow (decision D6): logged-out visitors get a "Log in to follow" CTA, and
 // the button is hidden when viewing your own account. Mutations are plain async
 // followsApi calls + manual setQueryData (repo convention — no useMutation).
+//
+// `knownIsFollowing` lets a parent rendering many buttons at once (e.g. a
+// player-discovery grid) batch-fetch status for every visible target with one
+// useFollowStatus([...ids]) call and pass each result down, instead of every
+// button independently firing its own single-id request. When omitted, the
+// button fetches its own status (fine for a lone button on a profile page).
 export function FollowButton({
   targetUserId,
   size = 'default',
   variant = 'default',
   className = '',
+  knownIsFollowing,
 }) {
   const onDark = variant === 'onDark';
   const { user } = useAuth();
@@ -26,10 +33,13 @@ export function FollowButton({
   const [error, setError] = useState('');
 
   const isOwnAccount = user && String(user.id) === String(targetUserId);
-  const canQuery = Boolean(user) && !isOwnAccount;
+  const hasKnownStatus = knownIsFollowing !== undefined;
+  const canQuery = Boolean(user) && !isOwnAccount && !hasKnownStatus;
 
   const { data: statuses } = useFollowStatus([targetUserId], { enabled: canQuery });
-  const isFollowing = Boolean(statuses?.[String(targetUserId)]);
+  const isFollowing = hasKnownStatus
+    ? Boolean(knownIsFollowing)
+    : Boolean(statuses?.[String(targetUserId)]);
 
   // Never render for your own account.
   if (isOwnAccount) {
@@ -61,7 +71,19 @@ export function FollowButton({
         await followsApi.unfollow(targetUserId);
       }
 
-      // Flip this target's cached status.
+      // Flip this target's cached status everywhere it's cached — both this
+      // button's own single-id query key and any batched key a parent (e.g. a
+      // discovery grid) fetched for multiple ids at once, since both may hold
+      // an entry for targetUserId.
+      queryClient.setQueriesData({ queryKey: ['followStatus'] }, (current) => {
+        if (!current?.statuses || !(String(targetUserId) in current.statuses)) {
+          return current;
+        }
+        return {
+          ...current,
+          statuses: { ...current.statuses, [String(targetUserId)]: nextFollowing },
+        };
+      });
       queryClient.setQueryData(followStatusQueryKey([targetUserId]), (current) => ({
         ...(current?.statuses ? current : { statuses: {} }),
         statuses: { ...(current?.statuses || {}), [String(targetUserId)]: nextFollowing },

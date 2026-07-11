@@ -85,6 +85,8 @@ const {
   listLeaguePlayersByClaimedUser,
   listLeagueTeamsByIds,
   saveLeague,
+  findLeagueTeamByLeagueAndSlug,
+  findLeaguePlayerByIdAndTeam,
 } = require('../../modules/leagues/leagues.repository');
 const { reverseAutoPostsForLeague } = require('../../modules/feed/feed.service');
 const { listLeagueGamesByLeagueId } = require('../../modules/games/games.repository');
@@ -104,9 +106,11 @@ const {
   isLeaguePublic,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
+  getPublicLeaguePlayerBySlug,
   updateLeagueForUser,
   getMyLeagueProfiles,
 } = require('../../modules/leagues/leagues.service');
+const { findUserById } = require('../../modules/auth/auth.repository');
 
 function buildLeagueTeam(id, name) {
   return {
@@ -740,6 +744,67 @@ describe('private league visibility on public-slug routes (OPT-024)', () => {
 
     const league = await getPublicLeagueBySlug('secret-league', null);
     expect(league.slug).toBe('secret-league');
+  });
+});
+
+describe('getPublicLeaguePlayerBySlug — claimedUserId is public-league-only (Follow System v1)', () => {
+  function seedPlayerPage({ isPublic }) {
+    findLeagueBySlug.mockResolvedValue({
+      _id: 'league-1',
+      slug: 'secret-league',
+      ownerUserId: 'owner-1',
+      isPublic,
+      status: 'active',
+    });
+    findLeagueTeamByLeagueAndSlug.mockResolvedValue({
+      _id: 'team-1',
+      leagueId: 'league-1',
+      slug: 'the-team',
+      name: 'The Team',
+    });
+    findLeaguePlayerByIdAndTeam.mockResolvedValue({
+      _id: 'player-1',
+      leagueTeamId: 'team-1',
+      displayName: 'Avery Brooks',
+      claimedByUserId: 'claimer-1',
+      isActive: true,
+    });
+    findUserById.mockResolvedValue({ _id: 'claimer-1', name: 'Avery Brooks', avatar: null });
+    listLeagueGamesByLeagueId.mockResolvedValue([]);
+    listLeagueTeams.mockResolvedValue([]);
+    findActiveLeagueManager.mockResolvedValue(null);
+    listLeagueMembershipsForUser.mockResolvedValue([]);
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('exposes claimedUserId when the league is public', async () => {
+    seedPlayerPage({ isPublic: true });
+
+    const result = await getPublicLeaguePlayerBySlug('secret-league', 'the-team', 'player-1', null);
+
+    expect(result.player.isClaimed).toBe(true);
+    expect(result.player.claimedUserId).toBe('claimer-1');
+  });
+
+  test('nulls out claimedUserId when the league is private, even for an authorized viewer', async () => {
+    seedPlayerPage({ isPublic: false });
+    findActiveLeagueManager.mockResolvedValue({ leagueId: 'league-1', userId: 'manager-1' });
+
+    const result = await getPublicLeaguePlayerBySlug(
+      'secret-league',
+      'the-team',
+      'player-1',
+      'manager-1'
+    );
+
+    // isClaimed still reflects reality (matches pre-existing behavior), but the
+    // actual account id is withheld — Follow System v1 only surfaces a follow
+    // target on public-league surfaces.
+    expect(result.player.isClaimed).toBe(true);
+    expect(result.player.claimedUserId).toBeNull();
   });
 });
 

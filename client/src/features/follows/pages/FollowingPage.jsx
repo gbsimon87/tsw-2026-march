@@ -47,7 +47,9 @@ function FollowingCard({ entry }) {
         </div>
       </div>
       <div className="mt-auto">
-        <FollowButton targetUserId={entry.userId} size="compact" />
+        {/* Every entry on this page is, by definition, someone the viewer
+            follows — skip re-deriving that per-card via a status fetch. */}
+        <FollowButton targetUserId={entry.userId} size="compact" knownIsFollowing />
       </div>
     </li>
   );

@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { feedApi } from '../../feed/api/feedApi';
 import { FollowButton } from '../../follows/components/FollowButton';
+import { useFollowStatus } from '../../follows/hooks/useFollowStatus';
+import { useAuth } from '../../../app/store/AuthContext';
 
 const SEARCH_DEBOUNCE_MS = 400;
 
@@ -43,6 +45,7 @@ function PlayerInitials({ name }) {
 }
 
 export function DiscoverablePlayers({ limit = 24 }) {
+  const { user } = useAuth();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
 
@@ -57,6 +60,15 @@ export function DiscoverablePlayers({ limit = 24 }) {
   });
 
   const players = data?.players || [];
+
+  // Batch-fetch follow status for every claimed result on the page in one
+  // request instead of each card's FollowButton firing its own — otherwise a
+  // 24-result page would fire 24 separate GET /follows/status calls.
+  const claimedUserIds = useMemo(
+    () => (data?.players || []).map((player) => player.claimedByUserId).filter(Boolean),
+    [data]
+  );
+  const { data: followStatuses } = useFollowStatus(claimedUserIds, { enabled: Boolean(user) });
   const error = isError ? queryError?.message || 'Failed to load players' : '';
 
   return (
@@ -142,7 +154,13 @@ export function DiscoverablePlayers({ limit = 24 }) {
                     >
                       View full profile →
                     </Link>
-                    <FollowButton targetUserId={player.claimedByUserId} size="compact" />
+                    <FollowButton
+                      targetUserId={player.claimedByUserId}
+                      size="compact"
+                      knownIsFollowing={
+                        user ? Boolean(followStatuses?.[player.claimedByUserId]) : undefined
+                      }
+                    />
                   </div>
                 ) : null}
               </div>

@@ -1266,6 +1266,12 @@ async function getPublicLeaguePlayerBySlug(
     player.claimedByUserId &&
     String(player.claimedByUserId) === String(viewerUserId)
   );
+  // Follow System v1 is public-surface-only (unified profile + discovery, both
+  // filtered to public leagues) — don't hand out a follow target for a private
+  // league even though isClaimed/claimedBadgeLabel already say it's claimed.
+  if (!league.isPublic) {
+    sanitizedPlayer.claimedUserId = null;
+  }
 
   return {
     league: sanitizeLeague(league),
