@@ -1167,16 +1167,20 @@ async function assembleLeagueProfilesForUser(userId) {
         String(row.leagueTeamId) === String(player.leagueTeamId) &&
         String(row.leaguePlayerId) === String(player._id)
     );
-    const summary = league?.currentSeasonId
-      ? statRow
-        ? {
-            gamesCount: statRow.gamesCount,
-            pointsPerGame: deriveLeaguePlayerScores(statRow).ppg,
-            reboundsPerGame: deriveLeaguePlayerScores(statRow).rpg,
-            assistsPerGame: deriveLeaguePlayerScores(statRow).apg,
-          }
-        : { gamesCount: 0, pointsPerGame: 0, reboundsPerGame: 0, assistsPerGame: 0 }
-      : null;
+    let summary = null;
+    if (league?.currentSeasonId) {
+      if (statRow) {
+        const scores = deriveLeaguePlayerScores(statRow);
+        summary = {
+          gamesCount: statRow.gamesCount,
+          pointsPerGame: scores.ppg,
+          reboundsPerGame: scores.rpg,
+          assistsPerGame: scores.apg,
+        };
+      } else {
+        summary = { gamesCount: 0, pointsPerGame: 0, reboundsPerGame: 0, assistsPerGame: 0 };
+      }
+    }
 
     return {
       id: String(player._id),
