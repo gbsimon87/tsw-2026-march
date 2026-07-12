@@ -1,11 +1,13 @@
 const mongoose = require('mongoose');
 const { applyIdCursor } = require('../../utils/pagination');
 
-// User Follow System v1 (users-only). Follows are account-level: one follow
-// edge per (follower, target). The schema is polymorphic-ready — `targetType`
-// is an enum starting at ['user'] so adding 'team'/'league' later is an
-// additive change with no migration. `targetId` intentionally has no `ref`
-// because it is polymorphic. See docs/follow-system/.
+// Follow System. Follows are account-level: one follow edge per
+// (follower, target). The schema is polymorphic: `targetType` selects which
+// kind of entity `targetId` points at. v1.5 (2026-07-12) widened the enum from
+// ['user'] to also cover 'league' and 'leagueTeam' — an additive change with no
+// migration (existing 'user' rows are untouched). `targetId` intentionally has
+// no `ref` because it is polymorphic. Standalone `Team` is deliberately absent
+// (no public surface / visibility model yet). See docs/follow-system-teams-leagues/.
 const followSchema = new mongoose.Schema(
   {
     followerUserId: {
@@ -14,7 +16,12 @@ const followSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    targetType: { type: String, enum: ['user'], required: true, default: 'user' },
+    targetType: {
+      type: String,
+      enum: ['user', 'league', 'leagueTeam'],
+      required: true,
+      default: 'user',
+    },
     targetId: { type: mongoose.Schema.Types.ObjectId, required: true },
   },
   { timestamps: true }

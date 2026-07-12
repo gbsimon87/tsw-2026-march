@@ -12,13 +12,15 @@ function requireAuthUserId(req) {
 
 async function follow(req, res) {
   const userId = requireAuthUserId(req);
-  const result = await followsService.followUser(userId, req.params.userId);
+  const { targetType, targetId } = req.params;
+  const result = await followsService.followTarget(userId, targetType, targetId);
   res.status(201).json({ follow: result });
 }
 
 async function unfollow(req, res) {
   const userId = requireAuthUserId(req);
-  const result = await followsService.unfollowUser(userId, req.params.userId);
+  const { targetType, targetId } = req.params;
+  const result = await followsService.unfollowTarget(userId, targetType, targetId);
   res.status(200).json(result);
 }
 
@@ -31,8 +33,8 @@ async function listFollowing(req, res) {
 
 async function status(req, res) {
   const userId = requireAuthUserId(req);
-  const { userIds } = followStatusQuerySchema.parse(req.query);
-  const { statuses } = await followsService.getFollowStatuses(userId, userIds);
+  const { targetType, targetIds } = followStatusQuerySchema.parse(req.query);
+  const { statuses } = await followsService.getFollowStatuses(userId, targetType, targetIds);
   res.status(200).json({ statuses });
 }
 

@@ -3,13 +3,20 @@ const { paginationQueryShape } = require('../shared/pagination.validation');
 
 const objectIdSchema = z.string().regex(/^[a-f0-9]{24}$/, 'Invalid id');
 
-// GET /follows/following — keyset-paginated list of the current user's follows.
-const followingQuerySchema = z.object(paginationQueryShape);
+const targetTypeSchema = z.enum(['user', 'league', 'leagueTeam']);
 
-// GET /follows/status?userIds=a,b,c — batch "am I following?" for follow
-// buttons. Accepts a comma-separated list of user ids, capped at 50.
+// GET /follows/following?targetType=… — keyset-paginated list of the current
+// user's follows of one type (the client fires one query per section).
+const followingQuerySchema = z.object({
+  ...paginationQueryShape,
+  targetType: targetTypeSchema.optional(),
+});
+
+// GET /follows/status?targetType=…&targetIds=a,b,c — batch "am I following?" for
+// follow buttons. Accepts a comma-separated list of ids, capped at 50.
 const followStatusQuerySchema = z.object({
-  userIds: z
+  targetType: targetTypeSchema,
+  targetIds: z
     .string()
     .trim()
     .transform((value) =>
@@ -23,6 +30,7 @@ const followStatusQuerySchema = z.object({
 
 module.exports = {
   objectIdSchema,
+  targetTypeSchema,
   followingQuerySchema,
   followStatusQuerySchema,
 };

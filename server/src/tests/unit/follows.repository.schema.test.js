@@ -14,9 +14,9 @@ describe('Follow schema', () => {
     expect(Follow.schema.path('targetId').instance).toBe('ObjectId');
   });
 
-  test('targetType enum is users-only in v1 with a default of "user"', () => {
+  test('targetType enum covers user/league/leagueTeam with a default of "user"', () => {
     const targetType = Follow.schema.path('targetType');
-    expect(targetType.enumValues).toEqual(['user']);
+    expect(targetType.enumValues).toEqual(['user', 'league', 'leagueTeam']);
     expect(targetType.defaultValue).toBe('user');
   });
 

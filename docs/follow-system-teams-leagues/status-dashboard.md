@@ -10,17 +10,18 @@
 | Phase                     | Status         | Progress |
 | ------------------------- | -------------- | -------- |
 | Phase 0 — Docs scaffold   | ✅ Complete    | 100%     |
-| Phase 1 — Backend + API   | ⬜ Not Started | 0%       |
-| Phase 2 — Frontend        | ⬜ Not Started | 0%       |
+| Phase 1 — Backend + API   | ✅ Complete    | 100%     |
+| Phase 2 — Frontend        | 🟡 In Progress | 0%       |
 | Phase 3 — Verify & polish | ⬜ Not Started | 0%       |
 | Phase 4 — Ship & doc-sync | ⬜ Not Started | 0%       |
 
-**Overall:** ~15% — planning + docs scaffold complete; implementation not yet started.
+**Overall:** ~45% — backend + API complete and green (server suite 416/416); frontend next.
 
 ## Current phase
 
-**Phase 0 → Phase 1.** Docs scaffold committed. Next: widen the `Follow.targetType`
-enum and build the service-layer dispatch map.
+**Phase 2 — Frontend.** Backend dispatch map, generic routes, validation, and
+server tests landed (50 follows tests, full suite 416/416). Next: type-aware
+`FollowButton`/api/hooks, sectioned FollowingPage, new mounts.
 
 ## Completed work
 

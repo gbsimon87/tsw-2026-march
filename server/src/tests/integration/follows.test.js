@@ -12,8 +12,8 @@ jest.mock('../../middleware/rateLimit.middleware', () => {
 });
 
 jest.mock('../../modules/follows/follows.service', () => ({
-  followUser: jest.fn(),
-  unfollowUser: jest.fn(),
+  followTarget: jest.fn(),
+  unfollowTarget: jest.fn(),
   listFollowing: jest.fn(),
   getFollowStatuses: jest.fn(),
 }));
@@ -24,6 +24,8 @@ const { ApiError } = require('../../utils/apiError');
 const { signAccessToken } = require('../../services/token.service');
 
 const CSRF_ORIGIN = 'http://localhost:5173';
+const HEX_A = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+const HEX_B = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 
 function bearer(userId = 'follower-1') {
   return `Bearer ${signAccessToken({ sub: userId, sid: 's1' })}`;
@@ -40,25 +42,67 @@ describe('follows routes', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    test('blocks POST /api/v1/follows/users/:userId without csrf token', async () => {
+    test('blocks POST follow without a csrf token', async () => {
       const res = await request(createApp())
-        .post('/api/v1/follows/users/target-1')
+        .post('/api/v1/follows/user/target-1')
         .set('Authorization', bearer());
       expect(res.statusCode).toBe(403);
     });
 
-    test('blocks DELETE /api/v1/follows/users/:userId without csrf token', async () => {
+    test('blocks DELETE unfollow without a csrf token', async () => {
       const res = await request(createApp())
-        .delete('/api/v1/follows/users/target-1')
+        .delete('/api/v1/follows/user/target-1')
         .set('Authorization', bearer());
       expect(res.statusCode).toBe(403);
     });
   });
 
-  describe('POST /api/v1/follows/users/:userId', () => {
-    test('201 and returns follow state on success', async () => {
-      followsService.followUser.mockResolvedValue({
-        targetUserId: 'target-1',
+  describe('POST /api/v1/follows/:targetType/:targetId', () => {
+    test.each([
+      ['user', 'target-1'],
+      ['league', HEX_A],
+      ['leagueTeam', HEX_B],
+    ])('201 and returns follow state for %s', async (targetType, targetId) => {
+      followsService.followTarget.mockResolvedValue({ targetType, targetId, isFollowing: true });
+
+      const res = await request(createApp())
+        .post(`/api/v1/follows/${targetType}/${targetId}`)
+        .set('Authorization', bearer('follower-1'))
+        .set('Origin', CSRF_ORIGIN);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.follow).toEqual({ targetType, targetId, isFollowing: true });
+      expect(followsService.followTarget).toHaveBeenCalledWith('follower-1', targetType, targetId);
+    });
+
+    test('400 when following yourself', async () => {
+      followsService.followTarget.mockRejectedValue(
+        new ApiError(400, 'You cannot follow yourself')
+      );
+
+      const res = await request(createApp())
+        .post('/api/v1/follows/user/follower-1')
+        .set('Authorization', bearer('follower-1'))
+        .set('Origin', CSRF_ORIGIN);
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    test('404 when following a private league you cannot see', async () => {
+      followsService.followTarget.mockRejectedValue(new ApiError(404, 'League not found'));
+
+      const res = await request(createApp())
+        .post(`/api/v1/follows/league/${HEX_A}`)
+        .set('Authorization', bearer())
+        .set('Origin', CSRF_ORIGIN);
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    test('back-compat /users/:userId alias maps to the user target type', async () => {
+      followsService.followTarget.mockResolvedValue({
+        targetType: 'user',
+        targetId: 'target-1',
         isFollowing: true,
       });
 
@@ -68,37 +112,32 @@ describe('follows routes', () => {
         .set('Origin', CSRF_ORIGIN);
 
       expect(res.statusCode).toBe(201);
-      expect(res.body.follow).toEqual({ targetUserId: 'target-1', isFollowing: true });
-      expect(followsService.followUser).toHaveBeenCalledWith('follower-1', 'target-1');
-    });
-
-    test('400 when following yourself', async () => {
-      followsService.followUser.mockRejectedValue(new ApiError(400, 'You cannot follow yourself'));
-
-      const res = await request(createApp())
-        .post('/api/v1/follows/users/follower-1')
-        .set('Authorization', bearer('follower-1'))
-        .set('Origin', CSRF_ORIGIN);
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    test('404 when target user does not exist', async () => {
-      followsService.followUser.mockRejectedValue(new ApiError(404, 'User not found'));
-
-      const res = await request(createApp())
-        .post('/api/v1/follows/users/missing')
-        .set('Authorization', bearer())
-        .set('Origin', CSRF_ORIGIN);
-
-      expect(res.statusCode).toBe(404);
+      expect(followsService.followTarget).toHaveBeenCalledWith('follower-1', 'user', 'target-1');
     });
   });
 
-  describe('DELETE /api/v1/follows/users/:userId', () => {
+  describe('DELETE /api/v1/follows/:targetType/:targetId', () => {
     test('200 and returns unfollowed state (idempotent)', async () => {
-      followsService.unfollowUser.mockResolvedValue({
-        targetUserId: 'target-1',
+      followsService.unfollowTarget.mockResolvedValue({
+        targetType: 'league',
+        targetId: HEX_A,
+        isFollowing: false,
+      });
+
+      const res = await request(createApp())
+        .delete(`/api/v1/follows/league/${HEX_A}`)
+        .set('Authorization', bearer('follower-1'))
+        .set('Origin', CSRF_ORIGIN);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toEqual({ targetType: 'league', targetId: HEX_A, isFollowing: false });
+      expect(followsService.unfollowTarget).toHaveBeenCalledWith('follower-1', 'league', HEX_A);
+    });
+
+    test('back-compat /users/:userId alias maps to the user target type', async () => {
+      followsService.unfollowTarget.mockResolvedValue({
+        targetType: 'user',
+        targetId: 'target-1',
         isFollowing: false,
       });
 
@@ -108,74 +147,88 @@ describe('follows routes', () => {
         .set('Origin', CSRF_ORIGIN);
 
       expect(res.statusCode).toBe(200);
-      expect(res.body).toEqual({ targetUserId: 'target-1', isFollowing: false });
-      expect(followsService.unfollowUser).toHaveBeenCalledWith('follower-1', 'target-1');
+      expect(followsService.unfollowTarget).toHaveBeenCalledWith('follower-1', 'user', 'target-1');
     });
   });
 
   describe('GET /api/v1/follows/following', () => {
-    test('200 with hydrated following list + nextCursor', async () => {
+    test('200 with a hydrated following list + nextCursor', async () => {
       followsService.listFollowing.mockResolvedValue({
         following: [
           {
-            userId: 'target-1',
-            name: 'Jamie Rivera',
-            avatarUrl: null,
-            hasPublicProfile: true,
-            profileHref: '/players/target-1',
+            targetType: 'league',
+            leagueId: HEX_A,
+            name: 'Open League',
+            logo: null,
+            slug: 'open',
+            profileHref: '/league/open',
           },
         ],
         nextCursor: null,
       });
 
       const res = await request(createApp())
-        .get('/api/v1/follows/following')
+        .get('/api/v1/follows/following?targetType=league')
         .set('Authorization', bearer('follower-1'));
 
       expect(res.statusCode).toBe(200);
-      expect(res.body.following).toHaveLength(1);
       expect(res.body.following[0]).toMatchObject({
-        userId: 'target-1',
-        hasPublicProfile: true,
-        profileHref: '/players/target-1',
+        targetType: 'league',
+        profileHref: '/league/open',
       });
-      expect(res.body.nextCursor).toBeNull();
     });
 
-    test('passes limit/cursor through to the service', async () => {
+    test('passes targetType/limit through to the service', async () => {
       followsService.listFollowing.mockResolvedValue({ following: [], nextCursor: null });
 
       await request(createApp())
-        .get('/api/v1/follows/following?limit=5')
+        .get('/api/v1/follows/following?targetType=leagueTeam&limit=5')
         .set('Authorization', bearer('follower-1'));
 
       expect(followsService.listFollowing).toHaveBeenCalledWith(
         'follower-1',
-        expect.objectContaining({ limit: 5 })
+        expect.objectContaining({ targetType: 'leagueTeam', limit: 5 })
       );
+    });
+
+    test('400 on an unknown targetType', async () => {
+      const res = await request(createApp())
+        .get('/api/v1/follows/following?targetType=team')
+        .set('Authorization', bearer('follower-1'));
+
+      expect(res.statusCode).toBe(400);
     });
   });
 
   describe('GET /api/v1/follows/status', () => {
     test('200 with a per-id status map', async () => {
       followsService.getFollowStatuses.mockResolvedValue({
-        statuses: { aaaaaaaaaaaaaaaaaaaaaaaa: true, bbbbbbbbbbbbbbbbbbbbbbbb: false },
+        statuses: { [HEX_A]: true, [HEX_B]: false },
       });
 
       const res = await request(createApp())
-        .get('/api/v1/follows/status?userIds=aaaaaaaaaaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbbbbbbbbbb')
+        .get(`/api/v1/follows/status?targetType=league&targetIds=${HEX_A},${HEX_B}`)
         .set('Authorization', bearer('follower-1'));
 
       expect(res.statusCode).toBe(200);
-      expect(res.body.statuses).toEqual({
-        aaaaaaaaaaaaaaaaaaaaaaaa: true,
-        bbbbbbbbbbbbbbbbbbbbbbbb: false,
-      });
+      expect(res.body.statuses).toEqual({ [HEX_A]: true, [HEX_B]: false });
+      expect(followsService.getFollowStatuses).toHaveBeenCalledWith('follower-1', 'league', [
+        HEX_A,
+        HEX_B,
+      ]);
+    });
+
+    test('400 when targetType is missing', async () => {
+      const res = await request(createApp())
+        .get(`/api/v1/follows/status?targetIds=${HEX_A}`)
+        .set('Authorization', bearer('follower-1'));
+
+      expect(res.statusCode).toBe(400);
     });
 
     test('400 on a malformed id in the list', async () => {
       const res = await request(createApp())
-        .get('/api/v1/follows/status?userIds=not-an-id')
+        .get('/api/v1/follows/status?targetType=user&targetIds=not-an-id')
         .set('Authorization', bearer('follower-1'));
 
       expect(res.statusCode).toBe(400);
