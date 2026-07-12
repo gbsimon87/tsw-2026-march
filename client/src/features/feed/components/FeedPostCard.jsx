@@ -2,6 +2,7 @@ import { GameCardPost } from './posts/GameCardPost';
 import { HighlightClipPostCard } from './posts/HighlightClipPostCard';
 import { ImagePostCard } from './posts/ImagePostCard';
 import { PlayerCardPost } from './posts/PlayerCardPost';
+import { ShareImageButton } from './ShareImageButton';
 import { TeamCardPost } from './posts/TeamCardPost';
 import { VideoPostCard } from './posts/VideoPostCard';
 
@@ -26,7 +27,12 @@ export function FeedPostCard({ post, onDelete }) {
       <div className="space-y-3">
         {post.caption ? <p className="text-sm text-slate-700">{post.caption}</p> : null}
         {post.gameCard ? (
-          <GameCardPost gameCard={post.gameCard} />
+          <div className="space-y-3">
+            <GameCardPost gameCard={post.gameCard} />
+            <div className="flex justify-end">
+              <ShareImageButton type="game_card" gameCard={post.gameCard} />
+            </div>
+          </div>
         ) : (
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5">
             <svg
@@ -48,14 +54,24 @@ export function FeedPostCard({ post, onDelete }) {
     content = (
       <div className="space-y-3">
         {post.caption ? <p className="text-sm text-slate-700">{post.caption}</p> : null}
-        <PlayerCardPost playerCard={post.playerCard} />
+        <div className="space-y-3">
+          <PlayerCardPost playerCard={post.playerCard} />
+          <div className="flex justify-end">
+            <ShareImageButton type="player_card" playerCard={post.playerCard} />
+          </div>
+        </div>
       </div>
     );
   } else if (post.type === 'team_card') {
     content = (
       <div className="space-y-3">
         {post.caption ? <p className="text-sm text-slate-700">{post.caption}</p> : null}
-        <TeamCardPost teamCard={post.teamCard} />
+        <div className="space-y-3">
+          <TeamCardPost teamCard={post.teamCard} />
+          <div className="flex justify-end">
+            <ShareImageButton type="team_card" teamCard={post.teamCard} />
+          </div>
+        </div>
       </div>
     );
   } else if (post.type === 'highlight_clip') {
