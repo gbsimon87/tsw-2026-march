@@ -98,6 +98,24 @@ league/team follow → 404 via `assertLeagueVisible`; hydration nulls
 re-checks visibility; auth/follower-identity correct; route params validated;
 enum widening safe). **No actionable security findings.**
 
+### Runtime bug found via live-DB verification (found + fixed 2026-07-12)
+
+**Bug:** every league/leagueTeam follow returned a 500
+(`assertLeagueVisible is not a function`). Root cause: `assertLeagueVisible` was
+**defined** in `leagues.service.js` but never added to its `module.exports`
+(only `assembleLeagueProfilesForUser` was). The follows module imported it and
+got `undefined`. **Why the test suite missed it:** `follows.service.test.js`
+mocks `leagues.service`, so the mock supplied a fake `assertLeagueVisible` and
+every mocked path passed; the module-load smoke check imported the symbol but
+never _called_ it. **Fix:** export `assertLeagueVisible` (one line).
+**Regression guard added:** `server/src/tests/unit/follows.dependency-contract.test.js`
+requires the REAL `leagues.service`/`leagues.repository` (unmocked) and asserts
+the exact symbols the follows module imports exist as functions — verified to
+fail without the export and pass with it. Lesson: when a service imports another
+service's helper, a mocked unit test cannot verify the export exists; a small
+unmocked dependency-contract test is the cheap guard. This surfaced during the
+live `pnpm dev` verification the plan flagged as still-needed (DEP-2b).
+
 One **non-security perf note** (accepted, not fixed): each following-list
 hydration re-checks visibility with `assertLeagueVisible`, which re-fetches
 league docs already loaded by `listLeaguesByIds` in the same call. This is a

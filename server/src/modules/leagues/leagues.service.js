@@ -2625,6 +2625,11 @@ module.exports = {
   // TSW-005: card-snapshot-sized ID-keyed getters + visibility check, for
   // the feed module's league-scoped game_card/player_card/team_card support.
   isLeaguePublic,
+  // Viewer-aware visibility gate (returns the league or throws 404 for
+  // missing/private-non-member). Exported for the follows module's
+  // league/leagueTeam follow gating (reuse-the-canonical-helper rule,
+  // PROJECT-KNOWLEDGE.md §4).
+  assertLeagueVisible,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
   updateLeagueTeamForLeague,
