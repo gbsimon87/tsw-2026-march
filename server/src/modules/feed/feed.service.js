@@ -246,6 +246,20 @@ function buildTeamCardSnapshot(payload) {
 // persists the result — self-backfilling, same pattern as the OPT-010/011/013
 // materialisations. `refresh: true` forces a live re-resolve + re-persist
 // (the "slim refresh path for stale cards").
+// PERF-002 (docs/performance-investigation): game_card creation snapshots the
+// card like player/team cards already do, so the feed read path never pays the
+// full getPublicGame pipeline (whole events[] doc + team/league lookups) per
+// card on first render. Best-effort: a resolve failure just creates the post
+// without a snapshot and the read-path self-backfill covers it as before.
+async function tryBuildGameCardSnapshot(gameId) {
+  try {
+    return buildGameCardSnapshot(await getPublicGame(String(gameId)));
+  } catch (error) {
+    logger.warn({ err: error, gameId: String(gameId) }, 'Game card snapshot at creation failed');
+    return null;
+  }
+}
+
 async function resolveGameCardPayload(post, { refresh = false } = {}) {
   if (!refresh && post.gameCard.cardSnapshot) {
     return { image: null, gameCard: post.gameCard.cardSnapshot, playerCard: null, teamCard: null };
@@ -437,15 +451,33 @@ async function listFeedPosts(viewerUserId, options = {}) {
     ])
   );
 
+  // PERF-003 (docs/performance-investigation): sanitize posts concurrently
+  // instead of one-at-a-time — a page of snapshot-miss cards used to stack
+  // its 3-6 fallback queries per card sequentially. Concurrency is bounded
+  // below maxPoolSize (10) so a cold page can't exhaust the connection pool.
+  const SANITIZE_CONCURRENCY = 5;
+  const sanitizedByIndex = new Array(rawPosts.length);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(SANITIZE_CONCURRENCY, rawPosts.length) }, async () => {
+      while (nextIndex < rawPosts.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const post = rawPosts[index];
+        const creator = creatorsById.get(String(post.creatorUserId));
+        sanitizedByIndex[index] = creator
+          ? await sanitizePost(post, viewerUserId, { creator })
+          : await sanitizePost(post, viewerUserId);
+      }
+    })
+  );
+
   const resolved = [];
   let lastResolvedRaw = null;
   let hitLimit = false;
 
-  for (const post of rawPosts) {
-    const creator = creatorsById.get(String(post.creatorUserId));
-    const sanitized = creator
-      ? await sanitizePost(post, viewerUserId, { creator })
-      : await sanitizePost(post, viewerUserId);
+  for (const [index, post] of rawPosts.entries()) {
+    const sanitized = sanitizedByIndex[index];
     if (sanitized) {
       resolved.push(sanitized);
       lastResolvedRaw = post;
@@ -597,6 +629,7 @@ async function createGameCardPostForUser(userId, input) {
       gameId: payload.gameId,
       teamId: game.teamId || null,
       leagueTeamId: trackedLeagueTeamId,
+      cardSnapshot: await tryBuildGameCardSnapshot(payload.gameId),
     },
   });
 
@@ -1063,6 +1096,7 @@ async function autoCreateGameCardPost(systemUserId, game) {
         teamId: game.teamId || null,
         leagueTeamId: trackedLeagueTeamId,
         auto: true,
+        cardSnapshot: await tryBuildGameCardSnapshot(game._id),
       },
     });
   } catch (error) {

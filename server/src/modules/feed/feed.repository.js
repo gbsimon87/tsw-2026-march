@@ -166,9 +166,12 @@ async function listPosts({ limit, cursor } = {}) {
     query._id = { $lt: cursor };
   }
 
+  // PERF-004 (docs/performance-investigation): read-only list path — plain
+  // objects, no per-doc hydration for up to limit+10 posts per page.
   return Post.find(query)
     .sort({ _id: -1 })
-    .limit(limit || 20);
+    .limit(limit || 20)
+    .lean();
 }
 
 async function findPostById(postId) {

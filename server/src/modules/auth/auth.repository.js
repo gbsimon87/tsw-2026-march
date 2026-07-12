@@ -88,7 +88,9 @@ async function findUserById(id) {
 async function findUsersByIds(ids) {
   const uniqueIds = [...new Set((ids || []).filter(Boolean).map(String))];
   if (uniqueIds.length === 0) return [];
-  return User.find({ _id: { $in: uniqueIds } });
+  // PERF-004 (docs/performance-investigation): both callers (feed creator
+  // batch, follows hydration) are read-only display paths.
+  return User.find({ _id: { $in: uniqueIds } }).lean();
 }
 
 async function findOrCreateGoogleUser({ googleId, email, name }) {
