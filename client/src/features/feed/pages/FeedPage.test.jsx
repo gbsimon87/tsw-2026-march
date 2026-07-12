@@ -92,6 +92,14 @@ describe('FeedPage', () => {
       expect(screen.getAllByAltText('TSW Blue card logo')[0]).toBeInTheDocument();
     });
 
+    // Exactly 2 nodes are expected here: 1 visible team card + 1 hidden
+    // ShareableCardExport duplicate (off-screen, aria-hidden) rendered for
+    // html2canvas capture. `[0]` below assumes the visible card comes first
+    // in DOM order. If that order ever changes, or if the duplicate count
+    // changes, this assertion trips a loud failure instead of silently
+    // asserting against the wrong (hidden) node.
+    expect(screen.getAllByAltText('TSW Blue card logo')).toHaveLength(2);
+
     expect(screen.getAllByAltText('TSW Blue card logo')[0]).toHaveAttribute(
       'src',
       'https://example.com/team-logo.png'
