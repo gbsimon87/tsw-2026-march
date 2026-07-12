@@ -6,6 +6,7 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { FeedComposer } from '../../feed/components/FeedComposer';
 import { TeamCardPost } from '../../feed/components/posts/TeamCardPost';
+import { ShareImageButton } from '../../feed/components/ShareImageButton';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { teamsApi } from '../api/teamsApi';
@@ -445,6 +446,9 @@ export function PublicTeamPage() {
         </div>
         <div className="mt-5">
           <TeamCardPost teamCard={teamCardPreview} interactive={false} />
+        </div>
+        <div className="flex justify-end">
+          <ShareImageButton type="team_card" teamCard={teamCardPreview} />
         </div>
       </section>
 

@@ -7,6 +7,7 @@ import { FeedComposer } from '../../feed/components/FeedComposer';
 import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 import { PlayerCardPost } from '../../feed/components/posts/PlayerCardPost';
+import { ShareImageButton } from '../../feed/components/ShareImageButton';
 import { extractYouTubeVideoId } from '../../games/youtube';
 
 function formatGameDate(game) {
@@ -349,6 +350,26 @@ export function PublicPlayerPage() {
             },
           }}
         />
+
+        <div className="flex justify-end">
+          <ShareImageButton
+            type="player_card"
+            playerCard={{
+              playerUrl: `/teams/${teamId}/players/${playerId}`,
+              playerName: playerLabel,
+              teamName: data.team.name,
+              jerseyNumber: data.player.jerseyNumber ?? null,
+              playerImage: data.player.image ?? null,
+              teamLogo: data.team.logo ?? null,
+              teamColors: data.team.colors ?? [],
+              summary: {
+                pointsPerGame: summary.pointsPerGame,
+                reboundsPerGame: summary.reboundsPerGame,
+                assistsPerGame: summary.assistsPerGame,
+              },
+            }}
+          />
+        </div>
 
         <div className="flex justify-end">
           <button
