@@ -1,7 +1,7 @@
 services:
   - type: web
     name: tsw-2026-march-api-prod
-    plan: free
+    plan: starter
     runtime: node
     branch: main
     autoDeployTrigger: off

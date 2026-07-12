@@ -996,6 +996,75 @@ describe('feed service', () => {
     });
   });
 
+  // PERF-002 (docs/performance-investigation): game_card creation must persist
+  // a cardSnapshot like player/team cards already do, so the feed read path
+  // never pays the full getPublicGame pipeline per card on first render. Uses
+  // the exact buildGameCardSnapshot key set (TSW-004 lesson: assert the shape,
+  // not just presence).
+  describe('game_card snapshot at creation (PERF-002)', () => {
+    const publicGamePayload = {
+      game: { id: '0120a4f9196a5f9eb9f523f3', trackingMode: 'one_sided', opponent: 'Falcons' },
+      team: { id: 't1', name: 'TSW Blue', logo: null, colors: [] },
+      participants: null,
+      recap: { statusLabel: 'Final', team: { points: 58 }, opponent: { points: 51 } },
+    };
+
+    test('createGameCardPostForUser persists cardSnapshot with the live-path key set', async () => {
+      findGameById.mockResolvedValue({
+        _id: '0120a4f9196a5f9eb9f523f3',
+        gameContext: 'league',
+        leagueId: '377fd569971eedeba8fbea28',
+        trackedLeagueTeamId: '2e13ff6bcb41415413eaf71a',
+        status: 'completed',
+        scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      isLeaguePublic.mockResolvedValue(true);
+      getPublicGame.mockResolvedValue(publicGamePayload);
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'game_card', creatorUserId: 'user-1' });
+
+      await service.createGameCardPostForUser('user-1', { gameId: '0120a4f9196a5f9eb9f523f3' });
+
+      const created = createPost.mock.calls[0][0];
+      expect(Object.keys(created.gameCard.cardSnapshot).sort()).toEqual(
+        Object.keys(service.buildGameCardSnapshot(publicGamePayload)).sort()
+      );
+    });
+
+    test('autoCreateGameCardPost persists cardSnapshot too', async () => {
+      findAutoGameCardPost.mockResolvedValue(null);
+      getPublicGame.mockResolvedValue(publicGamePayload);
+      createPost.mockResolvedValue({ _id: 'post-1' });
+
+      await service.autoCreateGameCardPost('system-user-1', {
+        _id: '0120a4f9196a5f9eb9f523f3',
+        gameContext: 'league',
+        trackedLeagueTeamId: '2e13ff6bcb41415413eaf71a',
+      });
+
+      expect(createPost.mock.calls[0][0].gameCard.cardSnapshot).toEqual(
+        service.buildGameCardSnapshot(publicGamePayload)
+      );
+    });
+
+    test('a snapshot-resolve failure still creates the post (snapshot null)', async () => {
+      findGameById.mockResolvedValue({
+        _id: '0120a4f9196a5f9eb9f523f3',
+        gameContext: 'league',
+        leagueId: '377fd569971eedeba8fbea28',
+        trackedLeagueTeamId: '2e13ff6bcb41415413eaf71a',
+        status: 'completed',
+        scheduledAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      isLeaguePublic.mockResolvedValue(true);
+      getPublicGame.mockRejectedValue(new Error('resolve failed'));
+      createPost.mockResolvedValue({ _id: 'post-1', type: 'game_card', creatorUserId: 'user-1' });
+
+      await service.createGameCardPostForUser('user-1', { gameId: '0120a4f9196a5f9eb9f523f3' });
+
+      expect(createPost.mock.calls[0][0].gameCard.cardSnapshot).toBeNull();
+    });
+  });
+
   describe('autoCreateHighlightClipPosts', () => {
     function makeEvent(overrides) {
       return {
