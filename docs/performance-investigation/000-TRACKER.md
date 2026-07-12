@@ -16,9 +16,13 @@
 - **Root cause**: infrastructure — **prod API is on Render's free plan**
   (`render.yaml:4`) → spin-down + 10–50 s cold boot; amplified by Atlas M0
   (shared with dev) and a self-healing game_card snapshot N+1 on first read.
-- **Remaining critical issues**: none — PERF-001 resolved. Note
-  `render.yaml:4` still says `plan: free`; a future blueprint sync could
-  silently downgrade the instance — update it to match the dashboard.
+- **Remaining critical issues**: none — PERF-001 resolved (2026-07-12:
+  both `tsw-2026-march-api-prod` and `tsw-2026-march-client-prod` confirmed
+  on Starter plans). ⚠️ `render.yaml:4` still says `plan: free` and is
+  policy-locked against automated edits (see `docs/security.md`) — change it
+  to `plan: starter` **by hand** so a future blueprint sync can't silently
+  downgrade the API. (Static sites take no `plan` key, so the client block
+  needs no change.)
 - **High-risk items**: PERF-006 (prod DB migration — backup + dry-run
   playbook required).
 - **Blockers**: PERF-008 needs a product decision on enabling prod analytics.
