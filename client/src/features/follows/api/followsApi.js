@@ -1,17 +1,20 @@
 import { apiClient } from '../../../lib/apiClient';
 
 export const followsApi = {
-  follow(userId) {
-    return apiClient.post(`/follows/users/${userId}`);
+  follow(targetType, targetId) {
+    return apiClient.post(`/follows/${targetType}/${targetId}`);
   },
-  unfollow(userId) {
-    return apiClient.delete(`/follows/users/${userId}`);
+  unfollow(targetType, targetId) {
+    return apiClient.delete(`/follows/${targetType}/${targetId}`);
   },
-  listFollowing() {
-    return apiClient.get('/follows/following');
+  listFollowing(targetType) {
+    const query = targetType ? `?targetType=${encodeURIComponent(targetType)}` : '';
+    return apiClient.get(`/follows/following${query}`);
   },
-  getStatuses(userIds) {
-    const ids = (userIds || []).filter(Boolean).join(',');
-    return apiClient.get(`/follows/status?userIds=${encodeURIComponent(ids)}`);
+  getStatuses(targetType, targetIds) {
+    const ids = (targetIds || []).filter(Boolean).join(',');
+    return apiClient.get(
+      `/follows/status?targetType=${encodeURIComponent(targetType)}&targetIds=${encodeURIComponent(ids)}`
+    );
   },
 };

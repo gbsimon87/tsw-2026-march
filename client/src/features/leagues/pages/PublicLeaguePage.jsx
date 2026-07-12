@@ -14,6 +14,7 @@ import { StatsTable } from '../../teams/components/StatsTable';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
+import { FollowButton } from '../../follows/components/FollowButton';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 
@@ -245,11 +246,19 @@ export function PublicLeaguePage() {
           />
         }
       >
-        <SeasonSelect
-          seasons={seasons}
-          selectedSeasonId={activeSeasonId}
-          onChange={setSelectedSeasonId}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <SeasonSelect
+            seasons={seasons}
+            selectedSeasonId={activeSeasonId}
+            onChange={setSelectedSeasonId}
+          />
+          {/* Follow is a public-surface-only feature (decision D8/DL7): only
+              offer it when the league is actually public, even though a private
+              league is reachable here for its own members. */}
+          {league.isPublic ? (
+            <FollowButton targetType="league" targetId={league.id} variant="onDark" />
+          ) : null}
+        </div>
       </DarkPageHeader>
 
       <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">

@@ -57,42 +57,84 @@ describe('FollowButton', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  test('signed-in viewer can follow and the button flips to Following', async () => {
+  test('a user can follow their own league/team (no self-follow hiding for non-user types)', async () => {
+    useAuth.mockReturnValue({ user: { id: 'me-1' } });
+    followsApi.getStatuses.mockResolvedValue({ statuses: {} });
+
+    renderButton({ targetType: 'league', targetId: 'me-1' });
+
+    // targetId matching the user id must NOT hide the button for a league.
+    expect(await screen.findByRole('button', { name: /^follow$/i })).toBeInTheDocument();
+  });
+
+  test('signed-in viewer can follow a user; the button flips to Following', async () => {
     useAuth.mockReturnValue({ user: { id: 'me-1' } });
     followsApi.getStatuses.mockResolvedValue({ statuses: { 'target-1': false } });
     followsApi.follow.mockResolvedValue({
-      follow: { targetUserId: 'target-1', isFollowing: true },
+      follow: { targetType: 'user', targetId: 'target-1', isFollowing: true },
     });
 
     renderButton({ targetUserId: 'target-1' });
 
-    const button = await screen.findByRole('button', { name: /follow this player/i });
+    const button = await screen.findByRole('button', { name: /^follow$/i });
     expect(button).toHaveTextContent('Follow');
 
     fireEvent.click(button);
 
-    await waitFor(() => expect(followsApi.follow).toHaveBeenCalledWith('target-1'));
+    await waitFor(() => expect(followsApi.follow).toHaveBeenCalledWith('user', 'target-1'));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /unfollow this player/i })).toHaveTextContent(
-        'Following'
-      )
+      expect(screen.getByRole('button', { name: /unfollow/i })).toHaveTextContent('Following')
+    );
+  });
+
+  test.each([
+    ['league', 'league-1'],
+    ['leagueTeam', 'team-1'],
+  ])('signed-in viewer can follow a %s target', async (targetType, targetId) => {
+    useAuth.mockReturnValue({ user: { id: 'me-1' } });
+    followsApi.getStatuses.mockResolvedValue({ statuses: { [targetId]: false } });
+    followsApi.follow.mockResolvedValue({
+      follow: { targetType, targetId, isFollowing: true },
+    });
+
+    renderButton({ targetType, targetId });
+
+    const button = await screen.findByRole('button', { name: /^follow$/i });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(followsApi.follow).toHaveBeenCalledWith(targetType, targetId));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /unfollow/i })).toHaveTextContent('Following')
     );
   });
 
   test('already-following viewer can unfollow', async () => {
     useAuth.mockReturnValue({ user: { id: 'me-1' } });
     followsApi.getStatuses.mockResolvedValue({ statuses: { 'target-1': true } });
-    followsApi.unfollow.mockResolvedValue({ targetUserId: 'target-1', isFollowing: false });
+    followsApi.unfollow.mockResolvedValue({
+      targetType: 'user',
+      targetId: 'target-1',
+      isFollowing: false,
+    });
 
     renderButton({ targetUserId: 'target-1' });
 
-    const button = await screen.findByRole('button', { name: /unfollow this player/i });
+    const button = await screen.findByRole('button', { name: /unfollow/i });
     fireEvent.click(button);
 
-    await waitFor(() => expect(followsApi.unfollow).toHaveBeenCalledWith('target-1'));
+    await waitFor(() => expect(followsApi.unfollow).toHaveBeenCalledWith('user', 'target-1'));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /follow this player/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^follow$/i })).toBeInTheDocument()
     );
+  });
+
+  test('knownIsFollowing skips the status fetch entirely', async () => {
+    useAuth.mockReturnValue({ user: { id: 'me-1' } });
+
+    renderButton({ targetType: 'league', targetId: 'league-1', knownIsFollowing: true });
+
+    expect(await screen.findByRole('button', { name: /unfollow/i })).toHaveTextContent('Following');
+    expect(followsApi.getStatuses).not.toHaveBeenCalled();
   });
 
   test('surfaces an error message when the toggle fails', async () => {
@@ -102,7 +144,7 @@ describe('FollowButton', () => {
 
     renderButton({ targetUserId: 'target-1' });
 
-    const button = await screen.findByRole('button', { name: /follow this player/i });
+    const button = await screen.findByRole('button', { name: /^follow$/i });
     fireEvent.click(button);
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Network down'));

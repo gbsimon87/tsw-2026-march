@@ -4,42 +4,56 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../app/store/AuthContext';
 import { followsApi } from '../api/followsApi';
 import { useFollowStatus, followStatusQueryKey } from '../hooks/useFollowStatus';
-import { FOLLOWING_QUERY_KEY } from '../hooks/useFollowing';
+import { followingQueryKey } from '../hooks/useFollowing';
 
 const baseClass =
   'inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60';
 
-// Follow/unfollow toggle for a target user account. Only signed-in users can
-// follow (decision D6): logged-out visitors get a "Log in to follow" CTA, and
-// the button is hidden when viewing your own account. Mutations are plain async
-// followsApi calls + manual setQueryData (repo convention — no useMutation).
+// The id field on a following-list card differs per target type — used to drop
+// the right card from the list cache on unfollow.
+const LIST_ID_FIELD = {
+  user: 'userId',
+  league: 'leagueId',
+  leagueTeam: 'leagueTeamId',
+};
+
+// Follow/unfollow toggle for a target (user account, league, or league team).
+// Only signed-in users can follow (decision D6): logged-out visitors get a
+// "Log in to follow" CTA. For a user target the button is hidden when viewing
+// your own account; following your own league/team is allowed (decision DL3).
+// Mutations are plain async followsApi calls + manual setQueryData (repo
+// convention — no useMutation).
 //
 // `knownIsFollowing` lets a parent rendering many buttons at once (e.g. a
-// player-discovery grid) batch-fetch status for every visible target with one
-// useFollowStatus([...ids]) call and pass each result down, instead of every
-// button independently firing its own single-id request. When omitted, the
-// button fetches its own status (fine for a lone button on a profile page).
+// player-discovery grid, or the Following page) batch-fetch status for every
+// visible target with one useFollowStatus([...ids]) call and pass each result
+// down, instead of every button independently firing its own single-id request.
+// When omitted, the button fetches its own status.
+//
+// `targetUserId` is a back-compat alias for `targetId` when targetType==='user'.
 export function FollowButton({
+  targetType = 'user',
+  targetId,
   targetUserId,
   size = 'default',
   variant = 'default',
   className = '',
   knownIsFollowing,
 }) {
+  const id = targetId ?? targetUserId;
   const onDark = variant === 'onDark';
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
-  const isOwnAccount = user && String(user.id) === String(targetUserId);
+  // Self-follow only applies to user accounts (DL3).
+  const isOwnAccount = targetType === 'user' && user && String(user.id) === String(id);
   const hasKnownStatus = knownIsFollowing !== undefined;
-  const canQuery = Boolean(user) && !isOwnAccount && !hasKnownStatus;
+  const canQuery = Boolean(user) && !isOwnAccount && !hasKnownStatus && Boolean(id);
 
-  const { data: statuses } = useFollowStatus([targetUserId], { enabled: canQuery });
-  const isFollowing = hasKnownStatus
-    ? Boolean(knownIsFollowing)
-    : Boolean(statuses?.[String(targetUserId)]);
+  const { data: statuses } = useFollowStatus([id], { targetType, enabled: canQuery });
+  const isFollowing = hasKnownStatus ? Boolean(knownIsFollowing) : Boolean(statuses?.[String(id)]);
 
   // Never render for your own account.
   if (isOwnAccount) {
@@ -66,44 +80,44 @@ export function FollowButton({
     const nextFollowing = !isFollowing;
     try {
       if (nextFollowing) {
-        await followsApi.follow(targetUserId);
+        await followsApi.follow(targetType, id);
       } else {
-        await followsApi.unfollow(targetUserId);
+        await followsApi.unfollow(targetType, id);
       }
 
       // Flip this target's cached status everywhere it's cached — both this
       // button's own single-id query key and any batched key a parent (e.g. a
-      // discovery grid) fetched for multiple ids at once, since both may hold
-      // an entry for targetUserId.
-      queryClient.setQueriesData({ queryKey: ['followStatus'] }, (current) => {
-        if (!current?.statuses || !(String(targetUserId) in current.statuses)) {
+      // discovery grid) fetched for multiple ids at once, since both may hold an
+      // entry for this id. Scoped to this targetType's status keys.
+      queryClient.setQueriesData({ queryKey: ['followStatus', targetType] }, (current) => {
+        if (!current?.statuses || !(String(id) in current.statuses)) {
           return current;
         }
         return {
           ...current,
-          statuses: { ...current.statuses, [String(targetUserId)]: nextFollowing },
+          statuses: { ...current.statuses, [String(id)]: nextFollowing },
         };
       });
-      queryClient.setQueryData(followStatusQueryKey([targetUserId]), (current) => ({
+      queryClient.setQueryData(followStatusQueryKey(targetType, [id]), (current) => ({
         ...(current?.statuses ? current : { statuses: {} }),
-        statuses: { ...(current?.statuses || {}), [String(targetUserId)]: nextFollowing },
+        statuses: { ...(current?.statuses || {}), [String(id)]: nextFollowing },
       }));
 
-      // On unfollow, drop the card from the Following list cache immediately;
-      // on follow, invalidate by removing so the list refetches with the new
-      // card (it needs the hydrated name/avatar the button doesn't have).
-      queryClient.setQueryData(FOLLOWING_QUERY_KEY, (current) => {
+      // On unfollow, drop the card from this type's Following list cache
+      // immediately; on follow, remove the list so it refetches with the new
+      // hydrated card (which carries name/logo the button doesn't have).
+      const listKey = followingQueryKey(targetType);
+      const idField = LIST_ID_FIELD[targetType] || 'targetId';
+      queryClient.setQueryData(listKey, (current) => {
         if (!current?.following) return current;
         if (nextFollowing) return current;
         return {
           ...current,
-          following: current.following.filter(
-            (entry) => String(entry.userId) !== String(targetUserId)
-          ),
+          following: current.following.filter((entry) => String(entry[idField]) !== String(id)),
         };
       });
       if (nextFollowing) {
-        queryClient.removeQueries({ queryKey: FOLLOWING_QUERY_KEY });
+        queryClient.removeQueries({ queryKey: listKey });
       }
     } catch (toggleError) {
       setError(toggleError.message || 'Something went wrong');
@@ -131,7 +145,7 @@ export function FollowButton({
         onClick={onToggle}
         disabled={pending}
         aria-pressed={isFollowing}
-        aria-label={isFollowing ? 'Unfollow this player' : 'Follow this player'}
+        aria-label={isFollowing ? 'Unfollow' : 'Follow'}
         className={`${baseClass} ${sizeClass} ${styleClass} ${className}`}
       >
         {isFollowing ? 'Following' : 'Follow'}

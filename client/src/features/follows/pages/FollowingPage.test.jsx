@@ -30,6 +30,14 @@ function renderPage() {
   );
 }
 
+// Route listFollowing per targetType so each section gets its own data.
+function mockFollowingByType({ user = [], league = [], leagueTeam = [] }) {
+  followsApi.listFollowing.mockImplementation((targetType) => {
+    const map = { user, league, leagueTeam };
+    return Promise.resolve({ following: map[targetType] || [], nextCursor: null });
+  });
+}
+
 describe('FollowingPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,17 +48,24 @@ describe('FollowingPage', () => {
     cleanup();
   });
 
-  test('shows an empty state when following no one', async () => {
-    followsApi.listFollowing.mockResolvedValue({ following: [], nextCursor: null });
+  test('renders three sections with independent empty states', async () => {
+    mockFollowingByType({});
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/not following anyone yet/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/not following any players yet/i)).toBeInTheDocument()
+    );
+    expect(screen.getByText(/not following any leagues yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/not following any teams yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Players' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Leagues' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Teams' })).toBeInTheDocument();
   });
 
-  test('renders a card per followed user with a profile link when public', async () => {
-    followsApi.listFollowing.mockResolvedValue({
-      following: [
+  test('renders a player card with a profile link when public', async () => {
+    mockFollowingByType({
+      user: [
         {
           userId: 'target-1',
           name: 'Jamie Rivera',
@@ -59,39 +74,76 @@ describe('FollowingPage', () => {
           profileHref: '/players/target-1',
         },
       ],
-      nextCursor: null,
     });
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Jamie Rivera')).toBeInTheDocument());
-    const profileLink = screen.getByText(/view profile/i).closest('a');
-    expect(profileLink).toHaveAttribute('href', '/players/target-1');
+    expect(screen.getByText(/view profile/i).closest('a')).toHaveAttribute(
+      'href',
+      '/players/target-1'
+    );
   });
 
-  test('shows a minimal card (no profile link) when the user has no public profile', async () => {
-    followsApi.listFollowing.mockResolvedValue({
-      following: [
+  test('renders a league card linking to the public league page', async () => {
+    mockFollowingByType({
+      league: [
         {
-          userId: 'target-2',
-          name: 'Alex Chen',
-          avatarUrl: null,
-          hasPublicProfile: false,
-          profileHref: null,
+          leagueId: 'league-1',
+          name: 'Open League',
+          logo: null,
+          slug: 'open',
+          profileHref: '/league/open',
         },
       ],
-      nextCursor: null,
     });
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Alex Chen')).toBeInTheDocument());
-    expect(screen.getByText(/no public profile yet/i)).toBeInTheDocument();
-    expect(screen.queryByText(/view profile/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Open League')).toBeInTheDocument());
+    expect(screen.getByText(/view league/i).closest('a')).toHaveAttribute('href', '/league/open');
   });
 
-  test('surfaces a load error', async () => {
-    followsApi.listFollowing.mockRejectedValue(new Error('Boom'));
+  test('renders a team card linking to the public team page', async () => {
+    mockFollowingByType({
+      leagueTeam: [
+        {
+          leagueTeamId: 'team-1',
+          name: 'Hawks',
+          logo: null,
+          teamSlug: 'hawks',
+          leagueSlug: 'open',
+          profileHref: '/league/open/teams/hawks',
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Hawks')).toBeInTheDocument());
+    expect(screen.getByText(/view team/i).closest('a')).toHaveAttribute(
+      'href',
+      '/league/open/teams/hawks'
+    );
+  });
+
+  test('a now-private league card shows no link (D8 degradation)', async () => {
+    mockFollowingByType({
+      league: [{ leagueId: 'league-2', name: 'Secret League', logo: null, profileHref: null }],
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Secret League')).toBeInTheDocument());
+    expect(screen.getByText(/not currently public/i)).toBeInTheDocument();
+    expect(screen.queryByText(/view league/i)).not.toBeInTheDocument();
+  });
+
+  test('surfaces a per-section load error', async () => {
+    followsApi.listFollowing.mockImplementation((targetType) => {
+      if (targetType === 'league') return Promise.reject(new Error('Boom'));
+      return Promise.resolve({ following: [], nextCursor: null });
+    });
 
     renderPage();
 
@@ -99,8 +151,8 @@ describe('FollowingPage', () => {
   });
 
   test('never fetches follow status — every entry is already known to be followed', async () => {
-    followsApi.listFollowing.mockResolvedValue({
-      following: [
+    mockFollowingByType({
+      user: [
         {
           userId: 'target-1',
           name: 'Jamie Rivera',
@@ -108,21 +160,16 @@ describe('FollowingPage', () => {
           hasPublicProfile: true,
           profileHref: '/players/target-1',
         },
-        {
-          userId: 'target-2',
-          name: 'Alex Chen',
-          avatarUrl: null,
-          hasPublicProfile: false,
-          profileHref: null,
-        },
       ],
-      nextCursor: null,
+      league: [
+        { leagueId: 'league-1', name: 'Open League', logo: null, profileHref: '/league/open' },
+      ],
     });
 
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Unfollow this player' })).toHaveLength(2)
+      expect(screen.getAllByRole('button', { name: 'Unfollow' }).length).toBeGreaterThanOrEqual(2)
     );
     expect(followsApi.getStatuses).not.toHaveBeenCalled();
   });

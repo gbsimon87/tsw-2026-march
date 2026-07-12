@@ -149,11 +149,11 @@ describe('DiscoverablePlayers follow-status batching', () => {
 
     await waitFor(() => expect(screen.getByText('Jamie Rivera')).toBeInTheDocument());
     await waitFor(() => expect(followsApi.getStatuses).toHaveBeenCalledTimes(1));
-    expect(followsApi.getStatuses).toHaveBeenCalledWith(['user-1', 'user-2']);
+    expect(followsApi.getStatuses).toHaveBeenCalledWith('user', ['user-1', 'user-2']);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Unfollow this player' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument()
     );
-    expect(screen.getByRole('button', { name: 'Follow this player' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Follow' })).toBeInTheDocument();
   });
 });

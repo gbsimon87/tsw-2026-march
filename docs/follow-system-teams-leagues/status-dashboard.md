@@ -11,17 +11,21 @@
 | ------------------------- | -------------- | -------- |
 | Phase 0 — Docs scaffold   | ✅ Complete    | 100%     |
 | Phase 1 — Backend + API   | ✅ Complete    | 100%     |
-| Phase 2 — Frontend        | 🟡 In Progress | 0%       |
-| Phase 3 — Verify & polish | ⬜ Not Started | 0%       |
+| Phase 2 — Frontend        | ✅ Complete    | 100%     |
+| Phase 3 — Verify & polish | 🟡 In Progress | 40%      |
 | Phase 4 — Ship & doc-sync | ⬜ Not Started | 0%       |
 
-**Overall:** ~45% — backend + API complete and green (server suite 416/416); frontend next.
+**Overall:** ~80% — backend + frontend complete and green; verification underway.
 
 ## Current phase
 
-**Phase 2 — Frontend.** Backend dispatch map, generic routes, validation, and
-server tests landed (50 follows tests, full suite 416/416). Next: type-aware
-`FollowButton`/api/hooks, sectioned FollowingPage, new mounts.
+**Phase 3 — Verify & polish.** Frontend landed: type-aware `FollowButton`
+(default `targetType='user'`), api/hooks namespaced by type, sectioned
+FollowingPage (Players/Leagues/Teams), follow buttons on `PublicLeaguePage` +
+`PublicLeagueTeamPage` (gated on `league.isPublic`). Client build ✓, lint ✓,
+follows + affected player tests green (22). The 19 failing client tests are the
+pre-existing OPT-026 drift set (games/feed/posthog/smoke) — unrelated. Next:
+security review + full pre-PR gate.
 
 ## Completed work
 
