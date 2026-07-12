@@ -19,6 +19,7 @@ import { GameRecapPanel } from '../components/GameRecapPanel';
 import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { createRecapCardDataUrl } from '../recapCardImage';
+import { ShareImageButton } from '../../feed/components/ShareImageButton';
 import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
@@ -850,6 +851,23 @@ export function GameDetailPage() {
     ? `${getParticipantName(participants, 'away')} at ${getParticipantName(participants, 'home')} final: ${gameSummary.homePoints || 0}-${gameSummary.awayPoints || 0}.`
     : `${team?.name || 'Team'} vs ${recap?.opponent?.name || game?.opponent || 'Opponent'} final: ${gameSummary.teamPoints || 0}-${gameSummary.opponentPoints || 0}.`;
   const shareText = `${shareSummary}\nView game: ${shareUrl}`;
+  // Mirrors server's buildGameCardSnapshot (feed.service.js) so the shareable
+  // image matches what an auto/manual game_card feed post would render — this
+  // page doesn't otherwise assemble a GameCardPost-shaped object since its
+  // existing share/download flow uses a separate SVG (createRecapCardDataUrl).
+  const gameCard = {
+    gameId: game.id,
+    gameUrl: `/games/${game.id}`,
+    teamId: team?.id ?? null,
+    teamName: isDualTeam
+      ? `${getParticipantName(participants, 'home')} vs ${getParticipantName(participants, 'away')}`
+      : (team?.name ?? null),
+    teamLogo: isDualTeam ? (participants?.home?.logo ?? null) : (team?.logo ?? null),
+    teamColors: team?.colors ?? [],
+    opponent: isDualTeam ? null : recap?.opponent?.name || game?.opponent || null,
+    participants: isDualTeam ? participants : null,
+    recap,
+  };
 
   // `preparedDataUrl` lets a caller that already generated the card (e.g.
   // shareHeaderCard's fallback path) hand it straight through instead of
@@ -1117,6 +1135,9 @@ export function GameDetailPage() {
                 </span>
                 <span className="text-[11px] font-medium">Pulse</span>
               </button>
+              <div className="flex justify-end">
+                <ShareImageButton type="game_card" gameCard={gameCard} />
+              </div>
             </>
           }
         />

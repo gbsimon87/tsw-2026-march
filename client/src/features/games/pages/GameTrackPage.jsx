@@ -1384,7 +1384,7 @@ export function GameTrackPage() {
   const eventPickerShellClass =
     'fixed inset-0 z-[60] flex items-stretch justify-center bg-slate-950/35 p-2 backdrop-blur-[1px] sm:p-3';
   const eventPickerPanelClass =
-    'flex h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
+    'relative z-10 flex h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
   const eventPickerBodyClass = 'flex h-full min-h-0 w-full flex-col';
   const eventPickerGridClass =
     'mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),minmax(12rem,0.78fr)] landscape:grid-rows-none md:grid-cols-[minmax(0,1fr),minmax(13rem,0.8fr)]';
@@ -1421,18 +1421,20 @@ export function GameTrackPage() {
   };
 
   const eventPicker = isEventPickerOpen ? (
+    // onKeyDown/onClickCapture below are Escape handling + a ghost-click guard, not
+    // user-facing interactions — the actual dismiss control is the invisible backdrop
+    // <button> beneath this dialog.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       aria-modal="true"
       aria-label="Add event"
       className={eventPickerShellClass}
       role="dialog"
-      onClick={clearEventPicker}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           clearEventPicker();
         }
       }}
-      onPointerDown={(event) => event.stopPropagation()}
       onClickCapture={(event) => {
         if (ghostClickGuardRef.current !== null && Date.now() - ghostClickGuardRef.current < 350) {
           event.stopPropagation();
@@ -1441,6 +1443,16 @@ export function GameTrackPage() {
         }
       }}
     >
+      <button
+        type="button"
+        aria-label="Close"
+        tabIndex={-1}
+        className="fixed inset-0 h-full w-full cursor-default"
+        onClick={clearEventPicker}
+        onPointerDown={(event) => event.stopPropagation()}
+      />
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
+          stop-propagation guard only, not an interactive control. */}
       <div
         className={eventPickerPanelClass}
         onClick={(event) => event.stopPropagation()}
@@ -2846,18 +2858,29 @@ export function GameTrackPage() {
           ? (() => {
               const allStatTypes = Object.keys(STAT_LABELS);
               return (
+                // Escape handling only — the actual dismiss control is the invisible
+                // backdrop <button> beneath this dialog.
+                // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
                 <div
                   role="dialog"
                   aria-modal="true"
                   aria-label="Edit event"
                   className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
-                  onClick={() => setEditingEvent(null)}
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') setEditingEvent(null);
                   }}
                 >
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    tabIndex={-1}
+                    className="fixed inset-0 h-full w-full cursor-default"
+                    onClick={() => setEditingEvent(null)}
+                  />
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
+                      stop-propagation guard only, not an interactive control. */}
                   <div
-                    className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+                    className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="mb-4 flex items-center justify-between gap-3">
@@ -3036,18 +3059,29 @@ export function GameTrackPage() {
           : null}
 
         {showFinishConfirm ? (
+          // Escape handling only — the actual dismiss control is the invisible
+          // backdrop <button> beneath this dialog.
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Finish tracking"
             className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
-            onClick={() => setShowFinishConfirm(false)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') setShowFinishConfirm(false);
             }}
           >
+            <button
+              type="button"
+              aria-label="Close"
+              tabIndex={-1}
+              className="fixed inset-0 h-full w-full cursor-default"
+              onClick={() => setShowFinishConfirm(false)}
+            />
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
+                stop-propagation guard only, not an interactive control. */}
             <div
-              className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+              className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <p className="text-base font-semibold text-slate-900">Finish tracking?</p>

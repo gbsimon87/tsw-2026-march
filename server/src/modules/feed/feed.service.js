@@ -5,7 +5,10 @@ const {
   listPosts,
   findPostById,
   deletePostById,
+  deleteAutoPostsForGameIds,
+  findAutoGameCardPost,
   findPostByHighlightEventId,
+  findSharedEventIds,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
 } = require('./feed.repository');
@@ -26,10 +29,12 @@ const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { findUserById, findUsersByIds } = require('../auth/auth.repository');
+const { getSystemUserId } = require('../auth/auth.service');
 const {
   findGameById,
   listCompletedGames,
   listLeagueGamesByLeagueId,
+  listLeagueGameIdsByLeagueId,
 } = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const {
@@ -241,6 +246,20 @@ function buildTeamCardSnapshot(payload) {
 // persists the result — self-backfilling, same pattern as the OPT-010/011/013
 // materialisations. `refresh: true` forces a live re-resolve + re-persist
 // (the "slim refresh path for stale cards").
+// PERF-002 (docs/performance-investigation): game_card creation snapshots the
+// card like player/team cards already do, so the feed read path never pays the
+// full getPublicGame pipeline (whole events[] doc + team/league lookups) per
+// card on first render. Best-effort: a resolve failure just creates the post
+// without a snapshot and the read-path self-backfill covers it as before.
+async function tryBuildGameCardSnapshot(gameId) {
+  try {
+    return buildGameCardSnapshot(await getPublicGame(String(gameId)));
+  } catch (error) {
+    logger.warn({ err: error, gameId: String(gameId) }, 'Game card snapshot at creation failed');
+    return null;
+  }
+}
+
 async function resolveGameCardPayload(post, { refresh = false } = {}) {
   if (!refresh && post.gameCard.cardSnapshot) {
     return { image: null, gameCard: post.gameCard.cardSnapshot, playerCard: null, teamCard: null };
@@ -432,15 +451,33 @@ async function listFeedPosts(viewerUserId, options = {}) {
     ])
   );
 
+  // PERF-003 (docs/performance-investigation): sanitize posts concurrently
+  // instead of one-at-a-time — a page of snapshot-miss cards used to stack
+  // its 3-6 fallback queries per card sequentially. Concurrency is bounded
+  // below maxPoolSize (10) so a cold page can't exhaust the connection pool.
+  const SANITIZE_CONCURRENCY = 5;
+  const sanitizedByIndex = new Array(rawPosts.length);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(SANITIZE_CONCURRENCY, rawPosts.length) }, async () => {
+      while (nextIndex < rawPosts.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const post = rawPosts[index];
+        const creator = creatorsById.get(String(post.creatorUserId));
+        sanitizedByIndex[index] = creator
+          ? await sanitizePost(post, viewerUserId, { creator })
+          : await sanitizePost(post, viewerUserId);
+      }
+    })
+  );
+
   const resolved = [];
   let lastResolvedRaw = null;
   let hitLimit = false;
 
-  for (const post of rawPosts) {
-    const creator = creatorsById.get(String(post.creatorUserId));
-    const sanitized = creator
-      ? await sanitizePost(post, viewerUserId, { creator })
-      : await sanitizePost(post, viewerUserId);
+  for (const [index, post] of rawPosts.entries()) {
+    const sanitized = sanitizedByIndex[index];
     if (sanitized) {
       resolved.push(sanitized);
       lastResolvedRaw = post;
@@ -592,6 +629,7 @@ async function createGameCardPostForUser(userId, input) {
       gameId: payload.gameId,
       teamId: game.teamId || null,
       leagueTeamId: trackedLeagueTeamId,
+      cardSnapshot: await tryBuildGameCardSnapshot(payload.gameId),
     },
   });
 
@@ -873,6 +911,86 @@ async function listShareablePlayers(userId, query = {}) {
   return [...standaloneResults, ...leagueResults].slice(0, query.limit || 10);
 }
 
+async function listDiscoverablePlayers(query = {}) {
+  const [teams, publicLeagues] = await Promise.all([listTeams(), listAllPublicLeagues()]);
+  const standaloneResults = [];
+
+  for (const team of teams) {
+    for (const player of team.players || []) {
+      if (!player.isActive) {
+        continue;
+      }
+
+      const label = `${player.displayName} ${team.name}`;
+      if (!matchesQuery(label, query.q)) {
+        continue;
+      }
+
+      standaloneResults.push({
+        id: String(player._id),
+        source: 'standalone',
+        sourceLabel: 'Public team',
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        claimedByUserId: null,
+        profileHref: `/teams/${String(team._id)}/players/${String(player._id)}`,
+        team: {
+          id: String(team._id),
+          name: team.name,
+          profileHref: `/teams/${String(team._id)}`,
+        },
+        league: null,
+      });
+    }
+  }
+
+  const leagueTeamsByLeague = await Promise.all(
+    publicLeagues.map((league) => listLeagueTeams(league.id))
+  );
+  const leagueTeamEntries = publicLeagues.flatMap((league, leagueIndex) =>
+    leagueTeamsByLeague[leagueIndex]
+      .filter((team) => team.status === 'active')
+      .map((team) => ({ league, team }))
+  );
+  const leaguePlayersByTeam = await Promise.all(
+    leagueTeamEntries.map(({ team }) => listLeaguePlayers(team._id))
+  );
+  const leagueResults = leagueTeamEntries.flatMap(({ league, team }, index) =>
+    leaguePlayersByTeam[index]
+      .filter((player) => player.isActive)
+      .filter((player) =>
+        matchesQuery(`${player.displayName} ${team.name} ${league.name}`, query.q)
+      )
+      .map((player) => ({
+        id: String(player._id),
+        source: 'league',
+        sourceLabel: 'Public league',
+        leaguePlayerId: String(player._id),
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        claimedByUserId: player.claimedByUserId ? String(player.claimedByUserId) : null,
+        profileHref: `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`,
+        team: {
+          leagueTeamId: String(team._id),
+          name: team.name,
+          profileHref: `/league/${league.slug}/teams/${team.slug}`,
+        },
+        league: {
+          id: league.id,
+          name: league.name,
+          slug: league.slug,
+          profileHref: `/league/${league.slug}`,
+        },
+      }))
+  );
+
+  return [...standaloneResults, ...leagueResults]
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .slice(0, query.limit || 48);
+}
+
 function findSnapshotPlayer(game, playerId) {
   const playerIdStr = String(playerId);
   for (const roster of [game.rosterSnapshot, game.homeRosterSnapshot, game.awayRosterSnapshot]) {
@@ -954,6 +1072,177 @@ async function createHighlightClipPostForUser(userId, input) {
   return sanitizePost(post, userId);
 }
 
+// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): creates the
+// system-authored game-card for a finalised public-league game. Mirrors
+// createGameCardPostForUser but skips the billing gate (the system user is
+// not a paying customer) and marks gameCard.auto so the partial unique index
+// on {gameCard.gameId, gameCard.auto:true} guarantees at most one per game.
+async function autoCreateGameCardPost(systemUserId, game) {
+  const existing = await findAutoGameCardPost(game._id);
+  if (existing) return existing;
+
+  const trackedLeagueTeamId =
+    game.gameContext === 'league'
+      ? game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId || null
+      : null;
+
+  try {
+    return await createPost({
+      creatorUserId: systemUserId,
+      type: 'game_card',
+      caption: null,
+      gameCard: {
+        gameId: game._id,
+        teamId: game.teamId || null,
+        leagueTeamId: trackedLeagueTeamId,
+        auto: true,
+        cardSnapshot: await tryBuildGameCardSnapshot(game._id),
+      },
+    });
+  } catch (error) {
+    // E11000 from a concurrent finalise/retry racing this same game — another
+    // call already created the auto card, so treat it as a no-op, not a failure.
+    if (error?.code === 11000) {
+      return findAutoGameCardPost(game._id);
+    }
+    throw error;
+  }
+}
+
+// Per-game cap on auto-generated highlight clips so one video-rich game can't
+// flood the feed. Priority favors made shots (most exciting) over misses/
+// assists/steals. See docs/auto-feed-generation/000-TRACKER.md (B3).
+const AUTO_HIGHLIGHT_CAP = 5;
+const AUTO_HIGHLIGHT_PRIORITY = [
+  'FG3_MADE',
+  'FG2_MADE',
+  'AST',
+  'STL',
+  'BLK',
+  'FT_MADE',
+  'FG3_MISS',
+  'FG2_MISS',
+  'FT_MISS',
+];
+
+function rankAutoHighlightEvents(events) {
+  return [...events].sort((a, b) => {
+    const rankA = AUTO_HIGHLIGHT_PRIORITY.indexOf(a.statType);
+    const rankB = AUTO_HIGHLIGHT_PRIORITY.indexOf(b.statType);
+    return rankA - rankB;
+  });
+}
+
+// Auto Feed Generation: system-authored highlight_clip posts for a finalised
+// game's video-eligible events. No-op if the game has no linked video. Reuses
+// the same eligibility rule as manual highlight sharing (HIGHLIGHT_STAT_TYPES +
+// numeric videoTimestamp) and the existing findSharedEventIds dedup so events
+// already shared manually are never duplicated. Caps per game and logs when
+// capped rather than silently truncating.
+async function autoCreateHighlightClipPosts(systemUserId, game) {
+  if (!game.videoUrl) return { created: 0, skipped: 0, capped: false };
+
+  const eligibleEvents = (game.events || []).filter(
+    (ev) => HIGHLIGHT_STAT_TYPES.has(ev.statType) && typeof ev.videoTimestamp === 'number'
+  );
+  if (eligibleEvents.length === 0) return { created: 0, skipped: 0, capped: false };
+
+  const eventIds = eligibleEvents.map((ev) => String(ev._id));
+  const alreadySharedIds = new Set(await findSharedEventIds(eventIds));
+  const unsharedEvents = eligibleEvents.filter((ev) => !alreadySharedIds.has(String(ev._id)));
+
+  const ranked = rankAutoHighlightEvents(unsharedEvents);
+  const capped = ranked.length > AUTO_HIGHLIGHT_CAP;
+  const toCreate = ranked.slice(0, AUTO_HIGHLIGHT_CAP);
+
+  if (capped) {
+    logger.info(
+      { gameId: String(game._id), eligible: ranked.length, cap: AUTO_HIGHLIGHT_CAP },
+      'Auto feed: highlight clip generation capped for this game'
+    );
+  }
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const event of toCreate) {
+    const snapshotPlayer = event.playerId ? findSnapshotPlayer(game, event.playerId) : null;
+    try {
+      await createPost({
+        creatorUserId: systemUserId,
+        type: 'highlight_clip',
+        caption: null,
+        highlightClip: {
+          gameId: game._id,
+          eventId: String(event._id),
+          videoUrl: game.videoUrl,
+          videoTimestamp: event.videoTimestamp,
+          statType: event.statType,
+          playerId: event.playerId ? String(event.playerId) : null,
+          playerName: snapshotPlayer?.displayName ?? null,
+          gameTitle: game.title ?? null,
+        },
+      });
+      created += 1;
+    } catch (error) {
+      // E11000 on the unique highlightClip.eventId index — already shared
+      // (manually or by a concurrent auto-publish run). Not a failure.
+      if (error?.code === 11000) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return { created, skipped, capped };
+}
+
+// Auto Feed Generation entry point (docs/auto-feed-generation/000-TRACKER.md):
+// invoked post-response from games.service.js#scheduleAutoFeedForGame after a
+// game finishes. This is the SINGLE enforcement point for the public-league
+// restriction — private leagues and standalone games are never published,
+// using the same isLeaguePublic gate the manual share paths already use.
+async function autoPublishForFinalizedGame(gameId) {
+  const game = await findGameById(gameId);
+  if (!game || game.status !== 'completed') return;
+
+  if (game.gameContext !== 'league' || !(await isLeaguePublic(game.leagueId))) {
+    return;
+  }
+
+  const systemUserId = await getSystemUserId();
+  const gameCardPost = await autoCreateGameCardPost(systemUserId, game);
+  const highlightResult = await autoCreateHighlightClipPosts(systemUserId, game);
+
+  logger.info(
+    {
+      gameId: String(gameId),
+      leagueId: String(game.leagueId),
+      gameCardPostId: gameCardPost ? String(gameCardPost._id) : null,
+      highlightClipsCreated: highlightResult.created,
+      highlightClipsSkipped: highlightResult.skipped,
+      highlightClipsCapped: highlightResult.capped,
+    },
+    'Auto feed: publish complete for finalised public-league game'
+  );
+}
+
+// Auto Feed Generation (B2, docs/auto-feed-generation/000-TRACKER.md): reverse
+// (delete) auto-generated posts for a league that just flipped from public to
+// private. Only removes system-authored auto content — a user's own manual
+// game_card/highlight_clip shares for that league's games are left alone.
+// Called from leagues.service.js#updateLeagueForUser; a feed failure here
+// should not block the league update itself, so callers should treat this as
+// best-effort (see the try/catch at the call site).
+async function reverseAutoPostsForLeague(leagueId) {
+  const gameIds = await listLeagueGameIdsByLeagueId(leagueId);
+  if (gameIds.length === 0) return { deletedCount: 0 };
+
+  const systemUserId = await getSystemUserId();
+  return deleteAutoPostsForGameIds(gameIds, systemUserId);
+}
+
 module.exports = {
   listFeedPosts,
   createImagePostForUser,
@@ -966,10 +1255,16 @@ module.exports = {
   listShareableGames,
   listShareablePlayers,
   listShareableTeams,
+  listDiscoverablePlayers,
   sanitizePost,
   refreshGameCardPostsForGame,
   // TSW-004/TSW-005: exported for direct unit testing of the snapshot shapes.
   buildGameCardSnapshot,
   buildPlayerCardSnapshot,
   buildTeamCardSnapshot,
+  // Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md).
+  autoPublishForFinalizedGame,
+  autoCreateGameCardPost,
+  autoCreateHighlightClipPosts,
+  reverseAutoPostsForLeague,
 };

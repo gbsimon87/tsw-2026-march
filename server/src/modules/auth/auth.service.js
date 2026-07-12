@@ -5,6 +5,7 @@ const {
   findUserByEmail,
   findUserById,
   findOrCreateGoogleUser,
+  findOrCreateSystemUser,
   upsertSession,
   findSessionById,
   deleteSessionById,
@@ -162,7 +163,7 @@ async function register(input) {
 
 async function login(input, metadata) {
   const user = await findUserByEmail(input.email);
-  if (!user || !user.passwordHash) {
+  if (!user || !user.passwordHash || user.authProvider === 'system') {
     throw new ApiError(401, 'Invalid credentials');
   }
 
@@ -290,6 +291,21 @@ async function resetPassword(token, newPassword) {
   };
 }
 
+let cachedSystemUserId = null;
+
+// Reserved author for auto-generated feed content (see
+// docs/auto-feed-generation/000-TRACKER.md). Cached after first lookup since
+// the system user never changes for the lifetime of the process.
+async function getSystemUserId() {
+  if (cachedSystemUserId) {
+    return cachedSystemUserId;
+  }
+
+  const user = await findOrCreateSystemUser();
+  cachedSystemUserId = String(user._id);
+  return cachedSystemUserId;
+}
+
 async function loginWithGoogle(googleProfile, metadata) {
   const user = await findOrCreateGoogleUser({
     googleId: googleProfile.id,
@@ -383,4 +399,5 @@ module.exports = {
   getUserLeagueBillingSummary,
   getUserLeagueEntitlements,
   uploadUserAvatar,
+  getSystemUserId,
 };

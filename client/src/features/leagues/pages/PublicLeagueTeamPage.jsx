@@ -12,6 +12,7 @@ import { StatsTable } from '../../teams/components/StatsTable';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { FollowButton } from '../../follows/components/FollowButton';
 
 const TABS = [
   {
@@ -287,7 +288,7 @@ export function PublicLeagueTeamPage() {
             sizes="64px"
             className="h-16 w-16 shrink-0 rounded-full border-2 border-white/10 bg-white object-cover"
           />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#F4A300]">
               <CloudinaryImage
                 src={getLeagueHeaderImage(league)}
@@ -315,6 +316,14 @@ export function PublicLeagueTeamPage() {
               </span>
             </p>
           </div>
+          {/* Follow is a public-surface-only feature (decision D8/DL7): only
+              offer it when the parent league is public, even though a private
+              league's team page is reachable here for its own members. */}
+          {league.isPublic ? (
+            <div className="relative shrink-0 self-start">
+              <FollowButton targetType="leagueTeam" targetId={team.id} variant="onDark" />
+            </div>
+          ) : null}
         </div>
       </section>
 

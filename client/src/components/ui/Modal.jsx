@@ -42,15 +42,20 @@ export function Modal({
     <div
       className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm"
       style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
-      onClick={onClose}
     >
+      <button
+        type="button"
+        aria-label="Close dialog"
+        tabIndex={-1}
+        className="fixed inset-0 h-full w-full cursor-default"
+        onClick={onClose}
+      />
       <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby={title ? titleId : undefined}
           className={`relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl ${panelClassName}`}
-          onClick={(event) => event.stopPropagation()}
         >
           {showCloseButton ? (
             <button

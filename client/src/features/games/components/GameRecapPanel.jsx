@@ -178,49 +178,51 @@ export function GameRecapPanel({
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-xl font-semibold text-slate-900">Key Moments</h3>
-          <p className="text-sm text-slate-500">{(recap?.keyMoments || []).length} key moments</p>
-        </div>
+      {highlights.length === 0 ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xl font-semibold text-slate-900">Key Moments</h3>
+            <p className="text-sm text-slate-500">{(recap?.keyMoments || []).length} key moments</p>
+          </div>
 
-        {(recap?.keyMoments || []).length === 0 ? (
-          <p className="mt-4 text-sm text-slate-600">
-            No key moments were available for this game.
-          </p>
-        ) : (
-          <HorizontalScrollRow className="mt-4">
-            {recap.keyMoments.map((moment) => (
-              <div
-                key={moment.eventId}
-                className="flex w-56 shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
-              >
-                <CloudinaryImage
-                  src={playerPlaceholder}
-                  alt=""
-                  aria-hidden="true"
-                  width={32}
-                  height={32}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                />
-                <div className="min-w-0">
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wide text-slate-500"
-                    title="Real-world clock time when this moment was recorded"
-                  >
-                    at {formatMomentTime(moment.occurredAt)}
-                  </p>
-                  <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
-                    {moment.playerName} • {moment.statLabel}
-                  </p>
+          {(recap?.keyMoments || []).length === 0 ? (
+            <p className="mt-4 text-sm text-slate-600">
+              No key moments were available for this game.
+            </p>
+          ) : (
+            <HorizontalScrollRow className="mt-4">
+              {recap.keyMoments.map((moment) => (
+                <div
+                  key={moment.eventId}
+                  className="flex w-56 shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
+                >
+                  <CloudinaryImage
+                    src={playerPlaceholder}
+                    alt=""
+                    aria-hidden="true"
+                    width={32}
+                    height={32}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                  />
+                  <div className="min-w-0">
+                    <p
+                      className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                      title="Real-world clock time when this moment was recorded"
+                    >
+                      at {formatMomentTime(moment.occurredAt)}
+                    </p>
+                    <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+                      {moment.playerName} • {moment.statLabel}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </HorizontalScrollRow>
-        )}
-      </section>
+              ))}
+            </HorizontalScrollRow>
+          )}
+        </section>
+      ) : null}
 
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

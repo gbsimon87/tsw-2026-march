@@ -54,6 +54,11 @@ const shareableLookupSchema = z.object({
   limit: z.coerce.number().int().positive().max(20).default(10),
 });
 
+const discoverablePlayersSchema = z.object({
+  q: z.string().trim().max(120).optional(),
+  limit: z.coerce.number().int().positive().max(100).default(48),
+});
+
 module.exports = {
   createGameCardPostSchema,
   createPlayerCardPostSchema,
@@ -61,4 +66,5 @@ module.exports = {
   createHighlightClipPostSchema,
   listFeedSchema,
   shareableLookupSchema,
+  discoverablePlayersSchema,
 };

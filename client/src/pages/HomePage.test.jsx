@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { HomePage } from './HomePage';
@@ -57,12 +57,17 @@ describe('HomePage', () => {
       expect(screen.getByRole('heading', { name: 'Featured Leagues' })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('link', { name: /TSW Blue/ })).toHaveAttribute('href', '/teams/team-1');
-    expect(screen.getByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
       'href',
       '/league/spring-league'
     );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Teams' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /TSW Blue/ })).toHaveAttribute('href', '/teams/team-1');
   });
 
   test('renders empty states when no public leagues or teams are available', async () => {
@@ -78,12 +83,38 @@ describe('HomePage', () => {
     await waitFor(() => {
       expect(screen.getByText(/No public leagues yet/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/No public teams yet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Teams' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/No public teams yet/i)).toBeInTheDocument();
+    });
   });
 
-  test('renders the three homepage audience images', async () => {
-    teamsApi.listPublic.mockResolvedValue({ teams: [] });
-    leaguesApi.listPublic.mockResolvedValue({ leagues: [] });
+  test('filters leagues and teams by search input', async () => {
+    teamsApi.listPublic.mockResolvedValue({
+      teams: [{ id: 'team-1', name: 'TSW Blue', logo: null }],
+    });
+    leaguesApi.listPublic.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-1',
+          name: 'Spring League',
+          slug: 'spring-league',
+          seasonLabel: 'Spring 2026',
+          isPublic: true,
+          status: 'active',
+        },
+        {
+          id: 'league-2',
+          name: 'Winter Classic',
+          slug: 'winter-classic',
+          seasonLabel: 'Winter 2026',
+          isPublic: true,
+          status: 'active',
+        },
+      ],
+    });
 
     render(
       <MemoryRouter>
@@ -92,20 +123,26 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('img', { name: /players reviewing basketball progress and development/i })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Featured Leagues' })).toBeInTheDocument();
     });
 
-    expect(
-      screen.getByRole('img', {
-        name: /coaches and managers using basketball performance insights/i,
-      })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', {
-        name: /friends and family following basketball team highlights/i,
-      })
-    ).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Search leagues'), {
+      target: { value: 'winter' },
+    });
+
+    expect(screen.getByRole('heading', { name: 'Winter Classic' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Spring League' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Teams' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('Search teams'), {
+      target: { value: 'nonexistent' },
+    });
+
+    expect(screen.getByText(/No teams match your search/i)).toBeInTheDocument();
   });
 });

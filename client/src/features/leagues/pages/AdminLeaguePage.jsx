@@ -5,6 +5,7 @@ import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { SportsLoader } from '../../../components/SportsLoader';
+import { Modal } from '../../../components/ui/Modal';
 import { useAuth } from '../../../app/store/AuthContext';
 import { gamesApi } from '../../games/api/gamesApi';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
@@ -127,6 +128,12 @@ export function AdminLeaguePage() {
   const [submittingTeamManagerId, setSubmittingTeamManagerId] = useState('');
   const [teamRequests, setTeamRequests] = useState({});
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [seasons, setSeasons] = useState([]);
+  const [isCompletingSeason, setIsCompletingSeason] = useState(false);
+  const [confirmCompleteSeasonId, setConfirmCompleteSeasonId] = useState('');
+  const [newSeasonLabel, setNewSeasonLabel] = useState('');
+  const [isCreatingSeason, setIsCreatingSeason] = useState(false);
+  const [seasonError, setSeasonError] = useState('');
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -168,6 +175,14 @@ export function AdminLeaguePage() {
   useEffect(() => {
     setLeagueNameInput(league?.name || '');
   }, [league?.name]);
+
+  useEffect(() => {
+    if (activeTab !== 'settings') return;
+    leaguesApi
+      .listSeasons(leagueId)
+      .then((response) => setSeasons(response.seasons || []))
+      .catch(() => {});
+  }, [activeTab, leagueId]);
 
   useEffect(() => {
     if (activeTab !== 'requests' || !league?.teams?.length) return;
@@ -335,6 +350,43 @@ export function AdminLeaguePage() {
       setError(submitError.message || 'Failed to update league visibility');
     } finally {
       setIsUpdatingLeague(false);
+    }
+  }
+
+  async function onCompleteSeason(seasonId) {
+    setConfirmCompleteSeasonId('');
+    setSeasonError('');
+    setIsCompletingSeason(true);
+    try {
+      const response = await leaguesApi.completeSeason(leagueId, seasonId);
+      setSeasons((current) =>
+        current.map((season) => (season.id === seasonId ? response.season : season))
+      );
+      const refreshed = await leaguesApi.getById(leagueId);
+      setLeague(refreshed.league);
+    } catch (submitError) {
+      setSeasonError(submitError.message || 'Failed to complete season');
+    } finally {
+      setIsCompletingSeason(false);
+    }
+  }
+
+  async function onCreateSeason(event) {
+    event.preventDefault();
+    const label = newSeasonLabel.trim();
+    if (!label) return;
+    setSeasonError('');
+    setIsCreatingSeason(true);
+    try {
+      const response = await leaguesApi.createSeason(leagueId, { label });
+      setSeasons((current) => [response.season, ...current]);
+      setNewSeasonLabel('');
+      const refreshed = await leaguesApi.getById(leagueId);
+      setLeague(refreshed.league);
+    } catch (submitError) {
+      setSeasonError(submitError.message || 'Failed to start new season');
+    } finally {
+      setIsCreatingSeason(false);
     }
   }
 
@@ -518,7 +570,6 @@ export function AdminLeaguePage() {
                           setIsEditingLeagueName(false);
                         }
                       }}
-                      autoFocus
                     />
                     <button
                       type="button"
@@ -610,7 +661,7 @@ export function AdminLeaguePage() {
               </h1>
             )}
             <span className="mt-2 inline-flex flex-wrap items-center gap-2 text-sm text-white/60">
-              <span>{league.seasonLabel || 'Season TBD'}</span>
+              <span>{league.currentSeason?.label || league.seasonLabel || 'Season TBD'}</span>
               <span className="text-white/20">•</span>
               <span>{league.status}</span>
               <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-white/80">
@@ -630,13 +681,20 @@ export function AdminLeaguePage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         <div
+          role="tablist"
+          aria-label="League admin sections"
           className="grid border-b border-slate-200"
           style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}
         >
           {TABS.map((tab, index) => (
             <button
               key={tab.id}
+              id={`admin-league-tab-${tab.id}`}
               type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`admin-league-tabpanel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
                 index < TABS.length - 1 ? 'border-r border-slate-200' : ''
@@ -654,7 +712,12 @@ export function AdminLeaguePage() {
 
         <div className="p-5">
           {activeTab === 'games' ? (
-            <div>
+            <div
+              id="admin-league-tabpanel-games"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-games"
+              tabIndex={0}
+            >
               <div className="flex items-center justify-between gap-3">
                 <h2
                   className="text-lg text-slate-900"
@@ -812,7 +875,12 @@ export function AdminLeaguePage() {
           ) : null}
 
           {activeTab === 'teams' ? (
-            <div>
+            <div
+              id="admin-league-tabpanel-teams"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-teams"
+              tabIndex={0}
+            >
               <div className="flex items-center justify-between gap-3">
                 <h2
                   className="text-lg text-slate-900"
@@ -842,170 +910,186 @@ export function AdminLeaguePage() {
           ) : null}
 
           {activeTab === 'management' ? (
-            canViewManagers ? (
-              <div>
-                <h2
-                  className="text-lg text-slate-900"
-                  style={{ fontFamily: "'Archivo Black', sans-serif" }}
-                >
-                  Managers
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  League managers can manage all teams and games but cannot delete the league.
-                </p>
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                    League Managers
-                  </h3>
-                  {leagueManagers.length > 0 ? (
-                    <div className="mt-3 divide-y divide-slate-200">
-                      {leagueManagers.map((manager) => (
-                        <article key={manager.id} className="py-3 first:pt-0 last:pb-0">
-                          <div className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <span className="font-medium text-slate-900">
-                                {manager.userName || manager.userEmail || 'Unknown'}
-                              </span>
-                              {manager.userEmail ? (
-                                <span className="ml-2 text-sm text-slate-400">
-                                  • {manager.userEmail}
+            <div
+              id="admin-league-tabpanel-management"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-management"
+              tabIndex={0}
+            >
+              {canViewManagers ? (
+                <div>
+                  <h2
+                    className="text-lg text-slate-900"
+                    style={{ fontFamily: "'Archivo Black', sans-serif" }}
+                  >
+                    Managers
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    League managers can manage all teams and games but cannot delete the league.
+                  </p>
+                  <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      League Managers
+                    </h3>
+                    {leagueManagers.length > 0 ? (
+                      <div className="mt-3 divide-y divide-slate-200">
+                        {leagueManagers.map((manager) => (
+                          <article key={manager.id} className="py-3 first:pt-0 last:pb-0">
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-medium text-slate-900">
+                                  {manager.userName || manager.userEmail || 'Unknown'}
                                 </span>
+                                {manager.userEmail ? (
+                                  <span className="ml-2 text-sm text-slate-400">
+                                    • {manager.userEmail}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {isOwner ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onRemoveLeagueManager(manager.id)}
+                                  className="shrink-0 rounded-lg border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                                >
+                                  Remove
+                                </button>
                               ) : null}
                             </div>
-                            {isOwner ? (
-                              <button
-                                type="button"
-                                onClick={() => onRemoveLeagueManager(manager.id)}
-                                className="shrink-0 rounded-lg border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-500">No league managers yet.</p>
+                    )}
+                    {isOwner ? (
+                      <form onSubmit={onAddLeagueManager} className="mt-3 flex gap-2">
+                        <input
+                          autoComplete="off"
+                          type="email"
+                          aria-label="Add league manager by email"
+                          className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
+                          placeholder="Add manager by email"
+                          value={newManagerEmail}
+                          onChange={(event) => setNewManagerEmail(event.target.value)}
+                        />
+                        <button
+                          aria-label="manager-submit"
+                          type="submit"
+                          disabled={isSubmittingManager}
+                          className="shrink-0 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
+                        >
+                          {isSubmittingManager ? 'Adding…' : 'Add'}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                  <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      Team Managers
+                    </h3>
+                    {(league.teams || []).length > 0 ? (
+                      <div className="mt-3 divide-y divide-slate-200">
+                        {(league.teams || []).map((team) => {
+                          const teamManagers = (team.members || []).filter(
+                            (member) => member.role === 'manager'
+                          );
+                          const isSubmitting = submittingTeamManagerId === team.id;
+                          return (
+                            <article key={team.id} className="py-4 first:pt-0 last:pb-0">
+                              <Link
+                                to={`/admin/leagues/${league.id}/teams/${team.id}`}
+                                className="font-medium text-slate-900 transition hover:text-[#1B4332] hover:underline"
                               >
-                                Remove
-                              </button>
-                            ) : null}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500">No league managers yet.</p>
-                  )}
-                  {isOwner ? (
-                    <form onSubmit={onAddLeagueManager} className="mt-3 flex gap-2">
-                      <input
-                        autoComplete="off"
-                        type="email"
-                        className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
-                        placeholder="Add manager by email"
-                        value={newManagerEmail}
-                        onChange={(event) => setNewManagerEmail(event.target.value)}
-                      />
-                      <button
-                        aria-label="manager-submit"
-                        type="submit"
-                        disabled={isSubmittingManager}
-                        className="shrink-0 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
-                      >
-                        {isSubmittingManager ? 'Adding…' : 'Add'}
-                      </button>
-                    </form>
+                                {team.name}
+                              </Link>
+                              {teamManagers.length > 0 ? (
+                                <ul className="mt-2 space-y-1">
+                                  {teamManagers.map((manager) => (
+                                    <li
+                                      key={manager.id}
+                                      className="flex items-center gap-2 text-sm text-slate-600"
+                                    >
+                                      <span className="font-medium text-slate-800">
+                                        {manager.userName || manager.userEmail || 'Unknown'}
+                                      </span>
+                                      {manager.userEmail ? (
+                                        <span className="text-slate-400">
+                                          • {manager.userEmail}
+                                        </span>
+                                      ) : null}
+                                      {canEditLeague ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => onRemoveTeamManager(team.id, manager.id)}
+                                          className="ml-auto shrink-0 rounded-lg border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                                        >
+                                          Remove
+                                        </button>
+                                      ) : null}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="mt-1 text-sm text-slate-400">No managers assigned</p>
+                              )}
+                              {canEditLeague ? (
+                                <form
+                                  onSubmit={(e) => onAddTeamManager(e, team.id)}
+                                  className="mt-3 flex gap-2"
+                                >
+                                  <input
+                                    autoComplete="off"
+                                    type="email"
+                                    aria-label={`Add manager by email for ${team.name}`}
+                                    className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
+                                    placeholder="Add manager by email"
+                                    value={teamManagerEmails[team.id] || ''}
+                                    onChange={(e) =>
+                                      setTeamManagerEmails((current) => ({
+                                        ...current,
+                                        [team.id]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="shrink-0 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
+                                  >
+                                    {isSubmitting ? 'Adding…' : 'Add'}
+                                  </button>
+                                </form>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-500">No teams yet.</p>
+                    )}
+                  </div>
+                  {managerError ? (
+                    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                      {managerError}
+                    </p>
                   ) : null}
                 </div>
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                    Team Managers
-                  </h3>
-                  {(league.teams || []).length > 0 ? (
-                    <div className="mt-3 divide-y divide-slate-200">
-                      {(league.teams || []).map((team) => {
-                        const teamManagers = (team.members || []).filter(
-                          (member) => member.role === 'manager'
-                        );
-                        const isSubmitting = submittingTeamManagerId === team.id;
-                        return (
-                          <article key={team.id} className="py-4 first:pt-0 last:pb-0">
-                            <Link
-                              to={`/admin/leagues/${league.id}/teams/${team.id}`}
-                              className="font-medium text-slate-900 transition hover:text-[#1B4332] hover:underline"
-                            >
-                              {team.name}
-                            </Link>
-                            {teamManagers.length > 0 ? (
-                              <ul className="mt-2 space-y-1">
-                                {teamManagers.map((manager) => (
-                                  <li
-                                    key={manager.id}
-                                    className="flex items-center gap-2 text-sm text-slate-600"
-                                  >
-                                    <span className="font-medium text-slate-800">
-                                      {manager.userName || manager.userEmail || 'Unknown'}
-                                    </span>
-                                    {manager.userEmail ? (
-                                      <span className="text-slate-400">• {manager.userEmail}</span>
-                                    ) : null}
-                                    {canEditLeague ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => onRemoveTeamManager(team.id, manager.id)}
-                                        className="ml-auto shrink-0 rounded-lg border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
-                                      >
-                                        Remove
-                                      </button>
-                                    ) : null}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="mt-1 text-sm text-slate-400">No managers assigned</p>
-                            )}
-                            {canEditLeague ? (
-                              <form
-                                onSubmit={(e) => onAddTeamManager(e, team.id)}
-                                className="mt-3 flex gap-2"
-                              >
-                                <input
-                                  autoComplete="off"
-                                  type="email"
-                                  className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
-                                  placeholder="Add manager by email"
-                                  value={teamManagerEmails[team.id] || ''}
-                                  onChange={(e) =>
-                                    setTeamManagerEmails((current) => ({
-                                      ...current,
-                                      [team.id]: e.target.value,
-                                    }))
-                                  }
-                                />
-                                <button
-                                  type="submit"
-                                  disabled={isSubmitting}
-                                  className="shrink-0 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
-                                >
-                                  {isSubmitting ? 'Adding…' : 'Add'}
-                                </button>
-                              </form>
-                            ) : null}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500">No teams yet.</p>
-                  )}
-                </div>
-                {managerError ? (
-                  <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-                    {managerError}
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">
-                You don&apos;t have access to manager settings.
-              </p>
-            )
+              ) : (
+                <p className="text-sm text-slate-500">
+                  You don&apos;t have access to manager settings.
+                </p>
+              )}
+            </div>
           ) : null}
 
           {activeTab === 'requests' ? (
-            <div>
+            <div
+              id="admin-league-tabpanel-requests"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-requests"
+              tabIndex={0}
+            >
               <h2
                 className="text-lg text-slate-900"
                 style={{ fontFamily: "'Archivo Black', sans-serif" }}
@@ -1048,7 +1132,12 @@ export function AdminLeaguePage() {
           ) : null}
 
           {activeTab === 'settings' ? (
-            <div>
+            <div
+              id="admin-league-tabpanel-settings"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-settings"
+              tabIndex={0}
+            >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2
@@ -1081,44 +1170,159 @@ export function AdminLeaguePage() {
                 Current visibility:{' '}
                 <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
               </p>
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <h2
+                  className="text-lg text-slate-900"
+                  style={{ fontFamily: "'Archivo Black', sans-serif" }}
+                >
+                  Season
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Complete the current season to freeze final standings as a permanent record, then
+                  start a new one. Teams and rosters carry over automatically.
+                </p>
+
+                {league.currentSeason ? (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <p className="font-medium text-slate-900">{league.currentSeason.label}</p>
+                      <p className="text-sm text-slate-500">
+                        {league.currentSeason.status === 'active' ? 'Active' : 'Completed'}
+                      </p>
+                    </div>
+                    {isOwner && league.currentSeason.status === 'active' ? (
+                      <button
+                        type="button"
+                        disabled={isCompletingSeason}
+                        onClick={() => setConfirmCompleteSeasonId(league.currentSeason.id)}
+                        className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50"
+                      >
+                        {isCompletingSeason ? 'Completing…' : 'Complete Season'}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">This league has no season yet.</p>
+                )}
+
+                {isOwner &&
+                (!league.currentSeason || league.currentSeason.status === 'completed') ? (
+                  <form onSubmit={onCreateSeason} className="mt-4 flex gap-2">
+                    <input
+                      autoComplete="off"
+                      type="text"
+                      maxLength={80}
+                      aria-label="New season label"
+                      className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
+                      placeholder="New season label (e.g. 2026 Fall)"
+                      value={newSeasonLabel}
+                      onChange={(event) => setNewSeasonLabel(event.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isCreatingSeason || !newSeasonLabel.trim()}
+                      className="shrink-0 rounded-lg bg-[#141414] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B4332] disabled:opacity-50"
+                    >
+                      {isCreatingSeason ? 'Starting…' : 'Start New Season'}
+                    </button>
+                  </form>
+                ) : null}
+
+                {seasonError ? (
+                  <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                    {seasonError}
+                  </p>
+                ) : null}
+
+                {seasons.length > 0 ? (
+                  <div className="mt-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      Season History
+                    </h3>
+                    <div className="mt-3 divide-y divide-slate-200">
+                      {seasons.map((season) => (
+                        <div
+                          key={season.id}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                        >
+                          <span className="font-medium text-slate-800">{season.label}</span>
+                          <span className="text-slate-500">
+                            {season.status === 'active' ? 'Active' : 'Completed'}
+                            {season.completedAt
+                              ? ` · ${new Date(season.completedAt).toLocaleDateString()}`
+                              : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
       </div>
-      {confirmDeleteGameId ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
-          onClick={() => setConfirmDeleteGameId('')}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+      <Modal
+        open={Boolean(confirmDeleteGameId)}
+        onClose={() => setConfirmDeleteGameId('')}
+        title="Remove this game?"
+        showCloseButton={false}
+        panelClassName="max-w-sm"
+      >
+        <p className="text-sm text-slate-500">
+          This will permanently delete the game and all its recorded stats. This cannot be undone.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setConfirmDeleteGameId('')}
+            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            <p className="text-base font-semibold text-slate-900">Remove this game?</p>
-            <p className="mt-1 text-sm text-slate-500">
-              This will permanently delete the game and all its recorded stats. This cannot be
-              undone.
-            </p>
-            <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteGameId('')}
-                className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={deletingGameId === confirmDeleteGameId}
-                onClick={() => onDeleteGame(confirmDeleteGameId)}
-                className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
-              >
-                {deletingGameId === confirmDeleteGameId ? 'Removing…' : 'Yes, remove game'}
-              </button>
-            </div>
-          </div>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={deletingGameId === confirmDeleteGameId}
+            onClick={() => onDeleteGame(confirmDeleteGameId)}
+            className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
+          >
+            {deletingGameId === confirmDeleteGameId ? 'Removing…' : 'Yes, remove game'}
+          </button>
         </div>
-      ) : null}
+      </Modal>
+      <Modal
+        open={Boolean(confirmCompleteSeasonId)}
+        onClose={() => setConfirmCompleteSeasonId('')}
+        title="Complete this season?"
+        showCloseButton={false}
+        panelClassName="max-w-sm"
+      >
+        <p className="text-sm text-slate-500">
+          Standings and stats will be frozen as a permanent record. No new games can be scheduled
+          until you start a new season. This cannot be undone.
+          {(league.games || []).some((game) => game.status !== 'completed')
+            ? ` ${(league.games || []).filter((game) => game.status !== 'completed').length} game(s) are still in progress and will not count toward final standings.`
+            : ''}
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setConfirmCompleteSeasonId('')}
+            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isCompletingSeason}
+            onClick={() => onCompleteSeason(confirmCompleteSeasonId)}
+            className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
+          >
+            {isCompletingSeason ? 'Completing…' : 'Yes, complete season'}
+          </button>
+        </div>
+      </Modal>
     </main>
   );
 }

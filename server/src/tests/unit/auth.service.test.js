@@ -3,6 +3,7 @@ jest.mock('../../modules/auth/auth.repository', () => ({
   findUserByEmail: jest.fn(),
   findUserById: jest.fn(),
   findOrCreateGoogleUser: jest.fn(),
+  findOrCreateSystemUser: jest.fn(),
   upsertSession: jest.fn(),
   findSessionById: jest.fn(),
   deleteSessionById: jest.fn(),
@@ -70,5 +71,46 @@ describe('auth service', () => {
       'If an account exists for that email, a verification link has been sent.'
     );
     expect(result.verificationUrl).toBeNull();
+  });
+
+  test('login rejects the reserved system account even if a password hash is ever set', async () => {
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'system-1',
+      email: 'system@tsw.internal',
+      authProvider: 'system',
+      passwordHash: 'some-hash',
+    });
+
+    await expect(
+      authService.login({ email: 'system@tsw.internal', password: 'whatever' }, {})
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test('login rejects a user with no passwordHash (covers the system user by default)', async () => {
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'system-1',
+      email: 'system@tsw.internal',
+      authProvider: 'system',
+      passwordHash: null,
+    });
+
+    await expect(
+      authService.login({ email: 'system@tsw.internal', password: 'whatever' }, {})
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test('getSystemUserId creates the system user once and caches the id across calls', async () => {
+    repository.findOrCreateSystemUser.mockResolvedValue({
+      _id: 'system-1',
+      email: 'system@tsw.internal',
+      authProvider: 'system',
+    });
+
+    const first = await authService.getSystemUserId();
+    const second = await authService.getSystemUserId();
+
+    expect(first).toBe('system-1');
+    expect(second).toBe('system-1');
+    expect(repository.findOrCreateSystemUser).toHaveBeenCalledTimes(1);
   });
 });

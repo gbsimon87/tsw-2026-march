@@ -61,6 +61,11 @@ const OpponentPlaceholderPage = lazy(() =>
     default: m.OpponentPlaceholderPage,
   }))
 );
+const PublicUserProfilePage = lazy(() =>
+  import('../../features/players/pages/PublicUserProfilePage').then((m) => ({
+    default: m.PublicUserProfilePage,
+  }))
+);
 const NewGamePage = lazy(() =>
   import('../../features/games/pages/NewGamePage').then((m) => ({ default: m.NewGamePage }))
 );
@@ -125,6 +130,9 @@ const PublicLeaguePlayerPage = lazy(() =>
 );
 const MySportyPage = lazy(() =>
   import('../../features/leagues/pages/MySportyPage').then((m) => ({ default: m.MySportyPage }))
+);
+const FollowingPage = lazy(() =>
+  import('../../features/follows/pages/FollowingPage').then((m) => ({ default: m.FollowingPage }))
 );
 const AboutPage = lazy(() =>
   import('../../pages/AboutPage').then((m) => ({ default: m.AboutPage }))
@@ -225,6 +233,7 @@ export function AppRouter() {
           />
           <Route path="/opponents/:opponentSlug" element={<OpponentPlaceholderPage />} />
           <Route path="/teams/:teamId/players/:playerId" element={<PublicPlayerPage />} />
+          <Route path="/players/:userId" element={<PublicUserProfilePage />} />
           <Route path="/teams/:teamId" element={<PublicTeamPage />} />
           <Route path="/leagues" element={<Navigate to="/admin" replace />} />
           <Route path="/leagues/new" element={<Navigate to="/pricing" replace />} />
@@ -306,6 +315,14 @@ export function AppRouter() {
             element={
               <ProtectedRoute>
                 <MySportyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/following"
+            element={
+              <ProtectedRoute>
+                <FollowingPage />
               </ProtectedRoute>
             }
           />

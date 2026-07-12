@@ -17,6 +17,8 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeaguePlayerById: jest.fn(),
   findLeaguePlayerByIdAndTeam: jest.fn(),
   listLeaguePlayers: jest.fn(),
+  listLeaguePlayersByClaimedUser: jest.fn(),
+  listLeagueTeamsByIds: jest.fn(),
   saveLeaguePlayer: jest.fn(),
   createLeagueTeamMember: jest.fn(),
   findActiveLeagueTeamMember: jest.fn(),
@@ -41,6 +43,14 @@ jest.mock('../../modules/games/games.repository', () => ({
   listLeagueGamesByLeagueId: jest.fn(),
 }));
 
+jest.mock('../../modules/leagues/seasons.repository', () => ({
+  createSeason: jest.fn(),
+  findSeasonById: jest.fn(),
+  findSeasonByIdAndLeague: jest.fn(),
+  listSeasonsByLeague: jest.fn(),
+  saveSeason: jest.fn(),
+}));
+
 jest.mock('../../modules/auth/auth.repository', () => ({
   findUserByEmail: jest.fn(),
   findUserById: jest.fn(),
@@ -50,6 +60,10 @@ jest.mock('../../modules/feed/cloudinary.client', () => ({
   uploadImageBuffer: jest.fn(),
   destroyImage: jest.fn(),
   isCloudinaryConfigured: jest.fn(() => true),
+}));
+
+jest.mock('../../modules/feed/feed.service', () => ({
+  reverseAutoPostsForLeague: jest.fn(() => Promise.resolve({ deletedCount: 0 })),
 }));
 
 const {
@@ -68,8 +82,15 @@ const {
   listLeaguesByManager,
   findLeagueTeamById,
   findLeaguePlayerById,
+  listLeaguePlayersByClaimedUser,
+  listLeagueTeamsByIds,
+  saveLeague,
+  findLeagueTeamByLeagueAndSlug,
+  findLeaguePlayerByIdAndTeam,
 } = require('../../modules/leagues/leagues.repository');
+const { reverseAutoPostsForLeague } = require('../../modules/feed/feed.service');
 const { listLeagueGamesByLeagueId } = require('../../modules/games/games.repository');
+const { listSeasonsByLeague } = require('../../modules/leagues/seasons.repository');
 const { STAT_TYPES, TEAM_SIDES } = require('../../modules/shared/stats.constants');
 const {
   getLeagueRosterSnapshotForTeam,
@@ -85,7 +106,11 @@ const {
   isLeaguePublic,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
+  getPublicLeaguePlayerBySlug,
+  updateLeagueForUser,
+  getMyLeagueProfiles,
 } = require('../../modules/leagues/leagues.service');
+const { findUserById } = require('../../modules/auth/auth.repository');
 
 function buildLeagueTeam(id, name) {
   return {
@@ -182,6 +207,81 @@ describe('leagues service roster snapshots', () => {
   });
 });
 
+describe('season scoping does not leak across seasons (League Seasons)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('computeLeagueStandings for seasonB excludes games tagged with seasonA', async () => {
+    listLeagueTeams.mockResolvedValue([
+      buildLeagueTeam('team-a', 'Alpha'),
+      buildLeagueTeam('team-b', 'Bravo'),
+    ]);
+    // listLeagueGamesByLeagueId is called with (leagueId, seasonId) — the mock
+    // simulates the repository filtering by seasonId the way games.repository
+    // really does, so a game tagged for season-a is invisible when season-b is
+    // requested.
+    listLeagueGamesByLeagueId.mockImplementation((leagueId, seasonId) => {
+      const allGames = [
+        {
+          _id: 'g-season-a',
+          seasonId: 'season-a',
+          status: 'completed',
+          trackingMode: 'dual_team',
+          homeLeagueTeamId: 'team-a',
+          awayLeagueTeamId: 'team-b',
+          finalScore: { home: 20, away: 12 },
+          events: [],
+        },
+      ];
+      return Promise.resolve(allGames.filter((g) => g.seasonId === seasonId));
+    });
+
+    const seasonBStandings = await computeLeagueStandings('league-1', 'season-b');
+
+    expect(seasonBStandings.find((r) => r.teamId === 'team-a')).toMatchObject({
+      gamesPlayed: 0,
+      wins: 0,
+      losses: 0,
+    });
+    expect(seasonBStandings.find((r) => r.teamId === 'team-b')).toMatchObject({
+      gamesPlayed: 0,
+      wins: 0,
+      losses: 0,
+    });
+  });
+
+  test('computeLeaguePlayerStats for seasonB excludes player stat rows from seasonA games', async () => {
+    listLeagueTeams.mockResolvedValue([
+      buildLeagueTeam('team-a', 'Alpha'),
+      buildLeagueTeam('team-b', 'Bravo'),
+    ]);
+    listLeagueGamesByLeagueId.mockImplementation((leagueId, seasonId) => {
+      const allGames = [
+        {
+          _id: 'g-season-a',
+          seasonId: 'season-a',
+          status: 'completed',
+          trackingMode: 'dual_team',
+          homeLeagueTeamId: 'team-a',
+          awayLeagueTeamId: 'team-b',
+          trackedLeagueTeamId: 'team-a',
+          homeRosterSnapshot: [{ _id: 'p1', leaguePlayerId: 'lp1', displayName: 'Alex' }],
+          awayRosterSnapshot: [{ _id: 'p2', leaguePlayerId: 'lp2', displayName: 'Sam' }],
+          events: [{ teamSide: TEAM_SIDES.HOME, playerId: 'p1', statType: STAT_TYPES.FG3_MADE }],
+        },
+      ];
+      return Promise.resolve(allGames.filter((g) => g.seasonId === seasonId));
+    });
+
+    const seasonBStats = await computeLeaguePlayerStats('league-1', 'season-b');
+
+    // No games under season-b, so no player rows should be produced at all —
+    // season-a's game must not leak into season-b's computed stats.
+    expect(seasonBStats).toEqual([]);
+  });
+});
+
 describe('league standings materialisation (OPT-010)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -210,7 +310,7 @@ describe('league standings materialisation (OPT-010)', () => {
     const storedRows = [{ teamId: 'team-a', teamName: 'Alpha', wins: 1 }];
     findLeagueStandings.mockResolvedValue({ leagueId: 'league-1', rows: storedRows });
 
-    const result = await getLeagueStandings('league-1');
+    const result = await getLeagueStandings('league-1', undefined);
 
     expect(result).toBe(storedRows);
     // Materialised hit must NOT touch the live-compute data sources.
@@ -223,12 +323,14 @@ describe('league standings materialisation (OPT-010)', () => {
     upsertLeagueStandings.mockResolvedValue({});
     seedTeamsAndGames();
 
-    const result = await getLeagueStandings('league-1');
+    const result = await getLeagueStandings('league-1', undefined);
 
     // Backfilled and persisted.
     expect(upsertLeagueStandings).toHaveBeenCalledTimes(1);
-    const [persistedLeagueId, persistedRows] = upsertLeagueStandings.mock.calls[0];
+    const [persistedLeagueId, persistedSeasonId, persistedRows] =
+      upsertLeagueStandings.mock.calls[0];
     expect(persistedLeagueId).toBe('league-1');
+    expect(persistedSeasonId).toBeUndefined();
     expect(persistedRows).toBe(result);
     // Alpha won (top row).
     expect(result[0]).toMatchObject({
@@ -242,15 +344,15 @@ describe('league standings materialisation (OPT-010)', () => {
 
   test('materialised rows == live compute (parity)', async () => {
     seedTeamsAndGames();
-    const live = await computeLeagueStandings('league-1');
+    const live = await computeLeagueStandings('league-1', undefined);
 
     // recompute persists exactly what the live compute produced.
     upsertLeagueStandings.mockResolvedValue({});
     seedTeamsAndGames();
-    const recomputed = await recomputeLeagueAggregates('league-1');
+    const recomputed = await recomputeLeagueAggregates('league-1', undefined);
 
     expect(recomputed).toEqual(live);
-    expect(upsertLeagueStandings).toHaveBeenCalledWith('league-1', recomputed);
+    expect(upsertLeagueStandings).toHaveBeenCalledWith('league-1', undefined, recomputed);
   });
 
   test('pre-fetched teams/games bypass the materialised read', async () => {
@@ -267,7 +369,7 @@ describe('league standings materialisation (OPT-010)', () => {
       },
     ];
 
-    const result = await getLeagueStandings('league-1', { teams, games });
+    const result = await getLeagueStandings('league-1', undefined, { teams, games });
 
     // No materialised read, no persist — computed straight from in-hand data.
     expect(findLeagueStandings).not.toHaveBeenCalled();
@@ -316,7 +418,7 @@ describe('league player stats materialisation (OPT-011)', () => {
   test('computeLeaguePlayerStats accumulates raw per-player totals across teams', async () => {
     seedTeamsAndGames();
 
-    const rows = await computeLeaguePlayerStats('league-1');
+    const rows = await computeLeaguePlayerStats('league-1', undefined);
 
     expect(rows).toHaveLength(2);
     const alex = rows.find((r) => r.leaguePlayerId === 'lp1');
@@ -370,7 +472,7 @@ describe('league player stats materialisation (OPT-011)', () => {
     const storedRows = [{ leaguePlayerId: 'lp1', gamesCount: 3 }];
     listLeaguePlayerStats.mockResolvedValue(storedRows);
 
-    const result = await getLeaguePlayerStats('league-1');
+    const result = await getLeaguePlayerStats('league-1', undefined);
 
     expect(result).toBe(storedRows);
     expect(listLeagueGamesByLeagueId).not.toHaveBeenCalled();
@@ -382,9 +484,9 @@ describe('league player stats materialisation (OPT-011)', () => {
     replaceLeaguePlayerStats.mockResolvedValue([]);
     seedTeamsAndGames();
 
-    const result = await getLeaguePlayerStats('league-1');
+    const result = await getLeaguePlayerStats('league-1', undefined);
 
-    expect(replaceLeaguePlayerStats).toHaveBeenCalledWith('league-1', result);
+    expect(replaceLeaguePlayerStats).toHaveBeenCalledWith('league-1', undefined, result);
     expect(result).toHaveLength(2);
   });
 
@@ -393,14 +495,14 @@ describe('league player stats materialisation (OPT-011)', () => {
     upsertLeagueStandings.mockResolvedValue({});
     replaceLeaguePlayerStats.mockResolvedValue([]);
 
-    await recomputeLeagueAggregates('league-1');
+    await recomputeLeagueAggregates('league-1', undefined);
 
     // Teams/games fetched once (not once per aggregate).
     expect(listLeagueTeams).toHaveBeenCalledTimes(1);
     expect(listLeagueGamesByLeagueId).toHaveBeenCalledTimes(1);
     expect(upsertLeagueStandings).toHaveBeenCalledTimes(1);
     expect(replaceLeaguePlayerStats).toHaveBeenCalledTimes(1);
-    const [, persistedPlayerRows] = replaceLeaguePlayerStats.mock.calls[0];
+    const [, , persistedPlayerRows] = replaceLeaguePlayerStats.mock.calls[0];
     expect(persistedPlayerRows).toHaveLength(2);
   });
 
@@ -422,9 +524,9 @@ describe('league player stats materialisation (OPT-011)', () => {
       )
       .mockResolvedValue(teams);
 
-    const first = recomputeLeagueAggregates('league-1');
+    const first = recomputeLeagueAggregates('league-1', undefined);
     // Second trigger while the first is still reading — must not be dropped.
-    const second = recomputeLeagueAggregates('league-1');
+    const second = recomputeLeagueAggregates('league-1', undefined);
     releaseFirst();
     await Promise.all([first, second]);
     // Let the dirty re-run (scheduled in the finally block) complete.
@@ -499,6 +601,78 @@ describe('league player stats materialisation (OPT-011)', () => {
   });
 });
 
+describe('unified profile assembly (public player profiles)', () => {
+  test('getMyLeagueProfiles includes a stats summary per profile', async () => {
+    listLeaguePlayersByClaimedUser.mockResolvedValue([
+      {
+        _id: 'lp-1',
+        leagueId: 'league-1',
+        leagueTeamId: 'team-1',
+        displayName: 'Jamie Rivera',
+        jerseyNumber: 7,
+        position: 'PG',
+      },
+    ]);
+    listLeaguesByIds.mockResolvedValue([
+      { _id: 'league-1', slug: 'city-league', name: 'City League', currentSeasonId: 'season-1' },
+    ]);
+    listLeagueTeamsByIds.mockResolvedValue([{ _id: 'team-1', slug: 'hawks', name: 'Hawks' }]);
+    listLeagueMembershipsForUser.mockResolvedValue([{ leagueTeamId: 'team-1', role: 'player' }]);
+    listLeaguePlayerStats.mockResolvedValue([
+      {
+        leagueTeamId: 'team-1',
+        leaguePlayerId: 'lp-1',
+        gamesCount: 4,
+        points: 40,
+        reb: 20,
+        ast: 8,
+        stl: 4,
+        blk: 0,
+        tov: 4,
+        foul: 8,
+      },
+    ]);
+
+    const result = await getMyLeagueProfiles('user-1');
+
+    expect(result.profiles).toHaveLength(1);
+    expect(result.profiles[0].summary).toEqual({
+      gamesCount: 4,
+      pointsPerGame: 10,
+      reboundsPerGame: 5,
+      assistsPerGame: 2,
+    });
+  });
+
+  test('summary is zeroed when the player has no materialised games', async () => {
+    listLeaguePlayersByClaimedUser.mockResolvedValue([
+      {
+        _id: 'lp-2',
+        leagueId: 'league-1',
+        leagueTeamId: 'team-1',
+        displayName: 'No Games Yet',
+        jerseyNumber: null,
+        position: null,
+      },
+    ]);
+    listLeaguesByIds.mockResolvedValue([
+      { _id: 'league-1', slug: 'city-league', name: 'City League', currentSeasonId: 'season-1' },
+    ]);
+    listLeagueTeamsByIds.mockResolvedValue([{ _id: 'team-1', slug: 'hawks', name: 'Hawks' }]);
+    listLeagueMembershipsForUser.mockResolvedValue([]);
+    listLeaguePlayerStats.mockResolvedValue([]);
+
+    const result = await getMyLeagueProfiles('user-1');
+
+    expect(result.profiles[0].summary).toEqual({
+      gamesCount: 0,
+      pointsPerGame: 0,
+      reboundsPerGame: 0,
+      assistsPerGame: 0,
+    });
+  });
+});
+
 describe('private league visibility on public-slug routes (OPT-024)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -521,6 +695,7 @@ describe('private league visibility on public-slug routes (OPT-024)', () => {
     replaceLeaguePlayerStats.mockResolvedValue({});
     findActiveLeagueManager.mockResolvedValue(null);
     listLeagueMembershipsForUser.mockResolvedValue([]);
+    listSeasonsByLeague.mockResolvedValue([]);
   }
 
   test('anonymous visitor gets 404, not a hint the league exists', async () => {
@@ -569,6 +744,67 @@ describe('private league visibility on public-slug routes (OPT-024)', () => {
 
     const league = await getPublicLeagueBySlug('secret-league', null);
     expect(league.slug).toBe('secret-league');
+  });
+});
+
+describe('getPublicLeaguePlayerBySlug — claimedUserId is public-league-only (Follow System v1)', () => {
+  function seedPlayerPage({ isPublic }) {
+    findLeagueBySlug.mockResolvedValue({
+      _id: 'league-1',
+      slug: 'secret-league',
+      ownerUserId: 'owner-1',
+      isPublic,
+      status: 'active',
+    });
+    findLeagueTeamByLeagueAndSlug.mockResolvedValue({
+      _id: 'team-1',
+      leagueId: 'league-1',
+      slug: 'the-team',
+      name: 'The Team',
+    });
+    findLeaguePlayerByIdAndTeam.mockResolvedValue({
+      _id: 'player-1',
+      leagueTeamId: 'team-1',
+      displayName: 'Avery Brooks',
+      claimedByUserId: 'claimer-1',
+      isActive: true,
+    });
+    findUserById.mockResolvedValue({ _id: 'claimer-1', name: 'Avery Brooks', avatar: null });
+    listLeagueGamesByLeagueId.mockResolvedValue([]);
+    listLeagueTeams.mockResolvedValue([]);
+    findActiveLeagueManager.mockResolvedValue(null);
+    listLeagueMembershipsForUser.mockResolvedValue([]);
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('exposes claimedUserId when the league is public', async () => {
+    seedPlayerPage({ isPublic: true });
+
+    const result = await getPublicLeaguePlayerBySlug('secret-league', 'the-team', 'player-1', null);
+
+    expect(result.player.isClaimed).toBe(true);
+    expect(result.player.claimedUserId).toBe('claimer-1');
+  });
+
+  test('nulls out claimedUserId when the league is private, even for an authorized viewer', async () => {
+    seedPlayerPage({ isPublic: false });
+    findActiveLeagueManager.mockResolvedValue({ leagueId: 'league-1', userId: 'manager-1' });
+
+    const result = await getPublicLeaguePlayerBySlug(
+      'secret-league',
+      'the-team',
+      'player-1',
+      'manager-1'
+    );
+
+    // isClaimed still reflects reality (matches pre-existing behavior), but the
+    // actual account id is withheld — Follow System v1 only surfaces a follow
+    // target on public-league surfaces.
+    expect(result.player.isClaimed).toBe(true);
+    expect(result.player.claimedUserId).toBeNull();
   });
 });
 
@@ -663,5 +899,70 @@ describe('TSW-005 — league feed-sharing support', () => {
     expect(result.team.name).toBe('Alpha');
     expect(result.summary.gamesCount).toBe(1);
     expect(result.summary.pointsPerGame).toBe(3);
+  });
+});
+
+describe('auto feed reversal on league going private (B2)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    saveLeague.mockImplementation((league) => Promise.resolve(league));
+  });
+
+  function buildOwnedLeague(overrides = {}) {
+    return {
+      _id: 'league-1',
+      ownerUserId: 'user-1',
+      status: 'active',
+      isPublic: true,
+      ...overrides,
+    };
+  }
+
+  test('reverses auto posts when a public league is switched to private', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague());
+
+    await updateLeagueForUser('user-1', 'league-1', { isPublic: false });
+
+    // Fire-and-forget post-response call; awaiting flushes the microtask.
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).toHaveBeenCalledWith('league-1');
+  });
+
+  test('does not reverse anything when a private league stays private', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague({ isPublic: false }));
+
+    await updateLeagueForUser('user-1', 'league-1', { isPublic: false });
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).not.toHaveBeenCalled();
+  });
+
+  test('does not reverse anything when a public league stays public', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague({ isPublic: true }));
+
+    await updateLeagueForUser('user-1', 'league-1', { isPublic: true });
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).not.toHaveBeenCalled();
+  });
+
+  test('does not reverse anything when isPublic is not part of the update', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague({ isPublic: true }));
+
+    await updateLeagueForUser('user-1', 'league-1', { name: 'New Name' });
+    await Promise.resolve();
+
+    expect(reverseAutoPostsForLeague).not.toHaveBeenCalled();
+  });
+
+  test('a reversal failure does not affect the league update response', async () => {
+    findLeagueById.mockResolvedValue(buildOwnedLeague());
+    reverseAutoPostsForLeague.mockRejectedValue(new Error('feed service down'));
+
+    await expect(
+      updateLeagueForUser('user-1', 'league-1', { isPublic: false })
+    ).resolves.toMatchObject({ isPublic: false });
+    await Promise.resolve();
   });
 });

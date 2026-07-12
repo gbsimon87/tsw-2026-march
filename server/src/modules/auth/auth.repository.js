@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema(
     googleId: { type: String, index: true },
     emailVerified: { type: Boolean, default: false },
     emailVerifiedAt: { type: Date },
-    authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
+    authProvider: { type: String, enum: ['local', 'google', 'system'], default: 'local' },
     plan: { type: String, enum: ['free', 'pro'], default: 'free' },
     leaguePlan: { type: String, enum: ['free', 'pro'], default: 'free' },
     leagueSubscriptionStatus: {
@@ -88,7 +88,9 @@ async function findUserById(id) {
 async function findUsersByIds(ids) {
   const uniqueIds = [...new Set((ids || []).filter(Boolean).map(String))];
   if (uniqueIds.length === 0) return [];
-  return User.find({ _id: { $in: uniqueIds } });
+  // PERF-004 (docs/performance-investigation): both callers (feed creator
+  // batch, follows hydration) are read-only display paths.
+  return User.find({ _id: { $in: uniqueIds } }).lean();
 }
 
 async function findOrCreateGoogleUser({ googleId, email, name }) {
@@ -118,6 +120,28 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     emailVerified: true,
     emailVerifiedAt: new Date(),
     roles: ['user'],
+  });
+}
+
+const SYSTEM_USER_EMAIL = 'system@tsw.internal';
+const SYSTEM_USER_NAME = 'TSW';
+
+// Reserved account that authors auto-generated feed content (see
+// docs/auto-feed-generation/000-TRACKER.md). Has no passwordHash and
+// authProvider:'system', so auth.service#login rejects it even without the
+// explicit guard there.
+async function findOrCreateSystemUser() {
+  let user = await User.findOne({ authProvider: 'system' });
+  if (user) {
+    return user;
+  }
+
+  return User.create({
+    email: SYSTEM_USER_EMAIL,
+    name: SYSTEM_USER_NAME,
+    authProvider: 'system',
+    emailVerified: false,
+    roles: ['system'],
   });
 }
 
@@ -207,6 +231,7 @@ module.exports = {
   findUserById,
   findUsersByIds,
   findOrCreateGoogleUser,
+  findOrCreateSystemUser,
   upsertSession,
   findSessionById,
   deleteSessionById,

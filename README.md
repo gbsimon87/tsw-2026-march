@@ -313,6 +313,7 @@ pnpm check-env
 
 - Product roadmap: [`docs/product-roadmap.md`](docs/product-roadmap.md)
 - Engineering optimisation tracker: [`docs/application-audit/000-OPTIMISATION-TRACKER.md`](docs/application-audit/000-OPTIMISATION-TRACKER.md)
+- Auto Feed Generation (in progress, behind `AUTO_FEED_ENABLED`): [`docs/auto-feed-generation/000-TRACKER.md`](docs/auto-feed-generation/000-TRACKER.md)
 
 ## Future Work
 

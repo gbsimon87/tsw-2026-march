@@ -17,6 +17,9 @@ vi.mock('../api/leaguesApi', () => ({
     getById: vi.fn(),
     update: vi.fn(),
     listLeagueManagers: vi.fn(),
+    listSeasons: vi.fn(),
+    createSeason: vi.fn(),
+    completeSeason: vi.fn(),
   },
 }));
 
@@ -26,6 +29,7 @@ function buildLeague(overrides = {}) {
     name: 'City League',
     ownerUserId: 'owner-1',
     seasonLabel: 'Spring 2026',
+    currentSeason: { id: 'season-1', label: 'Spring 2026', status: 'active' },
     status: 'active',
     isPublic: false,
     games: [],
@@ -52,6 +56,7 @@ describe('AdminLeaguePage', () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1' } });
     leaguesApi.getById.mockResolvedValue({ league: buildLeague() });
     leaguesApi.listLeagueManagers.mockResolvedValue({ managers: [] });
+    leaguesApi.listSeasons.mockResolvedValue({ seasons: [] });
   });
 
   afterEach(() => {
@@ -112,10 +117,13 @@ describe('AdminLeaguePage', () => {
 
     renderPage();
 
+    // Managers live under the Managers tab (default tab is Games).
+    fireEvent.click(await screen.findByRole('tab', { name: 'Managers' }));
+
     expect(await screen.findByText('League Managers')).toBeInTheDocument();
     expect(screen.getByText('Jordan Admin')).toBeInTheDocument();
-    expect(screen.getByText('jordan@example.com')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+    expect(screen.getByText(/jordan@example\.com/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Remove' }).length).toBeGreaterThan(0);
     expect(await screen.findByText('Team Managers')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'North Hoops' })).toHaveAttribute(
       'href',
@@ -124,6 +132,84 @@ describe('AdminLeaguePage', () => {
     expect(screen.getByText('Avery Stone')).toBeInTheDocument();
     expect(screen.getByText(/avery@example\.com/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'South Hoops' })).toBeInTheDocument();
-    expect(screen.getByText('No team managers')).toBeInTheDocument();
+    expect(screen.getByText('No managers assigned')).toBeInTheDocument();
+  });
+
+  test('shows the Complete Season control to a league owner with an active season', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({ viewerContext: { viewerRole: 'owner', managedTeamIds: [] } }),
+    });
+    leaguesApi.listSeasons.mockResolvedValue({
+      seasons: [{ id: 'season-1', label: 'Spring 2026', status: 'active' }],
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    expect(await screen.findByRole('button', { name: 'Complete Season' })).toBeInTheDocument();
+  });
+
+  test('hides the Complete Season control from a non-owner league manager', async () => {
+    // Default league in beforeEach has viewerRole 'league_manager' and user-1.
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    // The Season section renders, but no owner-only Complete Season button.
+    expect(await screen.findByText('Season')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Complete Season' })).not.toBeInTheDocument();
+  });
+
+  test('confirming Complete Season calls the API and refreshes the league', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({ viewerContext: { viewerRole: 'owner', managedTeamIds: [] } }),
+    });
+    leaguesApi.listSeasons.mockResolvedValue({
+      seasons: [{ id: 'season-1', label: 'Spring 2026', status: 'active' }],
+    });
+    leaguesApi.completeSeason.mockResolvedValue({
+      season: { id: 'season-1', label: 'Spring 2026', status: 'completed' },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Complete Season' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, complete season' }));
+
+    await waitFor(() => {
+      expect(leaguesApi.completeSeason).toHaveBeenCalledWith('league-1', 'season-1');
+    });
+  });
+
+  test('shows the Start New Season form once the current season is completed', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({
+        viewerContext: { viewerRole: 'owner', managedTeamIds: [] },
+        currentSeason: { id: 'season-1', label: 'Spring 2026', status: 'completed' },
+      }),
+    });
+    leaguesApi.listSeasons.mockResolvedValue({
+      seasons: [{ id: 'season-1', label: 'Spring 2026', status: 'completed' }],
+    });
+    leaguesApi.createSeason.mockResolvedValue({
+      season: { id: 'season-2', label: 'Fall 2026', status: 'active' },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    const labelInput = await screen.findByPlaceholderText(/New season label/i);
+    fireEvent.change(labelInput, { target: { value: 'Fall 2026' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start New Season' }));
+
+    await waitFor(() => {
+      expect(leaguesApi.createSeason).toHaveBeenCalledWith('league-1', { label: 'Fall 2026' });
+    });
   });
 });

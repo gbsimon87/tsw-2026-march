@@ -1,7 +1,7 @@
 services:
   - type: web
     name: tsw-2026-march-api-prod
-    plan: free
+    plan: starter
     runtime: node
     branch: main
     autoDeployTrigger: off
@@ -75,6 +75,8 @@ services:
         value: 5242880
       - key: COOKIE_DOMAIN
         sync: false
+      - key: AUTO_FEED_ENABLED
+        sync: true
 
   - type: web
     name: tsw-2026-march-client-prod
@@ -179,6 +181,8 @@ services:
         value: 5242880
       - key: COOKIE_DOMAIN
         sync: false
+      - key: AUTO_FEED_ENABLED
+        value: true
 
   - type: web
     name: tsw-2026-march-client-dev

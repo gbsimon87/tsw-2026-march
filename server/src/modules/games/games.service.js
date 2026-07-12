@@ -4,6 +4,7 @@ const { findSharedEventIds } = require('../feed/feed.repository');
 const { ApiError } = require('../../utils/apiError');
 const { buildCursorPage } = require('../../utils/pagination');
 const { logger } = require('../../config/logger');
+const { env } = require('../../config/env');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
   createGame,
@@ -179,7 +180,7 @@ function clearAiSummaryAfterCompletedLeagueEdit(game) {
 // on delete/finish where the completed set changes.
 function scheduleLeagueRecomputeForGame(game) {
   if (game.gameContext === 'league' && game.leagueId) {
-    scheduleLeagueAggregateRecompute(game.leagueId);
+    scheduleLeagueAggregateRecompute(game.leagueId, game.seasonId);
   }
 }
 
@@ -214,6 +215,27 @@ function scheduleFeedCardRefreshForGame(gameId) {
       logger.error(
         { err: error, gameId: String(gameId) },
         'Post-response feed card refresh failed'
+      );
+    });
+  });
+}
+
+// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): after a
+// game finishes, offer it to the feed's auto-publish gate. Post-response,
+// non-blocking, errors logged not thrown — same shape as the other
+// finish-time schedulers above. The public-league restriction and all
+// publish/idempotency logic live in feed.service.js#autoPublishForFinalizedGame;
+// this scheduler only decides *when* to call it. Lazy require to avoid a
+// cycle — feed.service.js requires games.service.js for getPublicGame/
+// canAccessGame/HIGHLIGHT_STAT_TYPES.
+function scheduleAutoFeedForGame(gameId) {
+  if (!env.AUTO_FEED_ENABLED || !gameId) return;
+  setImmediate(() => {
+    const { autoPublishForFinalizedGame } = require('../feed/feed.service');
+    autoPublishForFinalizedGame(gameId).catch((error) => {
+      logger.error(
+        { err: error, gameId: String(gameId) },
+        'Post-response auto feed publish failed'
       );
     });
   });
@@ -277,6 +299,7 @@ function sanitizeGame(game, options = {}) {
     gameContext: game.gameContext || 'standalone',
     trackingMode: game.trackingMode || 'one_sided',
     leagueId: game.leagueId ? String(game.leagueId) : null,
+    seasonId: game.seasonId ? String(game.seasonId) : null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
     awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
     trackedLeagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
@@ -986,6 +1009,7 @@ async function createGameForUser(userId, payload) {
       gameContext: 'league',
       trackingMode: 'dual_team',
       leagueId: payload.leagueId,
+      seasonId: context.seasonId,
       homeLeagueTeamId: payload.homeLeagueTeamId,
       awayLeagueTeamId: payload.awayLeagueTeamId,
       trackedLeagueTeamId:
@@ -1035,6 +1059,7 @@ async function createGameForUser(userId, payload) {
       gameContext: 'league',
       trackingMode: 'one_sided',
       leagueId: payload.leagueId,
+      seasonId: context.seasonId,
       homeLeagueTeamId: payload.homeLeagueTeamId,
       awayLeagueTeamId: payload.awayLeagueTeamId,
       trackedLeagueTeamId: payload.trackedLeagueTeamId,
@@ -1683,6 +1708,7 @@ async function deleteGameForUser(userId, gameId) {
   // changes league standings or the team's season summary).
   const wasLeagueGame = game.gameContext === 'league';
   const leagueId = game.leagueId;
+  const seasonId = game.seasonId;
   const isStandaloneOneSided =
     game.gameContext === 'standalone' && game.trackingMode === 'one_sided';
   const teamId = game.teamId;
@@ -1690,7 +1716,7 @@ async function deleteGameForUser(userId, gameId) {
   await game.deleteOne();
 
   if (wasLeagueGame) {
-    scheduleLeagueAggregateRecompute(leagueId);
+    scheduleLeagueAggregateRecompute(leagueId, seasonId);
   }
   if (isStandaloneOneSided && teamId) {
     const { scheduleTeamSeasonSummaryRecompute } = require('../teams/teams.service');
@@ -1742,6 +1768,7 @@ async function finishGameForUser(userId, gameId) {
   scheduleLeagueRecomputeForGame(game);
   scheduleTeamSummaryRecomputeForGame(game);
   scheduleFeedCardRefreshForGame(game._id);
+  scheduleAutoFeedForGame(game._id);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
     // OPT-020: generate the summary off the request path (see

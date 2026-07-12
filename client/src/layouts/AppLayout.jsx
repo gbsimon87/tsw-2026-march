@@ -34,6 +34,11 @@ export function AppLayout() {
                 My Sporty
               </NavLink>
             ) : null}
+            {user ? (
+              <NavLink to="/following" className={desktopNavLinkClass}>
+                Following
+              </NavLink>
+            ) : null}
             <NavLink to="/home" end className={desktopNavLinkClass}>
               Discover
             </NavLink>
@@ -136,6 +141,15 @@ export function AppLayout() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 My Sporty
+              </NavLink>
+            ) : null}
+            {user ? (
+              <NavLink
+                to="/following"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Following
               </NavLink>
             ) : null}
             <NavLink

@@ -34,6 +34,13 @@ const gameCardSchema = new mongoose.Schema(
       default: null,
     },
     cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Auto Feed Generation: true only for game-cards created by the system
+    // user when a public-league game is finalised (see
+    // docs/auto-feed-generation/000-TRACKER.md). Distinguishes auto cards from
+    // user-shared ones so a manual share and an auto card can coexist while
+    // still guaranteeing at most one auto card per game (see the partial
+    // unique index below).
+    auto: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -131,6 +138,17 @@ const postSchema = new mongoose.Schema(
 // Prevent the same game event from being shared more than once, even under concurrent requests.
 postSchema.index({ 'highlightClip.eventId': 1 }, { unique: true, sparse: true });
 
+// Auto Feed Generation: at most one auto-generated game_card per game, even
+// under concurrent/retried finalise requests. Manual game_card posts (auto:
+// false/unset) are unaffected — the partial filter only applies to auto ones.
+postSchema.index(
+  { 'gameCard.gameId': 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: 'game_card', 'gameCard.auto': true },
+  }
+);
+
 const Post = mongoose.models.Post || mongoose.model('Post', postSchema);
 
 async function createPost(input) {
@@ -148,9 +166,12 @@ async function listPosts({ limit, cursor } = {}) {
     query._id = { $lt: cursor };
   }
 
+  // PERF-004 (docs/performance-investigation): read-only list path — plain
+  // objects, no per-doc hydration for up to limit+10 posts per page.
   return Post.find(query)
     .sort({ _id: -1 })
-    .limit(limit || 20);
+    .limit(limit || 20)
+    .lean();
 }
 
 async function findPostById(postId) {
@@ -174,6 +195,32 @@ async function deletePostsByGameId(gameId) {
       { type: 'highlight_clip', 'highlightClip.gameId': gameId },
     ],
   });
+}
+
+// Auto Feed Generation: reverse auto-generated posts for a set of games (used
+// when a league flips from public to private — B2 in
+// docs/auto-feed-generation/000-TRACKER.md). Manually-shared posts (auto:
+// false/unset, or any highlight_clip a user shared directly) are left alone —
+// only content the system itself authored is removed. highlight_clip has no
+// `auto` flag (every one currently in the schema could in principle be
+// user-shared), so scope that half of the deletion to the reserved system
+// user id, passed in by the caller.
+async function deleteAutoPostsForGameIds(gameIds, systemUserId) {
+  if (!gameIds || gameIds.length === 0) return { deletedCount: 0 };
+  return Post.deleteMany({
+    $or: [
+      { type: 'game_card', 'gameCard.gameId': { $in: gameIds }, 'gameCard.auto': true },
+      {
+        type: 'highlight_clip',
+        'highlightClip.gameId': { $in: gameIds },
+        creatorUserId: systemUserId,
+      },
+    ],
+  });
+}
+
+async function findAutoGameCardPost(gameId) {
+  return Post.findOne({ type: 'game_card', 'gameCard.gameId': gameId, 'gameCard.auto': true });
 }
 
 async function findPostByHighlightEventId(eventId) {
@@ -203,6 +250,8 @@ module.exports = {
   findPostById,
   deletePostById,
   deletePostsByGameId,
+  deleteAutoPostsForGameIds,
+  findAutoGameCardPost,
   findPostByHighlightEventId,
   findSharedEventIds,
   updatePostCardSnapshot,

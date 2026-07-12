@@ -1,9 +1,11 @@
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { DarkPageHeader } from '../../../components/DarkPageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
+import { SeasonSelect } from '../components/SeasonSelect';
 import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
@@ -11,24 +13,28 @@ import { usePublicLeague } from '../hooks/usePublicLeague';
 
 export function PublicLeagueStandingsPage() {
   const { leagueSlug } = useParams();
+  const [selectedSeasonId, setSelectedSeasonId] = useState(null);
   const {
     data: league,
     isLoading: isLeagueLoading,
     isError: isLeagueError,
-  } = usePublicLeague(leagueSlug);
+  } = usePublicLeague(leagueSlug, selectedSeasonId);
+  const activeSeasonId = selectedSeasonId || league?.currentSeason?.id || null;
   const {
     data: standingsData,
     isLoading: isStandingsLoading,
     isError: isStandingsError,
   } = useQuery({
-    queryKey: ['publicLeagueStandings', leagueSlug],
-    queryFn: () => leaguesApi.getPublicStandings(leagueSlug),
+    queryKey: ['publicLeagueStandings', leagueSlug, activeSeasonId],
+    queryFn: () => leaguesApi.getPublicStandings(leagueSlug, activeSeasonId),
     enabled: Boolean(leagueSlug),
   });
 
   const standings = standingsData?.standings || [];
   const isLoading = isLeagueLoading || isStandingsLoading;
   const error = isLeagueError || isStandingsError ? 'Failed to load standings' : '';
+  const seasons = useMemo(() => league?.seasons || [], [league]);
+  const selectedSeason = seasons.find((season) => season.id === activeSeasonId);
 
   if (isLoading) {
     return <SportsLoader label="Loading standings" fullPage />;
@@ -52,7 +58,7 @@ export function PublicLeagueStandingsPage() {
         titleAriaLabel={league.name}
         eyebrow="Public League Standings"
         title={league.name}
-        description={`${league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.`}
+        description={`${selectedSeason?.label || league.seasonLabel || 'Season TBD'} standings with record, PF, PA, and differential.`}
         media={
           <CloudinaryImage
             src={getLeagueHeaderImage(league)}
@@ -67,7 +73,7 @@ export function PublicLeagueStandingsPage() {
           />
         }
       >
-        <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
           <Link
             to={`/league/${league.slug}`}
             className="font-semibold text-white/80 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#F4A300]"
@@ -80,6 +86,12 @@ export function PublicLeagueStandingsPage() {
           >
             League games
           </Link>
+          <SeasonSelect
+            seasons={seasons}
+            selectedSeasonId={activeSeasonId}
+            onChange={setSelectedSeasonId}
+            className="ml-auto"
+          />
         </div>
       </DarkPageHeader>
 

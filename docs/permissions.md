@@ -58,3 +58,23 @@ This document defines the permission model for leagues, teams, and games. Enforc
 - `canEditCompletedLeagueGame` — guards edits to already-completed league games; checks owner, active league manager, or team manager of the home, away, or tracked team.
 - `getLeagueContextForGame` — owners and league managers bypass both the `allowManager` gate and the per-team manager check; team managers must be the manager of the tracked team
 - `buildLeagueViewerContext` — attached to every `GET /leagues/:id` response as `viewerContext: { viewerRole, managedTeamIds }`; drives all client-side permission UI
+
+## Automated Feed Content (Auto Feed Generation)
+
+See [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md)
+for the full feature. Permission-relevant points:
+
+- Auto-generated `game_card`/`highlight_clip` posts are authored by a reserved
+  **system User** (`authProvider: 'system'`), never a real account.
+  `auth.service.js#login` explicitly rejects this account (it also has no
+  `passwordHash`, so it's unauthenticatable by construction, not just by the
+  explicit check).
+- The public-league restriction is enforced in exactly one place:
+  `feed.service.js#autoPublishForFinalizedGame` calls the same
+  `isLeaguePublic()` gate used by manual share endpoints. Standalone games and
+  games in private/archived leagues are never auto-published.
+- When an owner/league manager flips a league from public to private via
+  `PATCH /leagues/:id`, `updateLeagueForUser` fires a best-effort post-response
+  call to `reverseAutoPostsForLeague`, which deletes only the system-authored
+  auto posts for that league's games — any user's manually-shared cards/clips
+  for the same games are left untouched.

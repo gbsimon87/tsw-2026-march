@@ -93,6 +93,17 @@ describe('feed card posts', () => {
     expect(screen.getByText('PTS')).toBeInTheDocument();
   });
 
+  test('game preview mode renders a non-link card', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <GameCardPost gameCard={gameCardFixture} interactive={false} />
+      </MemoryRouter>
+    );
+
+    expect(container.querySelector('a')).not.toBeInTheDocument();
+    expect(screen.getByText('PTS')).toBeInTheDocument();
+  });
+
   test('player card falls back to initials when both player image and team logo are missing', () => {
     render(
       <MemoryRouter>

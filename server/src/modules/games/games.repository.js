@@ -150,6 +150,11 @@ const gameSchema = new mongoose.Schema(
       index: true,
     },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
+    // Null for standalone games and for league games created before the
+    // Season feature shipped (see docs/league-seasons/000-SEASONS-TRACKER.md).
+    // New league games always have this set, resolved server-side from
+    // League.currentSeasonId — never client-supplied.
+    seasonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Season', default: null, index: true },
     // OPT-007: dropped `index: true` on homeLeagueTeamId/awayLeagueTeamId/
     // homeTeamId/awayTeamId — each already starts a compound index below
     // ({field:1, createdAt:-1}), which fully covers any field-only query.
@@ -335,8 +340,14 @@ async function listPublicCompletedGames(limit = 100) {
     .limit(limit);
 }
 
-async function listLeagueGamesByLeagueId(leagueId) {
-  return Game.find({ gameContext: 'league', leagueId }).sort({
+// seasonId undefined preserves pre-Season "all games ever" behavior; pass
+// null explicitly to match only legacy (pre-migration) games.
+async function listLeagueGamesByLeagueId(leagueId, seasonId) {
+  return Game.find({
+    gameContext: 'league',
+    leagueId,
+    ...(seasonId !== undefined ? { seasonId } : {}),
+  }).sort({
     scheduledAt: -1,
     completedAt: -1,
     createdAt: -1,
@@ -345,6 +356,15 @@ async function listLeagueGamesByLeagueId(leagueId) {
 
 async function findGameByLeagueIdAndId(leagueId, gameId) {
   return Game.findOne({ _id: gameId, leagueId, gameContext: 'league' });
+}
+
+// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): lean id-only
+// lookup used when a league flips private, to find which games' auto-posts
+// need reversing — avoids loading full Game docs (events etc.) for a cleanup
+// pass that only needs ids.
+async function listLeagueGameIdsByLeagueId(leagueId) {
+  const games = await Game.find({ gameContext: 'league', leagueId }, { _id: 1 }).lean();
+  return games.map((g) => g._id);
 }
 
 async function saveGame(game) {
@@ -429,6 +449,7 @@ module.exports = {
   listCompletedGames,
   listPublicCompletedGames,
   listLeagueGamesByLeagueId,
+  listLeagueGameIdsByLeagueId,
   findGameByLeagueIdAndId,
   saveGame,
   claimGameSummaryGeneration,
