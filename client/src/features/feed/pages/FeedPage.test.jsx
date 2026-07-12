@@ -89,10 +89,10 @@ describe('FeedPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByAltText('TSW Blue card logo')).toBeInTheDocument();
+      expect(screen.getAllByAltText('TSW Blue card logo')[0]).toBeInTheDocument();
     });
 
-    expect(screen.getByAltText('TSW Blue card logo')).toHaveAttribute(
+    expect(screen.getAllByAltText('TSW Blue card logo')[0]).toHaveAttribute(
       'src',
       'https://example.com/team-logo.png'
     );
