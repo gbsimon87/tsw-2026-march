@@ -57,26 +57,43 @@ Core capabilities:
   (`leagues.controller.js#getPublicUserProfiles`, no auth required). **v1 is
   league-only** — standalone (non-league) team players have no claim
   mechanism yet and are out of scope; see §11.
-- **User Follow System v1 (users-only, 2026-07-11)**: signed-in users can
-  follow/unfollow other **user accounts** and view a private "Following" page
-  (`/following`). Follows are **account-level** (keyed by `User._id`), so
-  following one person covers all of their claimed player profiles at once —
-  the natural fit given a user can own many `LeaguePlayer` profiles. Follow
-  buttons attach to the public unified profile (`/players/:userId`), homepage
-  player discovery, and the public **league**-player page
-  (`PublicLeaguePlayerPage`, only when `league.isPublic` — see below). Backed
-  by `GET/POST/DELETE /follows/*` (`server/src/modules/follows/`, all
-  auth-required; follower identity always from `req.auth.userId`). Private in
-  v1 (no public follower counts). Schema is **polymorphic-ready**
-  (`Follow.targetType` enum starts at `['user']`), so following teams/leagues
-  later needs no migration. `listFollowing`'s per-user public-profile check is
-  fanned out with `Promise.all` (not sequential), and `FollowButton` accepts an
-  optional `knownIsFollowing` so a parent rendering many buttons (discovery
-  grid, the Following page itself) can batch/skip the status fetch instead of
-  each button independently calling `GET /follows/status`. Deferred:
-  teams/leagues targets, public counts, a personalized feed, notifications,
-  standalone team-player follows. Design + trackers:
-  [`follow-system/`](./follow-system/).
+- **Follow System (v1.5, users + leagues + league teams, 2026-07-12)**:
+  signed-in users can follow/unfollow **user accounts, leagues, and league
+  teams** and view a private, **sectioned** "Following" page (`/following` —
+  Players / Leagues / Teams). Follows are **account-level** (keyed by
+  `User._id` as the follower), so following one person covers all of their
+  claimed player profiles at once — the natural fit given a user can own many
+  `LeaguePlayer` profiles. The `Follow` collection is **polymorphic**:
+  `{ followerUserId, targetType, targetId }` with `targetType` enum
+  `['user','league','leagueTeam']` (v1 shipped users-only 2026-07-11; v1.5
+  widened the enum — additive, **no migration**). Standalone `Team` is
+  deliberately absent (it has no public page/`isPublic` yet). The service is a
+  `TARGET_HANDLERS` dispatch map (`assertFollowable`/`hydrateMany` per type);
+  routes are generic `POST/DELETE /follows/:targetType/:targetId` +
+  `GET /follows/following?targetType` + `GET /follows/status?targetType&targetIds`
+  (the old `/follows/users/:userId` kept as a back-compat alias). All routes
+  auth-required; follower identity always from `req.auth.userId`. **Visibility
+  gating reuses `assertLeagueVisible`** (`leagues.service.js`) for both
+  follow-creation and list hydration — for a leagueTeam, on its parent league
+  via `leagueId` — never a hand-rolled `isPublic` check (§4). A now-private
+  followed league/team has its `profileHref`/slugs nulled **server-side** on
+  hydration (the D8 pattern), the follow row persists. Follow buttons attach to
+  the public unified profile (`/players/:userId`), homepage player discovery,
+  the public league-player page (`PublicLeaguePlayerPage`, only when
+  `league.isPublic`), and now the public league page (`PublicLeaguePage`) and
+  public league-team page (`PublicLeagueTeamPage`) — both gated on
+  `league.isPublic` client-side too. `FollowButton` takes a `targetType` prop
+  (default `'user'`) and an optional `knownIsFollowing` so a parent rendering
+  many buttons can batch/skip the status fetch. Private (no public follower
+  counts). Deferred: standalone team-player follows, public counts, a
+  personalized feed, notifications. Design + trackers:
+  [`follow-system/`](./follow-system/) (v1),
+  [`follow-system-teams-leagues/`](./follow-system-teams-leagues/) (v1.5).
+  **Lesson (v1.5):** `assertLeagueVisible` was defined in `leagues.service.js`
+  but not exported, so every league follow 500'd at runtime while all
+  `leagues.service`-mocked unit tests passed — caught only by live-DB
+  verification. Cross-service helper imports now have an unmocked
+  `follows.dependency-contract.test.js` guard.
 - **Team-scoped and League-scoped Pro billing** gating replay, public shot maps,
   and highlight clips.
 
@@ -237,24 +254,24 @@ existing `leagues.service.js` helper rather than writing the check fresh.
 
 17 collections, all defined inline in repository files:
 
-| Collection                    | Owner module | Notes                                                                                                                                                                                                                                                                                                   |
-| ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                                                                                                                       |
-| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                                                                                                                        |
-| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                                                                         |
-| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                                                                 |
-| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                                                                 |
-| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons)                                                                                                                                                                                  |
-| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                                                                          |
-| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                                                                           |
-| `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/).                                               |
-| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league — deliberately season-independent, carry over across seasons automatically                                                                                                                                                                                                |
-| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role` — season-independent                                                                                                                                                                                                                                            |
-| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow; blocked when the league has no active season                                                                                                                                                                                                                           |
-| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                                                                                                              |
-| `LeagueStandings`             | leagues      | materialized standings (OPT-010), keyed `{leagueId, seasonId}` since League Seasons                                                                                                                                                                                                                     |
-| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011), keyed `{leagueId, seasonId, leagueTeamId, leaguePlayerId}` since League Seasons; also the stats source for unified player profiles (§1) — one `getLeaguePlayerStats` read-through per unique claimed league, not per profile                                  |
-| `Follow`                      | follows      | user-to-user follow edges (Follow System v1, §1). Polymorphic-ready `{followerUserId, targetType:'user', targetId}`; unique compound index `{followerUserId, targetType, targetId}` (dedupe → idempotent upsert) + listing index `{followerUserId, _id:-1}`. `targetType` enum is `['user']` only in v1 |
+| Collection                    | Owner module | Notes                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                                                                                                                                                                                             |
+| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                                                                                                                                                                                              |
+| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                                                                                                                                               |
+| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                                                                                                                                       |
+| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                                                                                                                                       |
+| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons)                                                                                                                                                                                                                                                        |
+| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                                                                                                                                                |
+| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                                                                                                                                                 |
+| `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/).                                                                                                                     |
+| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league — deliberately season-independent, carry over across seasons automatically                                                                                                                                                                                                                                                                      |
+| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role` — season-independent                                                                                                                                                                                                                                                                                                                  |
+| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow; blocked when the league has no active season                                                                                                                                                                                                                                                                                                 |
+| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                                                                                                                                                                                    |
+| `LeagueStandings`             | leagues      | materialized standings (OPT-010), keyed `{leagueId, seasonId}` since League Seasons                                                                                                                                                                                                                                                                                           |
+| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011), keyed `{leagueId, seasonId, leagueTeamId, leaguePlayerId}` since League Seasons; also the stats source for unified player profiles (§1) — one `getLeaguePlayerStats` read-through per unique claimed league, not per profile                                                                                                        |
+| `Follow`                      | follows      | polymorphic follow edges (Follow System, §1). `{followerUserId, targetType, targetId}` where `targetType` enum `['user','league','leagueTeam']` (v1.5) and `targetId` is a `User`/`League`/`LeagueTeam` `_id` (no `ref`, polymorphic); unique compound index `{followerUserId, targetType, targetId}` (dedupe → idempotent upsert) + listing index `{followerUserId, _id:-1}` |
 
 ### Notable design choices
 
@@ -718,6 +735,30 @@ for all visible claimed ids, and `FollowingPage` passes `knownIsFollowing`
 unconditionally. Design, phased plan, and live trackers:
 [`follow-system/`](./follow-system/).
 
+**Follow System v1.5, leagues + league teams (2026-07-12,
+`feature/follow-teams-leagues`)**: widened `Follow.targetType` to
+`['user','league','leagueTeam']` (additive, no migration) and generalized the
+`follows` module into a `TARGET_HANDLERS` dispatch map
+(`assertFollowable`/`hydrateMany` per type) behind generic
+`/follows/:targetType/:targetId` routes (old `/users/:userId` kept as a
+back-compat alias). League/leagueTeam visibility **reuses**
+`assertLeagueVisible` (leagueTeam via parent `leagueId`) for follow-creation
+and list hydration; hydration nulls `profileHref`/slugs server-side for
+now-private targets (D8). Client: `FollowButton` gained `targetType` (default
+`'user'`, existing mounts unchanged); the `/following` page is now sectioned
+(Players/Leagues/Teams, per-type pagination); follow buttons added to
+`PublicLeaguePage`/`PublicLeagueTeamPage`, gated on `league.isPublic`.
+Deferred: standalone `Team` follows, public counts, personalized feed,
+notifications. **Runtime bug found + fixed via live-DB verification**:
+`assertLeagueVisible` was defined in `leagues.service.js` but never exported,
+so every league follow 500'd while all `leagues.service`-mocked unit tests
+passed — a mocked unit test can't verify a real export exists. Added
+`follows.dependency-contract.test.js` (unmocked) as the guard. Non-security
+perf note: hydration re-fetches leagues already loaded by `listLeaguesByIds`
+(bounded per-page; reuse-over-speed choice per §4). Server suite 418/418;
+whole-diff security review found no actionable issues. Design + trackers:
+[`follow-system-teams-leagues/`](./follow-system-teams-leagues/).
+
 **Since then (2026-07-10)**: `GameRecapPanel.jsx`'s Highlights and Key
 Moments sections were merged — Key Moments (text cards) now only renders
 when a game has zero video highlights, instead of always showing alongside
@@ -751,22 +792,22 @@ design, phased plan, and live task tracker:
 
 ## 12. Where to start (by question)
 
-| I need to understand…                   | Start here                                                                                                                        |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                                 |
-| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                                            |
-| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                                             |
-| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                               |
-| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                                              |
-| API surface                             | [`api.md`](./api.md)                                                                                                              |
-| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                                            |
-| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                                              |
-| Billing                                 | [`billing.md`](./billing.md)                                                                                                      |
-| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                                |
-| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                                |
-| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                                                   |
-| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                                            |
-| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)                                            |
-| Auto Feed Generation (in progress)      | §11 above ("Auto Feed Generation"), [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md)                |
-| Public unified player profiles (v1)     | §1 above, §11 ("Public Unified Player Profiles v1"), `docs/superpowers/specs/2026-07-11-public-unified-player-profiles-design.md` |
-| User Follow System (v1)                 | §1 above, §11 ("User Follow System v1"), [`follow-system/`](./follow-system/)                                                     |
+| I need to understand…                   | Start here                                                                                                                                   |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product scope & features                | [`README.md`](../README.md), [`what-is-tsw.md`](./what-is-tsw.md)                                                                            |
+| Fast file-path orientation              | [`app-overview.md`](./app-overview.md)                                                                                                       |
+| Routing / page composition              | `client/src/app/router/AppRouter.jsx`                                                                                                        |
+| Live game behavior                      | `client/src/features/games/pages/GameTrackPage.jsx`                                                                                          |
+| Derived stats / recap logic             | `server/src/modules/games/games.service.js`, `shared/statSummary.js`                                                                         |
+| API surface                             | [`api.md`](./api.md)                                                                                                                         |
+| Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                                                       |
+| Authorization rules                     | [`permissions.md`](./permissions.md)                                                                                                         |
+| Billing                                 | [`billing.md`](./billing.md)                                                                                                                 |
+| Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                                           |
+| Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                                           |
+| Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                                                              |
+| Visual design system (partial redesign) | §9.1 above, `client/src/components/DarkPageHeader.jsx`                                                                                       |
+| Demo account / seed data generation     | §10 above ("Demo account seeding"), [`demo-data-generation/`](./demo-data-generation/)                                                       |
+| Auto Feed Generation (in progress)      | §11 above ("Auto Feed Generation"), [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md)                           |
+| Public unified player profiles (v1)     | §1 above, §11 ("Public Unified Player Profiles v1"), `docs/superpowers/specs/2026-07-11-public-unified-player-profiles-design.md`            |
+| Follow System (v1 + v1.5)               | §1 above, §11 ("Follow System v1.5"), [`follow-system/`](./follow-system/), [`follow-system-teams-leagues/`](./follow-system-teams-leagues/) |

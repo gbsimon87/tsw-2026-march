@@ -58,11 +58,11 @@
 
 ## Documentation
 
-| ID    | Task                                            | Status      | Dependencies | Notes                   |
-| ----- | ----------------------------------------------- | ----------- | ------------ | ----------------------- |
-| DOC-1 | `docs/follow-system-teams-leagues/` set created | Complete    | —            | Phase 0                 |
-| DOC-2 | Keep tracker + dashboard updated during dev     | Complete    | —            | Living                  |
-| DOC-3 | Apply PROJECT-KNOWLEDGE updates after ship      | Not Started | Phase 4      | §1/§5/§11 — after merge |
+| ID    | Task                                            | Status   | Dependencies | Notes                                                              |
+| ----- | ----------------------------------------------- | -------- | ------------ | ------------------------------------------------------------------ |
+| DOC-1 | `docs/follow-system-teams-leagues/` set created | Complete | —            | Phase 0                                                            |
+| DOC-2 | Keep tracker + dashboard updated during dev     | Complete | —            | Living                                                             |
+| DOC-3 | Apply PROJECT-KNOWLEDGE updates                 | Complete | Phase 4      | §1/§5/§11/§12 applied 2026-07-12 (ahead of merge, at user request) |
 
 ## Deployment
 
