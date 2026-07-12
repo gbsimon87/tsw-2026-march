@@ -90,6 +90,22 @@ server-side, not merely hidden client-side.
   missing targets by skipping/nulling; orphan rows are harmless.
 - **AL4:** No follow cap per user (v1 A2).
 
+## Found during the pre-merge security review (2026-07-12)
+
+The whole-diff security review confirmed the gating model on all points (private
+league/team follow → 404 via `assertLeagueVisible`; hydration nulls
+`profileHref`+slugs server-side for now-private targets; unfollow never
+re-checks visibility; auth/follower-identity correct; route params validated;
+enum widening safe). **No actionable security findings.**
+
+One **non-security perf note** (accepted, not fixed): each following-list
+hydration re-checks visibility with `assertLeagueVisible`, which re-fetches
+league docs already loaded by `listLeaguesByIds` in the same call. This is a
+bounded, per-page redundant read (not a true N+1), and reusing the canonical
+helper is a deliberate correctness choice over hand-rolling the check (DL7 /
+PROJECT-KNOWLEDGE §4). Revisit only if follow-list pages grow large — e.g. by
+denormalizing a cached visibility flag, per the v1 `hasPublicProfile` risk note.
+
 ## Open questions (non-blocking)
 
 - **QL1:** Merged, reverse-chronological "everything you follow" feed instead of

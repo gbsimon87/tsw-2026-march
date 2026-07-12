@@ -12,20 +12,20 @@
 | Phase 0 — Docs scaffold   | ✅ Complete    | 100%     |
 | Phase 1 — Backend + API   | ✅ Complete    | 100%     |
 | Phase 2 — Frontend        | ✅ Complete    | 100%     |
-| Phase 3 — Verify & polish | 🟡 In Progress | 40%      |
-| Phase 4 — Ship & doc-sync | ⬜ Not Started | 0%       |
+| Phase 3 — Verify & polish | ✅ Complete    | 100%     |
+| Phase 4 — Ship & doc-sync | 🟡 In Progress | 50%      |
 
-**Overall:** ~80% — backend + frontend complete and green; verification underway.
+**Overall:** ~90% — code-complete, tested, and security-reviewed. Remaining:
+merge feature → dev → main and the post-ship PROJECT-KNOWLEDGE sync.
 
 ## Current phase
 
-**Phase 3 — Verify & polish.** Frontend landed: type-aware `FollowButton`
-(default `targetType='user'`), api/hooks namespaced by type, sectioned
-FollowingPage (Players/Leagues/Teams), follow buttons on `PublicLeaguePage` +
-`PublicLeagueTeamPage` (gated on `league.isPublic`). Client build ✓, lint ✓,
-follows + affected player tests green (22). The 19 failing client tests are the
-pre-existing OPT-026 drift set (games/feed/posthog/smoke) — unrelated. Next:
-security review + full pre-PR gate.
+**Phase 4 — Ship & doc-sync.** Code complete on `feature/follow-teams-leagues`.
+Pre-PR gate green (check-env ✓, lint ✓, server 416/416 ✓, build ✓; the only
+failing client tests are the pre-existing OPT-026 drift set, none touching
+follow/league files). Security review passed with no actionable findings — the
+D8 private-league gating model is verified server-side. Awaiting merge; apply the
+PROJECT-KNOWLEDGE updates after ship.
 
 ## Completed work
 
