@@ -10,6 +10,17 @@ import { useAuth } from '../../../app/store/AuthContext';
 import { gamesApi } from '../../games/api/gamesApi';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { ExportCsvButton } from '../../export/components/ExportCsvButton';
+import { exportApi } from '../../export/api/exportApi';
+
+const LEAGUE_EXPORT_DATASETS = [
+  { value: 'all', label: 'Everything' },
+  { value: 'standings', label: 'Standings' },
+  { value: 'leaders', label: 'Statistical leaders' },
+  { value: 'players', label: 'Player stats' },
+  { value: 'games', label: 'Games' },
+  { value: 'gamelogs', label: 'Game logs (per game)' },
+];
 
 const TABS = [
   {
@@ -672,6 +683,18 @@ export function AdminLeaguePage() {
           </div>
         </div>
       </section>
+
+      {canEditLeague && league.currentSeason?.id ? (
+        <div className="flex justify-end">
+          <ExportCsvButton
+            label="Export CSV"
+            datasets={LEAGUE_EXPORT_DATASETS}
+            fetcher={(dataset) =>
+              exportApi.getLeagueCsv(leagueId, league.currentSeason.id, dataset)
+            }
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

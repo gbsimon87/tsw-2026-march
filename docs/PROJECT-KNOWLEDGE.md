@@ -96,6 +96,19 @@ Core capabilities:
   `follows.dependency-contract.test.js` guard.
 - **Team-scoped and League-scoped Pro billing** gating replay, public shot maps,
   and highlight clips.
+- **CSV Data Export (2026-07-12)**: signed-in users can export their stats as a
+  CSV download from three places — the private "My Sporty" page ("Export my
+  stats (CSV)", one row per claimed `LeaguePlayer` profile with season
+  averages, handling users with multiple profiles), `AdminLeaguePage`
+  ("Export CSV" dataset menu — standings / leaders / player stats / games /
+  per-game player game-logs / everything, gated `assertLeagueManagerOrOwner`),
+  and `AdminLeagueTeamPage` ("Export team CSV" — that team's player stats,
+  games, and game-logs, gated `assertTeamManagerOrOwner`). This introduced the
+  first non-JSON (`Content-Disposition: attachment`, `text/csv`) response in
+  the codebase, isolated in a new `server/src/modules/export/` module that
+  owns no collections and only orchestrates existing `leagues.service`
+  getters. See §11 ("CSV Data Export") for the full architecture and
+  follow-up history.
 
 The product model is centered on **one tracked team per standalone game**;
 opponents are represented by score totals and labels, not full rosters. League
@@ -788,6 +801,50 @@ existing post-response `setImmediate` pattern from `finishGameForUser`. Full
 design, phased plan, and live task tracker:
 [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md).
 
+**CSV Data Export (2026-07-12, `feature/csv-data-export`)**: shipped
+server-side CSV export described in §1, from the Product Opportunities
+Board's Tier-1 #1 backlog item ("get my data out"). New `export` module
+(`server/src/modules/export/`) orchestrates only existing `leagues.service`
+getters (`assembleLeagueProfilesForUser`, `getLeagueStandings`,
+`getLeaguePlayerStats`, and a new season-scoped `getLeagueSeasonGames`) into
+titled CSV sections via a dependency-free `server/src/utils/csv.js`
+(RFC-4180 escaping, UTF-8 BOM for Excel) — no new collection, no new npm
+dependency. Auth reuses the canonical `assertLeagueManagerOrOwner`/
+`assertTeamManagerOrOwner` gates (now exported from `leagues.service.js`
+alongside the pre-existing `assertLeagueVisible`). Client: `apiClient` gained
+`getBlob(path)` (same cookie-auth + 401→refresh behavior as `request()`, plus
+`Content-Disposition` filename parsing) and `lib/downloadFile.js`
+(object-URL→anchor→click, mirroring `useShareImage`'s desktop fallback); a new
+`features/export/` (`exportApi`, `useExportCsv`, `ExportCsvButton`) wires the
+three entry points. **Lesson**: the first `useExportCsv` implementation used
+TanStack Query's `useMutation`, which broke `AdminLeaguePage.test.jsx` and
+others with "No QueryClient set" — pages without a `QueryClientProvider` in
+their test tree exist throughout the admin surface. Since a CSV download is a
+one-shot imperative action, not cached server state, `useExportCsv` was
+rewritten as plain `useState` (no React Query dependency) — a pattern worth
+reusing for any future imperative-action hook.
+
+Bundled in the same branch: the `GameDetailPage` header had two redundant
+image-share controls (legacy **Share**/**Download** buttons driving a
+separate SVG recap-card pipeline — `createRecapCardDataUrl`,
+`createPngFileFromSvgDataUrl`) duplicating the newer, shareable-graphics-based
+**"Share as image"** (`ShareImageButton`). The legacy pair and their dead
+pipeline were removed; **Print** and **Pulse** kept. The now-orphaned
+`features/games/recapCardImage.js` (+ its test/snapshot) was deleted as a
+same-day follow-up once confirmed to have no other importers.
+
+**Follow-ups delivered same day**: a per-game per-player "Game Logs" CSV
+section (`?dataset=gamelogs` on the league export, folded into `all`; always
+included on the team export) replays each completed game's frozen `boxScore`
+into one row per player — handles both one-sided (`{ players, teamTotals }`)
+and dual-team (`{ home, away }`) shapes. The league/team Games and Game Logs
+sections are season-scoped via the new `getLeagueSeasonGames` helper
+(wraps the existing season-filtered `listLeagueGamesByLeagueId` +
+`listLeagueGames`, also returning the raw game docs the game-logs replay
+needs). Deferred: a PDF post-game report (a separate Tier-2 backlog item, not
+part of this initiative). Full design, endpoint table, and file-by-file
+tracker: [`data-export/`](./data-export/).
+
 ---
 
 ## 12. Where to start (by question)
@@ -811,3 +868,4 @@ design, phased plan, and live task tracker:
 | Auto Feed Generation (in progress)      | §11 above ("Auto Feed Generation"), [`auto-feed-generation/000-TRACKER.md`](./auto-feed-generation/000-TRACKER.md)                           |
 | Public unified player profiles (v1)     | §1 above, §11 ("Public Unified Player Profiles v1"), `docs/superpowers/specs/2026-07-11-public-unified-player-profiles-design.md`            |
 | Follow System (v1 + v1.5)               | §1 above, §11 ("Follow System v1.5"), [`follow-system/`](./follow-system/), [`follow-system-teams-leagues/`](./follow-system-teams-leagues/) |
+| CSV Data Export                         | §1 above, §11 ("CSV Data Export"), [`data-export/`](./data-export/)                                                                          |

@@ -317,8 +317,11 @@ describe('GameDetailPage', () => {
     );
     expect(screen.queryByRole('tab', { name: 'Game Info' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share image card' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Download image card' })).toBeInTheDocument();
+    // The redundant legacy "Share image card" / "Download image card" buttons were
+    // removed in favour of the single canonical "Share as image" control.
+    expect(screen.queryByRole('button', { name: 'Share image card' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download image card' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share as image' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
     expect(screen.queryByText('Share Card')).not.toBeInTheDocument();
     expect(screen.queryByText('Download Card')).not.toBeInTheDocument();
@@ -348,30 +351,6 @@ describe('GameDetailPage', () => {
       })
     ).toHaveAttribute('href', '/teams/team-1/players/p1');
     expect(screen.queryByTestId('recap-shot-snapshot')).not.toBeInTheDocument();
-
-    const shareImageButton = screen.getByRole('button', { name: 'Share image card' });
-    await waitFor(() => {
-      expect(shareImageButton).not.toBeDisabled();
-    });
-    fireEvent.click(shareImageButton);
-    fireEvent.click(shareImageButton);
-    await waitFor(() => expect(navigator.share).toHaveBeenCalledTimes(1));
-    const sharePayload = navigator.share.mock.calls[0][0];
-    expect(sharePayload.url).toBeUndefined();
-    expect(sharePayload.text).toContain('TSW Team vs Wildcats final: 4-0');
-    expect(sharePayload.text).toContain('View game: http://localhost:3000/games/game-1');
-    expect(sharePayload.files).toHaveLength(1);
-    expect(sharePayload.files[0].name).toMatch(/game-header\.png$/);
-    expect(sharePayload.files[0].type).toBe('image/png');
-
-    navigator.share.mockClear();
-    navigator.canShare.mockReturnValue(false);
-    fireEvent.click(shareImageButton);
-    await waitFor(() => expect(navigator.share).toHaveBeenCalledTimes(1));
-    const linkOnlyPayload = navigator.share.mock.calls[0][0];
-    expect(linkOnlyPayload.files).toBeUndefined();
-    expect(linkOnlyPayload.url).toBe('http://localhost:3000/games/game-1');
-    expect(linkOnlyPayload.text).toContain('View game: http://localhost:3000/games/game-1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     const shareDialog = await screen.findByRole('dialog');

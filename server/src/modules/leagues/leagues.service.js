@@ -2022,6 +2022,23 @@ async function listLeagueGames(
   return games.map((game) => createLeagueGameRow(game, byId));
 }
 
+// Season-scoped game data for the export module. Returns the summarised result
+// rows (same shape as listLeagueGames, but filtered to one season) alongside the
+// raw game docs — the raw docs carry each completed game's frozen `boxScore`,
+// which the CSV export replays into per-game player game-logs. Reuses the same
+// internals as the league-detail compositions so there is no new query logic.
+async function getLeagueSeasonGames(leagueId, seasonId) {
+  const [teams, games] = await Promise.all([
+    listLeagueTeams(leagueId),
+    listLeagueGamesByLeagueId(leagueId, seasonId),
+  ]);
+  return {
+    teams,
+    games,
+    rows: await listLeagueGames(leagueId, { teams, games }),
+  };
+}
+
 // OPT-010: the pure LIVE standings compute (the source of truth). Renamed from
 // getLeagueStandings; the public getLeagueStandings is now a materialised read
 // that falls back to this. OPT-005: same pre-fetch escape hatch as listLeagueGames.
@@ -2630,6 +2647,12 @@ module.exports = {
   // league/leagueTeam follow gating (reuse-the-canonical-helper rule,
   // PROJECT-KNOWLEDGE.md §4).
   assertLeagueVisible,
+  // Canonical resource + league-role gates. Exported for the export module's
+  // CSV endpoints (reuse-the-canonical-helper rule, PROJECT-KNOWLEDGE.md §4):
+  // owner/league_manager for league-wide exports, and additionally a team's
+  // manager for team-scoped exports.
+  assertLeagueManagerOrOwner,
+  assertTeamManagerOrOwner,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
   updateLeagueTeamForLeague,
@@ -2652,6 +2675,7 @@ module.exports = {
   cancelJoinRequest,
   unclaimLeaguePlayer,
   listLeagueGames,
+  getLeagueSeasonGames,
   getLeagueStandings,
   computeLeagueStandings,
   computeLeaguePlayerStats,

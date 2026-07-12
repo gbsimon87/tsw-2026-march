@@ -90,9 +90,69 @@ async function request(path, options = {}, retryState = {}) {
   return data;
 }
 
+// Parse the download filename out of a Content-Disposition header, if present.
+function parseContentDispositionFilename(header) {
+  if (!header) {
+    return null;
+  }
+  const utf8Match = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1].replace(/^"|"$/g, ''));
+    } catch {
+      // fall through to the plain filename form
+    }
+  }
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match ? match[1] : null;
+}
+
+async function requestBlob(path, retryState = {}) {
+  const response = await fetch(`${env.apiBaseUrl}${path}`, {
+    credentials: 'include',
+  });
+
+  const nextCsrfToken = response.headers.get('x-csrf-token');
+  if (nextCsrfToken) {
+    csrfToken = nextCsrfToken;
+  }
+
+  if (response.status === 401 && !retryState.didRefresh) {
+    try {
+      await refreshSession();
+      return requestBlob(path, { didRefresh: true });
+    } catch {
+      // Fall through to the error handling below.
+    }
+  }
+
+  if (!response.ok) {
+    let message = 'Request failed';
+    try {
+      const data = await response.json();
+      message = data?.error?.message || message;
+    } catch {
+      // non-JSON error body — keep the generic message
+    }
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const filename = parseContentDispositionFilename(response.headers.get('Content-Disposition'));
+  return { blob, filename };
+}
+
 export const apiClient = {
   get(path) {
     return request(path);
+  },
+  // Fetch a binary/file response (e.g. a CSV export) as a Blob, reusing the same
+  // cookie-auth + 401→refresh→retry-once behaviour as request(). GET only, so no
+  // CSRF token is required.
+  getBlob(path) {
+    return requestBlob(path);
   },
   post(path, body) {
     return request(path, {

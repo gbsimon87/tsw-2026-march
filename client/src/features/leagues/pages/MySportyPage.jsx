@@ -6,6 +6,8 @@ import { useAuth } from '../../../app/store/AuthContext';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { ProfileCard } from '../../players/components/ProfileCard';
+import { ExportCsvButton } from '../../export/components/ExportCsvButton';
+import { exportApi } from '../../export/api/exportApi';
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
@@ -150,16 +152,24 @@ export function MySportyPage() {
       </section>
 
       <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
-        <header className="border-b border-slate-100 pb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
-            On the roster
-          </p>
-          <h2
-            className="mt-1 text-2xl text-slate-900"
-            style={{ fontFamily: "'Archivo Black', sans-serif" }}
-          >
-            League Profiles
-          </h2>
+        <header className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+              On the roster
+            </p>
+            <h2
+              className="mt-1 text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              League Profiles
+            </h2>
+          </div>
+          {profiles.length > 0 ? (
+            <ExportCsvButton
+              fetcher={() => exportApi.getMySportyCsv()}
+              label="Export my stats (CSV)"
+            />
+          ) : null}
         </header>
 
         {error ? (

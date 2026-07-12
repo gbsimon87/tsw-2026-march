@@ -14,6 +14,7 @@ const {
   publicOpponentsRouter,
 } = require('../modules/teams/teams.routes');
 const { gamesRouter } = require('../modules/games/games.routes');
+const { exportRouter } = require('../modules/export/export.routes');
 const {
   leaguesRouter,
   publicLeaguesRouter,
@@ -40,6 +41,7 @@ apiRouter.use('/public/players', publicCacheMiddleware, publicPlayersRouter);
 apiRouter.use('/leagues', leaguesRouter);
 apiRouter.use('/teams', teamsRouter);
 apiRouter.use('/games', gamesRouter);
+apiRouter.use('/export', exportRouter);
 
 module.exports = {
   apiRouter,
