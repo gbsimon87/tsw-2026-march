@@ -53,6 +53,7 @@ rather than a code hunt.
 | 15  | [15-task-backlog.md](./15-task-backlog.md)                       | Granular, independently-shippable tasks                                |
 | 16  | [16-phased-roadmap.md](./16-phased-roadmap.md)                   | 8 phases, ordering rationale                                           |
 | 17  | [17-launch-checklist.md](./17-launch-checklist.md)               | Separate, gated go-live                                                |
+| —   | [OUTSTANDING-MANUAL-ACTIONS.md](./OUTSTANDING-MANUAL-ACTIONS.md) | **Running checklist of human/infra actions you need to take**          |
 | —   | [PHASE-3-MANUAL-ACTIONS.md](./PHASE-3-MANUAL-ACTIONS.md)         | Phase 3 by-hand infra/Stripe steps (render.yaml, .env, price metadata) |
 
 ## Status board
