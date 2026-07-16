@@ -2,8 +2,8 @@
 
 > **Single source of truth** for TSW's pricing/billing redesign. This folder is the
 > complete planning blueprint — read it before touching any billing, entitlement,
-> or pricing code. Planning was completed 2026-07-16; **no application code has
-> changed yet**.
+> or pricing code. Planning was completed 2026-07-16; implementation is **in progress
+> on `feature/pricing-overhaul`** — see the status board below for the current phase.
 
 ## What this initiative is
 
