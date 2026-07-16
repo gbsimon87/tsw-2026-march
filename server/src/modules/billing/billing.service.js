@@ -17,6 +17,7 @@ const {
   claimLeagueWebhookEvent,
 } = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
+const { resolveForTeam, resolveForLeague } = require('./entitlements.service');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
@@ -59,18 +60,20 @@ function normalizeSubscriptionStatus(value) {
 
 // ─── Entitlement checks ───────────────────────────────────────────────────────
 
+// Adapters (T-03): "is this a paid, active resource?" now delegates to the central
+// entitlement resolver (the single source of truth for plan normalization + active
+// state), so legacy 'pro'/'team'/'league' values and the comp/manual billingSource
+// are all handled in one place. A resource is paid-active when its resolved plan is
+// non-starter and active. These adapters keep their legacy signature/behavior so the
+// ~10 call sites can migrate to the resolver incrementally (Phase 4).
 function isTeamActive(team) {
-  const plan = team.plan || 'free';
-  const status = normalizeSubscriptionStatus(team.subscriptionStatus);
-  // 'pro' is the legacy plan value used before the pricing redesign
-  return (plan === 'team' || plan === 'pro') && ACTIVE_STATUSES.has(status);
+  const r = resolveForTeam(team);
+  return r.active && r.planId !== 'starter';
 }
 
 function isLeagueActive(league) {
-  const plan = league.plan || 'free';
-  const status = normalizeSubscriptionStatus(league.subscriptionStatus);
-  // 'pro' is the manually-set value on We-ball Saturday (no Stripe subscription)
-  return (plan === 'league' || plan === 'pro') && ACTIVE_STATUSES.has(status);
+  const r = resolveForLeague(league);
+  return r.active && r.planId !== 'starter';
 }
 
 function getTeamEntitlements(team) {

@@ -5,6 +5,12 @@ const {
   customerPortalSchema,
 } = require('./billing.validation');
 const billingService = require('./billing.service');
+const { getDisplayCatalog } = require('./plan-catalog');
+
+// Public: the price-ID-free plan catalog the client pricing page renders from.
+async function getCatalog(req, res) {
+  res.status(200).json({ plans: getDisplayCatalog() });
+}
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -65,6 +71,7 @@ async function handleWebhook(req, res) {
 }
 
 module.exports = {
+  getCatalog,
   createCheckoutSession,
   createTeamCheckoutSession,
   createLeagueCheckoutSession,

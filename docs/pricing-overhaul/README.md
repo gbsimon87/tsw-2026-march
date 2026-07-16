@@ -56,17 +56,17 @@ rather than a code hunt.
 
 ## Status board
 
-| Phase                        | Status         | Notes                     |
-| ---------------------------- | -------------- | ------------------------- |
-| 0 · Planning (this folder)   | ✅ Complete    | 2026-07-16                |
-| 1 · Discovery & architecture | ✅ Complete    | Captured in `05`          |
-| 2 · Catalog + resolver       | ⬜ Not started |                           |
-| 3 · Stripe/env/render        | ⬜ Not started |                           |
-| 4 · Backend                  | ⬜ Not started |                           |
-| 5 · Frontend                 | ⬜ Not started |                           |
-| 6 · Migration                | ⬜ Not started |                           |
-| 7 · Testing & hardening      | ⬜ Not started |                           |
-| 8 · Launch (gated)           | ⬜ Not started | Separate go-live decision |
+| Phase                        | Status         | Notes                                           |
+| ---------------------------- | -------------- | ----------------------------------------------- |
+| 0 · Planning (this folder)   | ✅ Complete    | 2026-07-16                                      |
+| 1 · Discovery & architecture | ✅ Complete    | Captured in `05`                                |
+| 2 · Catalog + resolver       | ✅ Complete    | T-01…T-05 done 2026-07-16; server suite 483/483 |
+| 3 · Stripe/env/render        | ⬜ Not started |                                                 |
+| 4 · Backend                  | ⬜ Not started |                                                 |
+| 5 · Frontend                 | ⬜ Not started |                                                 |
+| 6 · Migration                | ⬜ Not started |                                                 |
+| 7 · Testing & hardening      | ⬜ Not started |                                                 |
+| 8 · Launch (gated)           | ⬜ Not started | Separate go-live decision                       |
 
 ## Ground rules
 

@@ -9,6 +9,10 @@ const billingWebhookRouter = Router();
 
 billingWebhookRouter.post('/', asyncHandler(controller.handleWebhook));
 
+// Public — the served plan catalog for the client pricing page. Registered BEFORE
+// the auth gate below so it needs no authentication (no price IDs are exposed).
+billingRouter.get('/catalog', asyncHandler(controller.getCatalog));
+
 billingRouter.use(authMiddleware);
 
 // Legacy route — kept for backward compatibility
