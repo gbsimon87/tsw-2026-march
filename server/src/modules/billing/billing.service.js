@@ -18,6 +18,7 @@ const {
 } = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
 const { resolveForTeam, resolveForLeague } = require('./entitlements.service');
+const { resolvePriceId, trialDaysFor } = require('./plan-catalog');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
@@ -165,15 +166,15 @@ async function getLeagueBillingForOwner(userId, leagueId) {
 }
 
 // ─── Price ID resolution ──────────────────────────────────────────────────────
+// Prices, intervals, and trial lengths come from the plan catalog — the single
+// source of truth. No env-var names or hard-coded trial days live here (T-06).
 
 function resolveTeamPriceId(interval) {
-  if (interval === 'season') return env.STRIPE_PRICE_ID_TEAM_SEASON;
-  return env.STRIPE_PRICE_ID_TEAM_MONTHLY;
+  return resolvePriceId('team_pro', interval);
 }
 
 function resolveLeaguePriceId(interval) {
-  if (interval === 'season') return env.STRIPE_PRICE_ID_LEAGUE_SEASON;
-  return env.STRIPE_PRICE_ID_LEAGUE_MONTHLY;
+  return resolvePriceId('league', interval);
 }
 
 // ─── Checkout sessions ────────────────────────────────────────────────────────
@@ -214,7 +215,7 @@ async function createTeamCheckoutSession(userId, teamId, interval = 'monthly') {
     customer_email: team.billingEmail || undefined,
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
-      trial_period_days: 14,
+      trial_period_days: trialDaysFor('team_pro', interval),
       metadata: {
         resourceType: 'team',
         teamId: String(team._id),
@@ -260,7 +261,7 @@ async function createLeagueCheckoutSession(userId, interval = 'monthly') {
     ),
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
-      trial_period_days: 14,
+      trial_period_days: trialDaysFor('league', interval),
       metadata: {
         resourceType: 'league',
         ownerUserId: String(userId),

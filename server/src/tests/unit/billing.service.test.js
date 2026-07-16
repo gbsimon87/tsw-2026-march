@@ -26,7 +26,6 @@ jest.mock('../../config/env', () => ({
   env: {
     STRIPE_SECRET_KEY: 'sk_test_123',
     STRIPE_WEBHOOK_SECRET: 'whsec_123',
-    STRIPE_PRICE_ID_PRO_MONTHLY: 'price_pro_monthly',
     STRIPE_PRICE_ID_TEAM_MONTHLY: 'price_team_monthly',
     STRIPE_PRICE_ID_TEAM_SEASON: 'price_team_season',
     STRIPE_PRICE_ID_LEAGUE_MONTHLY: 'price_league_monthly',
@@ -59,6 +58,7 @@ const {
   League,
   LeagueManager,
   LeagueTeamMember,
+  findLeaguesByOwner,
 } = require('../../modules/leagues/leagues.repository');
 const { updateUserPlan } = require('../../modules/auth/auth.repository');
 const {
@@ -69,6 +69,7 @@ const {
   getBillingSummary,
   createCheckoutSession,
   createTeamCheckoutSession,
+  createLeagueCheckoutSession,
   createCustomerPortalSession,
   handleWebhookEvent,
   assertFeedPostingAllowed,
@@ -410,6 +411,69 @@ describe('createTeamCheckoutSession', () => {
     await expect(createTeamCheckoutSession('user-1', 'bad-id', 'monthly')).rejects.toMatchObject({
       statusCode: 404,
     });
+  });
+});
+
+// ─── Phase 3 (T-06): price/interval/trial resolved from the plan catalog ────────
+// These lock the resolution behavior so the catalog refactor is behavior-preserving:
+// price IDs come from resolvePriceId(planId, interval) and trial from trialDaysFor.
+describe('catalog-driven price + trial resolution', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('team monthly uses the team monthly price with the configured trial', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+
+    await createTeamCheckoutSession('user-1', 'team-99', 'monthly');
+
+    expect(mockCheckoutCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: 'price_team_monthly', quantity: 1 }],
+        subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+      })
+    );
+  });
+
+  test('team season uses the team season price', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+
+    await createTeamCheckoutSession('user-1', 'team-99', 'season');
+
+    expect(mockCheckoutCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: 'price_team_season', quantity: 1 }],
+        subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+      })
+    );
+  });
+
+  test('league monthly uses the league monthly price', async () => {
+    findLeaguesByOwner.mockResolvedValue([]);
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+
+    await createLeagueCheckoutSession('user-1', 'monthly');
+
+    expect(mockCheckoutCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: 'price_league_monthly', quantity: 1 }],
+        subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+      })
+    );
+  });
+
+  test('league season uses the league season price', async () => {
+    findLeaguesByOwner.mockResolvedValue([]);
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+
+    await createLeagueCheckoutSession('user-1', 'season');
+
+    expect(mockCheckoutCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: 'price_league_season', quantity: 1 }],
+        subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+      })
+    );
   });
 });
 
