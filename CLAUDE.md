@@ -59,7 +59,9 @@ Backfill scripts: `ENV_FILE=../env/server/.env.development node src/scripts/<nam
   See [`docs/permissions.md`](docs/permissions.md).
 - **Billing is resource-scoped** (per Team / per League), Stripe **hosted**
   Checkout (no client Stripe.js), webhook mounted before `express.json()`, Stripe
-  is the source of truth. See [`docs/billing.md`](docs/billing.md).
+  is the source of truth. See [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md)
+  §6 for today's code, and [`docs/pricing-overhaul/`](docs/pricing-overhaul/) for the
+  planned pricing/billing redesign.
 - **Routing**: feed is `/pulse`; admin is `/admin`; `/pricing` is dev-only.
 - **`OPT-###` comments** are an inline changelog of perf/correctness decisions —
   don't delete them. The active tracker is

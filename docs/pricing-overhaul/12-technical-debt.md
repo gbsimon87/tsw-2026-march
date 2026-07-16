@@ -43,5 +43,7 @@
   a confusing mixed state during the gated period).
 - **Snapshot shape assumptions** — always default absent snapshot keys; never assume a
   historical game has the full key set.
-- **Doc drift** — update `billing.md` and `PROJECT-KNOWLEDGE.md` §6 at launch (Phase 8),
-  or this folder itself becomes stale debt.
+- **Doc drift** — refresh `PROJECT-KNOWLEDGE.md` §6 (and recreate a dedicated billing
+  reference if wanted) at launch (Phase 8), or this folder itself becomes stale debt.
+  The old `billing.md`/`qa-billing-dev.md`/`stripe-development-setup.md` were deleted
+  with the overhaul.

@@ -80,6 +80,13 @@ rather than a code hunt.
 
 ## Related existing docs
 
-[`billing.md`](../billing.md) · [`stripe-development-setup.md`](../stripe-development-setup.md) ·
-[`qa-billing-dev.md`](../qa-billing-dev.md) · [`render-env-matrix.md`](../render-env-matrix.md) ·
-[`PROJECT-KNOWLEDGE.md`](../PROJECT-KNOWLEDGE.md) §6.
+[`render-env-matrix.md`](../render-env-matrix.md) ·
+[`PROJECT-KNOWLEDGE.md`](../PROJECT-KNOWLEDGE.md) §6 ·
+[`deployment-render.md`](../deployment-render.md).
+
+> The old `billing.md`, `qa-billing-dev.md`, and `stripe-development-setup.md`
+> described the pre-overhaul model and were **removed** (2026-07-16) to avoid
+> confusion — their factual content is captured in
+> [`01-current-state-audit.md`](./01-current-state-audit.md), and the target design
+> lives in [`06-stripe-architecture.md`](./06-stripe-architecture.md). A fresh
+> Stripe-setup and QA guide will be written during implementation (Phases 3–7).

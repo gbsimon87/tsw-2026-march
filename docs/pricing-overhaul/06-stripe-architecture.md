@@ -113,8 +113,10 @@ and remove `PRO_MONTHLY`. Without this, production checkout resolves `undefined`
 ## Dev vs prod setup
 
 - **Dev:** test-mode keys + the 4 test price IDs already in
-  `env/server/.env.development`; Stripe CLI for webhook forwarding (see
-  `docs/stripe-development-setup.md`, `docs/qa-billing-dev.md`).
+  `env/server/.env.development`; Stripe CLI for webhook forwarding
+  (`stripe listen --forward-to localhost:4000/api/v1/billing/webhooks`). The old
+  `stripe-development-setup.md` / `qa-billing-dev.md` were removed with the overhaul;
+  a fresh setup + QA guide is written during implementation.
 - **Prod:** create live products/prices at launch; set the 6 secrets + 2 URLs in the
   Render dashboard; register the live webhook endpoint and set
   `STRIPE_WEBHOOK_SECRET`. All in the launch checklist.

@@ -64,13 +64,13 @@ in the same phase can largely proceed in parallel unless a dependency says other
 
 ## F. Cross-cutting UX (often missed)
 
-| Area                                  | Current                                        | Why change                                 | Cx  | Depends on       | Risks                         | Order |
-| ------------------------------------- | ---------------------------------------------- | ------------------------------------------ | :-: | ---------------- | ----------------------------- | :---: |
-| Admin/dashboard billing visibility    | No plan/billing display on team/admin pages    | Users need to see plan & manage it         |  M  | Resolver         | Scope creep                   |   5   |
-| Nav upgrade affordance                | None                                           | A discoverable path to plans (post-launch) |  S  | —                | —                             |  5/8  |
-| Email comms                           | None for trial-ending/dunning (webhook no-ops) | Trial-ending & failed-payment emails       |  M  | Webhooks, Resend | No job queue — per-event only |  4/8  |
-| Marketing pages                       | No pricing copy (clean)                        | Add pricing entry point at launch          |  S  | Launch           | —                             |   8   |
-| `PROJECT-KNOWLEDGE.md` / `billing.md` | Describe old model                             | Update to new model post-merge             |  S  | All              | Doc drift                     |   8   |
+| Area                               | Current                                        | Why change                                                        | Cx  | Depends on       | Risks                         | Order |
+| ---------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------- | :-: | ---------------- | ----------------------------- | :---: |
+| Admin/dashboard billing visibility | No plan/billing display on team/admin pages    | Users need to see plan & manage it                                |  M  | Resolver         | Scope creep                   |   5   |
+| Nav upgrade affordance             | None                                           | A discoverable path to plans (post-launch)                        |  S  | —                | —                             |  5/8  |
+| Email comms                        | None for trial-ending/dunning (webhook no-ops) | Trial-ending & failed-payment emails                              |  M  | Webhooks, Resend | No job queue — per-event only |  4/8  |
+| Marketing pages                    | No pricing copy (clean)                        | Add pricing entry point at launch                                 |  S  | Launch           | —                             |   8   |
+| `PROJECT-KNOWLEDGE.md` §6          | Describes old model                            | Update to new model post-merge (old `billing.md` already removed) |  S  | All              | Doc drift                     |   8   |
 
 ## G. Migration, testing, launch
 

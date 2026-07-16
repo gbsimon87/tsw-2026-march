@@ -68,7 +68,8 @@
 
 - [ ] Launch email / in-app announcement (new plans, free tracking, prices).
 - [ ] Update marketing entry point to `/pricing`.
-- [ ] Update `docs/billing.md` and `PROJECT-KNOWLEDGE.md` §6 to the new model.
+- [ ] Update `PROJECT-KNOWLEDGE.md` §6 to the new model (old `docs/billing.md` was
+      removed with the overhaul; recreate a dedicated billing reference only if wanted).
 - [ ] Note the launch in the README status board here (Phase 8 → ✅).
 
 ## Rollback plan

@@ -285,7 +285,8 @@ getLeagueEntitlements` as one-line delegates so call sites migrate incrementally
 
 ### T-30 · Flip `/pricing` prod gate + comms + doc updates
 
-- **Files:** `AppRouter.jsx:194-199`; `billing.md`, `PROJECT-KNOWLEDGE.md` §6.
+- **Files:** `AppRouter.jsx:194-199`; `PROJECT-KNOWLEDGE.md` §6 (+ recreate a billing
+  reference doc if wanted — old `billing.md` was removed with the overhaul).
 - **Acceptance:** `/pricing` live in prod; docs reflect the new model; launch comms
   sent.
 - **Dep:** T-29 · **Effort:** S

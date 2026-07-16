@@ -57,7 +57,9 @@ resolveEntitlements/createRequestCache`, and that `games.service`/`leagues.servi
 
 ## Stripe test-clock scenarios (manual/scripted, dev)
 
-Using Stripe test clocks + CLI webhook forwarding (`docs/stripe-development-setup.md`):
+Using Stripe test clocks + CLI webhook forwarding
+(`stripe listen --forward-to localhost:4000/api/v1/billing/webhooks`; a fresh
+dev-setup guide is written during implementation):
 
 1. **Trial → active:** checkout with trial → advance clock past trial → `invoice.paid` →
    entitlements stay on; `trial_will_end` fired the email trigger.
