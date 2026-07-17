@@ -1278,6 +1278,23 @@ async function getGameForUser(userId, gameId) {
 
   const aiSummary = sanitizeAiSummary(game.aiSummary);
 
+  // T-14: light server guard on premium view data. Read the (frozen) entitlement
+  // surface for the tracked team — absent keys default to false — and omit replay
+  // clips / the shot-map snapshot when unentitled, so a scraper can't pull data the
+  // UI hides. Downgrade-safe: for recorded games this reads the frozen snapshot.
+  const viewEntitlements = team?.entitlements || {};
+  const highlights = viewEntitlements.canViewReplay
+    ? buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc))
+    : [];
+  const recap = buildGameRecap(
+    game,
+    game.trackingMode === 'dual_team' ? participants : teamDoc,
+    boxScore
+  );
+  if (recap && !viewEntitlements.canViewShotMaps) {
+    recap.shotSnapshot = null;
+  }
+
   return {
     game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
@@ -1318,15 +1335,11 @@ async function getGameForUser(userId, gameId) {
           logo: league.logo?.url ? { url: transformCloudinaryUrl(league.logo.url) } : null,
         }
       : null,
-    highlights: buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc)),
+    highlights,
     boxScore,
     replayFilters: game.trackingMode === 'dual_team' ? ['all', 'home', 'away'] : ['all'],
     teamEntitlements: team.entitlements,
-    recap: buildGameRecap(
-      game,
-      game.trackingMode === 'dual_team' ? participants : teamDoc,
-      boxScore
-    ),
+    recap,
     gameSummary,
     aiSummary,
     canEditCompletedGame: canEditCompleted,

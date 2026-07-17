@@ -949,6 +949,65 @@ describe('games service frozen box score (OPT-012)', () => {
     expect(result.team.entitlements.canViewShotMaps).toBe(false);
   });
 
+  // A qualifying replay clip: a made shot by a rostered player with a video timestamp.
+  const HIGHLIGHT_EVENT = {
+    _id: 'ev-1',
+    playerId: 'home-snap-1',
+    teamSide: 'home',
+    statType: STAT_TYPES.FG2_MADE,
+    videoTimestamp: 12,
+  };
+
+  test('T-14: omits replay highlights and shot snapshot when not entitled (frozen snapshot)', async () => {
+    buildGameRecap.mockReturnValue({
+      statusLabel: 'Final',
+      shotSnapshot: { made: 1, missed: 0, events: [] },
+    });
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      videoUrl: 'https://www.youtube.com/watch?v=abc123',
+      events: [HIGHLIGHT_EVENT],
+      homeParticipant: {
+        side: 'home',
+        participantType: 'league_team',
+        teamId: null,
+        leagueTeamId: 'home-team',
+        displayName: 'Home Squad',
+        logo: null,
+        colors: [],
+        billingSnapshot: { plan: 'free', subscriptionStatus: 'inactive' },
+        entitlementsSnapshot: { canViewReplay: false, canViewShotMaps: false },
+      },
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.highlights).toEqual([]);
+    expect(result.recap.shotSnapshot).toBeNull();
+  });
+
+  test('T-14: includes replay highlights and shot snapshot when entitled', async () => {
+    buildGameRecap.mockReturnValue({
+      statusLabel: 'Final',
+      shotSnapshot: { made: 1, missed: 0, events: [] },
+    });
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      videoUrl: 'https://www.youtube.com/watch?v=abc123',
+      events: [HIGHLIGHT_EVENT],
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    // Entitled (snapshot canViewReplay/canViewShotMaps:true) → both present.
+    expect(result.highlights.length).toBeGreaterThan(0);
+    expect(result.recap.shotSnapshot).toEqual(expect.any(Object));
+  });
+
   test('getGameForUser falls back to live compute when no frozen data exists', async () => {
     const game = buildDualLeagueGame({
       status: 'completed',
