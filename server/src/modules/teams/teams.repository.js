@@ -45,6 +45,9 @@ const teamSchema = new mongoose.Schema(
     homeVenue: { type: homeVenueSchema, default: null },
     players: { type: [playerSchema], default: [] },
     plan: { type: String, enum: ['free', 'pro', 'team'], default: 'free' },
+    // How this team's plan is granted. 'stripe' = billed via Stripe (webhooks own it);
+    // 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
+    billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
     subscriptionStatus: {
       type: String,
       enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
