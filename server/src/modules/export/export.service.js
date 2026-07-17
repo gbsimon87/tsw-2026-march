@@ -1,5 +1,17 @@
 const leaguesService = require('../leagues/leagues.service');
+const { resolveForLeague } = require('../billing/entitlements.service');
+const { ApiError } = require('../../utils/apiError');
 const { toCsvSection, joinSections } = require('../../utils/csv');
+
+// CSV is data egress — a Team Pro / League entitlement (T-15). Enforced server-side
+// (hard 402) in addition to the existing role gates. The personal my-sporty export
+// stays free (data portability). Gated on the league because both org-data exports
+// are league-scoped; an active League plan bundles canExportCsv to its teams.
+function assertCanExportCsv(league) {
+  if (!resolveForLeague(league).entitlements.canExportCsv) {
+    throw new ApiError(402, 'An active Team Pro or League subscription is required to export CSV');
+  }
+}
 
 // --- formatting helpers -----------------------------------------------------
 
@@ -285,6 +297,7 @@ async function buildMySportyCsv(userId) {
 
 async function buildLeagueCsv(userId, leagueId, seasonId, dataset) {
   const { league } = await leaguesService.assertLeagueManagerOrOwner(userId, leagueId);
+  assertCanExportCsv(league);
 
   const [standings, statRows, seasonGames] = await Promise.all([
     leaguesService.getLeagueStandings(leagueId, seasonId),
@@ -311,6 +324,7 @@ async function buildLeagueCsv(userId, leagueId, seasonId, dataset) {
 
 async function buildTeamCsv(userId, leagueId, leagueTeamId, seasonId) {
   const { league } = await leaguesService.assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+  assertCanExportCsv(league);
 
   const [statRows, seasonGames] = await Promise.all([
     leaguesService.getLeaguePlayerStats(leagueId, seasonId),
