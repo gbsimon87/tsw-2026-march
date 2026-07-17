@@ -8,10 +8,17 @@ import { leaguesApi } from '../../leagues/api/leaguesApi';
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 
+// Canonical plan ids are 'team_pro'/'league'; legacy 'team'/'pro' tolerated during
+// the migration window (a doc may still carry an un-migrated value).
+const TEAM_PLAN_VALUES = ['team_pro', 'team', 'pro'];
+const LEAGUE_PLAN_VALUES = ['league', 'pro'];
+
 function isActivePlan(billing, planValues) {
   return planValues.includes(billing?.plan) && ACTIVE_STATUSES.has(billing?.subscriptionStatus);
 }
 
+// Defense-in-depth: the server also validates the returned URL (T-09), but keep the
+// client guard so a bad URL never reaches window.location.
 function isSafeStripeUrl(url) {
   try {
     const parsed = new URL(url);
@@ -24,39 +31,6 @@ function isSafeStripeUrl(url) {
   }
 }
 
-const PRICES = {
-  team: { monthly: '$12/mo', season: '$89/season' },
-  league: { monthly: '$49/mo', season: '$299/season' },
-};
-
-const FREE_FEATURES = [
-  'Public team and player pages',
-  'My Sporty profile (claimed league player)',
-  'View stats on public pages',
-  'Post to The Pulse (if affiliated with a team or league)',
-];
-
-const TEAM_FEATURES = [
-  'Everything in Free',
-  'Full game tracking (shots, lineups, subs, all stat types)',
-  'Box score, recap, and play-by-play',
-  'Replay tab',
-  'Shot maps on public game pages',
-  'Highlight clip sharing',
-  'Per team — each team needs its own plan',
-];
-
-const LEAGUE_FEATURES = [
-  'Everything in Team, for all teams in the league',
-  'League creation and management',
-  'Dual-team tracking for league games',
-  'Standings and public league pages',
-  'Join request system',
-  'Multiple league managers',
-  'League logo and branding',
-  'Per league — each league needs its own plan',
-];
-
 function CheckIcon() {
   return (
     <span aria-hidden="true" className="text-emerald-600">
@@ -68,7 +42,7 @@ function CheckIcon() {
 function FeatureList({ features }) {
   return (
     <ul className="mt-5 space-y-2 text-sm text-slate-700">
-      {features.map((f) => (
+      {(features || []).map((f) => (
         <li key={f} className="flex gap-2">
           <CheckIcon />
           <span>{f}</span>
@@ -91,11 +65,23 @@ function PlanCard({ title, price, trial, description, features, accent = 'slate'
       <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-3 text-3xl font-bold text-slate-900">{price}</p>
       {trial && <p className="mt-1 text-xs font-medium text-emerald-700">{trial}</p>}
-      <p className="mt-3 text-sm text-slate-600">{description}</p>
+      {description && <p className="mt-3 text-sm text-slate-600">{description}</p>}
       <FeatureList features={features} />
       <div className="mt-6 space-y-3">{children}</div>
     </article>
   );
+}
+
+// Display price for a plan at the selected interval, from the served catalog.
+function planPrice(plan, interval) {
+  if (!plan) return '';
+  if (plan.price) return plan.price; // e.g. Starter → 'Free'
+  return plan.intervals?.[interval]?.display || '';
+}
+
+function trialLabel(plan, interval) {
+  const days = plan?.intervals?.[interval]?.trialDays;
+  return days ? `${days}-day free trial · card required upfront` : null;
 }
 
 export function PricingPage() {
@@ -103,6 +89,7 @@ export function PricingPage() {
   const [searchParams] = useSearchParams();
 
   const [interval, setInterval] = useState('monthly');
+  const [catalog, setCatalog] = useState([]);
   const [teams, setTeams] = useState([]);
   const [leagues, setLeagues] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
@@ -111,6 +98,14 @@ export function PricingPage() {
   const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
   const [isSubmittingLeague, setIsSubmittingLeague] = useState(false);
   const [error, setError] = useState('');
+
+  // Public catalog — fetched for everyone (drives all pricing copy; no client drift).
+  useEffect(() => {
+    billingApi
+      .getCatalog()
+      .then((res) => setCatalog(res.plans || []))
+      .catch((err) => setError(err.message || 'Failed to load pricing'));
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -144,6 +139,10 @@ export function PricingPage() {
       .finally(() => setIsLoadingData(false));
   }, [searchParams, user]);
 
+  const starterPlan = useMemo(() => catalog.find((p) => p.id === 'starter'), [catalog]);
+  const teamPlan = useMemo(() => catalog.find((p) => p.id === 'team_pro'), [catalog]);
+  const leaguePlan = useMemo(() => catalog.find((p) => p.id === 'league'), [catalog]);
+
   const selectedTeam = useMemo(
     () => teams.find((t) => t.id === selectedTeamId) ?? null,
     [teams, selectedTeamId]
@@ -153,8 +152,8 @@ export function PricingPage() {
     [leagues, selectedLeagueId]
   );
 
-  const teamIsActive = isActivePlan(selectedTeam?.billing, ['team', 'pro']);
-  const leagueIsActive = isActivePlan(selectedLeague?.billing, ['league', 'pro']);
+  const teamIsActive = isActivePlan(selectedTeam?.billing, TEAM_PLAN_VALUES);
+  const leagueIsActive = isActivePlan(selectedLeague?.billing, LEAGUE_PLAN_VALUES);
 
   async function handleTeamCheckout() {
     setError('');
@@ -199,15 +198,27 @@ export function PricingPage() {
     }
   }
 
-  const teamPrice = PRICES.team[interval];
-  const leaguePrice = PRICES.league[interval];
+  const teamCtaLabel = isSubmittingTeam
+    ? 'Redirecting…'
+    : teamIsActive
+      ? 'Manage Team Billing'
+      : trialLabel(teamPlan, interval)
+        ? 'Start free trial'
+        : 'Subscribe';
+  const leagueCtaLabel = isSubmittingLeague
+    ? 'Redirecting…'
+    : leagueIsActive
+      ? 'Manage League Billing'
+      : trialLabel(leaguePlan, interval)
+        ? 'Start free trial'
+        : 'Subscribe';
 
   return (
     <main className="space-y-10">
       <PageHeader
         eyebrow="Pricing"
-        title="Start your free trial today."
-        description="14-day free trial on Team and League plans — card required upfront, cancel any time."
+        title="Track for free. Upgrade for the extras."
+        description="Live stat tracking and box scores are free, forever. Team Pro and League unlock replay, shot maps, highlights, full history, CSV export, and league management."
       />
 
       {error ? (
@@ -219,7 +230,7 @@ export function PricingPage() {
       {/* Interval toggle */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-slate-700">Billing:</span>
-        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+        <div className="flex overflow-hidden rounded-lg border border-slate-200">
           {['monthly', 'season'].map((opt) => (
             <button
               key={opt}
@@ -237,17 +248,17 @@ export function PricingPage() {
           ))}
         </div>
         {interval === 'season' && (
-          <span className="text-xs text-emerald-700 font-medium">Save ~40%</span>
+          <span className="text-xs font-medium text-emerald-700">Best value</span>
         )}
       </div>
 
       <section className="grid gap-6 lg:grid-cols-3">
-        {/* Free */}
+        {/* Starter (Free) */}
         <PlanCard
-          title="Free"
-          price="$0"
-          description="Browse, view stats, and post to The Pulse if you're part of a team or league."
-          features={FREE_FEATURES}
+          title={starterPlan?.name || 'Starter'}
+          price={planPrice(starterPlan, interval) || 'Free'}
+          description={starterPlan?.tagline}
+          features={starterPlan?.features}
         >
           <Link
             to="/pulse"
@@ -257,13 +268,13 @@ export function PricingPage() {
           </Link>
         </PlanCard>
 
-        {/* Team */}
+        {/* Team Pro */}
         <PlanCard
-          title="Team"
-          price={teamPrice}
-          trial="14-day free trial · card required upfront"
-          description="Full game tracking and post-game review for one team."
-          features={TEAM_FEATURES}
+          title={teamPlan?.name || 'Team Pro'}
+          price={planPrice(teamPlan, interval)}
+          trial={trialLabel(teamPlan, interval)}
+          description={teamPlan?.tagline}
+          features={teamPlan?.features}
           accent="amber"
         >
           {user ? (
@@ -282,13 +293,13 @@ export function PricingPage() {
                     {teams.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
-                        {isActivePlan(t.billing, ['team', 'pro']) ? ' ✓ Active' : ''}
+                        {isActivePlan(t.billing, TEAM_PLAN_VALUES) ? ' ✓ Active' : ''}
                       </option>
                     ))}
                   </select>
                   {selectedTeam && (
                     <span className="mt-1 block text-xs text-slate-500">
-                      {selectedTeam.billing?.plan || 'free'}
+                      {selectedTeam.billing?.plan || 'starter'}
                       {selectedTeam.billing?.subscriptionStatus
                         ? ` · ${selectedTeam.billing.subscriptionStatus}`
                         : ''}
@@ -312,20 +323,10 @@ export function PricingPage() {
                   type="button"
                   onClick={handleTeamCheckout}
                   disabled={isSubmittingTeam || isLoadingData}
-                  aria-label={
-                    isSubmittingTeam
-                      ? 'Redirecting…'
-                      : teamIsActive
-                        ? 'Manage Team Billing'
-                        : 'Start 14-day Trial'
-                  }
+                  aria-label={teamCtaLabel}
                   className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
                 >
-                  {isSubmittingTeam
-                    ? 'Redirecting…'
-                    : teamIsActive
-                      ? 'Manage Team Billing'
-                      : 'Start 14-day Trial'}
+                  {teamCtaLabel}
                 </button>
               )}
             </>
@@ -334,18 +335,18 @@ export function PricingPage() {
               to="/register?redirectTo=/pricing"
               className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
             >
-              Start 14-day Trial
+              Start free trial
             </Link>
           )}
         </PlanCard>
 
         {/* League */}
         <PlanCard
-          title="League"
-          price={leaguePrice}
-          trial="14-day free trial · card required upfront"
-          description="Run a full league — tracking, standings, and public pages for every team."
-          features={LEAGUE_FEATURES}
+          title={leaguePlan?.name || 'League'}
+          price={planPrice(leaguePlan, interval)}
+          trial={trialLabel(leaguePlan, interval)}
+          description={leaguePlan?.tagline}
+          features={leaguePlan?.features}
           accent="violet"
         >
           {user ? (
@@ -364,13 +365,13 @@ export function PricingPage() {
                     {leagues.map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.name}
-                        {isActivePlan(l.billing, ['league', 'pro']) ? ' ✓ Active' : ''}
+                        {isActivePlan(l.billing, LEAGUE_PLAN_VALUES) ? ' ✓ Active' : ''}
                       </option>
                     ))}
                   </select>
                   {selectedLeague && (
                     <span className="mt-1 block text-xs text-slate-500">
-                      {selectedLeague.billing?.plan || 'free'}
+                      {selectedLeague.billing?.plan || 'starter'}
                       {selectedLeague.billing?.subscriptionStatus
                         ? ` · ${selectedLeague.billing.subscriptionStatus}`
                         : ''}
@@ -386,20 +387,10 @@ export function PricingPage() {
                 type="button"
                 onClick={handleLeagueCheckout}
                 disabled={isSubmittingLeague || isLoadingData}
-                aria-label={
-                  isSubmittingLeague
-                    ? 'Redirecting…'
-                    : leagueIsActive
-                      ? 'Manage League Billing'
-                      : 'Start 14-day Trial'
-                }
+                aria-label={leagueCtaLabel}
                 className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
               >
-                {isSubmittingLeague
-                  ? 'Redirecting…'
-                  : leagueIsActive
-                    ? 'Manage League Billing'
-                    : 'Start 14-day Trial'}
+                {leagueCtaLabel}
               </button>
             </>
           ) : (
@@ -407,7 +398,7 @@ export function PricingPage() {
               to="/register?redirectTo=/pricing"
               className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
             >
-              Start 14-day Trial
+              Start free trial
             </Link>
           )}
         </PlanCard>
