@@ -28,6 +28,15 @@ dashboard items below before deploying, or the API won't start.
       `STRIPE_PRICE_ID_PRO_MONTHLY=` line from `env/server/.env.development` together with
       the `seed.js` update.
 
+## Phase 4 — Backend (Stripe dashboard)
+
+- [ ] **Subscribe the webhook endpoint to the newly-handled events** in the Stripe
+      dashboard (dev + prod): `invoice.paid` (renewal → extend period) and
+      `customer.subscription.trial_will_end` (trial-ending email). Without these, the
+      handlers added in T-16/T-18 never fire. The endpoint already receives
+      `checkout.session.completed`, `customer.subscription.*`, and
+      `invoice.payment_failed`.
+
 ## Phase 8 — Launch (gated) — detail in [`17-launch-checklist.md`](./17-launch-checklist.md)
 
 - [ ] Create **live** Stripe products + prices; set the 6 secrets + 2 URLs in the Render
