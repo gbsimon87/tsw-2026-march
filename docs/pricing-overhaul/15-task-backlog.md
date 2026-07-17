@@ -9,6 +9,37 @@
 
 Objective · Files · DB · API · UI · Tests · Acceptance · Dep · Effort.
 
+## Progress tracker
+
+> Kept in sync with the [`README.md`](./README.md) status board. `code ✅` = code +
+> tests merged on `feature/pricing-overhaul`; **manual** = a by-hand infra/Stripe step
+> remains (see [`OUTSTANDING-MANUAL-ACTIONS.md`](./OUTSTANDING-MANUAL-ACTIONS.md)).
+
+| Task      | Status               | Notes                                                            |
+| --------- | -------------------- | ---------------------------------------------------------------- |
+| T-01      | code ✅              | plan-catalog.js                                                  |
+| T-02      | code ✅              | entitlements.service.js                                          |
+| T-03      | code ✅              | billing-service adapters delegate to resolver                    |
+| T-04      | code ✅              | billing.dependency-contract.test.js                              |
+| T-05      | code ✅              | GET /billing/catalog                                             |
+| T-06      | code ✅              | checkout price/interval/trial from catalog                       |
+| T-07      | code ✅ + **manual** | env superRefine + PRO_MONTHLY retired; render.yaml/.env by hand  |
+| T-08      | **manual**           | Stripe price metadata `{planId, interval}` (dashboard/CLI)       |
+| T-09      | code ✅              | stripeUrl.js on all 4 session URLs                               |
+| T-10      | code ✅              | billingSource field on Team/League                               |
+| T-11      | code ✅              | call sites migrated to resolver                                  |
+| T-12      | code ✅              | free-tracking flip (⚠️ revenue change)                           |
+| T-13      | code ✅              | resolver-derived snapshots + league downgrade safety             |
+| T-14      | code ✅              | replay/shot-map server guard                                     |
+| T-15      | code ✅              | CSV export gate (My Sporty stays free)                           |
+| T-16      | code ✅ + **manual** | webhook plan-derivation/comp-skip/invoice.paid; subscribe events |
+| T-17      | code ✅              | canonical User.plan via resolver                                 |
+| T-18      | code ✅              | trial-ending & payment-failed emails                             |
+| T-19…T-23 | ⬜ Phase 5           | frontend                                                         |
+| T-24…T-26 | ⬜ Phase 6           | migration + enum tightening                                      |
+| T-27…T-28 | ⬜ Phase 7           | testing & hardening                                              |
+| T-29…T-30 | ⬜ Phase 8           | launch (T-30 updates PROJECT-KNOWLEDGE §6)                       |
+
 ---
 
 ## Phase 2 — Config catalog + resolver
