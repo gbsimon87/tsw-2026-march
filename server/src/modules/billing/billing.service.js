@@ -18,7 +18,7 @@ const {
 } = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
 const { resolveForTeam, resolveForLeague } = require('./entitlements.service');
-const { resolvePriceId, trialDaysFor } = require('./plan-catalog');
+const { resolvePriceId, trialDaysFor, planForPriceId } = require('./plan-catalog');
 const { assertSafeStripeUrl } = require('../../utils/stripeUrl');
 const { env } = require('../../config/env');
 
@@ -323,9 +323,23 @@ async function createCustomerPortalSession(userId, teamId) {
 
 // ─── Apply subscription state ─────────────────────────────────────────────────
 
+// Derive { planId, interval } from the subscription's real price id (T-16) — the
+// authoritative source, not client-supplied metadata. Falls back to the scope's
+// canonical paid plan if the price isn't in the catalog (e.g. a legacy price).
+function derivePlanFromSubscription(subscription, fallbackPlanId) {
+  const priceId = subscription.items?.data?.[0]?.price?.id;
+  const derived = planForPriceId(priceId);
+  return {
+    planId: derived?.planId || fallbackPlanId,
+    interval: derived?.interval || subscription.metadata?.billingInterval || null,
+  };
+}
+
 function applyTeamSubscriptionState(team, subscription) {
   const status = normalizeSubscriptionStatus(subscription.status);
-  team.plan = ACTIVE_STATUSES.has(status) ? 'team' : 'free';
+  const { planId, interval } = derivePlanFromSubscription(subscription, 'team_pro');
+  // Canonical plan ids (T-16): 'team_pro' when active, else 'starter'.
+  team.plan = ACTIVE_STATUSES.has(status) ? planId : 'starter';
   team.subscriptionStatus = status;
   team.stripeCustomerId =
     typeof subscription.customer === 'string'
@@ -333,7 +347,7 @@ function applyTeamSubscriptionState(team, subscription) {
       : subscription.customer?.id || team.stripeCustomerId || null;
   team.stripeSubscriptionId = subscription.id || null;
   team.stripePriceId = subscription.items?.data?.[0]?.price?.id || team.stripePriceId || null;
-  team.billingInterval = subscription.metadata?.billingInterval || team.billingInterval || null;
+  team.billingInterval = interval || team.billingInterval || null;
   team.currentPeriodEnd = subscription.current_period_end
     ? new Date(subscription.current_period_end * 1000)
     : null;
@@ -343,7 +357,8 @@ function applyTeamSubscriptionState(team, subscription) {
 
 function applyLeagueSubscriptionState(league, subscription) {
   const status = normalizeSubscriptionStatus(subscription.status);
-  league.plan = ACTIVE_STATUSES.has(status) ? 'league' : 'free';
+  const { planId, interval } = derivePlanFromSubscription(subscription, 'league');
+  league.plan = ACTIVE_STATUSES.has(status) ? planId : 'starter';
   league.subscriptionStatus = status;
   league.stripeCustomerId =
     typeof subscription.customer === 'string'
@@ -351,12 +366,18 @@ function applyLeagueSubscriptionState(league, subscription) {
       : subscription.customer?.id || league.stripeCustomerId || null;
   league.stripeSubscriptionId = subscription.id || null;
   league.stripePriceId = subscription.items?.data?.[0]?.price?.id || league.stripePriceId || null;
-  league.billingInterval = subscription.metadata?.billingInterval || league.billingInterval || null;
+  league.billingInterval = interval || league.billingInterval || null;
   league.currentPeriodEnd = subscription.current_period_end
     ? new Date(subscription.current_period_end * 1000)
     : null;
   league.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
   league.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+}
+
+// Comp/manual grants are owned outside Stripe (T-10/T-16): a webhook must never
+// mutate them, so a stray Stripe event can't reset a comp grant.
+function isStripeManaged(doc) {
+  return !doc.billingSource || doc.billingSource === 'stripe';
 }
 
 // ─── Webhook handlers: teams ──────────────────────────────────────────────────
@@ -372,6 +393,7 @@ async function markTeamFromCheckoutSession(session, eventId) {
   team.stripeCustomerId =
     typeof session.customer === 'string' ? session.customer : team.stripeCustomerId || null;
   team.billingEmail = session.customer_details?.email || team.billingEmail || null;
+  team.billingSource = 'stripe'; // provisioned via Stripe (T-16)
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
@@ -382,6 +404,7 @@ async function updateTeamFromSubscription(subscription, eventId) {
 
   const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
+  if (!isStripeManaged(team)) return; // comp/manual grant — immune to Stripe events
 
   applyTeamSubscriptionState(team, subscription);
   await saveTeam(team);
@@ -396,8 +419,27 @@ async function markTeamInvoiceFailure(invoice, eventId) {
 
   const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
+  if (!isStripeManaged(team)) return;
 
   team.subscriptionStatus = 'past_due';
+  await saveTeam(team);
+  await syncOwnerPlan(team.ownerUserId);
+}
+
+// invoice.paid (T-16): a successful renewal — confirm active + extend the period.
+async function markTeamInvoicePaid(invoice, eventId) {
+  const teamId =
+    invoice.parent?.subscription_details?.metadata?.teamId ||
+    invoice.lines?.data?.[0]?.metadata?.teamId;
+  if (!teamId) return;
+
+  const team = await claimTeamWebhookEvent(teamId, eventId);
+  if (!team) return;
+  if (!isStripeManaged(team)) return;
+
+  team.subscriptionStatus = 'active';
+  const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+  if (periodEnd) team.currentPeriodEnd = new Date(periodEnd * 1000);
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
 }
@@ -428,6 +470,7 @@ async function createLeagueFromCheckoutSession(session, eventId) {
     slug: placeholderSlug,
     plan: 'free',
     subscriptionStatus: 'inactive',
+    billingSource: 'stripe', // provisioned via Stripe (T-16)
     stripeCustomerId: typeof session.customer === 'string' ? session.customer : null,
     billingEmail: session.customer_details?.email || null,
     billingInterval,
@@ -447,6 +490,7 @@ async function updateLeagueFromSubscription(subscription, eventId) {
 
   const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
   if (!league) return;
+  if (!isStripeManaged(league)) return; // comp/manual grant — immune to Stripe events
 
   applyLeagueSubscriptionState(league, subscription);
   await saveLeague(league);
@@ -466,8 +510,29 @@ async function markLeagueInvoiceFailure(invoice, eventId) {
 
   const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
   if (!league) return;
+  if (!isStripeManaged(league)) return;
 
   league.subscriptionStatus = 'past_due';
+  await saveLeague(league);
+}
+
+// invoice.paid (T-16): league renewal — confirm active + extend the period.
+async function markLeagueInvoicePaid(invoice, eventId) {
+  const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+  if (!customerId) return;
+
+  const resourceType =
+    invoice.parent?.subscription_details?.metadata?.resourceType ||
+    invoice.lines?.data?.[0]?.metadata?.resourceType;
+  if (resourceType !== 'league') return;
+
+  const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
+  if (!league) return;
+  if (!isStripeManaged(league)) return;
+
+  league.subscriptionStatus = 'active';
+  const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+  if (periodEnd) league.currentPeriodEnd = new Date(periodEnd * 1000);
   await saveLeague(league);
 }
 
@@ -513,8 +578,25 @@ async function handleWebhookEvent(signature, rawBody) {
       }
       break;
 
-    case 'invoice.paid':
+    case 'invoice.paid': {
+      // Invoices rarely carry a top-level resourceType — fall back to the
+      // subscription/line metadata so league renewals route correctly (T-16).
+      const invoiceResourceType =
+        resourceType ||
+        obj.parent?.subscription_details?.metadata?.resourceType ||
+        obj.lines?.data?.[0]?.metadata?.resourceType;
+      if (invoiceResourceType === 'league') {
+        await markLeagueInvoicePaid(obj, event.id);
+      } else {
+        await markTeamInvoicePaid(obj, event.id);
+      }
+      break;
+    }
+
     case 'customer.subscription.trial_will_end':
+      // Handled in T-18 (trial-ending email). No state change here.
+      break;
+
     default:
       break;
   }

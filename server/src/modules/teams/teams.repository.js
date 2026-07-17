@@ -44,7 +44,13 @@ const teamSchema = new mongoose.Schema(
     colors: { type: [String], default: [] },
     homeVenue: { type: homeVenueSchema, default: null },
     players: { type: [playerSchema], default: [] },
-    plan: { type: String, enum: ['free', 'pro', 'team'], default: 'free' },
+    // Canonical ids are 'starter'/'team_pro' (T-16); legacy 'free'/'pro'/'team' are
+    // tolerated until the Phase 6 migration rewrites data and tightens this enum.
+    plan: {
+      type: String,
+      enum: ['free', 'pro', 'team', 'starter', 'team_pro'],
+      default: 'free',
+    },
     // How this team's plan is granted. 'stripe' = billed via Stripe (webhooks own it);
     // 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
     billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },

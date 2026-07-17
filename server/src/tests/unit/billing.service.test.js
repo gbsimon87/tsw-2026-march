@@ -59,6 +59,7 @@ const {
   LeagueManager,
   LeagueTeamMember,
   findLeaguesByOwner,
+  claimLeagueWebhookEvent,
 } = require('../../modules/leagues/leagues.repository');
 const { updateUserPlan } = require('../../modules/auth/auth.repository');
 const {
@@ -287,7 +288,7 @@ describe('handleWebhookEvent — team subscription', () => {
     await handleWebhookEvent('sig', Buffer.from('payload'));
 
     expect(claimTeamWebhookEvent).toHaveBeenCalledWith('team-1', 'evt_sub_updated');
-    expect(team.plan).toBe('team');
+    expect(team.plan).toBe('team_pro'); // canonical (T-16), derived from price id
     expect(team.subscriptionStatus).toBe('active');
     expect(saveTeam).toHaveBeenCalledTimes(1);
     expect(updateUserPlan).toHaveBeenCalledWith('user-1', 'pro');
@@ -362,6 +363,129 @@ describe('handleWebhookEvent — team subscription', () => {
 
     expect(claimTeamWebhookEvent).toHaveBeenCalledWith('team-1', 'evt_sub_new');
     expect(saveTeam).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Webhook: T-16 (canonical plan, comp-skip, invoice.paid) ──────────────────
+
+describe('handleWebhookEvent — T-16 plan derivation, comp-safety, renewal', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    listTeamsByOwner.mockResolvedValue([]);
+  });
+
+  function subEvent(overrides = {}) {
+    return {
+      id: 'evt_sub',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_123',
+          status: 'active',
+          customer: 'cus_123',
+          items: { data: [{ price: { id: 'price_team_season' } }] },
+          current_period_end: 1770000000,
+          cancel_at_period_end: false,
+          trial_end: null,
+          metadata: { resourceType: 'team', teamId: 'team-1' },
+          ...overrides,
+        },
+      },
+    };
+  }
+
+  test('derives the canonical team_pro plan + interval from the price id', async () => {
+    const team = buildTeam();
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue(subEvent());
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(team.plan).toBe('team_pro');
+    expect(team.billingInterval).toBe('season'); // from price_team_season, not metadata
+    expect(saveTeam).toHaveBeenCalledTimes(1);
+  });
+
+  test('sets an inactive team back to the starter plan', async () => {
+    const team = buildTeam({ plan: 'team_pro', subscriptionStatus: 'active' });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue(subEvent({ status: 'canceled' }));
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(team.plan).toBe('starter');
+    expect(team.subscriptionStatus).toBe('canceled');
+  });
+
+  test('skips a non-stripe (comp) team so a stray Stripe event cannot clobber the grant', async () => {
+    const team = buildTeam({
+      plan: 'team_pro',
+      subscriptionStatus: 'active',
+      billingSource: 'comp',
+    });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue(subEvent({ status: 'canceled' }));
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(team.plan).toBe('team_pro'); // unchanged
+    expect(team.subscriptionStatus).toBe('active'); // unchanged
+    expect(saveTeam).not.toHaveBeenCalled();
+  });
+
+  test('invoice.paid marks the team active and extends the current period', async () => {
+    const team = buildTeam({ plan: 'team_pro', subscriptionStatus: 'past_due' });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_invoice_paid',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_123',
+          metadata: { resourceType: 'team' },
+          parent: {
+            subscription_details: { metadata: { resourceType: 'team', teamId: 'team-1' } },
+          },
+          lines: { data: [{ period: { end: 1780000000 } }] },
+        },
+      },
+    });
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(team.subscriptionStatus).toBe('active');
+    expect(team.currentPeriodEnd).toEqual(new Date(1780000000 * 1000));
+    expect(saveTeam).toHaveBeenCalledTimes(1);
+  });
+
+  test('derives the canonical league plan from the price id', async () => {
+    const league = buildLeague();
+    claimLeagueWebhookEvent.mockResolvedValue(league);
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_league_sub',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_l',
+          status: 'active',
+          customer: 'cus_l',
+          items: { data: [{ price: { id: 'price_league_monthly' } }] },
+          current_period_end: 1770000000,
+          cancel_at_period_end: false,
+          trial_end: null,
+          metadata: { resourceType: 'league', ownerUserId: 'user-1' },
+        },
+      },
+    });
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(league.plan).toBe('league');
+    expect(league.billingInterval).toBe('monthly');
   });
 });
 
