@@ -33,13 +33,10 @@ const leagueSchema = new mongoose.Schema(
     status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
     isPublic: { type: Boolean, default: true },
     logo: { type: logoSchema, default: null },
-    // Canonical ids are 'starter'/'league' (T-16); legacy 'free'/'pro' are tolerated
-    // until the Phase 6 migration rewrites data and tightens this enum.
-    plan: {
-      type: String,
-      enum: ['free', 'pro', 'league', 'starter'],
-      default: 'free',
-    },
+    // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro' were rewritten by
+    // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
+    // legacy values at read time; this enum only constrains writes.
+    plan: { type: String, enum: ['starter', 'league'], default: 'starter' },
     // How this league's plan is granted. 'stripe' = billed via Stripe (webhooks own
     // it); 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
     // We-ball Saturday becomes a real billingSource:'comp' doc (Phase 6 migration).

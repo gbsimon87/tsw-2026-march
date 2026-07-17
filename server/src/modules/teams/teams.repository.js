@@ -44,13 +44,10 @@ const teamSchema = new mongoose.Schema(
     colors: { type: [String], default: [] },
     homeVenue: { type: homeVenueSchema, default: null },
     players: { type: [playerSchema], default: [] },
-    // Canonical ids are 'starter'/'team_pro' (T-16); legacy 'free'/'pro'/'team' are
-    // tolerated until the Phase 6 migration rewrites data and tightens this enum.
-    plan: {
-      type: String,
-      enum: ['free', 'pro', 'team', 'starter', 'team_pro'],
-      default: 'free',
-    },
+    // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro'/'team' were rewritten by
+    // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
+    // legacy values at read time; this enum only constrains writes.
+    plan: { type: String, enum: ['starter', 'team_pro'], default: 'starter' },
     // How this team's plan is granted. 'stripe' = billed via Stripe (webhooks own it);
     // 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
     billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
