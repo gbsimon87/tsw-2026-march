@@ -19,6 +19,7 @@ const { updateUserPlan } = require('../auth/auth.repository');
 const { resolveForTeam, resolveForLeague, resolveForUser } = require('./entitlements.service');
 const { resolvePriceId, trialDaysFor, planForPriceId } = require('./plan-catalog');
 const { assertSafeStripeUrl } = require('../../utils/stripeUrl');
+const { sendPaymentFailedEmail, sendTrialEndingEmail } = require('../../services/email.service');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
@@ -425,6 +426,24 @@ async function markTeamInvoiceFailure(invoice, eventId) {
   team.subscriptionStatus = 'past_due';
   await saveTeam(team);
   await syncOwnerPlan(team.ownerUserId);
+  sendPaymentFailedEmail({ to: team.billingEmail, resourceLabel: team.name }); // T-18
+}
+
+// customer.subscription.trial_will_end (T-18): remind the owner before the trial ends.
+async function handleTeamTrialWillEnd(subscription, eventId) {
+  const teamId = subscription.metadata?.teamId;
+  if (!teamId) return;
+
+  const team = await claimTeamWebhookEvent(teamId, eventId);
+  if (!team) return;
+  if (!isStripeManaged(team)) return;
+  if (!team.billingEmail) return;
+
+  sendTrialEndingEmail({
+    to: team.billingEmail,
+    resourceLabel: team.name,
+    trialEndsAt: subscription.trial_end ? subscription.trial_end * 1000 : null,
+  });
 }
 
 // invoice.paid (T-16): a successful renewal — confirm active + extend the period.
@@ -515,6 +534,24 @@ async function markLeagueInvoiceFailure(invoice, eventId) {
 
   league.subscriptionStatus = 'past_due';
   await saveLeague(league);
+  sendPaymentFailedEmail({ to: league.billingEmail, resourceLabel: league.name }); // T-18
+}
+
+async function handleLeagueTrialWillEnd(subscription, eventId) {
+  const customerId =
+    typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+  if (!customerId) return;
+
+  const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
+  if (!league) return;
+  if (!isStripeManaged(league)) return;
+  if (!league.billingEmail) return;
+
+  sendTrialEndingEmail({
+    to: league.billingEmail,
+    resourceLabel: league.name,
+    trialEndsAt: subscription.trial_end ? subscription.trial_end * 1000 : null,
+  });
 }
 
 // invoice.paid (T-16): league renewal — confirm active + extend the period.
@@ -595,7 +632,12 @@ async function handleWebhookEvent(signature, rawBody) {
     }
 
     case 'customer.subscription.trial_will_end':
-      // Handled in T-18 (trial-ending email). No state change here.
+      // Trial-ending reminder email (T-18); no state change.
+      if (resourceType === 'league') {
+        await handleLeagueTrialWillEnd(obj, event.id);
+      } else {
+        await handleTeamTrialWillEnd(obj, event.id);
+      }
       break;
 
     default:

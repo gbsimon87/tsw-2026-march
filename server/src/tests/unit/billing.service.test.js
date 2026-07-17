@@ -22,6 +22,11 @@ jest.mock('../../modules/auth/auth.repository', () => ({
   updateUserPlan: jest.fn(),
 }));
 
+jest.mock('../../services/email.service', () => ({
+  sendPaymentFailedEmail: jest.fn(),
+  sendTrialEndingEmail: jest.fn(),
+}));
+
 jest.mock('../../config/env', () => ({
   env: {
     STRIPE_SECRET_KEY: 'sk_test_123',
@@ -62,6 +67,7 @@ const {
   claimLeagueWebhookEvent,
 } = require('../../modules/leagues/leagues.repository');
 const { updateUserPlan } = require('../../modules/auth/auth.repository');
+const { sendPaymentFailedEmail, sendTrialEndingEmail } = require('../../services/email.service');
 const {
   isTeamActive,
   isLeagueActive,
@@ -486,6 +492,93 @@ describe('handleWebhookEvent — T-16 plan derivation, comp-safety, renewal', ()
 
     expect(league.plan).toBe('league');
     expect(league.billingInterval).toBe('monthly');
+  });
+});
+
+// ─── Webhook: T-18 billing emails ─────────────────────────────────────────────
+
+describe('handleWebhookEvent — T-18 billing emails', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    listTeamsByOwner.mockResolvedValue([]);
+  });
+
+  test('invoice.payment_failed sends a payment-failed email to the team billing address', async () => {
+    const team = buildTeam({
+      plan: 'team_pro',
+      subscriptionStatus: 'active',
+      billingEmail: 'coach@x.com',
+    });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_failed',
+      type: 'invoice.payment_failed',
+      data: {
+        object: {
+          id: 'in_1',
+          metadata: { resourceType: 'team' },
+          parent: {
+            subscription_details: { metadata: { resourceType: 'team', teamId: 'team-1' } },
+          },
+        },
+      },
+    });
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(sendPaymentFailedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'coach@x.com' })
+    );
+  });
+
+  test('trial_will_end sends a trial-ending email to the team billing address', async () => {
+    const team = buildTeam({
+      plan: 'team_pro',
+      subscriptionStatus: 'trialing',
+      billingEmail: 'coach@x.com',
+    });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_trial',
+      type: 'customer.subscription.trial_will_end',
+      data: {
+        object: {
+          id: 'sub_1',
+          customer: 'cus_1',
+          trial_end: 1780000000,
+          metadata: { resourceType: 'team', teamId: 'team-1' },
+        },
+      },
+    });
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(sendTrialEndingEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'coach@x.com' })
+    );
+  });
+
+  test('trial_will_end without a billing email does not throw or email', async () => {
+    const team = buildTeam({
+      plan: 'team_pro',
+      subscriptionStatus: 'trialing',
+      billingEmail: null,
+    });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_trial2',
+      type: 'customer.subscription.trial_will_end',
+      data: {
+        object: { id: 'sub_1', metadata: { resourceType: 'team', teamId: 'team-1' } },
+      },
+    });
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(sendTrialEndingEmail).not.toHaveBeenCalled();
   });
 });
 
