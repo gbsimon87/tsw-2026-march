@@ -35,7 +35,11 @@ Objective · Files · DB · API · UI · Tests · Acceptance · Dep · Effort.
 | T-16      | code ✅ + **manual** | webhook plan-derivation/comp-skip/invoice.paid; subscribe events |
 | T-17      | code ✅              | canonical User.plan via resolver                                 |
 | T-18      | code ✅              | trial-ending & payment-failed emails                             |
-| T-19…T-23 | ⬜ Phase 5           | frontend                                                         |
+| T-19      | code ✅              | PricingPage from served catalog (3 plans, new prices)            |
+| T-20      | code ✅              | canonical plan values in paywall UX; replay LockedFeatureCard    |
+| T-21      | code ✅              | removed tracking hard-block (tracking is free)                   |
+| T-22      | code ✅              | BillingStatusPill on TeamsPage; CTA audit (copy already clean)   |
+| T-23      | code ✅              | deleted GameShotMap.jsx + legacy billingApi alias                |
 | T-24…T-26 | ⬜ Phase 6           | migration + enum tightening                                      |
 | T-27…T-28 | ⬜ Phase 7           | testing & hardening                                              |
 | T-29…T-30 | ⬜ Phase 8           | launch (T-30 updates PROJECT-KNOWLEDGE §6)                       |

@@ -65,7 +65,7 @@ rather than a code hunt.
 | 2 · Catalog + resolver       | ✅ Complete    | T-01…T-05 done 2026-07-16; server suite 483/483                                                                            |
 | 3 · Stripe/env/render        | 🟩 Code done   | T-06 + T-07 code done 2026-07-16; suite 492/492. Infra/Stripe = [`PHASE-3-MANUAL-ACTIONS.md`](./PHASE-3-MANUAL-ACTIONS.md) |
 | 4 · Backend                  | 🟩 Code done   | T-09…T-18 done 2026-07-17; server suite 521/521. Stripe webhook-event subscription = manual action                         |
-| 5 · Frontend                 | ⬜ Not started |                                                                                                                            |
+| 5 · Frontend                 | ✅ Complete    | T-19…T-23 done 2026-07-17; client baseline 19→17 pre-existing failures (−2), no regressions                                |
 | 6 · Migration                | ⬜ Not started |                                                                                                                            |
 | 7 · Testing & hardening      | ⬜ Not started |                                                                                                                            |
 | 8 · Launch (gated)           | ⬜ Not started | Separate go-live decision                                                                                                  |
