@@ -14,8 +14,4 @@ export const billingApi = {
   createCustomerPortalSession({ teamId, leagueId } = {}) {
     return apiClient.post('/billing/customer-portal', { teamId, leagueId });
   },
-  // Legacy alias — kept for backward compatibility
-  createCheckoutSession(teamId) {
-    return apiClient.post('/billing/checkout-session', { teamId });
-  },
 };
