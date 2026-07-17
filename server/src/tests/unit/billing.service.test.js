@@ -291,7 +291,7 @@ describe('handleWebhookEvent — team subscription', () => {
     expect(team.plan).toBe('team_pro'); // canonical (T-16), derived from price id
     expect(team.subscriptionStatus).toBe('active');
     expect(saveTeam).toHaveBeenCalledTimes(1);
-    expect(updateUserPlan).toHaveBeenCalledWith('user-1', 'pro');
+    expect(updateUserPlan).toHaveBeenCalledWith('user-1', 'team_pro'); // canonical (T-17)
 
     saveTeam.mockClear();
     updateUserPlan.mockClear();

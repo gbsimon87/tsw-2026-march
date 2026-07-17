@@ -3,7 +3,6 @@ const { ApiError } = require('../../utils/apiError');
 const {
   Team,
   findTeamByIdAndOwner,
-  listTeamsByOwner,
   saveTeam,
   claimTeamWebhookEvent,
 } = require('../teams/teams.repository');
@@ -17,7 +16,7 @@ const {
   claimLeagueWebhookEvent,
 } = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
-const { resolveForTeam, resolveForLeague } = require('./entitlements.service');
+const { resolveForTeam, resolveForLeague, resolveForUser } = require('./entitlements.service');
 const { resolvePriceId, trialDaysFor, planForPriceId } = require('./plan-catalog');
 const { assertSafeStripeUrl } = require('../../utils/stripeUrl');
 const { env } = require('../../config/env');
@@ -140,10 +139,12 @@ function getBillingSummary(team) {
 
 // ─── Sync owner plan ──────────────────────────────────────────────────────────
 
+// User.plan is a resolver-derived cache of the owner's aggregate state (T-17):
+// canonical 'team_pro' when they own any active team, else 'starter'. sanitizeUser
+// and analytics read it as a canonical value.
 async function syncOwnerPlan(ownerUserId) {
-  const teams = await listTeamsByOwner(ownerUserId);
-  const hasActiveTeam = teams.some(isTeamActive);
-  await updateUserPlan(ownerUserId, hasActiveTeam ? 'pro' : 'free');
+  const { plan } = await resolveForUser(ownerUserId);
+  await updateUserPlan(ownerUserId, plan);
 }
 
 // ─── Team billing reads ───────────────────────────────────────────────────────

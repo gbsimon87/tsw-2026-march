@@ -9,7 +9,9 @@ const userSchema = new mongoose.Schema(
     emailVerified: { type: Boolean, default: false },
     emailVerifiedAt: { type: Date },
     authProvider: { type: String, enum: ['local', 'google', 'system'], default: 'local' },
-    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    // Resolver-derived cache of the owner's aggregate plan (T-17). Canonical ids are
+    // 'starter'/'team_pro'; legacy 'free'/'pro' tolerated until the Phase 6 migration.
+    plan: { type: String, enum: ['free', 'pro', 'starter', 'team_pro'], default: 'free' },
     leaguePlan: { type: String, enum: ['free', 'pro'], default: 'free' },
     leagueSubscriptionStatus: {
       type: String,
