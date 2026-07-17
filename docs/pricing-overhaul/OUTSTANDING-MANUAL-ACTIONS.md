@@ -37,6 +37,22 @@ dashboard items below before deploying, or the API won't start.
       `checkout.session.completed`, `customer.subscription.*`, and
       `invoice.payment_failed`.
 
+## Phase 6 — Run the data migrations (per environment) — detail in [`13-migration-plan.md`](./13-migration-plan.md)
+
+⚠️ **Deploy ordering:** the Phase-6 code tightened the `plan` enums to canonical-only
+(`starter`/`team_pro`/`league`). Mongoose now **rejects legacy `free`/`pro`/`team`
+writes**, so the migration must run against a database **before** this branch's code
+serves traffic there. Run against **dev** before merging to `dev`; against **prod**
+at launch (Phase 8), after a fresh backup.
+
+Always `--dry-run` first. Order (from `server/`):
+
+- [ ] `ENV_FILE=../env/server/.env.development node src/scripts/migrate-unify-plan-enums.js --dry-run` → then without `--dry-run`
+- [ ] `… migrate-drop-user-league-fields.js --dry-run` → then without `--dry-run`
+- [ ] `… migrate-league-stripe-customer-index.js --dry-run` → then without `--dry-run` (aborts if duplicate `stripeCustomerId`s exist — resolve by hand)
+- [ ] Validate (see `13-migration-plan.md`): no non-canonical `plan`; We-ball resolves active via `billingSource:'comp'`; unique index present; no `User.league*` fields.
+- [ ] Re-seed dev if desired (`pnpm seed` now writes canonical ids).
+
 ## Phase 8 — Launch (gated) — detail in [`17-launch-checklist.md`](./17-launch-checklist.md)
 
 - [ ] Create **live** Stripe products + prices; set the 6 secrets + 2 URLs in the Render

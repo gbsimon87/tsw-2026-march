@@ -40,7 +40,9 @@ Objective · Files · DB · API · UI · Tests · Acceptance · Dep · Effort.
 | T-21      | code ✅              | removed tracking hard-block (tracking is free)                   |
 | T-22      | code ✅              | BillingStatusPill on TeamsPage; CTA audit (copy already clean)   |
 | T-23      | code ✅              | deleted GameShotMap.jsx + legacy billingApi alias                |
-| T-24…T-26 | ⬜ Phase 6           | migration + enum tightening                                      |
+| T-24      | code ✅ + **run**    | migrate-unify-plan-enums.js + canonical seeds; must run per-env  |
+| T-25      | code ✅ + **run**    | drop User.league\* fields/path; migrate-drop-user-league-fields  |
+| T-26      | code ✅ + **run**    | league stripeCustomerId index + enums tightened to canonical     |
 | T-27…T-28 | ⬜ Phase 7           | testing & hardening                                              |
 | T-29…T-30 | ⬜ Phase 8           | launch (T-30 updates PROJECT-KNOWLEDGE §6)                       |
 
