@@ -16,6 +16,43 @@ pnpm --filter client test    # record the real failing set — this is the basel
 
 Don't attribute new failures to pre-existing drift without this baseline.
 
+### Recorded baseline (Phase 7, 2026-07-17)
+
+- **Server:** `pnpm --filter server test` → **534/534 green** (49 suites pre-overhaul;
+  50 after adding `billing.lifecycle.test.js`). No skips, no pre-existing failures.
+- **Client:** `pnpm --filter client test` → **17 failing / 169 passing (186 total)**,
+  across 8 suites. This is the real number the vague "~20 (OPT-026)" note referred to.
+  All 17 are **pre-existing and unrelated to the pricing overhaul** — none reference
+  `plan`/`team_pro`/`subscription`/entitlements. Confirmed by reading each failure:
+
+  | Suite                             | Failing | Root cause (not overhaul)                                                        |
+  | --------------------------------- | ------- | -------------------------------------------------------------------------------- |
+  | `GameTrackPage.test.jsx`          | 7       | event-picker DOM (`Close event picker`, `combobox`, `Home Squad`) not found      |
+  | `GameDetailPage.test.jsx`         | 2       | YouTube embed `src` gained `?enablejsapi=1&controls=1…`; "Game Video" text moved |
+  | `FeedPage.test.jsx`               | 2       | modal composer / `?compose` query-param behavior                                 |
+  | `InteractiveCourtImage.test.jsx`  | 2       | shot-point mapping (with/without rotation)                                       |
+  | `CardPosts.test.jsx`              | 1       | snapshot drift (`text-center` class added to FT% tile)                           |
+  | `posthog.test.js`                 | 1       | PostHog init mock                                                                |
+  | `AdminNewLeagueGamePage.test.jsx` | 1       | short-roster warning                                                             |
+  | `tests.smoke.test.jsx`            | 1       | app-shell branding text                                                          |
+
+  The overhaul's own client tests (`PricingPage`, `BillingSuccessPage`,
+  `BillingStatusPill`, `GameDetailPage` replay-gating cases, `AppRouter` pricing route)
+  all pass. Phase 5 reduced this set from 19 → 17 (−2) by fixing overhaul-touched cases;
+  it did **not** introduce any of the 17.
+
+### Parity on the resolver call sites (T-28)
+
+The ~10 sites that moved from `isTeamActive`/`getTeamEntitlements`/the dead
+`auth.service` league path to the resolver are covered green:
+`entitlements.service.test.js` (every `plan × status × billingSource`),
+`games.service.test.js` (T-12/T-13/T-14 snapshot + read gating),
+`teams.service.test.js`, `leagues.service.test.js`, `export.test.js` (402 gating),
+`gates.test.js` (tracking-now-free inversion), and the unmocked
+`billing.dependency-contract.test.js` guarding real exports. Legacy tolerance
+(`'pro'`/`'team'`/`'free'`) is covered by `plan-catalog.test.js` `normalizePlanId` cases
+feeding the resolver.
+
 ## Server — unit
 
 | Target                        | Cases                                                                                                                                                                                                                                                          |

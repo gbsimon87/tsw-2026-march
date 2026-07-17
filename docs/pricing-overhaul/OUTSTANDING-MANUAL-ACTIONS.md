@@ -53,6 +53,17 @@ Always `--dry-run` first. Order (from `server/`):
 - [ ] Validate (see `13-migration-plan.md`): no non-canonical `plan`; We-ball resolves active via `billingSource:'comp'`; unique index present; no `User.league*` fields.
 - [ ] Re-seed dev if desired (`pnpm seed` now writes canonical ids).
 
+## Phase 7 — Run the live Stripe test-clock scenarios — detail in [`stripe-test-clock-runbook.md`](./stripe-test-clock-runbook.md)
+
+The CI-runnable equivalent (`server/src/tests/unit/billing.lifecycle.test.js`) is green,
+but the live wiring (real Stripe signature verification + event subscription + real
+payloads) must be confirmed once in dev/test mode before launch.
+
+- [ ] Run the four scenarios (trial→active, dunning, cancel, reactivate) + the comp-grant
+      immunity check with `stripe listen --forward-to localhost:4000/api/v1/billing/webhooks`
+      and test clocks, per the runbook. Depends on the four dev price IDs + their
+      `{planId,interval}` metadata (Phase 3 items above) already being set.
+
 ## Phase 8 — Launch (gated) — detail in [`17-launch-checklist.md`](./17-launch-checklist.md)
 
 - [ ] Create **live** Stripe products + prices; set the 6 secrets + 2 URLs in the Render

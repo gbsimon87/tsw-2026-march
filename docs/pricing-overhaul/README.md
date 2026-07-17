@@ -58,17 +58,17 @@ rather than a code hunt.
 
 ## Status board
 
-| Phase                        | Status         | Notes                                                                                                                                         |
-| ---------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0 · Planning (this folder)   | ✅ Complete    | 2026-07-16                                                                                                                                    |
-| 1 · Discovery & architecture | ✅ Complete    | Captured in `05`                                                                                                                              |
-| 2 · Catalog + resolver       | ✅ Complete    | T-01…T-05 done 2026-07-16; server suite 483/483                                                                                               |
-| 3 · Stripe/env/render        | 🟩 Code done   | T-06 + T-07 code done 2026-07-16; suite 492/492. Infra/Stripe = [`PHASE-3-MANUAL-ACTIONS.md`](./PHASE-3-MANUAL-ACTIONS.md)                    |
-| 4 · Backend                  | 🟩 Code done   | T-09…T-18 done 2026-07-17; server suite 521/521. Stripe webhook-event subscription = manual action                                            |
-| 5 · Frontend                 | ✅ Complete    | T-19…T-23 done 2026-07-17; client baseline 19→17 pre-existing failures (−2), no regressions                                                   |
-| 6 · Migration                | 🟩 Code done   | T-24…T-26 scripts + enum tightening + canonical seeds done 2026-07-17; server 529/529. ⚠️ Migrations must be RUN per-env (see manual actions) |
-| 7 · Testing & hardening      | ⬜ Not started |                                                                                                                                               |
-| 8 · Launch (gated)           | ⬜ Not started | Separate go-live decision                                                                                                                     |
+| Phase                        | Status         | Notes                                                                                                                                                                                                |
+| ---------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 · Planning (this folder)   | ✅ Complete    | 2026-07-16                                                                                                                                                                                           |
+| 1 · Discovery & architecture | ✅ Complete    | Captured in `05`                                                                                                                                                                                     |
+| 2 · Catalog + resolver       | ✅ Complete    | T-01…T-05 done 2026-07-16; server suite 483/483                                                                                                                                                      |
+| 3 · Stripe/env/render        | 🟩 Code done   | T-06 + T-07 code done 2026-07-16; suite 492/492. Infra/Stripe = [`PHASE-3-MANUAL-ACTIONS.md`](./PHASE-3-MANUAL-ACTIONS.md)                                                                           |
+| 4 · Backend                  | 🟩 Code done   | T-09…T-18 done 2026-07-17; server suite 521/521. Stripe webhook-event subscription = manual action                                                                                                   |
+| 5 · Frontend                 | ✅ Complete    | T-19…T-23 done 2026-07-17; client baseline 19→17 pre-existing failures (−2), no regressions                                                                                                          |
+| 6 · Migration                | 🟩 Code done   | T-24…T-26 scripts + enum tightening + canonical seeds done 2026-07-17; server 529/529. ⚠️ Migrations must be RUN per-env (see manual actions)                                                        |
+| 7 · Testing & hardening      | 🟩 Code done   | T-27 lifecycle scenario tests + test-clock runbook; T-28 baseline recorded (server 534/534; client 17 pre-existing failures, no regressions) done 2026-07-17. ⚠️ Live test-clock run = manual action |
+| 8 · Launch (gated)           | ⬜ Not started | Separate go-live decision                                                                                                                                                                            |
 
 ## Ground rules
 
