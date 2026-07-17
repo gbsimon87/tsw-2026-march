@@ -20,11 +20,8 @@ const {
 const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 const { logger } = require('../../config/logger');
-const {
-  getBillingSummary,
-  getTeamEntitlements,
-  assertTeamCreationAllowed,
-} = require('../billing/billing.service');
+const { getBillingSummary, assertTeamCreationAllowed } = require('../billing/billing.service');
+const { resolveForTeam } = require('../billing/entitlements.service');
 const {
   uploadImageBuffer,
   destroyImage,
@@ -67,7 +64,7 @@ function sanitizeTeam(team) {
     colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
     homeVenue: sanitizeVenue(team.homeVenue),
     billing: getBillingSummary(team),
-    entitlements: getTeamEntitlements(team),
+    entitlements: resolveForTeam(team).entitlements,
     players: team.players.map((player) => ({
       id: String(player._id),
       displayName: player.displayName,
@@ -602,7 +599,7 @@ async function getPublicTeam(teamId) {
       logo: sanitizeLogo(team.logo),
       colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
       homeVenue: sanitizeVenue(team.homeVenue),
-      entitlements: getTeamEntitlements(team),
+      entitlements: resolveForTeam(team).entitlements,
       players,
     },
     // OPT-013: materialised read (indexed find); falls back to computing from
@@ -640,7 +637,7 @@ async function getPublicPlayer(teamId, playerId) {
       logo: sanitizeLogo(team.logo),
       colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
       homeVenue: sanitizeVenue(team.homeVenue),
-      entitlements: getTeamEntitlements(team),
+      entitlements: resolveForTeam(team).entitlements,
     },
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),
@@ -779,7 +776,7 @@ async function getEntitlementsForUser(userId, teamId) {
 
   return {
     billing: getBillingSummary(team),
-    entitlements: getTeamEntitlements(team),
+    entitlements: resolveForTeam(team).entitlements,
   };
 }
 

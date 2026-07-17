@@ -28,6 +28,7 @@ const {
   getBillingSummary,
   isTeamActive,
 } = require('../billing/billing.service');
+const { resolveForTeam } = require('../billing/entitlements.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
 const {
@@ -940,7 +941,7 @@ async function resolveGameTeamContext(userId, game) {
       name: team.name,
       logo: sanitizeLogo(team.logo),
       billing: getBillingSummary(team),
-      entitlements: getTeamEntitlements(team),
+      entitlements: resolveForTeam(team).entitlements,
       players: team.players.map(sanitizePlayer),
     },
     opponentTeam: null,

@@ -429,8 +429,8 @@ async function getActiveSeasonForLeague(leagueId) {
 
 async function createSeasonForLeague(userId, leagueId, payload) {
   const league = await assertLeagueOwner(userId, leagueId);
-  const { getLeagueEntitlements } = require('../billing/billing.service');
-  if (!getLeagueEntitlements(league).canManageLeague) {
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
     throw new ApiError(402, 'An active League subscription is required to start a new season');
   }
   if (league.currentSeasonId) {
@@ -538,7 +538,7 @@ async function createLeagueForUser(userId, payload) {
   // League documents are created by the Stripe webhook after checkout.
   // This function configures the stub league (name, slug, settings) that the
   // webhook created. It finds the most recent unconfigured league for this owner.
-  const { isLeagueActive } = require('../billing/billing.service');
+  const { resolveForLeague } = require('../billing/entitlements.service');
   const { League } = require('./leagues.repository');
 
   const stub = await League.findOne({
@@ -553,7 +553,7 @@ async function createLeagueForUser(userId, payload) {
     );
   }
 
-  if (!isLeagueActive(stub)) {
+  if (!resolveForLeague(stub).entitlements.canManageLeague) {
     throw new ApiError(402, 'League subscription is not active. Complete checkout first.');
   }
 
@@ -804,9 +804,9 @@ async function archiveLeagueForUser(userId, leagueId) {
 }
 
 async function createLeagueTeamForLeague(userId, leagueId, payload) {
-  const { isLeagueActive } = require('../billing/billing.service');
+  const { resolveForLeague } = require('../billing/entitlements.service');
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
-  if (!isLeagueActive(league)) {
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
     throw new ApiError(402, 'An active League subscription is required to add teams');
   }
   ensureLeagueEditable(league);
