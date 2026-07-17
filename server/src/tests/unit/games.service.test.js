@@ -33,9 +33,11 @@ jest.mock('../../modules/billing/billing.service', () => ({
     cancelAtPeriodEnd: false,
     currentPeriodEnd: null,
   })),
-  getTeamEntitlements: jest.fn(() => ({
-    canViewReplay: false,
-    canViewShotMaps: false,
+  getLeagueBillingSummary: jest.fn(() => ({
+    plan: 'free',
+    subscriptionStatus: 'inactive',
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null,
   })),
   isTeamActive: jest.fn(() => true),
 }));
@@ -93,6 +95,7 @@ const { buildPersistedGameSummary } = require('../../modules/games/gameSummaryAi
 const {
   getLeagueContextForGame,
   getLeagueRosterSnapshotForTeam,
+  getLeagueTeamRosterSnapshotForGame,
   canEditCompletedLeagueGame,
 } = require('../../modules/leagues/leagues.service');
 const {
@@ -880,6 +883,70 @@ describe('games service frozen box score (OPT-012)', () => {
 
     expect(result.boxScore).toBe(frozenBoxScore);
     expect(result.gameSummary).toBe(frozenSummary);
+  });
+
+  test('T-13: a one-sided league game reflects the league live entitlements (active → premium)', async () => {
+    getLeagueTeamRosterSnapshotForGame.mockResolvedValue({
+      league: {
+        _id: 'league-1',
+        name: 'City League',
+        plan: 'league',
+        subscriptionStatus: 'active',
+      },
+      trackedTeam: { _id: 'lt-1', name: 'Hawks', slug: 'hawks', logo: null },
+      team: { players: [] },
+    });
+
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId: 'league-1',
+      trackedLeagueTeamId: 'lt-1',
+      status: 'in_progress',
+      rosterSnapshot: [],
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(true);
+    expect(result.team.entitlements.canViewShotMaps).toBe(true);
+  });
+
+  test('T-13: a lapsed/free league game loses premium views (downgrade safety)', async () => {
+    getLeagueTeamRosterSnapshotForGame.mockResolvedValue({
+      league: {
+        _id: 'league-1',
+        name: 'City League',
+        plan: 'free',
+        subscriptionStatus: 'inactive',
+      },
+      trackedTeam: { _id: 'lt-1', name: 'Hawks', slug: 'hawks', logo: null },
+      team: { players: [] },
+    });
+
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId: 'league-1',
+      trackedLeagueTeamId: 'lt-1',
+      status: 'in_progress',
+      rosterSnapshot: [],
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(false);
+    expect(result.team.entitlements.canViewShotMaps).toBe(false);
   });
 
   test('getGameForUser falls back to live compute when no frozen data exists', async () => {

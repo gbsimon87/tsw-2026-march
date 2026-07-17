@@ -24,11 +24,11 @@ const {
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const {
-  getTeamEntitlements,
   getBillingSummary,
+  getLeagueBillingSummary,
   isTeamActive,
 } = require('../billing/billing.service');
-const { resolveForTeam } = require('../billing/entitlements.service');
+const { resolveForTeam, resolveForLeague } = require('../billing/entitlements.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
 const {
@@ -728,7 +728,10 @@ function buildParticipantFromStandaloneTeam(team, side) {
     logo: sanitizeLogo(team.logo),
     colors: Array.isArray(team.colors) ? team.colors : [],
     billingSnapshot: getBillingSummary(team),
-    entitlementsSnapshot: getTeamEntitlements(team),
+    // Freeze the full resolver-derived entitlement set at record time (T-13). Old
+    // participants stored only {canViewReplay, canViewShotMaps}; readers default
+    // absent keys to false. A later downgrade never retroactively locks this game.
+    entitlementsSnapshot: resolveForTeam(team).entitlements,
   };
 }
 
@@ -892,16 +895,18 @@ async function resolveGameTeamContext(userId, game) {
         id: primary.teamId || primary.leagueTeamId,
         name: primary.displayName,
         logo: primary.logo,
-        billing: primary.billing || { plan: 'pro', subscriptionStatus: 'active' },
-        entitlements: primary.entitlements || { canViewReplay: true, canViewShotMaps: true },
+        billing: primary.billing || null,
+        // Read the frozen snapshot; absent keys default to false (T-13). No hard-coded
+        // 'pro' fallback — a missing snapshot must not grant premium views.
+        entitlements: primary.entitlements || {},
         players: primary.players,
       },
       opponentTeam: {
         id: secondary.teamId || secondary.leagueTeamId,
         name: secondary.displayName,
         logo: secondary.logo,
-        billing: secondary.billing || { plan: 'pro', subscriptionStatus: 'active' },
-        entitlements: secondary.entitlements || { canViewReplay: true, canViewShotMaps: true },
+        billing: secondary.billing || null,
+        entitlements: secondary.entitlements || {},
         players: secondary.players,
       },
       participants,
@@ -912,19 +917,16 @@ async function resolveGameTeamContext(userId, game) {
 
   if (game.gameContext === 'league') {
     const { league, trackedTeam, team } = await getLeagueTeamRosterSnapshotForGame(game);
+    // Live league entitlements (T-13): a lapsed/free league correctly loses premium
+    // views instead of the old hard-coded 'pro'. Comp leagues resolve via billingSource.
     return {
       team: {
         id: String(trackedTeam._id),
         slug: trackedTeam.slug,
         name: trackedTeam.name,
         logo: sanitizeLogo(trackedTeam.logo),
-        billing: {
-          plan: 'pro',
-          subscriptionStatus: 'active',
-          cancelAtPeriodEnd: false,
-          currentPeriodEnd: null,
-        },
-        entitlements: { canViewReplay: true, canViewShotMaps: true },
+        billing: getLeagueBillingSummary(league),
+        entitlements: resolveForLeague(league).entitlements,
         players: team.players.map(sanitizePlayer),
       },
       opponentTeam: null,
@@ -1027,8 +1029,8 @@ async function createGameForUser(userId, payload) {
         displayName: context.homeTeam.name,
         logo: sanitizeLogo(context.homeTeam.logo),
         colors: Array.isArray(context.homeTeam.colors) ? context.homeTeam.colors : [],
-        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
-        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+        billingSnapshot: getLeagueBillingSummary(context.league),
+        entitlementsSnapshot: resolveForLeague(context.league).entitlements,
       },
       awayParticipant: {
         side: TEAM_SIDES.AWAY,
@@ -1039,8 +1041,8 @@ async function createGameForUser(userId, payload) {
         displayName: context.awayTeam.name,
         logo: sanitizeLogo(context.awayTeam.logo),
         colors: Array.isArray(context.awayTeam.colors) ? context.awayTeam.colors : [],
-        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
-        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+        billingSnapshot: getLeagueBillingSummary(context.league),
+        entitlementsSnapshot: resolveForLeague(context.league).entitlements,
       },
       homeRosterSnapshot,
       awayRosterSnapshot,
