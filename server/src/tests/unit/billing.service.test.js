@@ -372,11 +372,13 @@ describe('createTeamCheckoutSession', () => {
 
   test('includes resourceType, trial, and payment_method_collection in session', async () => {
     findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
-    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+    mockCheckoutCreate.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_test_session',
+    });
 
     const result = await createTeamCheckoutSession('user-1', 'team-99', 'monthly');
 
-    expect(result).toEqual({ url: 'https://checkout.test/session' });
+    expect(result).toEqual({ url: 'https://checkout.stripe.com/c/pay/cs_test_session' });
     expect(mockCheckoutCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         payment_method_collection: 'always',
@@ -391,10 +393,12 @@ describe('createTeamCheckoutSession', () => {
 
   test('backward-compat createCheckoutSession routes to monthly team checkout', async () => {
     findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
-    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+    mockCheckoutCreate.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_test_session',
+    });
 
     const result = await createCheckoutSession('user-1', 'team-99');
-    expect(result).toEqual({ url: 'https://checkout.test/session' });
+    expect(result).toEqual({ url: 'https://checkout.stripe.com/c/pay/cs_test_session' });
   });
 
   test('throws 400 if team is already active', async () => {
@@ -412,6 +416,14 @@ describe('createTeamCheckoutSession', () => {
       statusCode: 404,
     });
   });
+
+  test('rejects an unsafe Stripe redirect URL with 502 (T-09)', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://evil.example.com/phish' });
+    await expect(createTeamCheckoutSession('user-1', 'team-99', 'monthly')).rejects.toMatchObject({
+      statusCode: 502,
+    });
+  });
 });
 
 // ─── Phase 3 (T-06): price/interval/trial resolved from the plan catalog ────────
@@ -422,7 +434,9 @@ describe('catalog-driven price + trial resolution', () => {
 
   test('team monthly uses the team monthly price with the configured trial', async () => {
     findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
-    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+    mockCheckoutCreate.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_test_session',
+    });
 
     await createTeamCheckoutSession('user-1', 'team-99', 'monthly');
 
@@ -436,7 +450,9 @@ describe('catalog-driven price + trial resolution', () => {
 
   test('team season uses the team season price', async () => {
     findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
-    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+    mockCheckoutCreate.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_test_session',
+    });
 
     await createTeamCheckoutSession('user-1', 'team-99', 'season');
 
@@ -450,7 +466,9 @@ describe('catalog-driven price + trial resolution', () => {
 
   test('league monthly uses the league monthly price', async () => {
     findLeaguesByOwner.mockResolvedValue([]);
-    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+    mockCheckoutCreate.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_test_session',
+    });
 
     await createLeagueCheckoutSession('user-1', 'monthly');
 
@@ -464,7 +482,9 @@ describe('catalog-driven price + trial resolution', () => {
 
   test('league season uses the league season price', async () => {
     findLeaguesByOwner.mockResolvedValue([]);
-    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.test/session' });
+    mockCheckoutCreate.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_test_session',
+    });
 
     await createLeagueCheckoutSession('user-1', 'season');
 
@@ -486,10 +506,10 @@ describe('createCustomerPortalSession', () => {
     findTeamByIdAndOwner.mockResolvedValue(
       buildTeam({ _id: 'team-99', stripeCustomerId: 'cus_123', subscriptionStatus: 'active' })
     );
-    mockBillingPortalCreate.mockResolvedValue({ url: 'https://portal.test/session' });
+    mockBillingPortalCreate.mockResolvedValue({ url: 'https://billing.stripe.com/p/session/test' });
 
     const result = await createCustomerPortalSession('user-1', 'team-99');
-    expect(result).toEqual({ url: 'https://portal.test/session' });
+    expect(result).toEqual({ url: 'https://billing.stripe.com/p/session/test' });
     expect(mockBillingPortalCreate).toHaveBeenCalledWith(
       expect.objectContaining({ customer: 'cus_123' })
     );

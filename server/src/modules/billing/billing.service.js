@@ -19,6 +19,7 @@ const {
 const { updateUserPlan } = require('../auth/auth.repository');
 const { resolveForTeam, resolveForLeague } = require('./entitlements.service');
 const { resolvePriceId, trialDaysFor } = require('./plan-catalog');
+const { assertSafeStripeUrl } = require('../../utils/stripeUrl');
 const { env } = require('../../config/env');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
@@ -233,7 +234,7 @@ async function createTeamCheckoutSession(userId, teamId, interval = 'monthly') {
     },
   });
 
-  return { url: session.url };
+  return { url: assertSafeStripeUrl(session.url) };
 }
 
 async function createLeagueCheckoutSession(userId, interval = 'monthly') {
@@ -277,7 +278,7 @@ async function createLeagueCheckoutSession(userId, interval = 'monthly') {
     },
   });
 
-  return { url: session.url };
+  return { url: assertSafeStripeUrl(session.url) };
 }
 
 // Keep old name as alias so existing routes don't break until migrated
@@ -297,7 +298,7 @@ async function createTeamPortalSession(userId, teamId) {
     customer: team.stripeCustomerId,
     return_url: env.STRIPE_SUCCESS_URL,
   });
-  return { url: session.url };
+  return { url: assertSafeStripeUrl(session.url) };
 }
 
 async function createLeaguePortalSession(userId, leagueId) {
@@ -312,7 +313,7 @@ async function createLeaguePortalSession(userId, leagueId) {
     customer: league.stripeCustomerId,
     return_url: env.STRIPE_SUCCESS_URL,
   });
-  return { url: session.url };
+  return { url: assertSafeStripeUrl(session.url) };
 }
 
 // Keep old name as alias
