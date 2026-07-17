@@ -81,7 +81,8 @@ jest.mock('mongoose', () => ({
   },
 }));
 
-const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
+const { findTeamByIdAndOwner, findTeamById } = require('../../modules/teams/teams.repository');
+const billingService = require('../../modules/billing/billing.service');
 const {
   createGame,
   findGameById,
@@ -313,6 +314,62 @@ describe('games service box score', () => {
 describe('games service create game', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  // T-12 (free-tracking flip, D2): tracking is free. Creating and tracking a game
+  // no longer requires an active Team subscription. Revenue-behavior change.
+  test('T-12: a free/inactive team can create a standalone game (no 402)', async () => {
+    billingService.isTeamActive.mockReturnValue(false);
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Game',
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      scheduledAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+      events: [],
+    });
+
+    const result = await createGameForUser('user-1', { teamId: 'team-1', title: 'Game' });
+
+    expect(result).toBeDefined();
+    expect(createGame).toHaveBeenCalled();
+  });
+
+  test('T-12: a free/inactive team can append an event to a standalone game (no 402)', async () => {
+    billingService.isTeamActive.mockReturnValue(false);
+    const teamPlayers = buildPlayers([{ _id: 'p1', displayName: 'Alex', isActive: true }]);
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      teamId: 'team-1',
+      rosterSnapshot: [],
+      events: buildEvents([]),
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+    findTeamById.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+    saveGame.mockResolvedValue(game);
+
+    const result = await appendEventForUser('user-1', 'game-1', {
+      playerId: 'p1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    expect(result).toHaveProperty('game');
   });
 
   test('persists a trimmed YouTube video URL', async () => {

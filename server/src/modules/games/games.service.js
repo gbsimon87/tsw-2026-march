@@ -23,11 +23,7 @@ const {
   applyEventToPlayerStatLine,
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
-const {
-  getBillingSummary,
-  getLeagueBillingSummary,
-  isTeamActive,
-} = require('../billing/billing.service');
+const { getBillingSummary, getLeagueBillingSummary } = require('../billing/billing.service');
 const { resolveForTeam, resolveForLeague } = require('../billing/entitlements.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
@@ -1076,10 +1072,10 @@ async function createGameForUser(userId, payload) {
     return sanitizeGame(game);
   }
 
-  const ownedTeam = await assertTeamOwnership(userId, payload.teamId);
-  if (!isTeamActive(ownedTeam)) {
-    throw new ApiError(402, 'An active Team subscription is required to track games');
-  }
+  // Tracking is free (T-12): ownership is still required, but no active-subscription
+  // gate — a Starter team can create and track games. Starter maxTeams is a
+  // config-driven fast-follow (F-02).
+  await assertTeamOwnership(userId, payload.teamId);
   const game = await createGame({
     ownerUserId: userId,
     teamId: payload.teamId,
@@ -1411,12 +1407,7 @@ function requireBothLineups(game) {
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
 
-  if (game.gameContext === 'standalone' && game.teamId) {
-    const gameTeam = await findTeamById(String(game.teamId));
-    if (gameTeam && !isTeamActive(gameTeam)) {
-      throw new ApiError(402, 'An active Team subscription is required to track stats');
-    }
-  }
+  // Tracking is free (T-12): no active-subscription gate on appending events.
 
   const context = await resolveGameTeamContext(userId, game);
   const insertBeforeEventId = options.insertBeforeEventId || null;

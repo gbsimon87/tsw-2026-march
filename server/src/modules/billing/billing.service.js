@@ -524,12 +524,14 @@ async function handleWebhookEvent(signature, rawBody) {
 
 // ─── Team creation guard ──────────────────────────────────────────────────────
 
+// Tracking is free (T-12): creating a team no longer requires an active
+// subscription on any existing team. The Starter plan's maxTeams limit
+// (plan-catalog limits) is a config-driven fast-follow (F-02); until it is
+// enforced here, team creation is unrestricted. Kept as the single hook where
+// that limit will live so call sites don't change again.
+// eslint-disable-next-line no-unused-vars
 async function assertTeamCreationAllowed(userId) {
-  const teams = await listTeamsByOwner(userId);
-  const inactiveTeams = teams.filter((t) => !isTeamActive(t));
-  if (inactiveTeams.length >= 1) {
-    throw new ApiError(402, 'Complete checkout for your existing team before creating another');
-  }
+  // no-op for now (see F-02)
 }
 
 // ─── Feed affiliation gate ────────────────────────────────────────────────────
