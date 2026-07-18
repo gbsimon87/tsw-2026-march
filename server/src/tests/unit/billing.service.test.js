@@ -5,6 +5,7 @@ jest.mock('../../modules/teams/teams.repository', () => ({
   listTeamsByOwner: jest.fn(),
   saveTeam: jest.fn(),
   claimTeamWebhookEvent: jest.fn(),
+  releaseTeamWebhookEvent: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
@@ -16,6 +17,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeaguesByOwner: jest.fn(),
   saveLeague: jest.fn(),
   claimLeagueWebhookEvent: jest.fn(),
+  releaseLeagueWebhookEvent: jest.fn(),
 }));
 
 jest.mock('../../modules/auth/auth.repository', () => ({
@@ -58,6 +60,7 @@ const {
   listTeamsByOwner,
   saveTeam,
   claimTeamWebhookEvent,
+  releaseTeamWebhookEvent,
 } = require('../../modules/teams/teams.repository');
 const {
   League,
@@ -786,5 +789,67 @@ describe('assertFeedPostingAllowed', () => {
       statusCode: 403,
       message: 'You must be part of a team or league to post',
     });
+  });
+});
+
+describe('handleWebhookEvent — audit H3 release-on-failure', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    listTeamsByOwner.mockResolvedValue([]);
+  });
+
+  test('releases the claim when the apply step throws, so a retry can re-apply', async () => {
+    const team = buildTeam({ billingSource: 'stripe' });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    // Apply step fails (transient DB error). Without release-on-failure the event
+    // stays claimed and Stripe's retry would no-op — the sub never activates.
+    saveTeam.mockRejectedValueOnce(new Error('transient write failure'));
+
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_flaky_1',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_1',
+          status: 'active',
+          customer: 'cus_1',
+          items: { data: [{ price: { id: 'price_team_monthly' } }] },
+          current_period_end: 1770000000,
+          cancel_at_period_end: false,
+          trial_end: null,
+          metadata: { resourceType: 'team', teamId: 'team-1', billingInterval: 'monthly' },
+        },
+      },
+    });
+
+    await expect(handleWebhookEvent('sig', Buffer.from('payload'))).rejects.toThrow(
+      'transient write failure'
+    );
+    expect(releaseTeamWebhookEvent).toHaveBeenCalledWith('team-1', 'evt_flaky_1');
+  });
+
+  test('does not release on a clean apply', async () => {
+    const team = buildTeam({ billingSource: 'stripe' });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_ok_1',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_1',
+          status: 'active',
+          customer: 'cus_1',
+          items: { data: [{ price: { id: 'price_team_monthly' } }] },
+          current_period_end: 1770000000,
+          cancel_at_period_end: false,
+          trial_end: null,
+          metadata: { resourceType: 'team', teamId: 'team-1', billingInterval: 'monthly' },
+        },
+      },
+    });
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+    expect(releaseTeamWebhookEvent).not.toHaveBeenCalled();
   });
 });

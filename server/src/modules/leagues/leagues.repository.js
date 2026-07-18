@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
@@ -336,6 +336,12 @@ function claimLeagueWebhookEvent(filter, eventId) {
   return claimWebhookEvent(League, filter, eventId);
 }
 
+// Audit H3: release a claim if the handler's apply step throws, so a Stripe retry
+// can re-apply the effect.
+function releaseLeagueWebhookEvent(filter, eventId) {
+  return releaseWebhookEvent(League, filter, eventId);
+}
+
 function createLeagueTeam(input) {
   return LeagueTeam.create(input);
 }
@@ -550,6 +556,7 @@ module.exports = {
   listLeaguesByIds,
   saveLeague,
   claimLeagueWebhookEvent,
+  releaseLeagueWebhookEvent,
   createLeagueTeam,
   listLeagueTeams,
   findLeagueTeamById,

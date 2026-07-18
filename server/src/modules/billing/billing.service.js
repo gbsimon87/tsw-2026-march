@@ -5,6 +5,7 @@ const {
   findTeamByIdAndOwner,
   saveTeam,
   claimTeamWebhookEvent,
+  releaseTeamWebhookEvent,
 } = require('../teams/teams.repository');
 const {
   League,
@@ -14,6 +15,7 @@ const {
   findLeaguesByOwner,
   saveLeague,
   claimLeagueWebhookEvent,
+  releaseLeagueWebhookEvent,
 } = require('../leagues/leagues.repository');
 const { updateUserPlan } = require('../auth/auth.repository');
 const { resolveForTeam, resolveForLeague, resolveForUser } = require('./entitlements.service');
@@ -384,6 +386,21 @@ function isStripeManaged(doc) {
 
 // ─── Webhook handlers: teams ──────────────────────────────────────────────────
 
+// Audit H3: run a claimed handler's apply step, releasing the claim if it throws
+// so Stripe's retry can re-apply. `release` is a thunk (releaseTeamWebhookEvent /
+// releaseLeagueWebhookEvent bound to this resource + event id).
+async function applyClaimedOrRelease(release, applyFn) {
+  try {
+    await applyFn();
+  } catch (err) {
+    // Best-effort release; if it also fails, the original error still wins.
+    await Promise.resolve()
+      .then(release)
+      .catch(() => {});
+    throw err;
+  }
+}
+
 async function markTeamFromCheckoutSession(session, eventId) {
   const teamId = session.metadata?.teamId;
   if (!teamId) return;
@@ -391,13 +408,21 @@ async function markTeamFromCheckoutSession(session, eventId) {
   // OPT-020: atomic claim — null means duplicate event or missing team.
   const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
+  // Audit M1: don't let a checkout event convert a comp/manual grant into a
+  // Stripe-managed doc (every other handler already guards this).
+  if (!isStripeManaged(team)) return;
 
-  team.stripeCustomerId =
-    typeof session.customer === 'string' ? session.customer : team.stripeCustomerId || null;
-  team.billingEmail = session.customer_details?.email || team.billingEmail || null;
-  team.billingSource = 'stripe'; // provisioned via Stripe (T-16)
-  await saveTeam(team);
-  await syncOwnerPlan(team.ownerUserId);
+  await applyClaimedOrRelease(
+    () => releaseTeamWebhookEvent(teamId, eventId),
+    async () => {
+      team.stripeCustomerId =
+        typeof session.customer === 'string' ? session.customer : team.stripeCustomerId || null;
+      team.billingEmail = session.customer_details?.email || team.billingEmail || null;
+      team.billingSource = 'stripe'; // provisioned via Stripe (T-16)
+      await saveTeam(team);
+      await syncOwnerPlan(team.ownerUserId);
+    }
+  );
 }
 
 async function updateTeamFromSubscription(subscription, eventId) {
@@ -408,9 +433,14 @@ async function updateTeamFromSubscription(subscription, eventId) {
   if (!team) return;
   if (!isStripeManaged(team)) return; // comp/manual grant — immune to Stripe events
 
-  applyTeamSubscriptionState(team, subscription);
-  await saveTeam(team);
-  await syncOwnerPlan(team.ownerUserId);
+  await applyClaimedOrRelease(
+    () => releaseTeamWebhookEvent(teamId, eventId),
+    async () => {
+      applyTeamSubscriptionState(team, subscription);
+      await saveTeam(team);
+      await syncOwnerPlan(team.ownerUserId);
+    }
+  );
 }
 
 async function markTeamInvoiceFailure(invoice, eventId) {
@@ -423,9 +453,14 @@ async function markTeamInvoiceFailure(invoice, eventId) {
   if (!team) return;
   if (!isStripeManaged(team)) return;
 
-  team.subscriptionStatus = 'past_due';
-  await saveTeam(team);
-  await syncOwnerPlan(team.ownerUserId);
+  await applyClaimedOrRelease(
+    () => releaseTeamWebhookEvent(teamId, eventId),
+    async () => {
+      team.subscriptionStatus = 'past_due';
+      await saveTeam(team);
+      await syncOwnerPlan(team.ownerUserId);
+    }
+  );
   sendPaymentFailedEmail({ to: team.billingEmail, resourceLabel: team.name }); // T-18
 }
 
@@ -457,11 +492,16 @@ async function markTeamInvoicePaid(invoice, eventId) {
   if (!team) return;
   if (!isStripeManaged(team)) return;
 
-  team.subscriptionStatus = 'active';
-  const periodEnd = invoice.lines?.data?.[0]?.period?.end;
-  if (periodEnd) team.currentPeriodEnd = new Date(periodEnd * 1000);
-  await saveTeam(team);
-  await syncOwnerPlan(team.ownerUserId);
+  await applyClaimedOrRelease(
+    () => releaseTeamWebhookEvent(teamId, eventId),
+    async () => {
+      team.subscriptionStatus = 'active';
+      const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+      if (periodEnd) team.currentPeriodEnd = new Date(periodEnd * 1000);
+      await saveTeam(team);
+      await syncOwnerPlan(team.ownerUserId);
+    }
+  );
 }
 
 // ─── Webhook handlers: leagues ────────────────────────────────────────────────
@@ -509,13 +549,21 @@ async function updateLeagueFromSubscription(subscription, eventId) {
 
   const customerId =
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+  // Audit M4: without this guard an undefined customerId becomes filter {} and
+  // could claim an arbitrary league (defensive — events are signature-verified).
+  if (!customerId) return;
 
   const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
   if (!league) return;
   if (!isStripeManaged(league)) return; // comp/manual grant — immune to Stripe events
 
-  applyLeagueSubscriptionState(league, subscription);
-  await saveLeague(league);
+  await applyClaimedOrRelease(
+    () => releaseLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId),
+    async () => {
+      applyLeagueSubscriptionState(league, subscription);
+      await saveLeague(league);
+    }
+  );
 }
 
 async function markLeagueInvoiceFailure(invoice, eventId) {
@@ -534,8 +582,13 @@ async function markLeagueInvoiceFailure(invoice, eventId) {
   if (!league) return;
   if (!isStripeManaged(league)) return;
 
-  league.subscriptionStatus = 'past_due';
-  await saveLeague(league);
+  await applyClaimedOrRelease(
+    () => releaseLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId),
+    async () => {
+      league.subscriptionStatus = 'past_due';
+      await saveLeague(league);
+    }
+  );
   sendPaymentFailedEmail({ to: league.billingEmail, resourceLabel: league.name }); // T-18
 }
 
@@ -570,10 +623,15 @@ async function markLeagueInvoicePaid(invoice, eventId) {
   if (!league) return;
   if (!isStripeManaged(league)) return;
 
-  league.subscriptionStatus = 'active';
-  const periodEnd = invoice.lines?.data?.[0]?.period?.end;
-  if (periodEnd) league.currentPeriodEnd = new Date(periodEnd * 1000);
-  await saveLeague(league);
+  await applyClaimedOrRelease(
+    () => releaseLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId),
+    async () => {
+      league.subscriptionStatus = 'active';
+      const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+      if (periodEnd) league.currentPeriodEnd = new Date(periodEnd * 1000);
+      await saveLeague(league);
+    }
+  );
 }
 
 // ─── Main webhook dispatcher ──────────────────────────────────────────────────

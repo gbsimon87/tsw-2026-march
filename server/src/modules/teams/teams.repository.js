@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
@@ -134,6 +134,12 @@ function claimTeamWebhookEvent(teamId, eventId) {
   return claimWebhookEvent(Team, { _id: teamId }, eventId);
 }
 
+// Audit H3: release a claim if the handler's apply step throws, so a Stripe retry
+// can re-apply the effect (the claim alone marks the event processed).
+function releaseTeamWebhookEvent(teamId, eventId) {
+  return releaseWebhookEvent(Team, { _id: teamId }, eventId);
+}
+
 // OPT-013: materialised team season summary read/write.
 function findTeamSeasonSummary(teamId) {
   return TeamSeasonSummary.findOne({ teamId });
@@ -160,6 +166,7 @@ module.exports = {
   listTeams,
   saveTeam,
   claimTeamWebhookEvent,
+  releaseTeamWebhookEvent,
   TeamSeasonSummary,
   findTeamSeasonSummary,
   upsertTeamSeasonSummary,
