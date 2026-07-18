@@ -1255,7 +1255,12 @@ async function getPublicLeaguePlayerBySlug(
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
-  const highlights = buildLeaguePlayerHighlights(games, team._id, player._id);
+  // Audit H6: highlight clips are gated (Team Pro, bundled into League) — a
+  // free/lapsed league exposes no clips on its public player profiles.
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  const highlights = resolveForLeague(league).entitlements.canViewHighlightClips
+    ? buildLeaguePlayerHighlights(games, team._id, player._id)
+    : [];
 
   const highlightEventIds = highlights.map((h) => h.eventId).filter(Boolean);
   const sharedEventIds = await findSharedEventIds(highlightEventIds);

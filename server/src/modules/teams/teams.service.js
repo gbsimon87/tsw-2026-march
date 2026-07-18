@@ -628,7 +628,12 @@ async function getPublicPlayer(teamId, playerId) {
   const teams = await listTeams();
   const teamLookup = buildTeamLookup(teams);
   const gameRows = buildPublicPlayerGameRows(games, team, player, teamLookup);
-  const highlights = buildPlayerHighlights(games, String(player._id));
+  const entitlements = resolveForTeam(team).entitlements;
+  // Audit H6: highlight clips are a Team Pro feature — gate them on the resolver.
+  // A free/lapsed team exposes no clips on its public profile.
+  const highlights = entitlements.canViewHighlightClips
+    ? buildPlayerHighlights(games, String(player._id))
+    : [];
 
   return {
     team: {
@@ -637,7 +642,7 @@ async function getPublicPlayer(teamId, playerId) {
       logo: sanitizeLogo(team.logo),
       colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
       homeVenue: sanitizeVenue(team.homeVenue),
-      entitlements: resolveForTeam(team).entitlements,
+      entitlements,
     },
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),

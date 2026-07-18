@@ -662,6 +662,48 @@ describe('teams public service', () => {
     });
   });
 
+  // Audit H6: highlight clips are a Team Pro feature — gate them on the resolver.
+  function seedPlayerWithClip(teamOverrides = {}) {
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [{ _id: 'p1', displayName: 'Alex', isActive: true }],
+      ...teamOverrides,
+    });
+    listTeams.mockResolvedValue([]);
+    listGamesByTeamId.mockResolvedValue([
+      {
+        _id: 'g1',
+        title: 'vs Falcons',
+        opponent: 'Falcons',
+        status: 'completed',
+        completedAt: new Date('2026-03-10T02:00:00.000Z'),
+        createdAt: new Date('2026-03-10T00:00:00.000Z'),
+        videoUrl: 'https://youtube.com/watch?v=abc',
+        events: [{ _id: 'e1', playerId: 'p1', statType: 'FG3_MADE', videoTimestamp: 42 }],
+      },
+    ]);
+  }
+
+  test('H6: hides highlight clips for a free/lapsed team on the public profile', async () => {
+    seedPlayerWithClip({ plan: 'starter', subscriptionStatus: 'inactive' });
+
+    const result = await getPublicPlayer('team-1', 'p1');
+
+    expect(result.team.entitlements.canViewHighlightClips).toBe(false);
+    expect(result.highlights).toEqual([]);
+  });
+
+  test('H6: exposes highlight clips for an active Team Pro team', async () => {
+    seedPlayerWithClip({ plan: 'team_pro', subscriptionStatus: 'active' });
+
+    const result = await getPublicPlayer('team-1', 'p1');
+
+    expect(result.team.entitlements.canViewHighlightClips).toBe(true);
+    expect(result.highlights).toHaveLength(1);
+    expect(result.highlights[0]).toMatchObject({ eventId: 'e1', statType: 'FG3_MADE' });
+  });
+
   test('returns recent public explore games with one game per team', async () => {
     listPublicCompletedGames.mockResolvedValue([
       {
