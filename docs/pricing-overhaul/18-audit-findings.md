@@ -13,6 +13,23 @@
 > the current 534-test suite is blind to both because every relevant test mocks the
 > models. Fixes are cheap; the danger is the false green.
 
+## Fix status (2026-07-18)
+
+Implemented on `feature/pricing-overhaul`, TDD, suite green (server 549):
+
+- **Gate 1 (merge blockers):** C1, C2 fixed; H9 regression net added.
+- **Gate 2 (migration safety):** C3, C4, H4, H5, M5, M6, M13 fixed.
+- **Gate 3 (payment integrity):** H3, M1, M4 fixed; M2, M3, M18 fixed; H1 fixed;
+  H2 partially fixed (team customer-reuse) — full concurrent-race closure deferred
+  to a live-Stripe-validated pass (see OUTSTANDING-MANUAL-ACTIONS).
+- **Gate 4 (entitlements):** H6, H7, H8, L4, M10 (copy + tracked), M11 fixed;
+  M17 deferred with rationale (OUTSTANDING-MANUAL-ACTIONS).
+- **Gate 5 (polish):** M7, M8, M12, M14 fixed.
+
+Not yet addressed (lower priority / launch-gated / need live Stripe): M9 (pre-launch
+CTA gating — documented state), M15 (price-drift guard — needs live Stripe), M16
+(trial-length copy), L1–L15, D1 (PROJECT-KNOWLEDGE §6 — do with the T-30 merge).
+
 ## Severity summary
 
 | #      | Severity                       | Title                                                                                                                      | File                                                   |
