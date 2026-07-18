@@ -934,13 +934,16 @@ async function resolveGameTeamContext(userId, game) {
   }
 
   const team = await assertTeamOwnership(userId || game.ownerUserId, game.teamId);
+  // Audit H7: prefer the entitlements frozen at record time; fall back to live
+  // resolution only for legacy one-sided games created before the snapshot existed.
+  const entitlements = game.entitlementsSnapshot ?? resolveForTeam(team).entitlements;
   return {
     team: {
       id: String(team._id),
       name: team.name,
       logo: sanitizeLogo(team.logo),
       billing: getBillingSummary(team),
-      entitlements: resolveForTeam(team).entitlements,
+      entitlements,
       players: team.players.map(sanitizePlayer),
     },
     opponentTeam: null,
@@ -1076,7 +1079,7 @@ async function createGameForUser(userId, payload) {
   // Tracking is free (T-12): ownership is still required, but no active-subscription
   // gate — a Starter team can create and track games. Starter maxTeams is a
   // config-driven fast-follow (F-02).
-  await assertTeamOwnership(userId, payload.teamId);
+  const team = await assertTeamOwnership(userId, payload.teamId);
   const game = await createGame({
     ownerUserId: userId,
     teamId: payload.teamId,
@@ -1086,6 +1089,9 @@ async function createGameForUser(userId, payload) {
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
     videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
     status: 'in_progress',
+    // Audit H7: freeze entitlements at record time (mirrors the dual-team
+    // participant snapshot) so a later downgrade never retroactively locks this game.
+    entitlementsSnapshot: resolveForTeam(team).entitlements,
   });
 
   return sanitizeGame(game);

@@ -1006,6 +1006,60 @@ describe('games service frozen box score (OPT-012)', () => {
     expect(result.team.entitlements.canViewShotMaps).toBe(false);
   });
 
+  test('H7: a one-sided standalone game uses its frozen snapshot, not live resolve', async () => {
+    // Team has since lapsed to starter, but the game was recorded while Pro.
+    findTeamByIdAndOwner.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [],
+      plan: 'starter',
+      subscriptionStatus: 'inactive',
+    });
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      teamId: 'team-1',
+      status: 'completed',
+      events: [],
+      entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(true);
+    expect(result.team.entitlements.canViewShotMaps).toBe(true);
+  });
+
+  test('H7: a legacy one-sided game with no snapshot falls back to live resolve', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [],
+      plan: 'starter',
+      subscriptionStatus: 'inactive',
+    });
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      teamId: 'team-1',
+      status: 'completed',
+      events: [],
+      // no entitlementsSnapshot (pre-H7 game)
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(false);
+  });
+
   // A qualifying replay clip: a made shot by a rostered player with a video timestamp.
   const HIGHLIGHT_EVENT = {
     _id: 'ev-1',
