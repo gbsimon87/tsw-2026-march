@@ -120,7 +120,8 @@ async function register(input) {
     authProvider: 'local',
     emailVerified: true,
     roles: ['user'],
-    plan: 'free',
+    // plan intentionally omitted — the schema default 'starter' applies (audit C1;
+    // the User enum is canonical-only since T-26 and rejects legacy 'free').
   });
 
   return {

@@ -488,7 +488,9 @@ async function createLeagueFromCheckoutSession(session, eventId) {
     ownerUserId,
     name: 'My League',
     slug: placeholderSlug,
-    plan: 'free',
+    // Canonical id (audit C2) — the League enum rejects legacy 'free' since T-26.
+    // The follow-on customer.subscription.* webhook sets the real paid plan.
+    plan: 'starter',
     subscriptionStatus: 'inactive',
     billingSource: 'stripe', // provisioned via Stripe (T-16)
     stripeCustomerId: typeof session.customer === 'string' ? session.customer : null,
