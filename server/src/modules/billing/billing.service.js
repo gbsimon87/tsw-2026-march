@@ -237,10 +237,17 @@ async function createTeamCheckoutSession(userId, teamId, interval = 'monthly') {
         'checkout',
         'canceled'
       ),
-      customer_email: team.billingEmail || undefined,
+      // Audit H2/H1: reuse this team's existing Stripe customer on re-checkout so
+      // a second purchase attaches to the same customer (the portal can then cancel
+      // it, and Stripe also suppresses a repeat trial for a known customer). Only
+      // one of customer / customer_email may be sent.
+      customer: team.stripeCustomerId || undefined,
+      customer_email: team.stripeCustomerId ? undefined : team.billingEmail || undefined,
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: trialDaysFor('team_pro', interval),
+        // Audit H1: grant a trial only if this team has never had one, so
+        // cancel-during-trial + re-checkout can't mint a fresh trial each time.
+        trial_period_days: team.hasTrialed ? undefined : trialDaysFor('team_pro', interval),
         metadata: {
           resourceType: 'team',
           teamId: String(team._id),
@@ -271,6 +278,11 @@ async function createLeagueCheckoutSession(userId, interval = 'monthly') {
   const priceId = resolveLeaguePriceId(interval);
   if (!priceId) throw new ApiError(503, 'Billing is not configured');
 
+  // Audit H1: league docs are created post-checkout, so there's no per-resource
+  // doc to carry hasTrialed at this point — gate on whether ANY league this owner
+  // already has has consumed a trial (a cancelled prior league still carries it).
+  const ownerHasTrialed = existingLeagues.some((l) => l.hasTrialed);
+
   const stripe = getStripe();
   const session = await callStripe(() =>
     stripe.checkout.sessions.create({
@@ -288,7 +300,7 @@ async function createLeagueCheckoutSession(userId, interval = 'monthly') {
       ),
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: trialDaysFor('league', interval),
+        trial_period_days: ownerHasTrialed ? undefined : trialDaysFor('league', interval),
         metadata: {
           resourceType: 'league',
           ownerUserId: String(userId),
@@ -384,6 +396,8 @@ function applyTeamSubscriptionState(team, subscription) {
     : null;
   team.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
   team.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+  // Audit H1: latch once a trial has ever been granted (sticky — never cleared).
+  if (status === 'trialing' || subscription.trial_end) team.hasTrialed = true;
 }
 
 function applyLeagueSubscriptionState(league, subscription) {
@@ -403,6 +417,8 @@ function applyLeagueSubscriptionState(league, subscription) {
     : null;
   league.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
   league.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+  // Audit H1: latch once a trial has ever been granted (sticky — never cleared).
+  if (status === 'trialing' || subscription.trial_end) league.hasTrialed = true;
 }
 
 // Comp/manual grants are owned outside Stripe (T-10/T-16): a webhook must never

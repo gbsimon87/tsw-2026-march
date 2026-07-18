@@ -57,6 +57,9 @@ const leagueSchema = new mongoose.Schema(
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     trialEnd: { type: Date, default: null },
+    // Audit H1: set once this league has ever been granted a Stripe trial, so an
+    // owner can't farm a fresh trial by cancelling and re-checking-out.
+    hasTrialed: { type: Boolean, default: false },
     billingEmail: { type: String, default: null },
     processedWebhookEventIds: { type: [String], default: [] },
     lastWebhookEventId: { type: String, default: null },

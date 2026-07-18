@@ -416,6 +416,17 @@ describe('handleWebhookEvent — T-16 plan derivation, comp-safety, renewal', ()
     expect(saveTeam).toHaveBeenCalledTimes(1);
   });
 
+  test('latches hasTrialed when a trialing subscription is observed (audit H1)', async () => {
+    const team = buildTeam({ hasTrialed: false });
+    claimTeamWebhookEvent.mockResolvedValue(team);
+    listTeamsByOwner.mockResolvedValue([team]);
+    mockConstructEvent.mockReturnValue(subEvent({ status: 'trialing', trial_end: 1770000000 }));
+
+    await handleWebhookEvent('sig', Buffer.from('payload'));
+
+    expect(team.hasTrialed).toBe(true);
+  });
+
   test('sets an inactive team back to the starter plan', async () => {
     const team = buildTeam({ plan: 'team_pro', subscriptionStatus: 'active' });
     claimTeamWebhookEvent.mockResolvedValue(team);
@@ -657,6 +668,65 @@ describe('createTeamCheckoutSession', () => {
       statusCode: 502,
       message: 'Billing provider error',
     });
+  });
+
+  test('omits the trial for a team that has already trialed (audit H1)', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99', hasTrialed: true }));
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs' });
+
+    await createTeamCheckoutSession('user-1', 'team-99', 'monthly');
+
+    const arg = mockCheckoutCreate.mock.calls[0][0];
+    expect(arg.subscription_data.trial_period_days).toBeUndefined();
+  });
+
+  test('grants the trial for a first-time team (audit H1)', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99', hasTrialed: false }));
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs' });
+
+    await createTeamCheckoutSession('user-1', 'team-99', 'monthly');
+
+    const arg = mockCheckoutCreate.mock.calls[0][0];
+    expect(arg.subscription_data.trial_period_days).toBe(14);
+  });
+
+  test('reuses an existing Stripe customer on re-checkout (audit H2)', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(
+      buildTeam({ _id: 'team-99', stripeCustomerId: 'cus_existing', billingEmail: 'o@e.com' })
+    );
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs' });
+
+    await createTeamCheckoutSession('user-1', 'team-99', 'monthly');
+
+    const arg = mockCheckoutCreate.mock.calls[0][0];
+    expect(arg.customer).toBe('cus_existing');
+    expect(arg.customer_email).toBeUndefined();
+  });
+});
+
+describe('createLeagueCheckoutSession trial farming (audit H1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('omits the trial when the owner already has a league that trialed', async () => {
+    findLeaguesByOwner.mockResolvedValue([
+      buildLeague({ subscriptionStatus: 'canceled', plan: 'starter', hasTrialed: true }),
+    ]);
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs' });
+
+    await createLeagueCheckoutSession('user-1', 'monthly');
+
+    const arg = mockCheckoutCreate.mock.calls[0][0];
+    expect(arg.subscription_data.trial_period_days).toBeUndefined();
+  });
+
+  test('grants the trial for an owner with no prior trialed league', async () => {
+    findLeaguesByOwner.mockResolvedValue([]);
+    mockCheckoutCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs' });
+
+    await createLeagueCheckoutSession('user-1', 'monthly');
+
+    const arg = mockCheckoutCreate.mock.calls[0][0];
+    expect(arg.subscription_data.trial_period_days).toBe(14);
   });
 });
 

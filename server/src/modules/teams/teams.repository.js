@@ -62,6 +62,9 @@ const teamSchema = new mongoose.Schema(
     billingInterval: { type: String, enum: ['monthly', 'season', null], default: null },
     currentPeriodEnd: { type: Date, default: null },
     trialEnd: { type: Date, default: null },
+    // Audit H1: set once this team has ever been granted a Stripe trial, so
+    // re-checkout after cancelling can't mint a fresh 14-day trial each time.
+    hasTrialed: { type: Boolean, default: false },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     billingEmail: { type: String, default: null },
     lastWebhookEventId: { type: String, default: null },
