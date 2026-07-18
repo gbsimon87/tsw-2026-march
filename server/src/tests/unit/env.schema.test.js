@@ -11,6 +11,15 @@ const PRICE_IDS = {
   STRIPE_PRICE_ID_LEAGUE_SEASON: 'price_league_season',
 };
 
+// Audit M2: full required Stripe config once the secret key is set — price IDs
+// plus the webhook secret and success/cancel URLs.
+const FULL_STRIPE = {
+  ...PRICE_IDS,
+  STRIPE_WEBHOOK_SECRET: 'whsec_123',
+  STRIPE_SUCCESS_URL: 'http://localhost:5173/billing/success',
+  STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
+};
+
 function baseEnv(overrides = {}) {
   return {
     NODE_ENV: 'test',
@@ -28,18 +37,31 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
     expect(typeof envSchema.safeParse).toBe('function');
   });
 
-  it('accepts billing enabled with all four price IDs present', () => {
-    const result = envSchema.safeParse(baseEnv({ STRIPE_SECRET_KEY: 'sk_test_123', ...PRICE_IDS }));
+  it('accepts billing enabled with the full Stripe config present', () => {
+    const result = envSchema.safeParse(
+      baseEnv({ STRIPE_SECRET_KEY: 'sk_test_123', ...FULL_STRIPE })
+    );
     expect(result.success).toBe(true);
   });
 
   it('rejects billing enabled when a price ID is missing', () => {
-    const partial = { ...PRICE_IDS };
+    const partial = { ...FULL_STRIPE };
     delete partial.STRIPE_PRICE_ID_TEAM_SEASON;
     const result = envSchema.safeParse(baseEnv({ STRIPE_SECRET_KEY: 'sk_test_123', ...partial }));
     expect(result.success).toBe(false);
     const messages = result.error.issues.map((i) => i.message).join(' ');
     expect(messages).toContain('STRIPE_PRICE_ID_TEAM_SEASON');
+  });
+
+  it('rejects billing enabled when the webhook secret or redirect URLs are missing (audit M2)', () => {
+    for (const key of ['STRIPE_WEBHOOK_SECRET', 'STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL']) {
+      const partial = { ...FULL_STRIPE };
+      delete partial[key];
+      const result = envSchema.safeParse(baseEnv({ STRIPE_SECRET_KEY: 'sk_test_123', ...partial }));
+      expect(result.success).toBe(false);
+      const messages = result.error.issues.map((i) => i.message).join(' ');
+      expect(messages).toContain(key);
+    }
   });
 
   it('allows billing disabled (no secret key) with no price IDs', () => {

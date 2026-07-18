@@ -604,7 +604,7 @@ describe('createTeamCheckoutSession', () => {
         payment_method_collection: 'always',
         subscription_data: expect.objectContaining({
           trial_period_days: 14,
-          metadata: expect.objectContaining({ resourceType: 'team', plan: 'team' }),
+          metadata: expect.objectContaining({ resourceType: 'team', plan: 'team_pro' }),
         }),
         success_url: expect.stringContaining('resourceType=team'),
       })
@@ -642,6 +642,20 @@ describe('createTeamCheckoutSession', () => {
     mockCheckoutCreate.mockResolvedValue({ url: 'https://evil.example.com/phish' });
     await expect(createTeamCheckoutSession('user-1', 'team-99', 'monthly')).rejects.toMatchObject({
       statusCode: 502,
+    });
+  });
+
+  test('masks a Stripe SDK error as a generic 502 (audit M3 — no price-ID leak)', async () => {
+    findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
+    const stripeErr = Object.assign(new Error('No such price: price_1ABCsecret'), {
+      type: 'StripeInvalidRequestError',
+      statusCode: 400,
+    });
+    mockCheckoutCreate.mockRejectedValue(stripeErr);
+
+    await expect(createTeamCheckoutSession('user-1', 'team-99', 'monthly')).rejects.toMatchObject({
+      statusCode: 502,
+      message: 'Billing provider error',
     });
   });
 });

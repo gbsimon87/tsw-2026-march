@@ -23,6 +23,7 @@ const { resolvePriceId, trialDaysFor, planForPriceId } = require('./plan-catalog
 const { assertSafeStripeUrl } = require('../../utils/stripeUrl');
 const { sendPaymentFailedEmail, sendTrialEndingEmail } = require('../../services/email.service');
 const { env } = require('../../config/env');
+const { logger } = require('../../config/logger');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 
@@ -41,6 +42,24 @@ function getStripe() {
     stripeClient = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
   }
   return stripeClient;
+}
+
+// Audit M3: run a Stripe SDK call, masking any SDK error as a generic 502. The
+// error middleware only masks >=500, so an unwrapped StripeInvalidRequestError
+// (statusCode 400, e.g. "No such price: price_1ABC…") would be returned verbatim,
+// leaking live price IDs that getDisplayCatalog deliberately hides.
+async function callStripe(fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    const isStripeError = typeof error?.type === 'string' && error.type.startsWith('Stripe');
+    if (isStripeError) {
+      logger.error({ err: error }, 'Stripe API error');
+      throw new ApiError(502, 'Billing provider error');
+    }
+    throw error;
+  }
 }
 
 // ─── URL helpers ──────────────────────────────────────────────────────────────
@@ -196,47 +215,49 @@ async function createTeamCheckoutSession(userId, teamId, interval = 'monthly') {
   if (!priceId) throw new ApiError(503, 'Billing is not configured');
 
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    payment_method_collection: 'always',
-    success_url: appendQueryParam(
-      appendQueryParam(
-        appendQueryParam(env.STRIPE_SUCCESS_URL, 'resourceType', 'team'),
-        'teamId',
-        team._id
+  const session = await callStripe(() =>
+    stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_collection: 'always',
+      success_url: appendQueryParam(
+        appendQueryParam(
+          appendQueryParam(env.STRIPE_SUCCESS_URL, 'resourceType', 'team'),
+          'teamId',
+          team._id
+        ),
+        'checkout',
+        'success'
       ),
-      'checkout',
-      'success'
-    ),
-    cancel_url: appendQueryParam(
-      appendQueryParam(
-        appendQueryParam(env.STRIPE_CANCEL_URL, 'resourceType', 'team'),
-        'teamId',
-        team._id
+      cancel_url: appendQueryParam(
+        appendQueryParam(
+          appendQueryParam(env.STRIPE_CANCEL_URL, 'resourceType', 'team'),
+          'teamId',
+          team._id
+        ),
+        'checkout',
+        'canceled'
       ),
-      'checkout',
-      'canceled'
-    ),
-    customer_email: team.billingEmail || undefined,
-    line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: {
-      trial_period_days: trialDaysFor('team_pro', interval),
+      customer_email: team.billingEmail || undefined,
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: trialDaysFor('team_pro', interval),
+        metadata: {
+          resourceType: 'team',
+          teamId: String(team._id),
+          ownerUserId: String(userId),
+          plan: 'team_pro',
+          billingInterval: interval,
+        },
+      },
       metadata: {
         resourceType: 'team',
         teamId: String(team._id),
         ownerUserId: String(userId),
-        plan: 'team',
+        plan: 'team_pro',
         billingInterval: interval,
       },
-    },
-    metadata: {
-      resourceType: 'team',
-      teamId: String(team._id),
-      ownerUserId: String(userId),
-      plan: 'team',
-      billingInterval: interval,
-    },
-  });
+    })
+  );
 
   return { url: assertSafeStripeUrl(session.url) };
 }
@@ -251,36 +272,38 @@ async function createLeagueCheckoutSession(userId, interval = 'monthly') {
   if (!priceId) throw new ApiError(503, 'Billing is not configured');
 
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    payment_method_collection: 'always',
-    success_url: appendQueryParam(
-      appendQueryParam(env.STRIPE_SUCCESS_URL, 'resourceType', 'league'),
-      'checkout',
-      'success'
-    ),
-    cancel_url: appendQueryParam(
-      appendQueryParam(env.STRIPE_CANCEL_URL, 'resourceType', 'league'),
-      'checkout',
-      'canceled'
-    ),
-    line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: {
-      trial_period_days: trialDaysFor('league', interval),
+  const session = await callStripe(() =>
+    stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_collection: 'always',
+      success_url: appendQueryParam(
+        appendQueryParam(env.STRIPE_SUCCESS_URL, 'resourceType', 'league'),
+        'checkout',
+        'success'
+      ),
+      cancel_url: appendQueryParam(
+        appendQueryParam(env.STRIPE_CANCEL_URL, 'resourceType', 'league'),
+        'checkout',
+        'canceled'
+      ),
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: trialDaysFor('league', interval),
+        metadata: {
+          resourceType: 'league',
+          ownerUserId: String(userId),
+          plan: 'league',
+          billingInterval: interval,
+        },
+      },
       metadata: {
         resourceType: 'league',
         ownerUserId: String(userId),
         plan: 'league',
         billingInterval: interval,
       },
-    },
-    metadata: {
-      resourceType: 'league',
-      ownerUserId: String(userId),
-      plan: 'league',
-      billingInterval: interval,
-    },
-  });
+    })
+  );
 
   return { url: assertSafeStripeUrl(session.url) };
 }
@@ -298,10 +321,12 @@ async function createTeamPortalSession(userId, teamId) {
   if (!team.stripeCustomerId) throw new ApiError(400, 'No billing customer exists for this team');
 
   const stripe = getStripe();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: team.stripeCustomerId,
-    return_url: env.STRIPE_SUCCESS_URL,
-  });
+  const session = await callStripe(() =>
+    stripe.billingPortal.sessions.create({
+      customer: team.stripeCustomerId,
+      return_url: env.STRIPE_SUCCESS_URL,
+    })
+  );
   return { url: assertSafeStripeUrl(session.url) };
 }
 
@@ -313,10 +338,12 @@ async function createLeaguePortalSession(userId, leagueId) {
   }
 
   const stripe = getStripe();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: league.stripeCustomerId,
-    return_url: env.STRIPE_SUCCESS_URL,
-  });
+  const session = await callStripe(() =>
+    stripe.billingPortal.sessions.create({
+      customer: league.stripeCustomerId,
+      return_url: env.STRIPE_SUCCESS_URL,
+    })
+  );
   return { url: assertSafeStripeUrl(session.url) };
 }
 

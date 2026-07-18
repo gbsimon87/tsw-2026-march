@@ -74,16 +74,23 @@ const baseEnvSchema = z.object({
 // four subscription price IDs must be present. Otherwise a missing ID resolves to
 // `undefined` at checkout and Stripe 503s silently in prod (see docs/pricing-
 // overhaul/06-stripe-architecture.md). This is all-or-nothing, not per-field.
-const REQUIRED_STRIPE_PRICE_IDS = [
+// Audit M2: the webhook secret and success/cancel URLs are as load-bearing as the
+// price IDs. Without STRIPE_WEBHOOK_SECRET, boot succeeds and checkout works, but
+// every webhook fails signature verification — customers are charged and never
+// provisioned. The success/cancel URLs are required by every checkout session.
+const REQUIRED_STRIPE_CONFIG = [
   'STRIPE_PRICE_ID_TEAM_MONTHLY',
   'STRIPE_PRICE_ID_TEAM_SEASON',
   'STRIPE_PRICE_ID_LEAGUE_MONTHLY',
   'STRIPE_PRICE_ID_LEAGUE_SEASON',
+  'STRIPE_WEBHOOK_SECRET',
+  'STRIPE_SUCCESS_URL',
+  'STRIPE_CANCEL_URL',
 ];
 
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
   if (!data.STRIPE_SECRET_KEY) return;
-  for (const key of REQUIRED_STRIPE_PRICE_IDS) {
+  for (const key of REQUIRED_STRIPE_CONFIG) {
     if (!data[key]) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
