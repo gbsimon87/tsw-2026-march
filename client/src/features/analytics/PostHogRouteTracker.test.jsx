@@ -98,27 +98,24 @@ describe('PostHogRouteTracker', () => {
         id: 'user-1',
         email: 'alex@example.com',
         name: 'Alex',
-        plan: 'pro',
+        plan: 'team_pro',
         roles: ['user'],
         emailVerified: true,
         authProvider: 'google',
-        leagueBilling: {
-          plan: 'pro',
-          subscriptionStatus: 'active',
-        },
       },
     };
 
     renderTracker('/pulse');
 
+    // Audit M7: leaguePlan/leagueSubscriptionStatus props were dropped (server no
+    // longer serializes user.leagueBilling; they reported 'free' for everyone).
     expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith('user-1', {
-      plan: 'pro',
+      plan: 'team_pro',
       roles: ['user'],
       emailVerified: true,
       authProvider: 'google',
-      leaguePlan: 'pro',
-      leagueSubscriptionStatus: 'active',
     });
+    expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('leaguePlan');
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('email');
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('name');
   });

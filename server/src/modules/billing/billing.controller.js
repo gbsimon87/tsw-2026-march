@@ -9,6 +9,9 @@ const { getDisplayCatalog } = require('./plan-catalog');
 
 // Public: the price-ID-free plan catalog the client pricing page renders from.
 async function getCatalog(req, res) {
+  // Audit M12: static config — let shared caches and the browser hold it briefly
+  // instead of refetching on every pricing-page visit.
+  res.set('Cache-Control', 'public, max-age=300');
   res.status(200).json({ plans: getDisplayCatalog() });
 }
 

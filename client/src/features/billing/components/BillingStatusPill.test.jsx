@@ -75,6 +75,34 @@ describe('BillingStatusPill', () => {
     expect(screen.getByRole('button', { name: /Manage billing/i })).toBeInTheDocument();
   });
 
+  test('past_due team shows Manage billing (portal), not Upgrade (audit M8)', () => {
+    renderPill({
+      billing: { plan: 'team_pro', subscriptionStatus: 'past_due' },
+      scope: 'team',
+      resourceId: 'team-1',
+    });
+    expect(screen.getByRole('button', { name: /Manage billing/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Upgrade/i })).not.toBeInTheDocument();
+  });
+
+  test('surfaces an error and clears busy when the portal returns no URL (audit M8)', async () => {
+    billingApiMocks.createCustomerPortalSession.mockResolvedValueOnce({ url: null });
+    renderPill({
+      billing: { plan: 'team_pro', subscriptionStatus: 'active' },
+      scope: 'team',
+      resourceId: 'team-1',
+    });
+
+    const btn = screen.getByRole('button', { name: /Manage billing/i });
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not open billing portal/i)).toBeInTheDocument();
+    });
+    // Button no longer stuck on "Opening…"
+    expect(screen.getByRole('button', { name: /Manage billing/i })).not.toBeDisabled();
+  });
+
   test('active league shows League + portal call with leagueId', async () => {
     renderPill({
       billing: { plan: 'league', subscriptionStatus: 'active' },
