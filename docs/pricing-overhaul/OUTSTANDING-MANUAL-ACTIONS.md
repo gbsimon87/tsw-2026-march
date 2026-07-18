@@ -64,6 +64,24 @@ payloads) must be confirmed once in dev/test mode before launch.
       and test clocks, per the runbook. Depends on the four dev price IDs + their
       `{planId,interval}` metadata (Phase 3 items above) already being set.
 
+## Audit follow-up — unbuilt features surfaced by the audit
+
+- **Team-scoped CSV export (M10).** Team Pro's catalog + pricing copy advertise "CSV
+  export", but the only export endpoints are **league-scoped** (standings + league
+  player stats), gated on `resolveForLeague`. A `team_pro` team that isn't in a
+  league therefore can't export anything. The misleading 402 copy was corrected to
+  say "League"; the actual Team-Pro deliverable — a team's own season/box-score CSV,
+  gated on `resolveForTeam().canExportCsv` — is a new endpoint still to be built
+  (`export.*` + route/controller/validation + tests). Until it ships, either build it
+  or drop "CSV export" from the Team Pro display in `plan-catalog.js`.
+- **League games freeze-vs-live semantics (M17).** H7 made one-sided _standalone_
+  games freeze their entitlements (matching dual-team standalone). _League_ games are
+  still mixed: dual-team league games read the frozen participant snapshot while
+  one-sided league games resolve live. Doc 08 wants league games **live**. Aligning
+  them touches several read sites (`resolveGameTeamContext`, the T-14 recap/highlight
+  gating, box-score) and flips deliberate T-14 frozen-snapshot tests, so it needs a
+  dedicated change with the doc-08 semantics confirmed — deferred, not done in this pass.
+
 ## Audit follow-up — duplicate-purchase race (H2), needs live Stripe validation
 
 The audit's H2 fix landed in part: team re-checkout now reuses the existing Stripe
