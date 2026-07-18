@@ -64,4 +64,21 @@ describe('planMigration.rollbackPlan (lossy inverse)', () => {
     expect(rollbackPlan('league', 'team_pro')).toBe('pro');
     expect(rollbackPlan('league', 'league')).toBe('league');
   });
+
+  // Audit H4: the pre-tightening User enum was ['free','pro'] — 'team' was never a
+  // valid user plan, so the user scope needs its own inverse.
+  it('rolls a user team_pro back to pro (never team)', () => {
+    expect(rollbackPlan('user', 'team_pro')).toBe('pro');
+    expect(rollbackPlan('user', 'starter')).toBe('free');
+  });
+});
+
+describe('planMigration.resolveTargetPlan (self-heal safety, audit M6)', () => {
+  it('throws when stripePriceId is set but matches no configured price id', () => {
+    // A Stripe-backed doc whose price id the loaded env does not recognize means
+    // the wrong ENV_FILE is loaded — silently falling back could downgrade a payer.
+    expect(() =>
+      resolveTargetPlan('team', { plan: 'pro', stripePriceId: 'price_unknown_123' })
+    ).toThrow(/price_unknown_123/);
+  });
 });

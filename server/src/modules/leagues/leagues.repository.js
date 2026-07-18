@@ -65,6 +65,15 @@ const leagueSchema = new mongoose.Schema(
 );
 
 leagueSchema.index({ ownerUserId: 1, status: 1 });
+// Audit C3/M13: unique + PARTIAL (not sparse) on stripeCustomerId. The schema
+// defaults this field to explicit null, which a sparse index would still index and
+// collide on; a partial index on { $type:'string' } indexes only real customer
+// ids — deduping the league-create webhook and indexing every webhook lookup.
+// migrate-league-stripe-customer-index.js builds the same index on existing DBs.
+leagueSchema.index(
+  { stripeCustomerId: 1 },
+  { unique: true, partialFilterExpression: { stripeCustomerId: { $type: 'string' } } }
+);
 
 const leagueTeamSchema = new mongoose.Schema(
   {

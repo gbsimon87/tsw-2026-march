@@ -26,6 +26,14 @@ function resolveTargetPlan(scope, doc) {
   if (doc?.stripePriceId) {
     const derived = planForPriceId(doc.stripePriceId);
     if (derived?.planId) return derived.planId;
+    // Audit M6: a Stripe-backed doc whose price id the loaded env doesn't know
+    // almost certainly means the wrong ENV_FILE — a silent fallback to the legacy
+    // map could downgrade a paying customer. Abort instead.
+    throw new Error(
+      `resolveTargetPlan: ${scope} ${doc?._id || '(no id)'} has stripePriceId ` +
+        `"${doc.stripePriceId}" which matches no configured STRIPE_PRICE_ID_* — ` +
+        `check ENV_FILE before migrating.`
+    );
   }
   return normalizePlanId(scope, doc?.plan);
 }

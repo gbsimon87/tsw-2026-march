@@ -6,12 +6,12 @@
 
 ## Summary
 
-| Change                                    | Collection         | Type                     | Phase | Reversible?                       |
-| ----------------------------------------- | ------------------ | ------------------------ | :---: | --------------------------------- |
-| Add `billingSource`                       | Team, League       | Additive field           |   4   | Yes (`$unset`)                    |
-| Unify `plan` enum values                  | Team, League, User | Enum tighten + data map  |   6   | Yes (inverse map)                 |
-| Drop `User.league*` (7 fields)            | User               | Field removal + `$unset` |   6   | From backup only (seed-only data) |
-| Unique sparse index on `stripeCustomerId` | League             | Index add (after dedup)  |   6   | Yes (drop index)                  |
+| Change                                     | Collection         | Type                     | Phase | Reversible?                       |
+| ------------------------------------------ | ------------------ | ------------------------ | :---: | --------------------------------- |
+| Add `billingSource`                        | Team, League       | Additive field           |   4   | Yes (`$unset`)                    |
+| Unify `plan` enum values                   | Team, League, User | Enum tighten + data map  |   6   | Yes (inverse map)                 |
+| Drop `User.league*` (7 fields)             | User               | Field removal + `$unset` |   6   | From backup only (seed-only data) |
+| Unique partial index on `stripeCustomerId` | League             | Index add (after dedup)  |   6   | Yes (drop index)                  |
 
 ## 1. `billingSource` (additive, Phase 4)
 
@@ -76,17 +76,24 @@ Remove from `auth.repository.js:13-23`:
   in the migration header; reversal is from backup only.
 - Update `seed.js` to stop writing them.
 
-## 4. `League.stripeCustomerId` unique sparse index (Phase 6)
+## 4. `League.stripeCustomerId` unique partial index (Phase 6)
 
 Closes the create-race (audit §1). Order:
 
 1. **Dedup pass** — a script (or the migration's first step) finds Leagues sharing a
-   `stripeCustomerId`; resolve manually if any exist (unlikely at current scale).
-2. Create `{ stripeCustomerId: 1 }` **unique, sparse** (sparse so the many `null`s
-   don't collide).
+   **string** `stripeCustomerId`; resolve manually if any exist (unlikely at current
+   scale).
+2. Create `{ stripeCustomerId: 1 }` **unique, partial** with
+   `partialFilterExpression: { stripeCustomerId: { $type: 'string' } }`.
+   > **Audit C3 correction:** a _sparse_ index only skips docs where the field is
+   > _missing_. The schema defaults `stripeCustomerId` to explicit `null`, so nearly
+   > every league stores a null and a sparse unique index aborts with `E11000` on the
+   > second null. A **partial** index on `{ $type: 'string' }` indexes only real
+   > customer ids. The dedup pass matches the same predicate so it doesn't falsely
+   > report "no duplicates" and then crash the build.
 3. Follow the **key-shape-match** convention from
-   `migrate-leaguestandings-season-index.js` — skip if an equivalent index already
-   exists; never match by name.
+   `migrate-leaguestandings-season-index.js` (also comparing `partialFilterExpression`)
+   — skip if an equivalent index already exists; never match by name.
 
 ## Fields intentionally unchanged
 
@@ -111,5 +118,5 @@ All idempotent, `--dry-run`, parity-checked, in `server/src/scripts/`:
 - No Team/League/User doc has a non-canonical `plan` value.
 - Every Stripe-backed doc's `plan` matches `planForPriceId(stripePriceId)`.
 - We-ball Saturday resolves active via `billingSource:'comp'`.
-- The `stripeCustomerId` unique index exists and no duplicates remain.
+- The `stripeCustomerId` unique **partial** index exists and no duplicates remain.
 - `User` docs no longer carry `league*` fields.

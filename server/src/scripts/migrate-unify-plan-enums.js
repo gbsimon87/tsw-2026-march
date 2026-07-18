@@ -82,13 +82,22 @@ async function migrateResource(Model, scope) {
             ? `, status ${doc.subscriptionStatus}→${nextStatus}`
             : '')
       );
+      // Audit C4: surface would-be validation failures in the dry run — otherwise a
+      // dataset that dry-runs clean can still abort the real run mid-collection.
+      doc.plan = nextPlan;
+      doc.billingSource = nextSource;
+      doc.subscriptionStatus = nextStatus;
+      await doc.validate({ validateModifiedOnly: true });
       continue;
     }
 
     doc.plan = nextPlan;
     doc.billingSource = nextSource;
     doc.subscriptionStatus = nextStatus;
-    await doc.save();
+    // Audit C4: validate only the paths this script modifies. A full-document
+    // save() validation would abort the whole migration on any unrelated
+    // out-of-enum legacy field (e.g. a pre-overhaul subscriptionStatus).
+    await doc.save({ validateModifiedOnly: true });
   }
 
   console.log(`${scope}: scanned ${scanned}, ${DRY_RUN ? 'would change' : 'changed'} ${changed}`);
@@ -103,35 +112,64 @@ async function migrateUsers() {
   for (let user = await cursor.next(); user != null; user = await cursor.next()) {
     scanned += 1;
     const before = user.plan;
-    const next = ROLLBACK ? rollbackPlan('team', user.plan) : mapUserPlan(user.plan);
+    // Audit H4: the user scope has its own inverse — the pre-tightening User enum
+    // was ['free','pro'], so 'team' (the team-scope inverse) was never valid here.
+    const next = ROLLBACK ? rollbackPlan('user', user.plan) : mapUserPlan(user.plan);
     if (next === before) continue;
 
     changed += 1;
     if (DRY_RUN) {
       console.log(`[dry-run] user ${user._id}: plan ${before}→${next}`);
+      user.plan = next;
+      await user.validate({ validateModifiedOnly: true });
       continue;
     }
     user.plan = next;
-    await user.save();
+    await user.save({ validateModifiedOnly: true });
   }
 
   console.log(`user: scanned ${scanned}, ${DRY_RUN ? 'would change' : 'changed'} ${changed}`);
   return { scanned, changed };
 }
 
+// Audit H4: rollback writes legacy values ('free'/'pro'/'team'); with the
+// tightened canonical-only enums loaded, every write would throw. The header says
+// "deploy the pre-tightening enum first" — enforce it instead of trusting it.
+function assertRollbackEnumsAreLoose() {
+  const checks = [
+    [Team, 'team', 'free'],
+    [League, 'league', 'free'],
+    [User, 'user', 'free'],
+  ];
+  for (const [Model, scope, legacy] of checks) {
+    const allowed = Model.schema.path('plan')?.enumValues || [];
+    if (!allowed.includes(legacy)) {
+      throw new Error(
+        `--rollback requires the pre-tightening ${scope} plan enum to be deployed ` +
+          `(loaded enum [${allowed.join(', ')}] does not allow '${legacy}'). ` +
+          `Revert the schema-tightening code first.`
+      );
+    }
+  }
+}
+
 async function main() {
   await connectDb();
   console.log(`Plan-enum ${ROLLBACK ? 'ROLLBACK' : 'unification'}${DRY_RUN ? ' (dry-run)' : ''}…`);
 
+  if (ROLLBACK) assertRollbackEnumsAreLoose();
+
   await migrateResource(Team, 'team');
   await migrateResource(League, 'league');
   await migrateUsers();
-
-  await disconnectDb();
 }
 
-main().catch((error) => {
-  console.error('Plan-enum migration failed');
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error('Plan-enum migration failed');
+    console.error(error);
+    process.exitCode = 1;
+  })
+  // Audit H5: always disconnect — an open connection keeps the event loop alive,
+  // so a failed run would hang a deploy pipeline instead of exiting 1.
+  .finally(() => disconnectDb().catch(() => {}));
