@@ -44,8 +44,6 @@ describe('billing module dependency contract', () => {
     for (const fn of [
       'isTeamActive',
       'isLeagueActive',
-      'getTeamEntitlements',
-      'getLeagueEntitlements',
       'handleWebhookEvent',
       'createTeamCheckoutSession',
       'createLeagueCheckoutSession',

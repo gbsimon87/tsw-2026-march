@@ -64,6 +64,18 @@ payloads) must be confirmed once in dev/test mode before launch.
       and test clocks, per the runbook. Depends on the four dev price IDs + their
       `{planId,interval}` metadata (Phase 3 items above) already being set.
 
+## Audit follow-up — duplicate-purchase race (H2), needs live Stripe validation
+
+The audit's H2 fix landed in part: team re-checkout now reuses the existing Stripe
+customer, and `hasTrialed` (H1) closes the trial loop. The remaining piece — fully
+closing the **concurrent two-tab create race** (two simultaneous league checkouts
+each minting a new customer → two billed leagues) — requires the customer-reuse
+refactor extended to the league path plus a webhook-side orphan-subscription cancel,
+and must be validated against **live Stripe test-clocks** before it can be trusted.
+Do this with the Phase 7 test-clock run (below) before launch. Until then the
+per-owner active-subscription guard + the C3 unique partial index bound the blast
+radius, but a true simultaneous double-submit is not yet fully prevented.
+
 ## Phase 8 — Launch (gated) — detail in [`17-launch-checklist.md`](./17-launch-checklist.md)
 
 - [ ] Create **live** Stripe products + prices; set the 6 secrets + 2 URLs in the Render

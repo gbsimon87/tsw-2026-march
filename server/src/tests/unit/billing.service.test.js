@@ -74,8 +74,6 @@ const { sendPaymentFailedEmail, sendTrialEndingEmail } = require('../../services
 const {
   isTeamActive,
   isLeagueActive,
-  getTeamEntitlements,
-  getLeagueEntitlements,
   getBillingSummary,
   createCheckoutSession,
   createTeamCheckoutSession,
@@ -193,61 +191,10 @@ describe('isLeagueActive', () => {
   });
 });
 
-// ─── getTeamEntitlements ──────────────────────────────────────────────────────
-
-describe('getTeamEntitlements', () => {
-  test('7.13 returns all true for active team', () => {
-    const entitlements = getTeamEntitlements(
-      buildTeam({ plan: 'team', subscriptionStatus: 'active' })
-    );
-    expect(entitlements.canTrackStats).toBe(true);
-    expect(entitlements.canViewReplay).toBe(true);
-    expect(entitlements.canViewShotMaps).toBe(true);
-    expect(entitlements.canViewHighlightClips).toBe(true);
-  });
-
-  test('7.14 returns all false for free team', () => {
-    const entitlements = getTeamEntitlements(buildTeam({ plan: 'free' }));
-    expect(entitlements.canTrackStats).toBe(false);
-    expect(entitlements.canViewReplay).toBe(false);
-    expect(entitlements.canViewShotMaps).toBe(false);
-    expect(entitlements.canViewHighlightClips).toBe(false);
-  });
-});
-
-// ─── getLeagueEntitlements ────────────────────────────────────────────────────
-
-describe('getLeagueEntitlements', () => {
-  test('7.15 returns all true for active league', () => {
-    const entitlements = getLeagueEntitlements(
-      buildLeague({ plan: 'league', subscriptionStatus: 'active' })
-    );
-    expect(entitlements.canManageLeague).toBe(true);
-    expect(entitlements.canTrackStats).toBe(true);
-    expect(entitlements.canViewReplay).toBe(true);
-    expect(entitlements.canViewShotMaps).toBe(true);
-    expect(entitlements.canViewHighlightClips).toBe(true);
-  });
-
-  test('7.16 returns all false for plan: free, status: inactive', () => {
-    const entitlements = getLeagueEntitlements(
-      buildLeague({ plan: 'free', subscriptionStatus: 'inactive' })
-    );
-    expect(entitlements.canManageLeague).toBe(false);
-    expect(entitlements.canTrackStats).toBe(false);
-    expect(entitlements.canViewReplay).toBe(false);
-    expect(entitlements.canViewShotMaps).toBe(false);
-    expect(entitlements.canViewHighlightClips).toBe(false);
-  });
-
-  test('We-ball Saturday (plan: pro, status: active) returns all true', () => {
-    const entitlements = getLeagueEntitlements(
-      buildLeague({ plan: 'pro', subscriptionStatus: 'active' })
-    );
-    expect(entitlements.canManageLeague).toBe(true);
-    expect(entitlements.canTrackStats).toBe(true);
-  });
-});
+// Audit M11: the legacy getTeam/LeagueEntitlements plan→boolean maps were deleted
+// (dead + contradicted T-12). Entitlement resolution is covered directly against
+// the resolver in entitlements.service.test.js; isTeamActive/isLeagueActive above
+// still guard the paid-active predicate those consumers use.
 
 // ─── getBillingSummary (backward-compat alias) ────────────────────────────────
 

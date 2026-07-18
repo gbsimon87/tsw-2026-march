@@ -822,8 +822,9 @@ function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
     id: participant.teamId || participant.leagueTeamId || participant.displayName,
     name: participant.displayName,
     logo: participant.logo,
-    plan: participant.billing?.plan || 'pro',
-    subscriptionStatus: participant.billing?.subscriptionStatus || 'active',
+    // Audit L4: no hard-coded 'pro'/'active' fallback — this doc feeds only
+    // roster/box-score, never entitlement resolution. A truthy default here is the
+    // always-premium footgun class T-13 removed.
     players: (rosterSnapshot || []).map((player) => ({
       _id: player._id || player.sourcePlayerId || player.leaguePlayerId,
       id: player._id || player.sourcePlayerId || player.leaguePlayerId,

@@ -99,26 +99,12 @@ function isLeagueActive(league) {
   return r.active && r.planId !== 'starter';
 }
 
-function getTeamEntitlements(team) {
-  const active = isTeamActive(team);
-  return {
-    canTrackStats: active,
-    canViewReplay: active,
-    canViewShotMaps: active,
-    canViewHighlightClips: active,
-  };
-}
-
-function getLeagueEntitlements(league) {
-  const active = isLeagueActive(league);
-  return {
-    canManageLeague: active,
-    canTrackStats: active,
-    canViewReplay: active,
-    canViewShotMaps: active,
-    canViewHighlightClips: active,
-  };
-}
+// Audit M11: the legacy getTeam/LeagueEntitlements maps (and the unrouted
+// getTeam/LeagueBillingForOwner reads that consumed them) were deleted — they
+// returned `canTrackStats: active`, contradicting T-12's free tracking, and omitted
+// canExportCsv/canViewFullHistory. All entitlement resolution now goes through the
+// central resolver (entitlements.service.js). Do not reintroduce plan→boolean maps
+// outside the resolver.
 
 // ─── Billing summaries ────────────────────────────────────────────────────────
 
@@ -167,26 +153,6 @@ function getBillingSummary(team) {
 async function syncOwnerPlan(ownerUserId) {
   const { plan } = await resolveForUser(ownerUserId);
   await updateUserPlan(ownerUserId, plan);
-}
-
-// ─── Team billing reads ───────────────────────────────────────────────────────
-
-async function getTeamBillingForOwner(userId, teamId) {
-  const team = await findTeamByIdAndOwner(teamId, userId);
-  if (!team) throw new ApiError(404, 'Team not found');
-  return {
-    billing: getTeamBillingSummary(team),
-    entitlements: getTeamEntitlements(team),
-  };
-}
-
-async function getLeagueBillingForOwner(userId, leagueId) {
-  const league = await findLeagueByIdAndOwner(leagueId, userId);
-  if (!league) throw new ApiError(404, 'League not found');
-  return {
-    billing: getLeagueBillingSummary(league),
-    entitlements: getLeagueEntitlements(league),
-  };
 }
 
 // ─── Price ID resolution ──────────────────────────────────────────────────────
@@ -787,15 +753,10 @@ module.exports = {
   // Entitlement checks
   isTeamActive,
   isLeagueActive,
-  getTeamEntitlements,
-  getLeagueEntitlements,
   // Billing summaries
   getBillingSummary,
   getTeamBillingSummary,
   getLeagueBillingSummary,
-  // Billing reads
-  getTeamBillingForOwner,
-  getLeagueBillingForOwner,
   // Checkout
   createCheckoutSession,
   createTeamCheckoutSession,

@@ -2451,8 +2451,10 @@ async function getLeagueTeamRosterSnapshotForGame(game) {
         position: player.position ?? null,
         isActive: true,
       })),
-      plan: 'pro',
-      subscriptionStatus: 'active',
+      // Audit H8: no hard-coded plan/subscriptionStatus. Callers resolve
+      // entitlements from the real league doc (resolveForLeague); this synthetic
+      // object is only used for roster/box-score. An always-active legacy object
+      // here would re-open the bypass T-13 removed if a future caller trusted it.
     },
   };
 }
