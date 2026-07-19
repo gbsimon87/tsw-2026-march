@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { BillingStatusPill } from '../../billing/components/BillingStatusPill';
 import { teamsApi } from '../api/teamsApi';
 
 export function TeamsPage() {
@@ -173,6 +174,15 @@ export function TeamsPage() {
                             style={{ backgroundColor: color }}
                           />
                         ))}
+                      </div>
+                    ) : null}
+                    {team.id ? (
+                      <div className="mt-2">
+                        <BillingStatusPill
+                          billing={team.billing}
+                          scope="team"
+                          resourceId={team.id}
+                        />
                       </div>
                     ) : null}
                   </div>

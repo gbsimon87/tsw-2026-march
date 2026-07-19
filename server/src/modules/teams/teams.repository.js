@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
@@ -44,7 +44,13 @@ const teamSchema = new mongoose.Schema(
     colors: { type: [String], default: [] },
     homeVenue: { type: homeVenueSchema, default: null },
     players: { type: [playerSchema], default: [] },
-    plan: { type: String, enum: ['free', 'pro', 'team'], default: 'free' },
+    // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro'/'team' were rewritten by
+    // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
+    // legacy values at read time; this enum only constrains writes.
+    plan: { type: String, enum: ['starter', 'team_pro'], default: 'starter' },
+    // How this team's plan is granted. 'stripe' = billed via Stripe (webhooks own it);
+    // 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
+    billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
     subscriptionStatus: {
       type: String,
       enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
@@ -56,6 +62,9 @@ const teamSchema = new mongoose.Schema(
     billingInterval: { type: String, enum: ['monthly', 'season', null], default: null },
     currentPeriodEnd: { type: Date, default: null },
     trialEnd: { type: Date, default: null },
+    // Audit H1: set once this team has ever been granted a Stripe trial, so
+    // re-checkout after cancelling can't mint a fresh 14-day trial each time.
+    hasTrialed: { type: Boolean, default: false },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     billingEmail: { type: String, default: null },
     lastWebhookEventId: { type: String, default: null },
@@ -128,6 +137,12 @@ function claimTeamWebhookEvent(teamId, eventId) {
   return claimWebhookEvent(Team, { _id: teamId }, eventId);
 }
 
+// Audit H3: release a claim if the handler's apply step throws, so a Stripe retry
+// can re-apply the effect (the claim alone marks the event processed).
+function releaseTeamWebhookEvent(teamId, eventId) {
+  return releaseWebhookEvent(Team, { _id: teamId }, eventId);
+}
+
 // OPT-013: materialised team season summary read/write.
 function findTeamSeasonSummary(teamId) {
   return TeamSeasonSummary.findOne({ teamId });
@@ -154,6 +169,7 @@ module.exports = {
   listTeams,
   saveTeam,
   claimTeamWebhookEvent,
+  releaseTeamWebhookEvent,
   TeamSeasonSummary,
   findTeamSeasonSummary,
   upsertTeamSeasonSummary,

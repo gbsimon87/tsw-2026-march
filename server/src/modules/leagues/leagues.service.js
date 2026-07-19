@@ -429,8 +429,8 @@ async function getActiveSeasonForLeague(leagueId) {
 
 async function createSeasonForLeague(userId, leagueId, payload) {
   const league = await assertLeagueOwner(userId, leagueId);
-  const { getLeagueEntitlements } = require('../billing/billing.service');
-  if (!getLeagueEntitlements(league).canManageLeague) {
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
     throw new ApiError(402, 'An active League subscription is required to start a new season');
   }
   if (league.currentSeasonId) {
@@ -538,7 +538,7 @@ async function createLeagueForUser(userId, payload) {
   // League documents are created by the Stripe webhook after checkout.
   // This function configures the stub league (name, slug, settings) that the
   // webhook created. It finds the most recent unconfigured league for this owner.
-  const { isLeagueActive } = require('../billing/billing.service');
+  const { resolveForLeague } = require('../billing/entitlements.service');
   const { League } = require('./leagues.repository');
 
   const stub = await League.findOne({
@@ -553,7 +553,7 @@ async function createLeagueForUser(userId, payload) {
     );
   }
 
-  if (!isLeagueActive(stub)) {
+  if (!resolveForLeague(stub).entitlements.canManageLeague) {
     throw new ApiError(402, 'League subscription is not active. Complete checkout first.');
   }
 
@@ -804,9 +804,9 @@ async function archiveLeagueForUser(userId, leagueId) {
 }
 
 async function createLeagueTeamForLeague(userId, leagueId, payload) {
-  const { isLeagueActive } = require('../billing/billing.service');
+  const { resolveForLeague } = require('../billing/entitlements.service');
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
-  if (!isLeagueActive(league)) {
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
     throw new ApiError(402, 'An active League subscription is required to add teams');
   }
   ensureLeagueEditable(league);
@@ -1255,7 +1255,12 @@ async function getPublicLeaguePlayerBySlug(
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
-  const highlights = buildLeaguePlayerHighlights(games, team._id, player._id);
+  // Audit H6: highlight clips are gated (Team Pro, bundled into League) — a
+  // free/lapsed league exposes no clips on its public player profiles.
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  const highlights = resolveForLeague(league).entitlements.canViewHighlightClips
+    ? buildLeaguePlayerHighlights(games, team._id, player._id)
+    : [];
 
   const highlightEventIds = highlights.map((h) => h.eventId).filter(Boolean);
   const sharedEventIds = await findSharedEventIds(highlightEventIds);
@@ -2451,8 +2456,10 @@ async function getLeagueTeamRosterSnapshotForGame(game) {
         position: player.position ?? null,
         isActive: true,
       })),
-      plan: 'pro',
-      subscriptionStatus: 'active',
+      // Audit H8: no hard-coded plan/subscriptionStatus. Callers resolve
+      // entitlements from the real league doc (resolveForLeague); this synthetic
+      // object is only used for roster/box-score. An always-active legacy object
+      // here would re-open the bypass T-13 removed if a future caller trusted it.
     },
   };
 }

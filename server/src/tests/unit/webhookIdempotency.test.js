@@ -1,5 +1,6 @@
 const {
   claimWebhookEvent,
+  releaseWebhookEvent,
   MAX_PROCESSED_WEBHOOK_EVENT_IDS,
 } = require('../../utils/webhookIdempotency');
 
@@ -47,5 +48,26 @@ describe('claimWebhookEvent (OPT-020)', () => {
     expect(result).toBe(doc);
     expect(Model.findOne).toHaveBeenCalledWith({ _id: 'team-1' });
     expect(Model.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('releaseWebhookEvent (audit H3 — un-claim on mid-apply failure)', () => {
+  test('pulls the event id so a Stripe retry can re-claim and re-apply', async () => {
+    const Model = { updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }) };
+
+    await releaseWebhookEvent(Model, { _id: 'team-1' }, 'evt_1');
+
+    expect(Model.updateOne).toHaveBeenCalledWith(
+      { _id: 'team-1' },
+      { $pull: { processedWebhookEventIds: 'evt_1' } }
+    );
+  });
+
+  test('is a no-op when no event id is supplied', async () => {
+    const Model = { updateOne: jest.fn() };
+
+    await releaseWebhookEvent(Model, { _id: 'team-1' }, undefined);
+
+    expect(Model.updateOne).not.toHaveBeenCalled();
   });
 });

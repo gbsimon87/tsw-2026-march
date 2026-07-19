@@ -20,11 +20,8 @@ const {
 const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 const { logger } = require('../../config/logger');
-const {
-  getBillingSummary,
-  getTeamEntitlements,
-  assertTeamCreationAllowed,
-} = require('../billing/billing.service');
+const { getBillingSummary, assertTeamCreationAllowed } = require('../billing/billing.service');
+const { resolveForTeam } = require('../billing/entitlements.service');
 const {
   uploadImageBuffer,
   destroyImage,
@@ -67,7 +64,7 @@ function sanitizeTeam(team) {
     colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
     homeVenue: sanitizeVenue(team.homeVenue),
     billing: getBillingSummary(team),
-    entitlements: getTeamEntitlements(team),
+    entitlements: resolveForTeam(team).entitlements,
     players: team.players.map((player) => ({
       id: String(player._id),
       displayName: player.displayName,
@@ -602,7 +599,7 @@ async function getPublicTeam(teamId) {
       logo: sanitizeLogo(team.logo),
       colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
       homeVenue: sanitizeVenue(team.homeVenue),
-      entitlements: getTeamEntitlements(team),
+      entitlements: resolveForTeam(team).entitlements,
       players,
     },
     // OPT-013: materialised read (indexed find); falls back to computing from
@@ -631,7 +628,12 @@ async function getPublicPlayer(teamId, playerId) {
   const teams = await listTeams();
   const teamLookup = buildTeamLookup(teams);
   const gameRows = buildPublicPlayerGameRows(games, team, player, teamLookup);
-  const highlights = buildPlayerHighlights(games, String(player._id));
+  const entitlements = resolveForTeam(team).entitlements;
+  // Audit H6: highlight clips are a Team Pro feature — gate them on the resolver.
+  // A free/lapsed team exposes no clips on its public profile.
+  const highlights = entitlements.canViewHighlightClips
+    ? buildPlayerHighlights(games, String(player._id))
+    : [];
 
   return {
     team: {
@@ -640,7 +642,7 @@ async function getPublicPlayer(teamId, playerId) {
       logo: sanitizeLogo(team.logo),
       colors: Array.isArray(team.colors) ? team.colors.map(normalizeHexColor).filter(Boolean) : [],
       homeVenue: sanitizeVenue(team.homeVenue),
-      entitlements: getTeamEntitlements(team),
+      entitlements,
     },
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),
@@ -779,7 +781,7 @@ async function getEntitlementsForUser(userId, teamId) {
 
   return {
     billing: getBillingSummary(team),
-    entitlements: getTeamEntitlements(team),
+    entitlements: resolveForTeam(team).entitlements,
   };
 }
 

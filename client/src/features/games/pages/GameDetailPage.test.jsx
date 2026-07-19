@@ -613,7 +613,7 @@ describe('GameDetailPage', () => {
 
     expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
-    expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to the Team Pro plan to unlock this/i)).toBeInTheDocument();
     expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
   });
 
@@ -841,7 +841,7 @@ describe('GameDetailPage', () => {
 
     expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
-    expect(screen.getByText(/Replay is only available for Pro users/i)).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to the Team Pro plan to unlock this/i)).toBeInTheDocument();
     expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
   });
 

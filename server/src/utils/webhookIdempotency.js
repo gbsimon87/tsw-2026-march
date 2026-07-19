@@ -38,7 +38,19 @@ async function claimWebhookEvent(Model, filter, eventId) {
   );
 }
 
+// Audit H3: un-claim an event so a later Stripe retry can re-claim and re-apply.
+// The claim marks the event processed *before* the handler mutates state; if that
+// mutation throws (transient DB error, validation), the route 500s and Stripe
+// retries — but the retry's claim would return null (id already recorded) and the
+// effect would be lost forever. Handlers call this in a catch to release the claim
+// before rethrowing, restoring at-least-once delivery for the apply step.
+async function releaseWebhookEvent(Model, filter, eventId) {
+  if (!eventId) return;
+  await Model.updateOne(filter, { $pull: { processedWebhookEventIds: eventId } });
+}
+
 module.exports = {
   claimWebhookEvent,
+  releaseWebhookEvent,
   MAX_PROCESSED_WEBHOOK_EVENT_IDS,
 };

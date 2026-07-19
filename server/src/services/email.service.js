@@ -7,6 +7,18 @@ function getClient() {
   return new Resend(env.RESEND_API_KEY);
 }
 
+// Audit M14: user-controlled values (names, team/league labels) are interpolated
+// into HTML email bodies — escape them so a crafted name can't inject markup or a
+// phishing link into a legitimately-delivered email.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLabel }) {
   const client = getClient();
 
@@ -71,7 +83,7 @@ function sendVerificationEmail({ to, name, verifyUrl }) {
     to,
     subject: 'Verify your email',
     text: `Hi ${safeName}, verify your email by visiting: ${verifyUrl}`,
-    html: `<p>Hi ${safeName},</p><p>Verify your email by clicking <a href="${verifyUrl}">this link</a>.</p>`,
+    html: `<p>Hi ${escapeHtml(safeName)},</p><p>Verify your email by clicking <a href="${verifyUrl}">this link</a>.</p>`,
     fallbackLabel: 'email_verification',
   });
 }
@@ -83,8 +95,47 @@ function sendPasswordResetEmail({ to, name, resetUrl }) {
     to,
     subject: 'Reset your password',
     text: `Hi ${safeName}, reset your password by visiting: ${resetUrl}`,
-    html: `<p>Hi ${safeName},</p><p>Reset your password by clicking <a href="${resetUrl}">this link</a>.</p>`,
+    html: `<p>Hi ${escapeHtml(safeName)},</p><p>Reset your password by clicking <a href="${resetUrl}">this link</a>.</p>`,
     fallbackLabel: 'password_reset',
+  });
+}
+
+// Billing lifecycle emails (T-18), dispatched fire-and-forget from webhook
+// handlers so a slow/failing Resend call never blocks webhook processing.
+function sendPaymentFailedEmail({ to, name, resourceLabel, manageUrl }) {
+  if (!to) return;
+  const safeName = name || 'there';
+  const what = resourceLabel || 'your subscription';
+  const cta = manageUrl ? ` Update your payment method: ${manageUrl}` : '';
+  sendTemplateEmailAsync({
+    to,
+    subject: 'Your payment failed',
+    text: `Hi ${safeName}, the latest payment for ${what} failed. Please update your payment method to keep your subscription active.${cta}`,
+    html: `<p>Hi ${escapeHtml(safeName)},</p><p>The latest payment for <strong>${escapeHtml(
+      what
+    )}</strong> failed. Please update your payment method to keep your subscription active.</p>${
+      manageUrl ? `<p><a href="${encodeURI(manageUrl)}">Update payment method</a></p>` : ''
+    }`,
+    fallbackLabel: 'billing_payment_failed',
+  });
+}
+
+function sendTrialEndingEmail({ to, name, resourceLabel, trialEndsAt, manageUrl }) {
+  if (!to) return;
+  const safeName = name || 'there';
+  const what = resourceLabel || 'your subscription';
+  const when = trialEndsAt ? ` on ${new Date(trialEndsAt).toDateString()}` : ' soon';
+  const cta = manageUrl ? ` Manage your subscription: ${manageUrl}` : '';
+  sendTemplateEmailAsync({
+    to,
+    subject: 'Your free trial is ending soon',
+    text: `Hi ${safeName}, your free trial for ${what} ends${when}. Add a payment method to keep your premium features.${cta}`,
+    html: `<p>Hi ${escapeHtml(safeName)},</p><p>Your free trial for <strong>${escapeHtml(
+      what
+    )}</strong> ends${when}. Add a payment method to keep your premium features.</p>${
+      manageUrl ? `<p><a href="${encodeURI(manageUrl)}">Manage subscription</a></p>` : ''
+    }`,
+    fallbackLabel: 'billing_trial_ending',
   });
 }
 
@@ -93,4 +144,6 @@ module.exports = {
   sendTemplateEmailAsync,
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendPaymentFailedEmail,
+  sendTrialEndingEmail,
 };

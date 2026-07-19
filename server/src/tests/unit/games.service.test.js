@@ -33,9 +33,11 @@ jest.mock('../../modules/billing/billing.service', () => ({
     cancelAtPeriodEnd: false,
     currentPeriodEnd: null,
   })),
-  getTeamEntitlements: jest.fn(() => ({
-    canViewReplay: false,
-    canViewShotMaps: false,
+  getLeagueBillingSummary: jest.fn(() => ({
+    plan: 'free',
+    subscriptionStatus: 'inactive',
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null,
   })),
   isTeamActive: jest.fn(() => true),
 }));
@@ -79,7 +81,8 @@ jest.mock('mongoose', () => ({
   },
 }));
 
-const { findTeamByIdAndOwner } = require('../../modules/teams/teams.repository');
+const { findTeamByIdAndOwner, findTeamById } = require('../../modules/teams/teams.repository');
+const billingService = require('../../modules/billing/billing.service');
 const {
   createGame,
   findGameById,
@@ -93,6 +96,7 @@ const { buildPersistedGameSummary } = require('../../modules/games/gameSummaryAi
 const {
   getLeagueContextForGame,
   getLeagueRosterSnapshotForTeam,
+  getLeagueTeamRosterSnapshotForGame,
   canEditCompletedLeagueGame,
 } = require('../../modules/leagues/leagues.service');
 const {
@@ -310,6 +314,62 @@ describe('games service box score', () => {
 describe('games service create game', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  // T-12 (free-tracking flip, D2): tracking is free. Creating and tracking a game
+  // no longer requires an active Team subscription. Revenue-behavior change.
+  test('T-12: a free/inactive team can create a standalone game (no 402)', async () => {
+    billingService.isTeamActive.mockReturnValue(false);
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Game',
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      scheduledAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+      events: [],
+    });
+
+    const result = await createGameForUser('user-1', { teamId: 'team-1', title: 'Game' });
+
+    expect(result).toBeDefined();
+    expect(createGame).toHaveBeenCalled();
+  });
+
+  test('T-12: a free/inactive team can append an event to a standalone game (no 402)', async () => {
+    billingService.isTeamActive.mockReturnValue(false);
+    const teamPlayers = buildPlayers([{ _id: 'p1', displayName: 'Alex', isActive: true }]);
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      teamId: 'team-1',
+      rosterSnapshot: [],
+      events: buildEvents([]),
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+    findTeamById.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+    saveGame.mockResolvedValue(game);
+
+    const result = await appendEventForUser('user-1', 'game-1', {
+      playerId: 'p1',
+      statType: STAT_TYPES.FG2_MADE,
+    });
+
+    expect(result).toHaveProperty('game');
   });
 
   test('persists a trimmed YouTube video URL', async () => {
@@ -880,6 +940,183 @@ describe('games service frozen box score (OPT-012)', () => {
 
     expect(result.boxScore).toBe(frozenBoxScore);
     expect(result.gameSummary).toBe(frozenSummary);
+  });
+
+  test('T-13: a one-sided league game reflects the league live entitlements (active → premium)', async () => {
+    getLeagueTeamRosterSnapshotForGame.mockResolvedValue({
+      league: {
+        _id: 'league-1',
+        name: 'City League',
+        plan: 'league',
+        subscriptionStatus: 'active',
+      },
+      trackedTeam: { _id: 'lt-1', name: 'Hawks', slug: 'hawks', logo: null },
+      team: { players: [] },
+    });
+
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId: 'league-1',
+      trackedLeagueTeamId: 'lt-1',
+      status: 'in_progress',
+      rosterSnapshot: [],
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(true);
+    expect(result.team.entitlements.canViewShotMaps).toBe(true);
+  });
+
+  test('T-13: a lapsed/free league game loses premium views (downgrade safety)', async () => {
+    getLeagueTeamRosterSnapshotForGame.mockResolvedValue({
+      league: {
+        _id: 'league-1',
+        name: 'City League',
+        plan: 'free',
+        subscriptionStatus: 'inactive',
+      },
+      trackedTeam: { _id: 'lt-1', name: 'Hawks', slug: 'hawks', logo: null },
+      team: { players: [] },
+    });
+
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId: 'league-1',
+      trackedLeagueTeamId: 'lt-1',
+      status: 'in_progress',
+      rosterSnapshot: [],
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(false);
+    expect(result.team.entitlements.canViewShotMaps).toBe(false);
+  });
+
+  test('H7: a one-sided standalone game uses its frozen snapshot, not live resolve', async () => {
+    // Team has since lapsed to starter, but the game was recorded while Pro.
+    findTeamByIdAndOwner.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [],
+      plan: 'starter',
+      subscriptionStatus: 'inactive',
+    });
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      teamId: 'team-1',
+      status: 'completed',
+      events: [],
+      entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(true);
+    expect(result.team.entitlements.canViewShotMaps).toBe(true);
+  });
+
+  test('H7: a legacy one-sided game with no snapshot falls back to live resolve', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      players: [],
+      plan: 'starter',
+      subscriptionStatus: 'inactive',
+    });
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      teamId: 'team-1',
+      status: 'completed',
+      events: [],
+      // no entitlementsSnapshot (pre-H7 game)
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    };
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.team.entitlements.canViewReplay).toBe(false);
+  });
+
+  // A qualifying replay clip: a made shot by a rostered player with a video timestamp.
+  const HIGHLIGHT_EVENT = {
+    _id: 'ev-1',
+    playerId: 'home-snap-1',
+    teamSide: 'home',
+    statType: STAT_TYPES.FG2_MADE,
+    videoTimestamp: 12,
+  };
+
+  test('T-14: omits replay highlights and shot snapshot when not entitled (frozen snapshot)', async () => {
+    buildGameRecap.mockReturnValue({
+      statusLabel: 'Final',
+      shotSnapshot: { made: 1, missed: 0, events: [] },
+    });
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      videoUrl: 'https://www.youtube.com/watch?v=abc123',
+      events: [HIGHLIGHT_EVENT],
+      homeParticipant: {
+        side: 'home',
+        participantType: 'league_team',
+        teamId: null,
+        leagueTeamId: 'home-team',
+        displayName: 'Home Squad',
+        logo: null,
+        colors: [],
+        billingSnapshot: { plan: 'free', subscriptionStatus: 'inactive' },
+        entitlementsSnapshot: { canViewReplay: false, canViewShotMaps: false },
+      },
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.highlights).toEqual([]);
+    expect(result.recap.shotSnapshot).toBeNull();
+  });
+
+  test('T-14: includes replay highlights and shot snapshot when entitled', async () => {
+    buildGameRecap.mockReturnValue({
+      statusLabel: 'Final',
+      shotSnapshot: { made: 1, missed: 0, events: [] },
+    });
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      videoUrl: 'https://www.youtube.com/watch?v=abc123',
+      events: [HIGHLIGHT_EVENT],
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+    findGameById.mockResolvedValue(game);
+
+    const result = await getGameForUser('user-1', 'game-1');
+    // Entitled (snapshot canViewReplay/canViewShotMaps:true) → both present.
+    expect(result.highlights.length).toBeGreaterThan(0);
+    expect(result.recap.shotSnapshot).toEqual(expect.any(Object));
   });
 
   test('getGameForUser falls back to live compute when no frozen data exists', async () => {

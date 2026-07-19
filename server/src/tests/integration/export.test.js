@@ -127,7 +127,7 @@ describe('export routes', () => {
   describe('GET /export/leagues/:leagueId/season/:seasonId', () => {
     beforeEach(() => {
       leaguesService.assertLeagueManagerOrOwner.mockResolvedValue({
-        league: { name: 'City League' },
+        league: { name: 'City League', plan: 'league', subscriptionStatus: 'active' },
         role: 'owner',
       });
       leaguesService.getLeagueStandings.mockResolvedValue([
@@ -240,6 +240,19 @@ describe('export routes', () => {
 
       expect(res.statusCode).toBe(400);
     });
+
+    test('402 when the league lacks canExportCsv (free/inactive) — T-15', async () => {
+      leaguesService.assertLeagueManagerOrOwner.mockResolvedValue({
+        league: { name: 'Free League', plan: 'free', subscriptionStatus: 'inactive' },
+        role: 'owner',
+      });
+
+      const res = await request(createApp())
+        .get(`/api/v1/export/leagues/${LEAGUE_ID}/season/${SEASON_ID}`)
+        .set('Authorization', bearer());
+
+      expect(res.statusCode).toBe(402);
+    });
   });
 
   describe('GET /export/leagues/:leagueId/teams/:leagueTeamId/season/:seasonId', () => {
@@ -280,7 +293,7 @@ describe('export routes', () => {
 
     test('team manager gets 200 with team sections', async () => {
       leaguesService.assertTeamManagerOrOwner.mockResolvedValue({
-        league: { name: 'City League' },
+        league: { name: 'City League', plan: 'league', subscriptionStatus: 'active' },
         role: 'manager',
       });
 
@@ -303,6 +316,19 @@ describe('export routes', () => {
         .set('Authorization', bearer());
 
       expect(res.statusCode).toBe(403);
+    });
+
+    test('402 when the league lacks canExportCsv (free/inactive) — T-15', async () => {
+      leaguesService.assertTeamManagerOrOwner.mockResolvedValue({
+        league: { name: 'Free League', plan: 'free', subscriptionStatus: 'inactive' },
+        role: 'manager',
+      });
+
+      const res = await request(createApp())
+        .get(`/api/v1/export/leagues/${LEAGUE_ID}/teams/${TEAM_ID}/season/${SEASON_ID}`)
+        .set('Authorization', bearer());
+
+      expect(res.statusCode).toBe(402);
     });
   });
 });

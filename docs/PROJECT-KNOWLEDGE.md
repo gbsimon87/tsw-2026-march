@@ -7,7 +7,9 @@
 > Companion docs: [`app-overview.md`](./app-overview.md) (fast orientation +
 > file-path map), [`api.md`](./api.md) (endpoint reference),
 > [`permissions.md`](./permissions.md) (authorization matrix),
-> [`billing.md`](./billing.md), [`security.md`](./security.md),
+> [`pricing-overhaul/`](./pricing-overhaul/) (planned pricing/billing redesign —
+> source of truth for the **future** commercial model),
+> [`security.md`](./security.md),
 > [`posthog-implementation.md`](./posthog-implementation.md),
 > [`demo-data-generation/`](./demo-data-generation/) (demo account seed
 > plan, decisions, live tracker),
@@ -337,11 +339,18 @@ existing `leagues.service.js` helper rather than writing the check fresh.
 Entry: [`billing.service.js`](../server/src/modules/billing/billing.service.js).
 Billing is **resource-scoped** (a Team or a League), not just user-scoped.
 
+> ⚠️ **A pricing/billing overhaul is planned** — this section describes the code as it
+> exists **today** (unchanged). The future model (3 plans, config-driven catalog +
+> entitlement resolver, free tracking, target prices Team Pro $9/mo·$79/yr, League
+> $29/mo·$199/season) is fully specified in
+> [`pricing-overhaul/`](./pricing-overhaul/), which is the source of truth for the
+> direction. Update this section when that work ships.
+
 - **Two products, two intervals** — Team and League, each `monthly`/`season`,
   resolved to env price IDs (`STRIPE_PRICE_ID_TEAM_MONTHLY|SEASON`,
-  `STRIPE_PRICE_ID_LEAGUE_MONTHLY|SEASON`). Current display pricing:
-  **Team $12/mo · $89/season**, **League $49/mo · $299/season** (see
-  `PricingPage.jsx`). A legacy `pro` plan value is still tolerated.
+  `STRIPE_PRICE_ID_LEAGUE_MONTHLY|SEASON`). Current display pricing (in
+  `PricingPage.jsx`): **Team $12/mo · $89/season**, **League $49/mo · $299/season**.
+  A legacy `pro` plan value is still tolerated.
 - **API version pinned**: `new Stripe(key, { apiVersion: '2024-06-20' })`.
 - **Flow**: client posts to `/billing/team-checkout` | `/billing/league-checkout`
   | `/billing/customer-portal`, gets a hosted-Checkout/Portal URL, validates it
@@ -365,8 +374,10 @@ Billing is **resource-scoped** (a Team or a League), not just user-scoped.
   every webhook and sets `User.plan` to `pro` if **any** team is active Pro.
 
 Stripe is the **source of truth** for activation/cancellation — the client never
-promotes to Pro directly. See [`billing.md`](./billing.md) and
-[`stripe-development-setup.md`](./stripe-development-setup.md).
+promotes to Pro directly. (The former `billing.md` and `stripe-development-setup.md`
+described the pre-overhaul model and were removed 2026-07-16; see
+[`pricing-overhaul/`](./pricing-overhaul/) for the current-state audit and the target
+design.)
 
 ---
 
@@ -859,7 +870,8 @@ tracker: [`data-export/`](./data-export/).
 | API surface                             | [`api.md`](./api.md)                                                                                                                         |
 | Persistence schemas                     | `server/src/modules/*/*.repository.js`                                                                                                       |
 | Authorization rules                     | [`permissions.md`](./permissions.md)                                                                                                         |
-| Billing                                 | [`billing.md`](./billing.md)                                                                                                                 |
+| Billing (today's code)                  | §6 above                                                                                                                                     |
+| Billing (planned overhaul)              | [`pricing-overhaul/`](./pricing-overhaul/)                                                                                                   |
 | Deploy & env                            | [`deployment-render.md`](./deployment-render.md), [`render-env-matrix.md`](./render-env-matrix.md)                                           |
 | Performance/optimisation state          | [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)                                           |
 | Bug fix / arch review history (closed)  | §11 above ("Closed initiative")                                                                                                              |

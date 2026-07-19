@@ -278,7 +278,8 @@ function buildFallbackPlayerName(index) {
 function createSeedUsers() {
   return Array.from({ length: seedConfig.userCount }, (_, index) => {
     const number = index + 1;
-    const plan = index % 2 === 0 ? 'pro' : 'free';
+    // Canonical plan ids (Phase 6): 'team_pro' / 'starter'.
+    const plan = index % 2 === 0 ? 'team_pro' : 'starter';
     const identity = seedIdentityBlueprints[index];
 
     return {
@@ -291,13 +292,13 @@ function createSeedUsers() {
 }
 
 function buildSeedBillingProfile(seedUser, index) {
-  if (seedUser.plan === 'pro') {
+  if (seedUser.plan === 'team_pro') {
     return {
-      plan: 'pro',
+      plan: 'team_pro',
       subscriptionStatus: 'active',
       stripeCustomerId: `cus_seed_${index + 1}`,
       stripeSubscriptionId: `sub_seed_${index + 1}`,
-      stripePriceId: process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_team_pro_monthly',
+      stripePriceId: process.env.STRIPE_PRICE_ID_TEAM_MONTHLY || 'price_seed_team_pro_monthly',
       currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       cancelAtPeriodEnd: false,
       billingEmail: seedUser.email,
@@ -305,7 +306,7 @@ function buildSeedBillingProfile(seedUser, index) {
   }
 
   return {
-    plan: 'free',
+    plan: 'starter',
     subscriptionStatus: 'inactive',
     stripeCustomerId: null,
     stripeSubscriptionId: null,
@@ -663,7 +664,7 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
         displayName: home.team.name,
         logo: null,
         colors: home.team.colors || ['#0f172a', '#38bdf8'],
-        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+        billingSnapshot: { plan: 'league', subscriptionStatus: 'active' },
         entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
       },
       awayParticipant: {
@@ -674,7 +675,7 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
         displayName: away.team.name,
         logo: null,
         colors: away.team.colors || ['#0f172a', '#38bdf8'],
-        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
+        billingSnapshot: { plan: 'league', subscriptionStatus: 'active' },
         entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
       },
       title: `${away.team.name} at ${home.team.name}`,
@@ -715,22 +716,8 @@ async function upsertSeedUsers() {
         emailVerifiedAt: new Date(),
         roles: ['user'],
         plan: seedUser.plan,
-        leaguePlan: seedUser.email === seededLeagueBlueprint.ownerEmail ? 'pro' : 'free',
-        leagueSubscriptionStatus:
-          seedUser.email === seededLeagueBlueprint.ownerEmail ? 'active' : 'inactive',
-        leagueCurrentPeriodEnd:
-          seedUser.email === seededLeagueBlueprint.ownerEmail
-            ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-            : null,
-        leagueCancelAtPeriodEnd: false,
-        leagueStripeCustomerId:
-          seedUser.email === seededLeagueBlueprint.ownerEmail ? 'cus_seed_league_user1' : null,
-        leagueStripeSubscriptionId:
-          seedUser.email === seededLeagueBlueprint.ownerEmail ? 'sub_seed_league_user1' : null,
-        leagueStripePriceId:
-          seedUser.email === seededLeagueBlueprint.ownerEmail
-            ? process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_league_pro_monthly'
-            : null,
+        // User.league* fields removed (Phase 6 / T-25): league billing lives on the
+        // League doc; user-level league plan is resolver-derived, never stored.
       });
     } else {
       user.name = seedUser.name;
@@ -740,22 +727,6 @@ async function upsertSeedUsers() {
       user.emailVerifiedAt = user.emailVerifiedAt || new Date();
       user.roles = ['user'];
       user.plan = seedUser.plan;
-      user.leaguePlan = seedUser.email === seededLeagueBlueprint.ownerEmail ? 'pro' : 'free';
-      user.leagueSubscriptionStatus =
-        seedUser.email === seededLeagueBlueprint.ownerEmail ? 'active' : 'inactive';
-      user.leagueCurrentPeriodEnd =
-        seedUser.email === seededLeagueBlueprint.ownerEmail
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          : null;
-      user.leagueCancelAtPeriodEnd = false;
-      user.leagueStripeCustomerId =
-        seedUser.email === seededLeagueBlueprint.ownerEmail ? 'cus_seed_league_user1' : null;
-      user.leagueStripeSubscriptionId =
-        seedUser.email === seededLeagueBlueprint.ownerEmail ? 'sub_seed_league_user1' : null;
-      user.leagueStripePriceId =
-        seedUser.email === seededLeagueBlueprint.ownerEmail
-          ? process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_league_pro_monthly'
-          : null;
       await user.save();
     }
 
@@ -795,11 +766,11 @@ async function seedLeagueForUser(userEntry) {
     seasonLabel: seededLeagueBlueprint.seasonLabel,
     status: 'active',
     isPublic: true,
-    plan: 'pro',
+    plan: 'league',
     subscriptionStatus: 'active',
     stripeCustomerId: 'cus_seed_league_1',
     stripeSubscriptionId: 'sub_seed_league_1',
-    stripePriceId: process.env.STRIPE_PRICE_ID_PRO_MONTHLY || 'price_seed_league_pro_monthly',
+    stripePriceId: process.env.STRIPE_PRICE_ID_LEAGUE_MONTHLY || 'price_seed_league_monthly',
     currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     cancelAtPeriodEnd: false,
   });
@@ -1021,8 +992,10 @@ async function main() {
     console.log(
       `Seeded League Owner: ${seededLeagueBlueprint.ownerEmail} (league premium, ${seedConfig.leaguePlayersPerTeam} players per league team)`
     );
-    console.log(`Free Teams: ${seededUsers.filter((entry) => entry.plan === 'free').length}`);
-    console.log(`Pro Teams: ${seededUsers.filter((entry) => entry.plan === 'pro').length}`);
+    console.log(`Starter Teams: ${seededUsers.filter((entry) => entry.plan === 'starter').length}`);
+    console.log(
+      `Team Pro Teams: ${seededUsers.filter((entry) => entry.plan === 'team_pro').length}`
+    );
     console.log(`Players: ${playerCount}`);
     console.log(`Games: ${gameCount}`);
     console.log(`Events: ${eventCount}`);

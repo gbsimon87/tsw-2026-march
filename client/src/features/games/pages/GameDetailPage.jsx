@@ -163,7 +163,11 @@ function canAccessReplay(team, entitlements) {
 
   const plan = team?.billing?.plan;
   const status = team?.billing?.subscriptionStatus;
-  return (plan === 'team' || plan === 'pro') && (status === 'active' || status === 'trialing');
+  // Canonical 'team_pro'; legacy 'team'/'pro' tolerated during migration.
+  return (
+    (plan === 'team_pro' || plan === 'team' || plan === 'pro') &&
+    (status === 'active' || status === 'trialing')
+  );
 }
 
 function buildPlayersById(data, isDualTeam) {
@@ -598,7 +602,7 @@ export function GameDetailPage() {
       replayFilters={data.replayFilters || ['all']}
     />
   ) : (
-    <LockedFeatureCard planName="Team" pricingHref="/pricing">
+    <LockedFeatureCard planName="Team Pro" pricingHref="/pricing">
       <div className="rounded-xl bg-slate-100 p-8 text-center text-slate-400">
         <p className="text-lg" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
           Replay

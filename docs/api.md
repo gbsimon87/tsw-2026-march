@@ -287,8 +287,9 @@ Image/video size limits come from `FEED_IMAGE_MAX_BYTES` / `FEED_VIDEO_MAX_BYTES
 
 Checkout/portal endpoints require auth and return a hosted Stripe URL. `interval`
 accepts `monthly` (default) or `season`. Entitlements and plan state are updated by
-webhooks. See [`billing.md`](./billing.md) and
-[`stripe-development-setup.md`](./stripe-development-setup.md).
+webhooks. See [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md) §6 for today's billing,
+and [`pricing-overhaul/`](./pricing-overhaul/) for the planned redesign. (The former
+`billing.md` and `stripe-development-setup.md` were removed 2026-07-16.)
 
 ## Contact
 

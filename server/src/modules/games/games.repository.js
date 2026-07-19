@@ -184,6 +184,12 @@ const gameSchema = new mongoose.Schema(
     },
     homeParticipant: { type: participantSchema, default: null },
     awayParticipant: { type: participantSchema, default: null },
+    // Audit H7: frozen entitlements for a one-sided STANDALONE game (which has no
+    // participant docs to carry the snapshot). Written at create time from the
+    // team's resolved entitlements so a later downgrade never retroactively locks
+    // replay/shot-maps on games recorded while the team was Pro. Null for league
+    // games (they resolve live per doc 08) and dual-team games (participant-frozen).
+    entitlementsSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
     title: { type: String, required: true, trim: true },
     opponent: { type: String, trim: true, default: null },
     videoUrl: { type: String, trim: true, default: null },
