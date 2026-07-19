@@ -69,34 +69,52 @@ stripe prices update <price_id> --metadata[planId]=team_pro --metadata[interval]
 
 ### A3. Put the price IDs into Render (the `-api-dev` service)
 
-Two parts:
+This has two parts. **Part (a) is already done** — `render.yaml` now declares the four
+`STRIPE_PRICE_ID_*` keys on both services (the old `STRIPE_PRICE_ID_PRO_MONTHLY` was
+removed). All that's left is **Part (b): typing the actual values into Render.**
 
-**(a) `render.yaml`** — edit the file, on the `-api-dev` service's `envVars`:
+Think of it this way: `render.yaml` says _which_ settings exist; the Render dashboard
+holds their _secret values_. `sync: false` next to a key means "don't store the value
+in the file — a human types it into the dashboard." So the four keys now exist but are
+**empty** until you do the following.
 
-- **Delete** this line:
-  ```yaml
-  - key: STRIPE_PRICE_ID_PRO_MONTHLY
-    sync: false
-  ```
-- **Add** these four (put them after `STRIPE_WEBHOOK_SECRET`):
-  ```yaml
-  - key: STRIPE_PRICE_ID_TEAM_MONTHLY
-    sync: false
-  - key: STRIPE_PRICE_ID_TEAM_SEASON
-    sync: false
-  - key: STRIPE_PRICE_ID_LEAGUE_MONTHLY
-    sync: false
-  - key: STRIPE_PRICE_ID_LEAGUE_SEASON
-    sync: false
-  ```
-  (`sync: false` just means "the actual value is typed into the Render dashboard,
-  not stored in this file.")
+**(a) `render.yaml`** — ✅ done (committed). Nothing to do here.
 
-**(b) Render dashboard** → `-api-dev` service → **Environment** → set the values of
-those four keys to the four **test-mode** price IDs you copied in A1.
+**(b) Enter the four values in the Render dashboard — step by step:**
 
-- [ ] `render.yaml` updated for `-api-dev`.
-- [ ] The four price ID values are set in the Render dashboard for `-api-dev`.
+1. Go to **https://dashboard.render.com** and log in.
+2. In the list of services, click **`tsw-2026-march-api-dev`** (the dev API — _not_
+   the `-prod` one, and not the `client` ones).
+3. In the left-hand menu for that service, click **Environment**.
+4. You'll see a list of environment variables. Find the four keys below. They will be
+   present but blank (because `render.yaml` declared them). For **each** one, click it,
+   paste the matching **test-mode** price ID you copied in step A1, and save:
+
+   | Key to find in Render            | Paste this value                    |
+   | -------------------------------- | ----------------------------------- |
+   | `STRIPE_PRICE_ID_TEAM_MONTHLY`   | the **Team Pro – monthly** price ID |
+   | `STRIPE_PRICE_ID_TEAM_SEASON`    | the **Team Pro – yearly** price ID  |
+   | `STRIPE_PRICE_ID_LEAGUE_MONTHLY` | the **League – monthly** price ID   |
+   | `STRIPE_PRICE_ID_LEAGUE_SEASON`  | the **League – season** price ID    |
+
+   > Each value is a Stripe price ID that looks like `price_1AbC2dEf...`. Paste the ID
+   > itself, **not** the product name or the dollar amount.
+
+5. While you're on this same Environment page, double-check these three are **also
+   filled in** (the API won't start without them — see the safety note at the top):
+   - `STRIPE_SECRET_KEY` — your Stripe **test-mode** secret key (`sk_test_...`)
+   - `STRIPE_WEBHOOK_SECRET` — the signing secret from your webhook (set in step A5)
+   - `STRIPE_SUCCESS_URL` and `STRIPE_CANCEL_URL` — where Stripe sends users back
+     after checkout (your dev site URLs)
+6. Click **Save Changes**. Render will redeploy the dev API with the new values.
+
+> ⚠️ Don't trigger this redeploy until steps A1, A2, and A5 are also done — if the
+> secret key is set but any price ID / the webhook secret / the URLs are missing, the
+> API will fail to boot on purpose.
+
+- [x] `render.yaml` updated (done).
+- [ ] The four price ID values are entered and saved in the Render dashboard for `-api-dev`.
+- [ ] `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL` also filled in for `-api-dev`.
 
 ### A4. Update the env template files (housekeeping)
 
@@ -116,20 +134,61 @@ STRIPE_PRICE_ID_LEAGUE_SEASON=
 
 - [ ] `.env.production` template updated.
 
-### A5. Subscribe the Stripe webhook to the new events
+### A5. Set up the Stripe webhook (and copy its signing secret)
 
-In Stripe dashboard → **Developers → Webhooks** → your endpoint, make sure it's
-subscribed to **all** of these events (the first three likely already are):
+A **webhook** is how Stripe tells our server "a payment happened / a subscription
+changed." Our dev server needs one endpoint registered, subscribed to the right
+events, and its **signing secret** pasted into Render (that's the
+`STRIPE_WEBHOOK_SECRET` value referenced in A3).
 
-- `checkout.session.completed`
-- `customer.subscription.created` / `.updated` / `.deleted`
-- `invoice.payment_failed`
-- `invoice.paid` ← **new** (renewals)
-- `customer.subscription.trial_will_end` ← **new** (trial-ending email)
+You're on the **Workbench → Webhooks** screen (a Stripe **Sandbox** — that's Stripe's
+test environment, which is fine). There are no endpoints yet, so you'll create one.
 
-Without the two new ones, renewals and trial-ending emails silently never fire.
+> ⚠️ Make sure the four prices from A1/A2 were created in **this same Sandbox**. The
+> webhook, the prices, and the `sk_test_...` secret key on Render must all belong to
+> the same sandbox, or they won't talk to each other.
 
-- [ ] Webhook is subscribed to all six event types (dev).
+**Step 1 — Add the destination.**
+
+1. Click the purple **+ Add destination** button.
+2. If it asks for a **destination type**, choose **Webhook endpoint** (not Amazon
+   EventBridge / Azure Event Grid).
+3. When it asks for the **Endpoint URL**, enter your **dev API** address ending in
+   `/api/v1/billing/webhooks`, e.g.
+   `https://tsw-2026-march-api-dev.onrender.com/api/v1/billing/webhooks`.
+   (Use your actual dev API URL from Render — the `-api-dev` service, not the client.)
+
+> Note: this is for the **deployed dev server**. The **"Test with a local listener"**
+> link on this same screen is a _different_ thing — that's the `stripe listen` local
+> testing you'll use in Round C. Don't click it for this step.
+
+**Step 2 — Select the events to send.** In the events picker, search for and tick
+**exactly these seven**:
+
+- [ ] `checkout.session.completed`
+- [ ] `customer.subscription.created`
+- [ ] `customer.subscription.updated`
+- [ ] `customer.subscription.deleted`
+- [ ] `invoice.payment_failed`
+- [ ] `invoice.paid`
+- [ ] `customer.subscription.trial_will_end`
+
+Then finish creating the destination (**Add / Create**).
+
+> The last two (`invoice.paid`, `customer.subscription.trial_will_end`) are the new
+> ones — without them, renewals and trial-ending emails silently never fire.
+
+**Step 3 — Copy the signing secret.** Open the destination you just created, find
+**Signing secret**, click **Reveal**, and copy the `whsec_...` value.
+
+**Step 4 — Paste it into Render.** Go to the Render dashboard →
+`tsw-2026-march-api-dev` → **Environment** → set **`STRIPE_WEBHOOK_SECRET`** to the
+`whsec_...` value you just copied, and save. (This is the same value A3, step 5
+told you to confirm.)
+
+- [ ] Dev webhook endpoint exists, pointing at `/api/v1/billing/webhooks` on the dev API.
+- [ ] All seven events above are selected.
+- [ ] The `whsec_...` signing secret is pasted into `STRIPE_WEBHOOK_SECRET` on `-api-dev`.
 
 ---
 
@@ -214,7 +273,7 @@ Repeat the same setup against **live** Stripe + the **prod** database:
 - [ ] In Stripe **Live mode**: create the four live prices, add the same
       `planId` / `interval` metadata (Round A1–A2, live).
 - [ ] Register the **live** webhook endpoint + its `STRIPE_WEBHOOK_SECRET`, subscribed
-      to all six events (Round A5, live).
+      to all seven events (Round A5, live).
 - [ ] In the Render dashboard for **`-api-prod`**: set the four live price IDs, the
       live secret key, the webhook secret, and the success/cancel URLs.
 - [ ] Update `render.yaml` for `-api-prod` the same way as A3(a).
