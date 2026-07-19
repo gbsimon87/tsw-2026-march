@@ -225,6 +225,26 @@ describe('subscription lifecycle (T-27 scenarios, resolver-asserted)', () => {
     expect(resolveForTeam(team).entitlements.canTrackStats).toBe(true); // still free
   });
 
+  test('Audit H4: a late invoice.payment_failed cannot resurrect a canceled team to past_due', async () => {
+    const team = buildTeam({ plan: 'team_pro', subscriptionStatus: 'active' });
+
+    // Subscription is deleted (e.g. retries exhausted) → team drops to starter/canceled.
+    await deliver(
+      team,
+      subEvent('evt_deleted', { status: 'canceled', type: 'customer.subscription.deleted' })
+    );
+    expect(team.plan).toBe('starter');
+    expect(team.subscriptionStatus).toBe('canceled');
+
+    // Stripe doesn't guarantee delivery order — the final failed-retry invoice
+    // event can arrive after the deletion event. It must not overwrite the
+    // already-terminal 'canceled' status back to 'past_due'.
+    await deliver(team, invoiceEvent('evt_late_failure', 'invoice.payment_failed'));
+    expect(team.subscriptionStatus).toBe('canceled');
+    expect(saveTeam).not.toHaveBeenCalled();
+    expect(sendPaymentFailedEmail).not.toHaveBeenCalled();
+  });
+
   test('reactivate: re-subscribing after a cancel restores the prior plan', async () => {
     const team = buildTeam({ plan: 'starter', subscriptionStatus: 'canceled' });
     expect(resolveForTeam(team).entitlements.canViewReplay).toBe(false);

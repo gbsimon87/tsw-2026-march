@@ -26,6 +26,11 @@ const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
+// Audit H4: Stripe doesn't guarantee webhook delivery order — a subscription's
+// final invoice.payment_failed can arrive after its customer.subscription.deleted.
+// Once a doc is canceled, a late payment-failure notice must not resurrect it to
+// past_due.
+const TERMINAL_STATUSES = new Set(['canceled']);
 
 // ─── Stripe client ────────────────────────────────────────────────────────────
 
@@ -461,6 +466,7 @@ async function markTeamInvoiceFailure(invoice, eventId) {
   const team = await claimTeamWebhookEvent(teamId, eventId);
   if (!team) return;
   if (!isStripeManaged(team)) return;
+  if (TERMINAL_STATUSES.has(team.subscriptionStatus)) return; // Audit H4
 
   await applyClaimedOrRelease(
     () => releaseTeamWebhookEvent(teamId, eventId),
@@ -590,6 +596,7 @@ async function markLeagueInvoiceFailure(invoice, eventId) {
   const league = await claimLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId);
   if (!league) return;
   if (!isStripeManaged(league)) return;
+  if (TERMINAL_STATUSES.has(league.subscriptionStatus)) return; // Audit H4
 
   await applyClaimedOrRelease(
     () => releaseLeagueWebhookEvent({ stripeCustomerId: customerId }, eventId),
