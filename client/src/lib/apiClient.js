@@ -7,9 +7,30 @@ let csrfToken =
     ?.split('=')[1] ?? null;
 let refreshPromise = null;
 
+// Bare fetch() never times out on its own — a stalled network/backend leaves any
+// caller gating UI on the promise's settlement (e.g. GameTrackPage's isSaving)
+// permanently disabled with no error. Every request gets an AbortController-based
+// ceiling so it always eventually rejects.
+const REQUEST_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your connection and try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function refreshSession() {
   if (!refreshPromise) {
-    refreshPromise = fetch(`${env.apiBaseUrl}/auth/refresh`, {
+    refreshPromise = fetchWithTimeout(`${env.apiBaseUrl}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
@@ -49,7 +70,7 @@ async function request(path, options = {}, retryState = {}) {
     headers['x-csrf-token'] = csrfToken;
   }
 
-  const response = await fetch(`${env.apiBaseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${env.apiBaseUrl}${path}`, {
     credentials: 'include',
     ...options,
     headers,
@@ -108,7 +129,7 @@ function parseContentDispositionFilename(header) {
 }
 
 async function requestBlob(path, retryState = {}) {
-  const response = await fetch(`${env.apiBaseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${env.apiBaseUrl}${path}`, {
     credentials: 'include',
   });
 
