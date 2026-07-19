@@ -93,6 +93,9 @@ const AdminLeagueTeamPage = lazy(() =>
     default: m.AdminLeagueTeamPage,
   }))
 );
+const AdminTeamPage = lazy(() =>
+  import('../../features/teams/pages/AdminTeamPage').then((m) => ({ default: m.AdminTeamPage }))
+);
 const AdminNewLeagueGamePage = lazy(() =>
   import('../../features/leagues/pages/AdminNewLeagueGamePage').then((m) => ({
     default: m.AdminNewLeagueGamePage,
@@ -290,6 +293,14 @@ export function AppRouter() {
             element={
               <ProtectedRoute>
                 <AdminNewLeagueTeamPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/teams/:teamId"
+            element={
+              <ProtectedRoute>
+                <AdminTeamPage />
               </ProtectedRoute>
             }
           />
