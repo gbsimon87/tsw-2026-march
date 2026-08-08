@@ -748,12 +748,20 @@ export function AdminLeaguePage() {
                 >
                   League Games
                 </h2>
-                <Link
-                  to={`/admin/leagues/${league.id}/games/new`}
-                  className="rounded-xl bg-[#141414] px-4 py-2 text-sm font-semibold text-white text-center transition hover:bg-[#1B4332]"
-                >
-                  Schedule Game
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to={`/admin/leagues/${league.id}/schedule`}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
+                  >
+                    Build Schedule
+                  </Link>
+                  <Link
+                    to={`/admin/leagues/${league.id}/games/new`}
+                    className="rounded-xl bg-[#141414] px-4 py-2 text-sm font-semibold text-white text-center transition hover:bg-[#1B4332]"
+                  >
+                    Schedule Game
+                  </Link>
+                </div>
               </div>
               {(league.games || []).length === 0 ? (
                 <p className="mt-3 text-sm text-slate-600">No league games yet.</p>
