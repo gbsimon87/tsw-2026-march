@@ -110,6 +110,9 @@ export const leaguesApi = {
   getGames(leagueId, seasonId) {
     return apiClient.get(`/leagues/${leagueId}/games${seasonId ? `?seasonId=${seasonId}` : ''}`);
   },
+  bulkCreateGames(leagueId, payload) {
+    return apiClient.post(`/leagues/${leagueId}/games/bulk`, payload);
+  },
   listSeasons(leagueId) {
     return apiClient.get(`/leagues/${leagueId}/seasons`);
   },
