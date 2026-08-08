@@ -101,6 +101,11 @@ const AdminNewLeagueGamePage = lazy(() =>
     default: m.AdminNewLeagueGamePage,
   }))
 );
+const AdminLeagueSchedulePage = lazy(() =>
+  import('../../features/leagues/pages/AdminLeagueSchedulePage').then((m) => ({
+    default: m.AdminLeagueSchedulePage,
+  }))
+);
 const AdminNewLeagueTeamPage = lazy(() =>
   import('../../features/leagues/pages/AdminNewLeagueTeamPage').then((m) => ({
     default: m.AdminNewLeagueTeamPage,
@@ -285,6 +290,14 @@ export function AppRouter() {
             element={
               <ProtectedRoute>
                 <AdminNewLeagueGamePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/leagues/:leagueId/schedule"
+            element={
+              <ProtectedRoute>
+                <AdminLeagueSchedulePage />
               </ProtectedRoute>
             }
           />

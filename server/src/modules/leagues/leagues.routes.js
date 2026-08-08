@@ -46,6 +46,7 @@ leaguesRouter.post(
 );
 leaguesRouter.get('/:leagueId/standings', asyncHandler(controller.standings));
 leaguesRouter.get('/:leagueId/games', asyncHandler(controller.games));
+leaguesRouter.post('/:leagueId/games/bulk', asyncHandler(controller.bulkCreateGames));
 leaguesRouter.post(
   '/:leagueId/logo',
   upload.single('logo'),

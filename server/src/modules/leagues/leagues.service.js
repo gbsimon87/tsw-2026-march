@@ -63,7 +63,11 @@ const {
   saveSeason,
 } = require('./seasons.repository');
 const { findUserByEmail, findUserById } = require('../auth/auth.repository');
-const { listLeagueGamesByLeagueId } = require('../games/games.repository');
+const {
+  listLeagueGamesByLeagueId,
+  insertManyGames,
+  deleteReplaceableLeagueGames,
+} = require('../games/games.repository');
 const { logger } = require('../../config/logger');
 const {
   uploadImageBuffer,
@@ -2382,6 +2386,79 @@ async function getLeagueRosterSnapshotForTeam(leagueTeamId) {
   return buildLeagueRosterSnapshot(players);
 }
 
+// Schedule Builder: create a whole fixture list in one request.
+//
+// All-or-nothing: every row is validated against this league's teams BEFORE any
+// write, so a single bad id can never leave half a schedule behind. Games are
+// born `scheduled` (not `in_progress`) — they are fixtures, not live games —
+// and mirror the one-sided league-game shape built by getLeagueContextForGame.
+async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
+  if (!mongoose.Types.ObjectId.isValid(leagueId)) {
+    throw new ApiError(400, 'Invalid league id');
+  }
+
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+
+  if (!league.currentSeasonId) {
+    throw new ApiError(400, 'League has no active season');
+  }
+  const season = await findSeasonById(league.currentSeasonId);
+  ensureSeasonEditable(season);
+
+  // Resolve every referenced team once, then validate all rows up front.
+  const teams = await listLeagueTeams(leagueId);
+  const teamsById = new Map(teams.map((team) => [String(team._id), team]));
+
+  const docs = payload.games.map((row) => {
+    const homeTeam = teamsById.get(String(row.homeLeagueTeamId));
+    const awayTeam = teamsById.get(String(row.awayLeagueTeamId));
+
+    if (!homeTeam || !awayTeam) {
+      throw new ApiError(400, 'Every game must be between two teams in this league');
+    }
+
+    return {
+      ownerUserId: userId,
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId,
+      seasonId: league.currentSeasonId,
+      homeLeagueTeamId: homeTeam._id,
+      awayLeagueTeamId: awayTeam._id,
+      // A fixture has no tracked side yet; default to home, matching the
+      // single-game create form's default. Editable once the game starts.
+      trackedLeagueTeamId: homeTeam._id,
+      title: `${awayTeam.name} at ${homeTeam.name}`,
+      scheduledAt: new Date(row.scheduledAt),
+      venue: row.venue?.trim() ? row.venue.trim() : undefined,
+      status: 'scheduled',
+    };
+  });
+
+  const replaced = payload.replaceExisting
+    ? await deleteReplaceableLeagueGames(leagueId, league.currentSeasonId)
+    : 0;
+
+  const created = await insertManyGames(docs);
+
+  return {
+    created: created.length,
+    replaced,
+    games: created.map((game) => ({
+      id: String(game._id),
+      leagueId: String(game.leagueId),
+      seasonId: game.seasonId ? String(game.seasonId) : null,
+      homeLeagueTeamId: String(game.homeLeagueTeamId),
+      awayLeagueTeamId: String(game.awayLeagueTeamId),
+      title: game.title,
+      status: game.status,
+      scheduledAt: game.scheduledAt ?? null,
+      venue: game.venue ?? null,
+    })),
+  };
+}
+
 async function getLeagueContextForGame(userId, payload, options = {}) {
   if (!mongoose.Types.ObjectId.isValid(payload.leagueId)) {
     throw new ApiError(400, 'Invalid league id');
@@ -2691,6 +2768,7 @@ module.exports = {
   recomputeLeagueAggregates,
   scheduleLeagueAggregateRecompute,
   getLeagueContextForGame,
+  bulkCreateLeagueGamesForUser,
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,

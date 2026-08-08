@@ -195,7 +195,11 @@ const gameSchema = new mongoose.Schema(
     videoUrl: { type: String, trim: true, default: null },
     status: {
       type: String,
-      enum: ['in_progress', 'completed'],
+      // Schedule Builder: 'scheduled' is a future fixture — created by the bulk
+      // schedule builder, carries no events, and is not yet trackable. Additive
+      // to the enum; existing documents keep in_progress/completed and the
+      // default is unchanged so every pre-existing create path behaves as before.
+      enum: ['scheduled', 'in_progress', 'completed'],
       default: 'in_progress',
       index: true,
     },
@@ -206,6 +210,10 @@ const gameSchema = new mongoose.Schema(
     awayStartingLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     awayCurrentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     scheduledAt: { type: Date },
+    // Schedule Builder: free-text location for a fixture. Venue entities (with
+    // capacity, double-booking checks and a map) are a separate future feature;
+    // this is deliberately just a label.
+    venue: { type: String, trim: true, maxlength: 120 },
     completedAt: { type: Date },
     rosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
@@ -444,8 +452,31 @@ async function saveGameSummary(gameId, lockId, summary) {
   );
 }
 
+// Schedule Builder: bulk-create fixtures in a single round trip. `ordered: true`
+// so the whole batch fails together rather than leaving a half-built schedule —
+// the endpoint contract is all-or-nothing.
+async function insertManyGames(docs) {
+  return Game.insertMany(docs, { ordered: true });
+}
+
+// Schedule Builder: only a future fixture that nobody has started is safe to
+// replace. A game carrying any recorded event, or one already in progress or
+// completed, is real history and is never deleted by a schedule rebuild.
+async function deleteReplaceableLeagueGames(leagueId, seasonId) {
+  const result = await Game.deleteMany({
+    leagueId,
+    seasonId,
+    status: 'scheduled',
+    $or: [{ events: { $size: 0 } }, { events: { $exists: false } }],
+  });
+
+  return result?.deletedCount ?? 0;
+}
+
 module.exports = {
   createGame,
+  insertManyGames,
+  deleteReplaceableLeagueGames,
   listGamesByOwner,
   findGameByIdAndOwner,
   findGameById,

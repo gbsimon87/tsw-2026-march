@@ -748,12 +748,20 @@ export function AdminLeaguePage() {
                 >
                   League Games
                 </h2>
-                <Link
-                  to={`/admin/leagues/${league.id}/games/new`}
-                  className="rounded-xl bg-[#141414] px-4 py-2 text-sm font-semibold text-white text-center transition hover:bg-[#1B4332]"
-                >
-                  Schedule Game
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to={`/admin/leagues/${league.id}/schedule`}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
+                  >
+                    Build Schedule
+                  </Link>
+                  <Link
+                    to={`/admin/leagues/${league.id}/games/new`}
+                    className="rounded-xl bg-[#141414] px-4 py-2 text-sm font-semibold text-white text-center transition hover:bg-[#1B4332]"
+                  >
+                    Schedule Game
+                  </Link>
+                </div>
               </div>
               {(league.games || []).length === 0 ? (
                 <p className="mt-3 text-sm text-slate-600">No league games yet.</p>
@@ -1324,9 +1332,25 @@ export function AdminLeaguePage() {
         <p className="text-sm text-slate-500">
           Standings and stats will be frozen as a permanent record. No new games can be scheduled
           until you start a new season. This cannot be undone.
-          {(league.games || []).some((game) => game.status !== 'completed')
-            ? ` ${(league.games || []).filter((game) => game.status !== 'completed').length} game(s) are still in progress and will not count toward final standings.`
-            : ''}
+          {(() => {
+            // A scheduled game has not started, so calling it "in progress" is
+            // wrong — but it still matters here, because completing the season
+            // strands it. Count and describe the two states separately.
+            const games = league.games || [];
+            const inProgress = games.filter((game) => game.status === 'in_progress').length;
+            const scheduled = games.filter((game) => game.status === 'scheduled').length;
+
+            return (
+              <>
+                {inProgress > 0
+                  ? ` ${inProgress} game(s) are still in progress and will not count toward final standings.`
+                  : ''}
+                {scheduled > 0
+                  ? ` ${scheduled} scheduled game(s) have not been played and will not count toward final standings.`
+                  : ''}
+              </>
+            );
+          })()}
         </p>
         <div className="mt-5 flex gap-3">
           <button

@@ -76,6 +76,16 @@ function nextVideoUrl() {
 
 const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'PG', 'SF', 'C'];
 
+// Free-text venues (Game.venue, added with the Schedule Builder) so demo games
+// show a location. Cycled per game by index — deterministic, so reseeding is
+// still idempotent.
+const DEMO_VENUES = [
+  'Northside Community Center',
+  'Harbor Athletic Club',
+  'Summit High School Gym',
+  'Cedar Park Fieldhouse',
+];
+
 // A 5-team round-robin-ish schedule guaranteeing every team (indices 0-4)
 // appears in at least 3 games. Each pair is [homeIndex, awayIndex].
 const FIVE_TEAM_SCHEDULE = [
@@ -459,6 +469,7 @@ function buildDemoLeagueGames(ownerUserId, league, seasonId, leagueTeamsWithPlay
       videoUrl: nextVideoUrl(),
       status: 'completed',
       scheduledAt,
+      venue: DEMO_VENUES[gameIndex % DEMO_VENUES.length],
       completedAt,
       rosterSnapshot: homeRosterSnapshot,
       homeRosterSnapshot,
@@ -479,7 +490,14 @@ function buildDemoLeagueGames(ownerUserId, league, seasonId, leagueTeamsWithPlay
 }
 
 async function seedLeagueGames(league, seasonId, leagueTeamsWithPlayers, ownerUserId) {
-  const existingCount = await Game.countDocuments({ leagueId: league._id });
+  // Count only completed games. Since the Schedule Builder shipped, a demo
+  // league can also hold `scheduled` fixtures (created by an admin, carrying no
+  // events) — counting those would satisfy this guard and silently skip seeding
+  // the played games this script exists to produce.
+  const existingCount = await Game.countDocuments({
+    leagueId: league._id,
+    status: 'completed',
+  });
   const expectedCount = FIVE_TEAM_SCHEDULE.length;
 
   if (existingCount >= expectedCount) {
@@ -633,9 +651,14 @@ async function seedDemoLeagueFeedPosts({ league, leagueTeamsWithPlayers, demoUse
     return { createdCount: 0 };
   }
 
-  const games = await Game.find({ leagueId: league._id }).sort({ scheduledAt: 1 });
+  // Completed games only: a `scheduled` fixture from the Schedule Builder has no
+  // events and no videoUrl, so it yields no highlights and would render a
+  // game_card as a 0–0 result.
+  const games = await Game.find({ leagueId: league._id, status: 'completed' }).sort({
+    scheduledAt: 1,
+  });
   if (games.length === 0) {
-    log('  no games found for feed post generation, skipping');
+    log('  no completed games found for feed post generation, skipping');
     return { createdCount: 0 };
   }
 

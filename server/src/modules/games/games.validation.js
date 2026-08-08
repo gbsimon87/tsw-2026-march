@@ -225,7 +225,7 @@ const updateEventSchema = z.object({
 const listGamesSchema = z.object({
   ...paginationQueryShape,
   teamId: z.string().min(1).optional(),
-  status: z.enum(['in_progress', 'completed']).optional(),
+  status: z.enum(['scheduled', 'in_progress', 'completed']).optional(),
 });
 
 module.exports = {
