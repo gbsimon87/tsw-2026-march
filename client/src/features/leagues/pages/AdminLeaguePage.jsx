@@ -1324,9 +1324,25 @@ export function AdminLeaguePage() {
         <p className="text-sm text-slate-500">
           Standings and stats will be frozen as a permanent record. No new games can be scheduled
           until you start a new season. This cannot be undone.
-          {(league.games || []).some((game) => game.status !== 'completed')
-            ? ` ${(league.games || []).filter((game) => game.status !== 'completed').length} game(s) are still in progress and will not count toward final standings.`
-            : ''}
+          {(() => {
+            // A scheduled game has not started, so calling it "in progress" is
+            // wrong — but it still matters here, because completing the season
+            // strands it. Count and describe the two states separately.
+            const games = league.games || [];
+            const inProgress = games.filter((game) => game.status === 'in_progress').length;
+            const scheduled = games.filter((game) => game.status === 'scheduled').length;
+
+            return (
+              <>
+                {inProgress > 0
+                  ? ` ${inProgress} game(s) are still in progress and will not count toward final standings.`
+                  : ''}
+                {scheduled > 0
+                  ? ` ${scheduled} scheduled game(s) have not been played and will not count toward final standings.`
+                  : ''}
+              </>
+            );
+          })()}
         </p>
         <div className="mt-5 flex gap-3">
           <button

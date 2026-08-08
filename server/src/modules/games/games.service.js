@@ -1616,7 +1616,12 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
   const game = await assertGameAccess(userId, gameId);
   if (game.status !== 'in_progress') {
-    throw new ApiError(400, 'Cannot change lineup on a completed game');
+    throw new ApiError(
+      400,
+      game.status === 'scheduled'
+        ? 'Cannot change lineup on a game that has not started'
+        : 'Cannot change lineup on a completed game'
+    );
   }
 
   const payload = Array.isArray(payloadOrPlayerIds)

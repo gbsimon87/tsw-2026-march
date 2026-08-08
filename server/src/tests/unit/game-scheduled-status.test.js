@@ -37,3 +37,43 @@ describe('Game.status enum', () => {
     expect(buildGame({ status: 'cancelled' }).validateSync()?.errors?.status).toBeDefined();
   });
 });
+
+describe('setGameLineup rejects a game that has not started', () => {
+  const gameId = new mongoose.Types.ObjectId().toString();
+  const userId = new mongoose.Types.ObjectId().toString();
+
+  function loadServiceWithGameStatus(status) {
+    jest.resetModules();
+    jest.doMock('../../modules/games/games.repository', () => ({
+      ...jest.requireActual('../../modules/games/games.repository'),
+      findGameById: jest.fn().mockResolvedValue({
+        _id: gameId,
+        ownerUserId: userId,
+        gameContext: 'standalone',
+        status,
+      }),
+    }));
+    return require('../../modules/games/games.service');
+  }
+
+  afterEach(() => {
+    jest.resetModules();
+    jest.restoreAllMocks();
+  });
+
+  it('says the game has not started for a scheduled game', async () => {
+    const service = loadServiceWithGameStatus('scheduled');
+
+    await expect(service.setGameLineup(userId, gameId, { playerIds: [] })).rejects.toThrow(
+      /has not started/i
+    );
+  });
+
+  it('still says completed for a completed game', async () => {
+    const service = loadServiceWithGameStatus('completed');
+
+    await expect(service.setGameLineup(userId, gameId, { playerIds: [] })).rejects.toThrow(
+      /completed game/i
+    );
+  });
+});
