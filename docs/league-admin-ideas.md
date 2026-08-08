@@ -6,19 +6,25 @@
 >
 > Companion to [`ideas.md`](./ideas.md) (segment-wide opportunities) and
 > [`product-roadmap.md`](./product-roadmap.md). Nothing here is committed work —
-> this is an idea board. Each entry notes roughly what it leans on in today's code
+> this is an idea board — except where an entry is marked ✅ **shipped**. Each entry
+> notes roughly what it leans on in today's code
 > (see [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md)).
 
 ---
 
 ## A. Running the competition
 
-### 1. Schedule builder / fixture generator
+### 1. ✅ Schedule builder / fixture generator — **shipped**
 
 Generate a full round-robin (or multi-round) fixture list for the active `Season`
 from the league's `LeagueTeam` list, with configurable rounds, dates, and venues.
 Today every league game is created one at a time. Biggest single time sink for an
 admin at season start.
+
+> **Built 2026-08-08.** Lives at `/admin/leagues/:leagueId/schedule`; games are
+> created in bulk via `POST /leagues/:leagueId/games/bulk` as `status: 'scheduled'`.
+> See [`schedule-builder/`](./schedule-builder/) for the feature docs.
+> Venue is free text for now — the richer version is idea #2.
 
 ### 2. Venue & time-slot management
 
@@ -154,7 +160,7 @@ leagues actually fund themselves — and it's a natural paid-tier lever.
 
 | Tier                       | Ideas                   | Rationale                                                      |
 | -------------------------- | ----------------------- | -------------------------------------------------------------- |
-| **1 — highest leverage**   | 1, 4, 10, 14            | Remove the biggest manual/blind spots in running a season      |
+| **1 — highest leverage**   | ~~1~~ ✅, 4, 10, 14     | Remove the biggest manual/blind spots in running a season      |
 | **2 — competition depth**  | 5, 6, 7, 8, 11          | Needed as soon as a league is bigger than one flat division    |
 | **3 — engagement**         | 13, 15, 16, 20          | Cheap on data, high on perceived value                         |
 | **4 — scale & commercial** | 2, 3, 9, 12, 17, 18, 19 | Matters when TSW runs many leagues, or is monetised per league |
