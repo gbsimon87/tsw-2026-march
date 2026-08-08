@@ -9,6 +9,7 @@ const {
   updateMemberSchema,
   createJoinRequestSchema,
   createSeasonSchema,
+  bulkCreateLeagueGamesSchema,
 } = require('./leagues.validation');
 const leaguesService = require('./leagues.service');
 const { ApiError } = require('../../utils/apiError');
@@ -393,6 +394,17 @@ async function games(req, res) {
   res.status(200).json({ games });
 }
 
+async function bulkCreateGames(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = bulkCreateLeagueGamesSchema.parse(req.body);
+  const result = await leaguesService.bulkCreateLeagueGamesForUser(
+    userId,
+    req.params.leagueId,
+    payload
+  );
+  res.status(201).json(result);
+}
+
 async function publicGames(req, res) {
   const league = await leaguesService.getPublicLeagueBySlug(
     req.params.leagueSlug,
@@ -480,6 +492,7 @@ module.exports = {
   standings,
   publicStandings,
   games,
+  bulkCreateGames,
   publicGames,
   getPublicLeaders,
   listLeagueManagers,
