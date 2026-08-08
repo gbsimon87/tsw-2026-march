@@ -94,6 +94,13 @@ Note: admin pages here use the original slate/sky-blue `PageHeader` palette
 | Home/away by round parity                        | Running per-team balance                | Parity strands the circle-method anchor and its opposite on one side (5 home / 0 away). Balance is optimal (max diff 1) for all sizes 2–16.            |
 | `Breadcrumbs items={...}`                        | `crumbs={[{label, href}]}`              | Actual component contract.                                                                                                                             |
 
+## Downstream fixes (post-merge of the feature work)
+
+| Item                                                        | Status                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `seed-demo-account.js` assumed every league game was played | ✅ fixed — its idempotency guard and feed-post query now filter `status: 'completed'`, and demo games set the new `venue`. Without this, a demo league containing admin-created fixtures would silently skip seeding its played games. See [`../demo-data-generation/TRACKER.md`](../demo-data-generation/TRACKER.md) Session 5. |
+| `seed.js`                                                   | ✅ no change needed — it is destructive (full reset) and writes explicit `status: 'completed'` on every game it creates.                                                                                                                                                                                                         |
+
 ## Follow-ups discovered during implementation
 
 | Item                                                                                                                    | Status                                          |
