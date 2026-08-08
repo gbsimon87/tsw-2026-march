@@ -2,7 +2,7 @@
 
 > Spec: [`../superpowers/specs/2026-08-08-schedule-builder-design.md`](../superpowers/specs/2026-08-08-schedule-builder-design.md)
 > Dashboard: [`STATUS-DASHBOARD.md`](./STATUS-DASHBOARD.md)
-> Status keys: ✅ not started · 🟨 in progress · ✅ done · ⛔ blocked
+> Status keys: ⬜ not started · 🟨 in progress · ✅ done · ⛔ blocked
 
 Tests are written before implementation per the project's TDD convention.
 
