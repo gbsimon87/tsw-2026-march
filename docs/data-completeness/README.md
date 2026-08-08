@@ -16,7 +16,7 @@ rated the cheapest × highest-leverage next pick.
 | [`STATUS-DASHBOARD.md`](./STATUS-DASHBOARD.md)                                                                                                   | Progress, decision log, findings, risks    |
 | [`../superpowers/specs/2026-08-09-data-completeness-dashboard-design.md`](../superpowers/specs/2026-08-09-data-completeness-dashboard-design.md) | Full design spec — checks, severities, API |
 
-## The seven checks
+## The eight checks
 
 | Check                   | Level  | Severity |
 | ----------------------- | ------ | -------- |
@@ -26,6 +26,7 @@ rated the cheapest × highest-leverage next pick.
 | No recorded appearances | Team   | Medium   |
 | Roster too small (< 5)  | Team   | Medium   |
 | Missing jersey number   | Team   | Low      |
+| Unclaimed player        | Team   | Low      |
 | No venue                | League | Low      |
 
 **High** means the standings are wrong until it's fixed. That's the line — the
@@ -43,14 +44,17 @@ severity tiers aren't vibes, they're "does this corrupt the competition record".
 
 ## Before you extend this
 
-Two checks in the original idea described fields that **do not exist**:
+Two checks in the original idea didn't survive contact with the schema:
 
 - there is **no `minutes` field** anywhere — `LeaguePlayerStats` tracks
   `gamesCount` and box-score counters only;
-- there is **no photo field** on `LeaguePlayer`.
+- **`playerImage` is a computed feed-card field**, not a stored player field. A
+  league player's picture comes from the account that claimed them
+  (`claimedByUserId → User.avatar.url`), so an unclaimed player cannot have one
+  and no admin can upload it. The check reports **claim status** instead.
 
-Both were caught by reading the schema during design. If you add a check, verify
-the field exists first and name the check after what it actually measures.
+If you add a check, verify the field exists _and_ that an admin can actually act
+on it. Name the check after what it measures, not what you wish it measured.
 
 Related: the **5-player minimum is not enforced anywhere in the code** — this
 panel is the first thing to assert it, and it does so advisorily. Don't mistake

@@ -30,33 +30,40 @@ Progress  [                    ] 0%
 
 ## Decision log
 
-| #   | Decision                                                   | Status                                                        |
-| --- | ---------------------------------------------------------- | ------------------------------------------------------------- |
-| D1  | New tab on `AdminLeaguePage`                               | ✅ agreed                                                     |
-| D2  | League **and** team level; admins + managers only          | ✅ agreed                                                     |
-| D3  | Current season only                                        | ✅ agreed                                                     |
-| D4  | 48h grace after tip-off before a fixture is "overdue"      | ✅ agreed — the rule that stops the panel crying wolf         |
-| D5  | One-sided games: flag only the tracked side                | ✅ agreed                                                     |
-| D6  | All checks kept, severity-weighted                         | ✅ agreed                                                     |
-| D6a | "No photo" cut — no such field; `jerseyNumber` substituted | ⚠️ **changed from the original idea** — see below             |
-| D7  | Minimum roster = 5 active players                          | ✅ agreed — advisory, never blocking                          |
-| D8  | Read-only v1; inline fixes deferred                        | ✅ agreed                                                     |
-| D9  | Dismissible items, collapsed section at the bottom         | ✅ agreed                                                     |
-| D10 | Warnings only, no error tier                               | ✅ agreed                                                     |
-| D11 | Count per category, no health score                        | ✅ agreed                                                     |
-| D12 | Per-league; cross-league view is idea #19                  | ✅ agreed                                                     |
-| D13 | "Zero minutes" → "no recorded appearances"                 | ⚠️ **changed from the original idea** — see below             |
-| D14 | Computed on read, not materialized                         | ✅ proposed — keeps this XS by avoiding invalidation coupling |
+| #   | Decision                                                  | Status                                                        |
+| --- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| D1  | New tab on `AdminLeaguePage`                              | ✅ agreed                                                     |
+| D2  | League **and** team level; admins + managers only         | ✅ agreed                                                     |
+| D3  | Current season only                                       | ✅ agreed                                                     |
+| D4  | 48h grace after tip-off before a fixture is "overdue"     | ✅ agreed — the rule that stops the panel crying wolf         |
+| D5  | One-sided games: flag only the tracked side               | ✅ agreed                                                     |
+| D6  | All checks kept, severity-weighted                        | ✅ agreed                                                     |
+| D6a | Player image = claimed user's avatar → "Unclaimed player" | ⚠️ **changed from the original idea** — see below             |
+| D7  | Minimum roster = 5 active players                         | ✅ agreed — advisory, never blocking                          |
+| D8  | Read-only v1; inline fixes deferred                       | ✅ agreed                                                     |
+| D9  | Dismissible items, collapsed section at the bottom        | ✅ agreed                                                     |
+| D10 | Warnings only, no error tier                              | ✅ agreed                                                     |
+| D11 | Count per category, no health score                       | ✅ agreed                                                     |
+| D12 | Per-league; cross-league view is idea #19                 | ✅ agreed                                                     |
+| D13 | "Zero minutes" → "no recorded appearances"                | ⚠️ **changed from the original idea** — see below             |
+| D14 | Computed on read, not materialized                        | ✅ proposed — keeps this XS by avoiding invalidation coupling |
 
 ## Findings that changed the design
 
 Two checks from the original idea could not be built as written. Both were
 caught by reading the schema during design rather than during implementation.
 
-| Original                        | Problem                                                                                       | Resolution                                                          |
-| ------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| "players with zero **minutes**" | **No `minutes` field exists.** `LeaguePlayerStats` has `gamesCount` + box-score counters only | Reinterpreted as `gamesCount === 0` → **"No recorded appearances"** |
-| "players with no **photo**"     | **No photo/avatar field on `LeaguePlayer`**                                                   | Replaced with **missing `jerseyNumber`** (exists, nullable)         |
+| Original                        | Problem                                                                                                                           | Resolution                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| "players with zero **minutes**" | **No `minutes` field exists.** `LeaguePlayerStats` has `gamesCount` + box-score counters only                                     | Reinterpreted as `gamesCount === 0` → **"No recorded appearances"**              |
+| "players with no **photo**"     | `playerImage` exists but is a **computed feed-card field**, sourced from the claimed user's avatar — not stored on `LeaguePlayer` | Reframed as **"Unclaimed player"** + added missing `jerseyNumber`; see spec §3.1 |
+
+**On `playerImage`** — it is real, but the chain is
+`LeaguePlayer.claimedByUserId → User.avatar.url → avatarUrl
+(leagues.service.js:192) → playerImage (feed.service.js:195)`. So an unclaimed
+player _cannot_ have an image, and a claimed one's avatar is a personal account
+setting. Neither is admin-fixable, which is why the check reports the claim
+status instead — the actionable fact underneath.
 
 Also confirmed: **no minimum roster size is enforced anywhere in code**, so the
 5-player rule (D7) is a new advisory product rule, not an existing constraint.

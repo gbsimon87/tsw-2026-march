@@ -28,7 +28,7 @@ place where it gets fixed.
 | D4  | `scheduled` fixtures excluded until **48h past tip-off**                              | user                    |
 | D5  | One-sided games: **only the tracked side** is ever flagged for missing stats          | user                    |
 | D6  | All four original checks, plus three cosmetic ones, weighted by severity              | user                    |
-| D6a | "No photo" cut — no such field exists; `jerseyNumber` used instead                    | code                    |
+| D6a | Player image = **claimed user's avatar**; check reframed as "unclaimed player"        | code (see §3.1)         |
 | D7  | Minimum roster = **5 active players**                                                 | user                    |
 | D8  | **Read-only** in v1; inline fixes explicitly deferred                                 | user                    |
 | D9  | Items are **dismissible**; dismissed items move to a collapsed section at the bottom  | user                    |
@@ -61,7 +61,7 @@ must not block anything. `activeRosterCount` already exists
 
 ## 3. The checks
 
-Seven checks in three groups. Weights order the list; all render as warnings (D10).
+Eight checks in three groups. Weights order the list; all render as warnings (D10).
 
 ### Group A — Games (league-level)
 
@@ -82,14 +82,45 @@ inconvenience, not incorrectness.
 | --------------------------- | -------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------- |
 | **No recorded appearances** | `isActive` player, `gamesCount === 0` for the season, AND ≥1 completed team game | **Medium** | Either a roster ghost or missing stats. Ambiguous, so mid. |
 | **Missing jersey number**   | `isActive` player with `jerseyNumber: null`                                      | Low        | Cosmetic, but blocks identifying a player in a box score.  |
+| **Unclaimed player**        | `isActive` player with `claimedByUserId: null`                                   | Low        | No avatar, no follows, no shareable profile. See §3.1.     |
 
 The "≥1 completed team game" guard is essential: before a team's first game,
 _every_ player has zero appearances and none of it is a problem.
 
-> **"No photo" was cut.** `LeaguePlayer` has no photo/avatar field
-> (`leagueId, leagueTeamId, displayName, jerseyNumber, position, isActive,
-claimedByUserId`). `jerseyNumber` replaces it as the cosmetic player check —
-> it exists, it's nullable, and a missing number genuinely hampers scorekeeping.
+### 3.1 Player images — why "no photo" became "unclaimed"
+
+There **is** a player image, but it is not stored on the player. The chain:
+
+```
+LeaguePlayer.claimedByUserId  →  User.avatar.url
+  →  avatarUrl        (leagues.service.js:192, sanitizeLeaguePlayer)
+  →  playerImage      (feed.service.js:195, buildPlayerCardSnapshot)
+```
+
+`playerImage` is a **feed-card snapshot field**, computed at card-build time. It
+normalises two different sources — standalone players use `player.image`, league
+players use `avatarUrl` (the TSW-005 comment at `feed.service.js:191` documents
+exactly this split).
+
+Consequences for this dashboard:
+
+- `LeaguePlayer` itself has **no image field** —
+  `leagueId, leagueTeamId, displayName, jerseyNumber, position, isActive, claimedByUserId`.
+- A league player's picture is **the claimed account's avatar**.
+- An **unclaimed** player therefore cannot have an image at all. There is nothing
+  for an admin to upload.
+
+So "player has no photo" is not an admin-fixable data gap — it is a **proxy for
+being unclaimed**. Flagging it as a missing photo would be misleading twice
+over: it implies the admin can fix it, and it hides the real, more useful fact.
+
+The check is therefore **"Unclaimed player"**, severity **Low**. It is genuinely
+worth surfacing — unclaimed players have no avatar on cards, can't be followed,
+and have no public profile — but it is resolved by _the player claiming their
+account_, not by admin data entry. The item's `detail` says so.
+
+> A claimed player who simply hasn't set an avatar is **not** flagged. That's a
+> personal account setting, not league data, and no admin can act on it.
 
 ### Group C — Teams (team-level)
 
@@ -286,22 +317,23 @@ season name.
 **Server (Jest + Supertest)** — house pattern: unit-test the service with mocked
 repositories, drive routes via Supertest with a mocked service.
 
-| #   | Test                                                                        |
-| --- | --------------------------------------------------------------------------- |
-| S1  | scheduled game 47h old → **not** flagged                                    |
-| S2  | scheduled game 49h old → flagged overdue **(the D4 boundary)**              |
-| S3  | in_progress game 49h old → flagged                                          |
-| S4  | one-sided completed game, untracked side empty → **not** flagged (D5)       |
-| S5  | one-sided completed game, tracked side empty → flagged                      |
-| S6  | team with 4 active players → flagged; 5 → not (D7)                          |
-| S7  | inactive players don't count toward the roster minimum                      |
-| S8  | player with 0 appearances but team has no completed games → **not** flagged |
-| S9  | dismissed issue returned with `dismissed: true`, sorted last                |
-| S10 | dismissal is idempotent (same key twice → one record)                       |
-| S11 | non-manager → 403                                                           |
-| S12 | team manager sees only their own team's items                               |
-| S13 | no active season → 200, empty, `seasonId: null`                             |
-| S14 | integration: full GET round trip                                            |
+| #   | Test                                                                                      |
+| --- | ----------------------------------------------------------------------------------------- |
+| S1  | scheduled game 47h old → **not** flagged                                                  |
+| S2  | scheduled game 49h old → flagged overdue **(the D4 boundary)**                            |
+| S3  | in_progress game 49h old → flagged                                                        |
+| S4  | one-sided completed game, untracked side empty → **not** flagged (D5)                     |
+| S5  | one-sided completed game, tracked side empty → flagged                                    |
+| S6  | team with 4 active players → flagged; 5 → not (D7)                                        |
+| S7  | inactive players don't count toward the roster minimum                                    |
+| S8  | player with 0 appearances but team has no completed games → **not** flagged               |
+| S8a | unclaimed active player → flagged; claimed player with no avatar → **not** flagged (§3.1) |
+| S9  | dismissed issue returned with `dismissed: true`, sorted last                              |
+| S10 | dismissal is idempotent (same key twice → one record)                                     |
+| S11 | non-manager → 403                                                                         |
+| S12 | team manager sees only their own team's items                                             |
+| S13 | no active season → 200, empty, `seasonId: null`                                           |
+| S14 | integration: full GET round trip                                                          |
 
 S1/S2 straddle the 48h boundary deliberately — an off-by-one there silently
 either floods or hides the panel.
