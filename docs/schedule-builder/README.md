@@ -3,9 +3,9 @@
 Bulk creation of league games for league owners and managers — replacing the
 current one-game-at-a-time flow.
 
-**Status:** design approved, implementation not started
+**Status:** ✅ complete — 14/14 tasks, server 592/592, lint + build clean, manually verified
 **Branch:** `feature/schedule-builder`
-**Started:** 2026-08-08
+**Started / finished:** 2026-08-08
 
 ## Documents
 

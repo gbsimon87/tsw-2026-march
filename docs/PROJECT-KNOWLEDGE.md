@@ -276,7 +276,7 @@ existing `leagues.service.js` helper rather than writing the check fresh.
 | `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                                                                                                                                               |
 | `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                                                                                                                                       |
 | `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                                                                                                                                       |
-| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons)                                                                                                                                                                                                                                                        |
+| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons). `status` is `scheduled\|in_progress\|completed` (`scheduled` added by the Schedule Builder for future fixtures; default is still `in_progress`, no migration). Optional free-text `venue` (≤120)                                                      |
 | `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                                                                                                                                                |
 | `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                                                                                                                                                 |
 | `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/).                                                                                                                     |
@@ -856,6 +856,53 @@ needs). Deferred: a PDF post-game report (a separate Tier-2 backlog item, not
 part of this initiative). Full design, endpoint table, and file-by-file
 tracker: [`data-export/`](./data-export/).
 
+**Schedule Builder (2026-08-08, `feature/schedule-builder`)**: league owners and
+managers can create a whole fixture list in one action at
+`/admin/leagues/:leagueId/schedule`, replacing the one-game-at-a-time
+`AdminNewLeagueGamePage` flow for season setup (a 16-team round-robin is 120
+games). The page offers two entry paths into the same editable draft — **Suggest
+pairings** (single round-robin over the selected teams, laid onto real dates from
+a start date + weekday(s) + time slots) or **Start empty** — then commits
+everything through one new endpoint, `POST /leagues/:leagueId/games/bulk`
+(see [`api.md`](./api.md)).
+
+Design decisions worth knowing:
+
+- **`Game.status` gained `'scheduled'`** — the enum was `['in_progress',
+'completed']`, so a fixture built weeks ahead would have been born "in
+  progress". Additive: the default is unchanged and no document was rewritten.
+  Every pre-existing read uses explicit equality (`=== 'in_progress'`,
+  `!== 'completed'`), so the new value falls through safely; only two sites
+  needed wording fixes (`setGameLineup`'s error message and `AdminLeaguePage`'s
+  season-completion notice, which now counts scheduled and in-progress games
+  separately).
+- **The draft is client-only** — `client/src/features/leagues/scheduleBuilder.js`
+  holds two pure functions (`buildRoundRobin`, `assignDates`) so slot tweaking is
+  instant with no server round trip. Nothing persists until commit. Trade-off:
+  generation isn't reusable by a future API consumer.
+- **Byes are shown, never persisted.** Odd team counts produce a greyed,
+  non-committable bye row per round.
+- **Slot overflow is explicit.** If a round needs more games than the day has
+  slots, the spilled rows are badged, a banner names the count and new date, and
+  commit is **blocked** until the admin ticks an acknowledgement — silently
+  shifting fixtures would confuse players.
+- **Replace only removes `scheduled` games with no events**, behind a
+  confirmation dialog. Completed and in-progress games are never touched.
+- **Home/away alternates via a running per-team balance**, not positional parity.
+  A parity-based approach strands the circle-method anchor (and the team opposite
+  it) on one side — the first two attempts produced a 5-home/0-away team. The
+  balance approach is optimal (max diff 1) for every team count 2–16, and the
+  test asserts 13 sizes rather than one.
+- `useExportCsv`'s lesson repeats: the page fetches imperatively with
+  `useState`/`useEffect`, **not** `useQuery`, because several admin test trees
+  have no `QueryClientProvider`.
+
+Deferred: double round-robin and other formats, divisions/groups, playoff
+brackets, venue entities (free text only today), blackout dates,
+server-persisted/shareable drafts, and publish notifications. Design, plan and
+tracker: [`schedule-builder/`](./schedule-builder/),
+[`superpowers/specs/2026-08-08-schedule-builder-design.md`](./superpowers/specs/2026-08-08-schedule-builder-design.md).
+
 ---
 
 ## 12. Where to start (by question)
@@ -881,3 +928,4 @@ tracker: [`data-export/`](./data-export/).
 | Public unified player profiles (v1)     | §1 above, §11 ("Public Unified Player Profiles v1"), `docs/superpowers/specs/2026-07-11-public-unified-player-profiles-design.md`            |
 | Follow System (v1 + v1.5)               | §1 above, §11 ("Follow System v1.5"), [`follow-system/`](./follow-system/), [`follow-system-teams-leagues/`](./follow-system-teams-leagues/) |
 | CSV Data Export                         | §1 above, §11 ("CSV Data Export"), [`data-export/`](./data-export/)                                                                          |
+| Schedule Builder / bulk game creation   | §11 above ("Schedule Builder"), [`schedule-builder/`](./schedule-builder/)                                                                   |

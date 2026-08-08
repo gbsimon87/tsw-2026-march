@@ -8,13 +8,13 @@
 |                    |                                                   |
 | ------------------ | ------------------------------------------------- |
 | **Phase**          | Phases 1–2 complete → Phase 3 (client UI) next    |
-| **Tasks complete** | 9 / 14                                            |
+| **Tasks complete** | 14 / 14                                           |
 | **Server suite**   | ✅ 592 / 592 passing (57 suites)                  |
 | **Client suite**   | 17 failing — unchanged OPT-026 baseline, not ours |
 | **Blockers**       | none                                              |
 
 ```
-Progress  [█████████████░░░░░░░]  64%
+Progress  [████████████████████] 100%
 ```
 
 ## Phases
@@ -24,8 +24,8 @@ Progress  [█████████████░░░░░░░]  64%
 | 0 · Design     | Spec + tracker                                       | ✅     | 2 / 2 |
 | 1 · Server     | Status enum, venue, repo, validation, service, route | ✅     | 7 / 7 |
 | 2 · Generation | Pure `scheduleBuilder.js` + unit tests               | ✅     | 2 / 2 |
-| 3 · Client UI  | Builder page, draft table, api, route, entry point   | ⬜     | 0 / 4 |
-| 4 · Verify     | Full suites, lint, build, manual pass                | ⬜     | 0 / 1 |
+| 3 · Client UI  | Builder page, draft table, api, route, entry point   | ✅     | 4 / 4 |
+| 4 · Verify     | Full suites, lint, build, manual pass                | ✅     | 1 / 1 |
 
 ## Completed
 
@@ -38,6 +38,26 @@ Progress  [█████████████░░░░░░░]  64%
 | 6 · Bulk service            | `2481870` | Reuses `assertLeagueManagerOrOwner` / `ensureSeasonEditable`; validates all rows pre-write |
 | 7 · Controller + route      | `8c71d50` | `POST /leagues/:leagueId/games/bulk` → 201                                                 |
 | 8–9 · Generation            | `5bc69eb` | `buildRoundRobin` + `assignDates`, 34 unit tests                                           |
+
+## Final verification (2026-08-08)
+
+| Check                                          | Result                                                                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Server suite                                   | ✅ 592 / 592 (57 suites)                                                                                    |
+| Client suite                                   | ✅ 238 passing; 17 failing = **unchanged** OPT-026 baseline (was 172 passing / 17 failing before this work) |
+| `pnpm check-env` / `lint` / `build`            | ✅ all clean                                                                                                |
+| Manual pass (real dev DB, Metro Spring League) | ✅ see below                                                                                                |
+
+Manual pass covered: no-active-season guard · 4-team generation (6 games, 3
+rounds, consecutive Saturdays, correct slots) · venue applied · overflow warning
+naming count + date, commit blocked until acknowledged · commit persisting 6
+games as `scheduled` with the right `seasonId`/`venue` · **replace leaving all 6
+completed games intact** (6 completed + 6 scheduled before and after, with new
+`_id`s proving the swap ran) · 375px mobile card layout.
+
+> Manual verification left a "Schedule Builder Test Season" plus 6 scheduled
+> games in the shared **dev** DB (league `6a5c777ca58e60075a97c178`). Harmless,
+> but delete when convenient — the pre-existing completed games were untouched.
 
 ## Verification notes
 

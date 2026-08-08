@@ -303,6 +303,7 @@ Mounted under `/leagues`. Authorization per action is defined in
 - `POST /leagues`, `GET /leagues` _(keyset-paginated)_, `GET /leagues/my-profiles`
 - `GET /leagues/:leagueId`, `PATCH /leagues/:leagueId`, `POST /leagues/:leagueId/archive`
 - `GET /leagues/:leagueId/standings`, `GET /leagues/:leagueId/games`
+- `POST /leagues/:leagueId/games/bulk` — Schedule Builder bulk create (see below)
 - `POST|DELETE /leagues/:leagueId/logo`
 - `GET|POST /leagues/:leagueId/managers`, `DELETE /leagues/:leagueId/managers/:managerId`
 - `POST|GET /leagues/:leagueId/teams`, `GET|PATCH /leagues/:leagueId/teams/:leagueTeamId`, `POST /leagues/:leagueId/teams/:leagueTeamId/archive`
@@ -310,6 +311,56 @@ Mounted under `/leagues`. Authorization per action is defined in
 - `POST /leagues/:leagueId/teams/:leagueTeamId/players`, `PATCH|DELETE /leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId`, `POST /leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId/unclaim`
 - `GET /leagues/:leagueId/teams/:leagueTeamId/members`, `POST /leagues/:leagueId/teams/:leagueTeamId/managers`, `PATCH|DELETE /leagues/:leagueId/teams/:leagueTeamId/members/:memberId`
 - Join requests: `POST|GET /leagues/:leagueId/teams/:leagueTeamId/join-requests`, and `POST .../join-requests/:requestId/{approve,reject,cancel}`
+
+### `POST /leagues/:leagueId/games/bulk` — Schedule Builder
+
+Creates a whole fixture list in one all-or-nothing request. Backs the
+`/admin/leagues/:leagueId/schedule` builder page; see
+[`schedule-builder/`](./schedule-builder/).
+
+**Auth:** `assertLeagueManagerOrOwner` (league owner or active league manager).
+Requires an **active season** — 400 otherwise.
+
+Request:
+
+```json
+{
+  "replaceExisting": false,
+  "games": [
+    {
+      "homeLeagueTeamId": "…",
+      "awayLeagueTeamId": "…",
+      "scheduledAt": "2026-09-05T10:00:00.000Z",
+      "venue": "Court 1"
+    }
+  ]
+}
+```
+
+| Field                                   | Rules                                                  |
+| --------------------------------------- | ------------------------------------------------------ |
+| `games`                                 | required, 1–**200** rows                               |
+| `homeLeagueTeamId` / `awayLeagueTeamId` | required; must differ; both must belong to this league |
+| `scheduledAt`                           | required ISO-8601 datetime                             |
+| `venue`                                 | optional, trimmed, ≤120 chars                          |
+| `replaceExisting`                       | optional, defaults `false`                             |
+
+Games are created with `status: 'scheduled'`, `gameContext: 'league'`,
+`trackingMode: 'one_sided'`, the league's current `seasonId`, and a
+`"{away} at {home}"` title. `trackedLeagueTeamId` defaults to the home team.
+
+`replaceExisting: true` first deletes league games in the active season that are
+**`scheduled` and carry no events** — completed and in-progress games are never
+touched.
+
+Response `201`:
+
+```json
+{ "created": 6, "replaced": 0, "games": [{ "id": "…", "status": "scheduled", "venue": "Court 1" }] }
+```
+
+Errors: `400` invalid payload / no active season / completed season / a team from
+another league · `403` not a manager or owner · `404` league not found.
 
 ## Public routes (anonymous-readable)
 
