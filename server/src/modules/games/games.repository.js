@@ -452,8 +452,31 @@ async function saveGameSummary(gameId, lockId, summary) {
   );
 }
 
+// Schedule Builder: bulk-create fixtures in a single round trip. `ordered: true`
+// so the whole batch fails together rather than leaving a half-built schedule —
+// the endpoint contract is all-or-nothing.
+async function insertManyGames(docs) {
+  return Game.insertMany(docs, { ordered: true });
+}
+
+// Schedule Builder: only a future fixture that nobody has started is safe to
+// replace. A game carrying any recorded event, or one already in progress or
+// completed, is real history and is never deleted by a schedule rebuild.
+async function deleteReplaceableLeagueGames(leagueId, seasonId) {
+  const result = await Game.deleteMany({
+    leagueId,
+    seasonId,
+    status: 'scheduled',
+    $or: [{ events: { $size: 0 } }, { events: { $exists: false } }],
+  });
+
+  return result?.deletedCount ?? 0;
+}
+
 module.exports = {
   createGame,
+  insertManyGames,
+  deleteReplaceableLeagueGames,
   listGamesByOwner,
   findGameByIdAndOwner,
   findGameById,
