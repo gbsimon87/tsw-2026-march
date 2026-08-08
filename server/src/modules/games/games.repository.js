@@ -210,6 +210,10 @@ const gameSchema = new mongoose.Schema(
     awayStartingLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     awayCurrentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     scheduledAt: { type: Date },
+    // Schedule Builder: free-text location for a fixture. Venue entities (with
+    // capacity, double-booking checks and a map) are a separate future feature;
+    // this is deliberately just a label.
+    venue: { type: String, trim: true, maxlength: 120 },
     completedAt: { type: Date },
     rosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },

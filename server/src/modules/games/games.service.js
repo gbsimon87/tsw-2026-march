@@ -329,6 +329,7 @@ function sanitizeGame(game, options = {}) {
       ? game.awayCurrentLineupPlayerIds.map(String)
       : [],
     scheduledAt: game.scheduledAt ?? null,
+    venue: game.venue ?? null,
     completedAt: game.completedAt ?? null,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -1161,6 +1162,7 @@ async function listGamesForUser(userId, filter = {}) {
       opponent: game.opponent ?? null,
       status: game.status,
       scheduledAt: game.scheduledAt ?? null,
+      venue: game.venue ?? null,
       completedAt: game.completedAt ?? null,
       eventCount: (game.events || []).length,
       createdAt: game.createdAt,
