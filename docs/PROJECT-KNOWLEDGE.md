@@ -14,7 +14,9 @@
 > [`demo-data-generation/`](./demo-data-generation/) (demo account seed
 > plan, decisions, live tracker),
 > [`auto-feed-generation/`](./auto-feed-generation/) (Auto Feed Generation
-> plan + live tracker, in progress). Active work
+> plan + live tracker, in progress),
+> [`schedule-builder/`](./schedule-builder/) (bulk league-game creation —
+> design, tracker, verification record). Active work
 > tracker: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
 > (performance/hardening, OPT-###). The separate `project-improvement-plan/`
 > initiative (targeted bug fixes TSW-001–005) finished 2026-07-08 and was
@@ -111,6 +113,17 @@ Core capabilities:
   owns no collections and only orchestrates existing `leagues.service`
   getters. See §11 ("CSV Data Export") for the full architecture and
   follow-up history.
+- **Schedule Builder (2026-08-08)**: a league owner or manager can create a
+  whole season of league games in one action at
+  `/admin/leagues/:leagueId/schedule`, instead of one at a time via
+  `AdminNewLeagueGamePage` (a 16-team round-robin is 120 games). Pick teams,
+  game-days and time slots, then either **Suggest pairings** (single
+  round-robin, laid onto real calendar dates) or **Start empty**; both land in
+  the same editable client-side draft, committed through
+  `POST /leagues/:leagueId/games/bulk`. Games are created with the **new
+  `Game.status` value `'scheduled'`** — a fixture, not a live game — and an
+  optional free-text `venue`. See §11 ("Schedule Builder") for decisions and
+  deferred scope.
 
 The product model is centered on **one tracked team per standalone game**;
 opponents are represented by score totals and labels, not full rosters. League
@@ -208,6 +221,9 @@ Features wrap it in singleton `*Api` objects (e.g. `authApi`, `billingApi`).
   System v1) is protected.
 - **`/games/:gameId/track` renders outside `AppLayout`** (full-screen tracking,
   no shared nav).
+- **`/admin/leagues/:leagueId/schedule`** is the Schedule Builder (protected;
+  entry point is the "Build Schedule" button on `AdminLeaguePage`'s Games tab,
+  next to "Schedule Game" which still creates a single game).
 - Nearly every page is `React.lazy`-loaded (OPT-001 code-splitting); recharts /
   posthog-js / stripe-js are isolated `manualChunks` in `vite.config.js`.
 
@@ -429,6 +445,14 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
   a new data page, prefer `useQuery`; migrating the rest is the tracked
   "OPT-014b" follow-up (see its card for the exact remaining list and why each
   one is riskier than a plain read-swap).
+- ⚠️ **The "prefer `useQuery`" rule has a real exception on the admin surface**:
+  several admin pages' tests render without a `QueryClientProvider`, so any
+  hook reaching for React Query there fails with "No QueryClient set". This bit
+  `useExportCsv` (§11, CSV Data Export) and again `AdminLeagueSchedulePage`
+  (§11, Schedule Builder) — both were rewritten to plain `useState`/`useEffect`.
+  Until those test trees get a provider, a **new admin page doing a one-shot
+  read should fetch imperatively**; save `useQuery` for pages whose test setup
+  already provides a client.
 
 ---
 
@@ -602,7 +626,13 @@ redesigned too — don't spread the new palette opportunistically.
   two seed-related files plus the unrelated backfill/migration scripts
   above; a one-time dev-DB-reset helper and an unrelated real-league TSV
   importer that used to live there were removed once no longer needed (see
-  `demo-data-generation/TRACKER.md` Session 4). Full plan, decisions, and a
+  `demo-data-generation/TRACKER.md` Session 4). **Its "already seeded?" checks
+  filter `status: 'completed'`** — since the Schedule Builder shipped a league
+  can also hold `scheduled` fixtures, and counting those made the guard skip
+  seeding the played games entirely (fixtures but no stats/box scores/
+  highlights); the feed-post query is filtered for the same reason, since a
+  fixture has no events and no `videoUrl`. Any new query here that means "games
+  that were played" must say so explicitly. Full plan, decisions, and a
   live implementation tracker: [`demo-data-generation/`](./demo-data-generation/).
 - **Deployment**: Render blueprint (`render.yaml`) — 4 services (API + client ×
   dev/prod). Secrets injected via the Render dashboard, never in `render.yaml`.
