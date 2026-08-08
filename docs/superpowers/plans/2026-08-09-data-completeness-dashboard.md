@@ -1165,6 +1165,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => {
     findActiveLeagueTeamMember: jest.fn(),
     listLeagueTeams: jest.fn(),
     listLeaguePlayers: jest.fn(),
+    listLeaguePlayerStats: jest.fn(),
   };
 });
 
@@ -1218,6 +1219,7 @@ beforeEach(() => {
     { _id: TEAM_ID, name: 'Ballers', logo: { url: 'x' } },
   ]);
   leaguesRepository.listLeaguePlayers.mockResolvedValue(activeRoster(TEAM_ID, 5));
+  leaguesRepository.listLeaguePlayerStats.mockResolvedValue([]);
   gamesRepository.listLeagueGamesByLeagueId.mockResolvedValue([]);
   dismissalRepository.listDismissals.mockResolvedValue([]);
 });
@@ -1355,6 +1357,7 @@ const {
   findActiveLeagueTeamMember,
   listLeagueTeams,
   listLeaguePlayers,
+  listLeaguePlayerStats,
 } = require('./leagues.repository');
 const { findSeasonById } = require('./seasons.repository');
 const { listLeagueGamesByLeagueId } = require('../games/games.repository');
@@ -1451,11 +1454,12 @@ async function getDataCompletenessForUser(userId, leagueId) {
   const season = await findSeasonById(league.currentSeasonId);
   const seasonId = String(league.currentSeasonId);
 
-  const [teams, players, games, dismissals] = await Promise.all([
+  const [teams, players, games, statsRows, dismissals] = await Promise.all([
     listLeagueTeams(league._id),
     listLeaguePlayers(league._id),
     // Signature is positional: (leagueId, seasonId) — not an options object.
     listLeagueGamesByLeagueId(league._id, seasonId),
+    listLeaguePlayerStats(league._id, seasonId),
     listDismissals(league._id, seasonId),
   ]);
 
@@ -1470,20 +1474,15 @@ async function getDataCompletenessForUser(userId, leagueId) {
     if (game.awayLeagueTeamId) completedGameTeamIds.add(String(game.awayLeagueTeamId));
   }
 
-  const statsByPlayerId = new Map();
-  for (const game of games) {
-    if (game.status !== 'completed') continue;
-    for (const event of game.events ?? []) {
-      const playerId = event.leaguePlayerId ? String(event.leaguePlayerId) : null;
-      if (!playerId) continue;
-      const current = statsByPlayerId.get(playerId) ?? { gamesCount: 0, gameIds: new Set() };
-      if (!current.gameIds.has(String(game._id))) {
-        current.gameIds.add(String(game._id));
-        current.gamesCount += 1;
-      }
-      statsByPlayerId.set(playerId, current);
-    }
-  }
+  // Appearances come from the materialized LeaguePlayerStats rows, NOT from game
+  // events. Events carry `playerId`, which points at a game's embedded roster
+  // *snapshot* entry, and the snapshot stores `leaguePlayerId` separately (see
+  // leagues.service.js:1035/1043). Deriving appearances from events would mean
+  // re-implementing that indirection; the stats collection already did it, is
+  // season-scoped, and is indexed on (leagueId, seasonId, leagueTeamId, leaguePlayerId).
+  const statsByPlayerId = new Map(
+    statsRows.map((row) => [String(row.leaguePlayerId), { gamesCount: row.gamesCount ?? 0 }])
+  );
 
   const gameIssues = buildGameIssues({
     games: games.map((game) => ({
@@ -2473,9 +2472,16 @@ uses rose/amber/slate. If `AdminLeaguePage` already has a badge component for
 status colours, prefer it over these literals — the goal is consistency with the
 page, not with this plan.
 
-**Appearance counting.** Task 6 derives `gamesCount` from game events rather than
-reading `LeaguePlayerStats`. That keeps the service dependent on one already-loaded
-dataset instead of a second materialized collection whose season scoping would
-need separate verification. If `LeaguePlayerStats` proves cheaper during
-implementation, swapping it in is safe — `buildRosterIssues` only needs a
-`Map<playerId, { gamesCount }>`, and its tests never touch the source.
+**Appearance counting — corrected in pre-flight.** An earlier draft derived
+`gamesCount` by counting `event.leaguePlayerId` across game events. **No such
+field exists.** Events carry `playerId`, which references a game's embedded
+roster _snapshot_ entry; the snapshot stores `leaguePlayerId` separately
+(`leagues.service.js:1035` and `:1043` show the two-step match). Counting the
+wrong field would have produced an empty map and flagged **every rostered player**
+as having no appearances — a silent, plausible-looking wrong answer.
+
+Task 6 now reads `listLeaguePlayerStats(leagueId, seasonId)`
+(`leagues.repository.js:499`), which is already materialized per season and
+indexed on `(leagueId, seasonId, leagueTeamId, leaguePlayerId)`. `buildRosterIssues`
+is unaffected — it only ever needed a `Map<playerId, { gamesCount }>`, which is
+why its Task 2 tests never had to change.
