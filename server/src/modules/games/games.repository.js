@@ -195,7 +195,11 @@ const gameSchema = new mongoose.Schema(
     videoUrl: { type: String, trim: true, default: null },
     status: {
       type: String,
-      enum: ['in_progress', 'completed'],
+      // Schedule Builder: 'scheduled' is a future fixture — created by the bulk
+      // schedule builder, carries no events, and is not yet trackable. Additive
+      // to the enum; existing documents keep in_progress/completed and the
+      // default is unchanged so every pre-existing create path behaves as before.
+      enum: ['scheduled', 'in_progress', 'completed'],
       default: 'in_progress',
       index: true,
     },

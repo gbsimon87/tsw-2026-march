@@ -35,18 +35,19 @@ additional formats are a deliberate future extension.
 
 ## 3. Key decisions
 
-| #   | Decision                                                                             | Rationale                                                                                                                                         |
-| --- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | Draft is **client-only** state; nothing persists until commit                        | Cheap, instant interaction; a draft is built in one sitting                                                                                       |
-| D2  | Suggestion logic is **client-side pure functions**                                   | No server round-trip while the admin adjusts slots; unit-testable with Vitest. Trade-off: not reusable by a future API consumer — accepted for v1 |
-| D3  | **One bulk endpoint**, all-or-nothing                                                | Avoids N sequential creates and half-created seasons                                                                                              |
-| D4  | Active `Season` **required** to generate or commit                                   | Matches existing league-game rules; standings/stats are season-keyed                                                                              |
-| D5  | Regeneration **replaces only `scheduled` games with no events** in the active season | Never destroys in-progress or completed games                                                                                                     |
-| D6  | Byes are **shown, never persisted**                                                  | Odd team counts are normal; a bye is informational, not a `Game`                                                                                  |
-| D7  | Slot overflow is **explicit and acknowledged**, never silent                         | Silent date shuffling confuses players; admin must see and accept it                                                                              |
-| D8  | Home/away **alternates** across the round-robin, plus a per-row swap button          | Roughly even home/away split without removing admin control                                                                                       |
-| D9  | Auth via existing **`assertLeagueManagerOrOwner`**                                   | Reuses the canonical gate (§4 of PROJECT-KNOWLEDGE) rather than a fresh check                                                                     |
-| D10 | Venue is a **free-text string on `Game`**                                            | Additive field, no migration; venue entities are a separate future idea                                                                           |
+| #   | Decision                                                                             | Rationale                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Draft is **client-only** state; nothing persists until commit                        | Cheap, instant interaction; a draft is built in one sitting                                                                                                                                                                                                                                        |
+| D2  | Suggestion logic is **client-side pure functions**                                   | No server round-trip while the admin adjusts slots; unit-testable with Vitest. Trade-off: not reusable by a future API consumer — accepted for v1                                                                                                                                                  |
+| D3  | **One bulk endpoint**, all-or-nothing                                                | Avoids N sequential creates and half-created seasons                                                                                                                                                                                                                                               |
+| D4  | Active `Season` **required** to generate or commit                                   | Matches existing league-game rules; standings/stats are season-keyed                                                                                                                                                                                                                               |
+| D5  | Regeneration **replaces only `scheduled` games with no events** in the active season | Never destroys in-progress or completed games                                                                                                                                                                                                                                                      |
+| D6  | Byes are **shown, never persisted**                                                  | Odd team counts are normal; a bye is informational, not a `Game`                                                                                                                                                                                                                                   |
+| D7  | Slot overflow is **explicit and acknowledged**, never silent                         | Silent date shuffling confuses players; admin must see and accept it                                                                                                                                                                                                                               |
+| D8  | Home/away **alternates** across the round-robin, plus a per-row swap button          | Roughly even home/away split without removing admin control                                                                                                                                                                                                                                        |
+| D9  | Auth via existing **`assertLeagueManagerOrOwner`**                                   | Reuses the canonical gate (§4 of PROJECT-KNOWLEDGE) rather than a fresh check                                                                                                                                                                                                                      |
+| D10 | Venue is a **free-text string on `Game`**                                            | Additive field, no migration; venue entities are a separate future idea                                                                                                                                                                                                                            |
+| D11 | Add **`'scheduled'`** to the `Game.status` enum                                      | Discovered during planning: the enum was `['in_progress','completed']` only. A fixture built weeks ahead must not read as live. Additive — the default stays `in_progress`, existing documents are untouched, and every existing read uses explicit equality so a third value falls through safely |
 
 ## 4. User flow
 
@@ -151,14 +152,38 @@ Response: `{ games: [...], created: N, replaced: M }`.
 
 ## 7. Data model change
 
-One additive field on the `Game` schema (`games.repository.js`):
+Two additive changes on the `Game` schema (`games.repository.js`), neither
+requiring a migration:
+
+**1. `venue` — new field**
 
 ```js
 venue: { type: String, trim: true, maxlength: 120 },
 ```
 
-No migration — absent on existing documents, rendered as blank. `scheduledAt`,
-`status`, `seasonId`, and the league team refs already exist and are reused
+Absent on existing documents, rendered as blank.
+
+**2. `'scheduled'` — new status value (D11)**
+
+```js
+enum: ['scheduled', 'in_progress', 'completed'],  // default stays 'in_progress'
+```
+
+The enum was `['in_progress', 'completed']`; a bulk-created fixture would
+otherwise have been born "in progress". **Existing games are unaffected** — the
+default is unchanged, so every pre-existing create path behaves exactly as
+before, and no document is rewritten.
+
+Audit of existing `status` reads (all safe, two message fixes needed):
+
+| Site                                                                                                        | Behaviour with `'scheduled'`                                        | Action                        |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------- |
+| `games.service.js` `!== 'completed'` guards, `feed.service.js`, `export.service.js`, `gameRecap.service.js` | excludes scheduled games from stats/feed/export                     | correct as-is                 |
+| `GamesListPage`, `PublicTeamPage`, `AdminTeamPage`, `GameDetailHeader`                                      | explicit `=== 'in_progress'` — falls through to the non-live branch | correct as-is                 |
+| `games.service.js#setGameLineup`                                                                            | rejects, but says _"on a completed game"_                           | fix the message               |
+| `AdminLeaguePage.jsx:1327`                                                                                  | counts scheduled games as "still in progress"                       | narrow to `=== 'in_progress'` |
+
+`scheduledAt`, `seasonId`, and the league team refs already exist and are reused
 unchanged.
 
 ## 8. Files
