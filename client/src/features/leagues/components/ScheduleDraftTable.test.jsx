@@ -135,6 +135,25 @@ describe('ScheduleDraftTable', () => {
     expect(onRemoveRow).toHaveBeenCalledWith('row-2');
   });
 
+  it('names controls after the matchup, never the internal row id', () => {
+    const { container } = setup({ rows: [gameRow()] });
+
+    expect(
+      screen.getAllByRole('button', { name: 'Remove game Bisons at Hawks' }).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole('button', { name: 'Swap home and away for Bisons at Hawks' }).length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Venue for Bisons at Hawks').length).toBeGreaterThan(0);
+
+    // No visible or accessible text should expose a `row-N` id.
+    expect(container.textContent).not.toMatch(/row-\d/);
+    const accessibleNames = [...container.querySelectorAll('[aria-label]')].map((el) =>
+      el.getAttribute('aria-label')
+    );
+    expect(accessibleNames.every((name) => !/row-\d/.test(name))).toBe(true);
+  });
+
   it('renders an empty state when there are no rows', () => {
     setup({ rows: [] });
 

@@ -11,6 +11,15 @@ function teamName(teams, teamId) {
   return teams.find((team) => team.id === teamId)?.name ?? 'Unknown team';
 }
 
+// Accessible names describe the fixture ("Bisons at Hawks"), never the internal
+// row id — a screen-reader user has no idea what "row-3" refers to.
+function matchupLabel(teams, row) {
+  if (row.isBye) {
+    return `${teamName(teams, row.byeTeamId)} bye`;
+  }
+  return `${teamName(teams, row.awayLeagueTeamId)} at ${teamName(teams, row.homeLeagueTeamId)}`;
+}
+
 // <input type="datetime-local"> speaks local wall-clock time with no zone, so
 // format from the local getters rather than toISOString() (which would shift the
 // displayed time by the UTC offset).
@@ -43,14 +52,16 @@ function ByeLabel({ teams, row }) {
   );
 }
 
-function RowControls({ row, onSwapSides, onRemoveRow }) {
+function RowControls({ row, teams, onSwapSides, onRemoveRow }) {
+  const label = matchupLabel(teams, row);
+
   return (
     <div className="flex items-center gap-2">
       {!row.isBye && (
         <button
           type="button"
           onClick={() => onSwapSides(row.id)}
-          aria-label={`Swap home and away for game ${row.id}`}
+          aria-label={`Swap home and away for ${label}`}
           className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
         >
           Swap
@@ -59,7 +70,7 @@ function RowControls({ row, onSwapSides, onRemoveRow }) {
       <button
         type="button"
         onClick={() => onRemoveRow(row.id)}
-        aria-label={`Remove ${row.isBye ? 'bye' : 'game'} ${row.id}`}
+        aria-label={`Remove ${row.isBye ? 'bye' : 'game'} ${label}`}
         className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-red-50 hover:text-red-700"
       >
         Remove
@@ -142,7 +153,7 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                     {!row.isBye && (
                       <>
                         <label className="sr-only" htmlFor={`${fieldPrefix}-date-${row.id}`}>
-                          Date and time for game {row.id}
+                          Date and time for {matchupLabel(teams, row)}
                         </label>
                         <input
                           id={`${fieldPrefix}-date-${row.id}`}
@@ -158,7 +169,7 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                     {!row.isBye && (
                       <>
                         <label className="sr-only" htmlFor={`${fieldPrefix}-venue-${row.id}`}>
-                          Venue for game {row.id}
+                          Venue for {matchupLabel(teams, row)}
                         </label>
                         <input
                           id={`${fieldPrefix}-venue-${row.id}`}
@@ -173,7 +184,12 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                     )}
                   </td>
                   <td className="py-2.5">
-                    <RowControls row={row} onSwapSides={onSwapSides} onRemoveRow={onRemoveRow} />
+                    <RowControls
+                      row={row}
+                      teams={teams}
+                      onSwapSides={onSwapSides}
+                      onRemoveRow={onRemoveRow}
+                    />
                   </td>
                 </tr>
               );
@@ -198,7 +214,12 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                 {row.isBye ? (
                   <div className="flex items-center justify-between gap-3">
                     <ByeLabel teams={teams} row={row} />
-                    <RowControls row={row} onSwapSides={onSwapSides} onRemoveRow={onRemoveRow} />
+                    <RowControls
+                      row={row}
+                      teams={teams}
+                      onSwapSides={onSwapSides}
+                      onRemoveRow={onRemoveRow}
+                    />
                   </div>
                 ) : (
                   <>
@@ -208,7 +229,12 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                         <span className="px-1.5 text-slate-400">at</span>
                         <span>{teamName(teams, row.homeLeagueTeamId)}</span>
                       </p>
-                      <RowControls row={row} onSwapSides={onSwapSides} onRemoveRow={onRemoveRow} />
+                      <RowControls
+                        row={row}
+                        teams={teams}
+                        onSwapSides={onSwapSides}
+                        onRemoveRow={onRemoveRow}
+                      />
                     </div>
 
                     {row.overflowed && (
@@ -223,11 +249,12 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                           className="mb-1 block text-xs font-medium text-slate-500"
                           htmlFor={`${fieldPrefix}-card-date-${row.id}`}
                         >
-                          Date and time for game {row.id}
+                          Date and time
                         </label>
                         <input
                           id={`${fieldPrefix}-card-date-${row.id}`}
                           type="datetime-local"
+                          aria-label={`Date and time for ${matchupLabel(teams, row)}`}
                           value={toDateTimeLocalValue(row.scheduledAt)}
                           onChange={(event) => handleDateChange(row.id, event.target.value)}
                           className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-100"
@@ -238,11 +265,12 @@ export function ScheduleDraftTable({ rows, teams, onChangeRow, onSwapSides, onRe
                           className="mb-1 block text-xs font-medium text-slate-500"
                           htmlFor={`${fieldPrefix}-card-venue-${row.id}`}
                         >
-                          Venue for game {row.id}
+                          Venue
                         </label>
                         <input
                           id={`${fieldPrefix}-card-venue-${row.id}`}
                           type="text"
+                          aria-label={`Venue for ${matchupLabel(teams, row)}`}
                           value={row.venue ?? ''}
                           maxLength={120}
                           placeholder="Venue"
