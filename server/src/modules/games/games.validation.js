@@ -237,6 +237,16 @@ const listGamesSchema = z.object({
   status: z.enum(['scheduled', 'in_progress', 'completed']).optional(),
 });
 
+// Mid-game roster add. Name + optional jersey only — position is deliberately
+// omitted (unused by tracking, and this form is filled with a game running).
+// Mirrors leagues.validation.js's jerseyNumber rules so a player added here
+// validates identically to one added on the admin roster page.
+const addRosterPlayerSchema = z.object({
+  side: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  displayName: z.string().trim().min(1).max(120),
+  jerseyNumber: z.number().int().min(0).max(999).nullable().optional(),
+});
+
 module.exports = {
   createGameSchema,
   updateGameSchema,
@@ -245,4 +255,5 @@ module.exports = {
   statTypeSchema,
   updateEventSchema,
   listGamesSchema,
+  addRosterPlayerSchema,
 };
