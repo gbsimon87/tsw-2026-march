@@ -158,6 +158,7 @@ Returns the feature entitlements for the specified team. Requires authentication
 - `DELETE /games/:gameId/events/:eventId`
 - `POST /games/:gameId/finish`
 - `DELETE /games/:gameId`
+- `POST /games/:gameId/roster`
 
 ### Game Event Payload (`POST /games/:gameId/events`)
 
@@ -217,6 +218,48 @@ Inserts a new event immediately before the referenced event. Accepts the same pa
 ### Delete Game (`DELETE /games/:gameId`)
 
 Permanently deletes the game and all its events.
+
+### Add Roster Player (`POST /games/:gameId/roster`)
+
+Mid-game roster add: adds a player to the game's roster without leaving the
+live tracking screen. Works for both league and standalone games; auth
+required (same game-access gate as the rest of this section).
+
+```json
+{ "side": "home", "displayName": "Jordan Lee", "jerseyNumber": 23 }
+```
+
+| Field          | Rules                                                                              |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `side`         | `"home"` \| `"away"` — **required for dual-team games**, ignored/omitted otherwise |
+| `displayName`  | required, trimmed, 1–120 chars                                                     |
+| `jerseyNumber` | optional, integer 0–999, nullable                                                  |
+
+No `position` field — deliberately name + jersey only.
+
+The write always goes to the durable roster (`LeaguePlayer` for league games,
+`team.players` for standalone), gated by the same permission rules as the
+admin roster pages (`assertTeamManagerOrOwner` / team ownership) — this
+endpoint does not widen who can edit a roster. For any game shape that reads a
+frozen roster snapshot (league one-sided, or any dual-team game), the new
+player is also appended to that game's snapshot array so it appears in the
+game being tracked. New players land on the bench; use the existing
+substitution flow to sub them in.
+
+Response `201`:
+
+```json
+{
+  "player": { "id": "…", "displayName": "Jordan Lee", "jerseyNumber": 23, "isActive": true },
+  "side": "home"
+}
+```
+
+Errors: `400` missing `side` on a dual-team game, or invalid body · `403`
+insufficient roster permission for the targeted team (e.g. a home-team manager
+adding to the away roster of a dual-team league game) · `404` game not found /
+no access · `409` game is `completed` (only `in_progress`/`scheduled` games are
+editable), or a duplicate active player name on that roster.
 
 ### `statType` values
 

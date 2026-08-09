@@ -135,6 +135,30 @@ Core capabilities:
   judged fine; dismissed items collapse to the bottom rather than disappearing.
   See §11 ("Data Health") for the 48-hour rule that keeps it from crying wolf.
 
+- **Mid-game roster add (2026-08-09)**: from the live tracking screen
+  (`/games/:gameId/track`), an authorized user can add a player who was missed
+  at team-creation time without leaving the screen — covers both league and
+  standalone games, name + optional jersey only (no position; the form is
+  filled with a game running). `POST /games/:gameId/roster` writes to whichever
+  roster the game actually reads from: a standalone one-sided game reads
+  `team.players` **live** off the `Team` doc, so only the durable roster row is
+  written; every other shape (league one-sided, or any dual-team game) reads a
+  **frozen** roster snapshot on the `Game` doc, so the endpoint also appends to
+  the matching snapshot array, or the new player stays invisible in the very
+  game they were added for. The durable write is delegated to the existing
+  `addPlayerToLeagueTeam`/`addPlayerToTeam` gates rather than re-derived, so
+  permissions and the duplicate-active-name rule are inherited, not widened.
+  New players land on the **bench**; subbing them in reuses the existing
+  substitution flow. Allowed only while a game is `in_progress` or `scheduled`
+  — a completed game 409s, since appending would invalidate its frozen
+  `finalScore`/`boxScore`. A `canManageRoster` boolean on the game payload
+  (top-level, sibling of `game`) gates the client button; **note this is a
+  game-payload field, not `viewerContext`** — `viewerContext` is attached only
+  to `GET /leagues/:id` (see §4/`permissions.md`) and `GameTrackPage` has no
+  access to it. See §11 ("Mid-game roster add") for the full design record,
+  including a correction to the original spec's stated rationale for
+  `canManageRoster`.
+
 The product model is centered on **one tracked team per standalone game**;
 opponents are represented by score totals and labels, not full rosters. League
 games are the exception (dual-team tracking).
@@ -1007,6 +1031,80 @@ operator view, historic seasons, CSV export, and notifications when new issues
 appear. Design, plan and tracker:
 [`data-completeness/`](./data-completeness/),
 [`superpowers/specs/2026-08-09-data-completeness-dashboard-design.md`](./superpowers/specs/2026-08-09-data-completeness-dashboard-design.md).
+
+**Mid-game roster add (2026-08-09, `feature/mid-game-roster-add`)**: from the
+live tracking screen (`/games/:gameId/track`), an authorized user can add a
+player who was missed when the team was created, without leaving the screen —
+covers both league and standalone games via one new endpoint,
+`POST /games/:gameId/roster` (see [`api.md`](./api.md)).
+
+Design decisions worth knowing:
+
+- **Three game shapes, two writes.** A standalone one-sided game reads
+  `team.players` **live** off the `Team` doc (`resolveGameTeamContext`), so it
+  needs only the durable roster write and no game write. A league one-sided
+  game reads the frozen `game.rosterSnapshot`; any dual-team game (league or
+  standalone) reads frozen `game.homeRosterSnapshot`/`awayRosterSnapshot` —
+  both need the roster write **plus** an append to the correct snapshot array,
+  or the new player stays invisible in the very game they were added for.
+  `resolveRosterTargetForGame(game, side)` (pure, `games.service.js`) encodes
+  that mapping and returns `snapshotField: null` for the live-reading shape.
+- **Permissions are inherited by delegation, not re-derived.** The durable
+  write is delegated to the existing `leaguesService.addPlayerToLeagueTeam`
+  (gates `assertTeamManagerOrOwner`, enforces its 409 duplicate-active-name
+  rule, runs `ensureLeagueEditable`) or `teamsService.addPlayerToTeam` (gates
+  team ownership, runs `scheduleTeamSeasonSummaryRecompute` per OPT-013). This
+  deliberately follows §4's TSW-001 lesson that a gate rewritten from scratch
+  is the one that forgets the owner OR-clause.
+- **Ordering: roster write first, snapshot append second.** A failed append
+  leaves a real player with no game row — recoverable, adjacent to
+  `repairGameRosterSnapshots`. The reverse would leave a phantom snapshot entry
+  with no `LeaguePlayer` behind it, breaking the `leaguePlayerId` linkage
+  `LeaguePlayerStats` and public player pages rely on.
+- **`VersionError` retry-once.** `Game` uses `optimisticConcurrency`, so a
+  co-tracker's concurrent event save can make the snapshot save throw. The
+  append is pure and is replayed once against a freshly loaded game; the
+  roster write itself is **not** replayed (that would create a second real
+  player). Deliberate — better than surfacing a conflict mid-game.
+- **`in_progress`/`scheduled` only.** A completed game 409s, because appending
+  to a finalised game would invalidate its frozen `finalScore`/`boxScore` and
+  the materialized league stats.
+- **New players land on the bench**; the tracker subs them in via the existing
+  substitution flow. No lineup mutation, no `SUB_IN` event — a second path into
+  substitution would have to choose who comes off, which the order-sensitive
+  `SUB_IN`/`SUB_OUT` pairing doesn't need. The existing "exactly 5 players"
+  lineup validation is untouched.
+- **`canManageRoster`** is a new top-level boolean on the game payload (from
+  `canManageGameRoster` in `games.service.js`), gating the button client-side;
+  UX-only, the service gate stays authoritative. **Correction to the original
+  design spec**: the spec justified this flag by saying a league `helper` can
+  track a game but not edit rosters — that's false and shouldn't be repeated.
+  `canManageLeagueGame` resolves membership via `isTeamManager`, which requires
+  `role === 'manager'`, so a helper 404s on game access and never reaches the
+  tracking screen at all. The real case: in a **dual-team league game**,
+  `canManageLeagueGame` is true if the user manages home _or_ away, but
+  `assertTeamManagerOrOwner` is per-team — so a home-team manager can
+  legitimately track the game while being forbidden from adding players to the
+  away roster. An integration test pins that 403.
+- Name + optional jersey only — position is deliberately omitted (unused by
+  tracking, and the form is filled with a game running).
+- Client: `AddRosterPlayerDialog` (`features/games/components/`), hand-rolled
+  form, surfaces the server's real error message inline per this section's
+  swallowed-error debt (above). Triggers from the bench area and from the
+  previously dead-end empty-roster panel. `GameTrackPage` was **not**
+  decomposed and **not** migrated to TanStack Query (still `OPT-014b`) — the
+  only refactor was extracting its inline `loadGame` to a `useCallback` so the
+  page can refetch after an add.
+- This branch added devDependency `@testing-library/user-event` and a global
+  `afterEach(cleanup)` to the shared `client/src/utils/testSetup.js` (RTL's
+  documented Vitest pattern). Verified to change the client suite's
+  pre-existing failure count by zero — it did **not** resolve any part of
+  `OPT-026`.
+
+Deferred: completed games (would need recompute + feed-card refresh triggers,
+same gap as `player_card`/`team_card` staleness above), mid-game edit/remove of
+players (add only), the `position` field, an immediate "sub in now?" prompt
+after adding, and widening roster writes beyond the existing gates.
 
 ---
 
