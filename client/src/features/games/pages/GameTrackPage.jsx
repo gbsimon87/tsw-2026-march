@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -6,6 +6,7 @@ import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
+import { AddRosterPlayerDialog } from '../components/AddRosterPlayerDialog';
 import {
   buildFreeThrowPayload,
   buildShotStatType,
@@ -108,6 +109,8 @@ function LineupPicker({
   teamId,
   variant = 'inline',
   stepLabel,
+  canManageRoster,
+  onAddPlayer,
 }) {
   const content = (
     <div
@@ -139,7 +142,15 @@ function LineupPicker({
       {players.length === 0 ? (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p className="font-semibold">No players found on this roster.</p>
-          {teamId ? (
+          {canManageRoster ? (
+            <button
+              type="button"
+              onClick={onAddPlayer}
+              className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
+            >
+              + Add player
+            </button>
+          ) : teamId ? (
             <Link to={`/teams/${teamId}/edit`} className="mt-1 inline-block underline">
               Add players to this team
             </Link>
@@ -328,6 +339,7 @@ export function GameTrackPage() {
   const [pauseVideoOnEntry, setPauseVideoOnEntry] = useState(() =>
     readLocalStorageFlag('gameTrack.pauseVideoOnEntry', true)
   );
+  const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
@@ -409,68 +421,68 @@ export function GameTrackPage() {
     );
   }
 
-  useEffect(() => {
-    async function loadGame() {
-      try {
-        const response = await gamesApi.getById(gameId);
-        const isDualTeam = response.game?.trackingMode === 'dual_team';
-        const isStandalone =
-          response.game?.gameContext === 'standalone' || !response.game?.gameContext;
+  const loadGame = useCallback(async () => {
+    try {
+      const response = await gamesApi.getById(gameId);
+      const isDualTeam = response.game?.trackingMode === 'dual_team';
+      const isStandalone =
+        response.game?.gameContext === 'standalone' || !response.game?.gameContext;
 
-        let resolvedResponse = response;
+      let resolvedResponse = response;
 
-        if (!isDualTeam && isStandalone && response.game?.teamId) {
-          const fromGame = response.team?.players || [];
-          const hasActivePlayers = fromGame.some((p) => p.isActive !== false);
-          if (!hasActivePlayers) {
-            try {
-              const teamRes = await teamsApi.getById(response.game.teamId);
-              if (teamRes.team?.players?.length) {
-                setRosterOverride(teamRes.team.players);
-              }
-            } catch {
-              // fall through — use whatever the game response has
+      if (!isDualTeam && isStandalone && response.game?.teamId) {
+        const fromGame = response.team?.players || [];
+        const hasActivePlayers = fromGame.some((p) => p.isActive !== false);
+        if (!hasActivePlayers) {
+          try {
+            const teamRes = await teamsApi.getById(response.game.teamId);
+            if (teamRes.team?.players?.length) {
+              setRosterOverride(teamRes.team.players);
             }
+          } catch {
+            // fall through — use whatever the game response has
           }
         }
+      }
 
-        setData(resolvedResponse);
+      setData(resolvedResponse);
 
-        const nextState = {
-          [TEAM_SIDES.HOME]: createEmptySideState(),
-          [TEAM_SIDES.AWAY]: createEmptySideState(),
-          oneSided: createEmptySideState(),
-        };
+      const nextState = {
+        [TEAM_SIDES.HOME]: createEmptySideState(),
+        [TEAM_SIDES.AWAY]: createEmptySideState(),
+        oneSided: createEmptySideState(),
+      };
 
-        if (isDualTeam) {
-          for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
-            const sidePlayers = response.participants?.[side]?.players || [];
-            const currentLineupIds = response.lineups?.[side]?.currentPlayerIds || [];
-            nextState[side] = {
-              lineupDraft: response.lineups?.[side]?.startingPlayerIds || currentLineupIds || [],
-              selectedPlayerId: currentLineupIds[0] || sidePlayers[0]?.id || '',
-              substitutionState: { playerOutId: '', playerInId: '' },
-            };
-          }
-          setActiveSide(response.game?.activeSideDefault || TEAM_SIDES.HOME);
-        } else {
-          const lineupIds = response.game?.currentLineupPlayerIds || [];
-          const roster = response.team?.players || [];
-          nextState.oneSided = {
-            lineupDraft: response.game?.startingLineupPlayerIds || lineupIds || [],
-            selectedPlayerId: lineupIds[0] || roster[0]?.id || '',
+      if (isDualTeam) {
+        for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
+          const sidePlayers = response.participants?.[side]?.players || [];
+          const currentLineupIds = response.lineups?.[side]?.currentPlayerIds || [];
+          nextState[side] = {
+            lineupDraft: response.lineups?.[side]?.startingPlayerIds || currentLineupIds || [],
+            selectedPlayerId: currentLineupIds[0] || sidePlayers[0]?.id || '',
             substitutionState: { playerOutId: '', playerInId: '' },
           };
         }
-
-        setSideState(nextState);
-      } catch (loadError) {
-        setError(loadError.message || 'Failed to load game');
+        setActiveSide(response.game?.activeSideDefault || TEAM_SIDES.HOME);
+      } else {
+        const lineupIds = response.game?.currentLineupPlayerIds || [];
+        const roster = response.team?.players || [];
+        nextState.oneSided = {
+          lineupDraft: response.game?.startingLineupPlayerIds || lineupIds || [],
+          selectedPlayerId: lineupIds[0] || roster[0]?.id || '',
+          substitutionState: { playerOutId: '', playerInId: '' },
+        };
       }
-    }
 
-    loadGame();
+      setSideState(nextState);
+    } catch (loadError) {
+      setError(loadError.message || 'Failed to load game');
+    }
   }, [gameId]);
+
+  useEffect(() => {
+    loadGame();
+  }, [loadGame]);
 
   useEffect(() => {
     const shouldLock = isEventPickerOpen || isTrackingFullscreen;
@@ -484,6 +496,7 @@ export function GameTrackPage() {
 
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
   const isLeagueGame = data?.game?.gameContext === 'league';
+  const canManageRoster = Boolean(data?.canManageRoster);
   const participantsBySide = useMemo(() => data?.participants || {}, [data?.participants]);
   const activeKey = isDualTeam ? activeSide : 'oneSided';
   const currentSideState = sideState[activeKey] || createEmptySideState();
@@ -1214,6 +1227,19 @@ export function GameTrackPage() {
     }
 
     await removeEvent(lastEvent.id);
+  }
+
+  async function handleAddRosterPlayer({ displayName, jerseyNumber }) {
+    await gamesApi.addRosterPlayer(gameId, {
+      ...(isDualTeam ? { side: activeSide } : {}),
+      displayName,
+      jerseyNumber,
+    });
+    // Refetch rather than patch local state: the roster is derived from either
+    // participantsBySide or team.players depending on game shape, and the server
+    // is the only thing that knows which snapshot it just appended to.
+    await loadGame();
+    setIsAddPlayerOpen(false);
   }
 
   async function saveLineup() {
@@ -1970,6 +1996,8 @@ export function GameTrackPage() {
                   participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
                 }
                 players={participantsBySide[lineupSetupStep]?.players || []}
+                canManageRoster={canManageRoster}
+                onAddPlayer={() => setIsAddPlayerOpen(true)}
                 lineupDraft={sideState[lineupSetupStep]?.lineupDraft || []}
                 onToggle={(playerId, checked) => {
                   const draft = sideState[lineupSetupStep]?.lineupDraft || [];
@@ -2294,6 +2322,8 @@ export function GameTrackPage() {
                             participantsBySide[activeSide]?.displayName || activeSide
                           }
                           players={players}
+                          canManageRoster={canManageRoster}
+                          onAddPlayer={() => setIsAddPlayerOpen(true)}
                           lineupDraft={currentSideState.lineupDraft}
                           onToggle={(playerId, checked) => {
                             const nextDraft = checked
@@ -2385,9 +2415,20 @@ export function GameTrackPage() {
                               </div>
 
                               <div>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                  On Bench — tap to sub in
-                                </p>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    On Bench — tap to sub in
+                                  </p>
+                                  {canManageRoster ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsAddPlayerOpen(true)}
+                                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                                    >
+                                      + Add player
+                                    </button>
+                                  ) : null}
+                                </div>
                                 {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
                                   <p className="text-sm text-slate-400">
                                     No bench players available.
@@ -3095,6 +3136,13 @@ export function GameTrackPage() {
             </div>
           </div>
         ) : null}
+
+        <AddRosterPlayerDialog
+          isOpen={isAddPlayerOpen}
+          onClose={() => setIsAddPlayerOpen(false)}
+          onSubmit={handleAddRosterPlayer}
+          teamName={isDualTeam ? participantsBySide[activeSide]?.displayName : team?.name}
+        />
 
         {isTrackingFullscreen ? (
           <div
