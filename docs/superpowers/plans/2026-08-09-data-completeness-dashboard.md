@@ -1245,7 +1245,7 @@ describe('getDataCompletenessForUser', () => {
     leaguesRepository.findActiveLeagueTeamMember.mockResolvedValue(null);
 
     await expect(service.getDataCompletenessForUser(STRANGER_ID, LEAGUE_ID)).rejects.toMatchObject({
-      status: 403,
+      statusCode: 403,
     });
   });
 
@@ -1312,7 +1312,7 @@ describe('dismissIssueForUser', () => {
 
     await expect(
       service.dismissIssueForUser(MANAGER_ID, LEAGUE_ID, { issueKey: 'no_logo:1', note: null })
-    ).rejects.toMatchObject({ status: 403 });
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 
   it('stores a dismissal scoped to the current season', async () => {
@@ -1338,7 +1338,7 @@ describe('dismissIssueForUser', () => {
 
     await expect(
       service.dismissIssueForUser(OWNER_ID, LEAGUE_ID, { issueKey: 'no_logo:1', note: null })
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 });
 
@@ -1471,7 +1471,9 @@ async function getDataCompletenessForUser(userId, leagueId) {
 
   const [teams, players, games, statsRows, dismissals] = await Promise.all([
     listLeagueTeams(league._id),
-    listLeaguePlayers(league._id),
+    // NOTE: listLeaguePlayers is TEAM-scoped — listLeaguePlayers(leagueTeamId).
+    // Passing a leagueId silently matches zero players. Fan out per team.
+    listAllLeaguePlayers(teams),
     // Signature is positional: (leagueId, seasonId) — not an options object.
     listLeagueGamesByLeagueId(league._id, seasonId),
     listLeaguePlayerStats(league._id, seasonId),
