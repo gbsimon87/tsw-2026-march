@@ -7,6 +7,7 @@ const {
   setLineupSchema,
   updateEventSchema,
   listGamesSchema,
+  addRosterPlayerSchema,
 } = require('./games.validation');
 
 function requireAuthUserId(req) {
@@ -109,6 +110,13 @@ async function deleteGame(req, res) {
   res.status(204).send();
 }
 
+async function addRosterPlayer(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = addRosterPlayerSchema.parse(req.body);
+  const result = await gamesService.addPlayerToGameRoster(userId, req.params.gameId, payload);
+  res.status(201).json(result);
+}
+
 module.exports = {
   create,
   list,
@@ -122,4 +130,5 @@ module.exports = {
   removeEvent,
   deleteGame,
   finish,
+  addRosterPlayer,
 };
