@@ -43,7 +43,7 @@ calibration point for the estimates below.
 
 | Tier                 | Ideas            | What makes them this size                                                        |
 | -------------------- | ---------------- | -------------------------------------------------------------------------------- |
-| **XS — days**        | 10, 16, 3        | Read existing materialized data, or add one field. No new model.                 |
+| **XS — days**        | ~~10~~ ✅, 16, 3 | Read existing materialized data, or add one field. No new model.                 |
 | **S — ~1 week**      | 7, 11, 9, 15     | One new model or config object, plus an admin screen. Established patterns.      |
 | **M — 2–3 weeks**    | 2, 13, 4, 12, 18 | New model _and_ it changes an existing flow, or needs careful data handling.     |
 | **L — a month+**     | 14, 17, 6, 5     | New subsystem, or it reshapes standings/billing — the two riskiest areas.        |
@@ -53,20 +53,20 @@ calibration point for the estimates below.
 
 ## XS — cheapest to build
 
-### 10. Data-completeness dashboard
+### 10. ✅ Data-completeness dashboard — **shipped**
 
 One panel flagging games missing box scores, players with zero recorded minutes,
 teams below a minimum roster size, and unfinalised games past their date. Turns
 silent data rot into a to-do list.
 
-**Why it's cheap:** pure read. Every input already exists (`Game.status`,
-embedded events, `LeaguePlayer`, `LeagueTeamMember`); this is a set of queries
-plus one admin tab. No schema change, no new model, no write path — so nothing
-to migrate and little to get wrong.
-
-> Now slightly more valuable than when written: with `status: 'scheduled'`
-> fixtures on the board, "unfinalised games past their date" is a real,
-> populated category rather than a rare edge case.
+> **Built 2026-08-09** as the **Data health** tab on `AdminLeaguePage`, backed by
+> `GET /leagues/:leagueId/data-completeness`. Nine checks across three severity
+> tiers, with dismissible items. See [`data-completeness/`](./data-completeness/).
+>
+> Two checks changed on contact with the schema: **there is no `minutes` field**
+> (became "no recorded appearances"), and **player photos come from the claiming
+> user's account** (became "unclaimed player"). It also needed one small model —
+> `LeagueDataIssueDismissal` — so it wasn't quite the pure read predicted below.
 
 ### 16. Awards & season honours
 
@@ -295,19 +295,19 @@ records. It also assumes #9 (audit log) and #14 (notifications). Do those first.
 Effort order alone would have you build the cheapest thing next, which isn't
 always right. Cross-referencing the original leverage tiers:
 
-| Idea                       | Effort | Leverage | Read                                       |
-| -------------------------- | ------ | -------- | ------------------------------------------ |
-| **10 · Completeness dash** | XS     | High     | **Best next pick** — cheapest × highest    |
-| 16 · Awards                | XS     | Medium   | Cheap engagement win                       |
-| 3 · Reschedule             | XS     | Medium   | Natural follow-on to the scheduler         |
-| 7 · Tiebreakers            | S      | Medium   | Do when a league hits a real tie           |
-| 11 · Roster import         | S      | High     | **Strong pick** — pairs with the scheduler |
-| 15 · Digest email          | S      | Medium   | Blocked on a job runner                    |
-| 4 · Season wizard          | M      | High     | High value, needs care                     |
-| 14 · Notifications         | L      | High     | Unblocks #3, #8, #15 — a dependency        |
-| 8 · Corrections            | XL     | Medium   | Do last; depends on #9 + #14               |
+| Idea                       | Effort | Leverage | Read                                        |
+| -------------------------- | ------ | -------- | ------------------------------------------- |
+| ~~10 · Completeness dash~~ | XS     | High     | ✅ **shipped 2026-08-09** — Data health tab |
+| 16 · Awards                | XS     | Medium   | Cheap engagement win                        |
+| 3 · Reschedule             | XS     | Medium   | Natural follow-on to the scheduler          |
+| 7 · Tiebreakers            | S      | Medium   | Do when a league hits a real tie            |
+| 11 · Roster import         | S      | High     | **Strong pick** — pairs with the scheduler  |
+| 15 · Digest email          | S      | Medium   | Blocked on a job runner                     |
+| 4 · Season wizard          | M      | High     | High value, needs care                      |
+| 14 · Notifications         | L      | High     | Unblocks #3, #8, #15 — a dependency         |
+| 8 · Corrections            | XL     | Medium   | Do last; depends on #9 + #14                |
 
-**Suggested order:** 10 → 11 → 3 → 4, then 14 once several ideas are waiting on it.
+**Suggested order:** ~~10~~ ✅ → **11 (next)** → 3 → 4, then 14 once several ideas are waiting on it.
 
 Two caveats on this ranking. Effort estimates are from reading today's code, not
 from spikes — #13 in particular was re-rated from "easy" to M once the `Post`

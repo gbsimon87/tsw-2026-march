@@ -304,6 +304,8 @@ Mounted under `/leagues`. Authorization per action is defined in
 - `GET /leagues/:leagueId`, `PATCH /leagues/:leagueId`, `POST /leagues/:leagueId/archive`
 - `GET /leagues/:leagueId/standings`, `GET /leagues/:leagueId/games`
 - `POST /leagues/:leagueId/games/bulk` — Schedule Builder bulk create (see below)
+- `GET /leagues/:leagueId/data-completeness` — Data health audit (see below)
+- `POST /leagues/:leagueId/data-completeness/dismissals`, `DELETE /leagues/:leagueId/data-completeness/dismissals/:issueKey`
 - `POST|DELETE /leagues/:leagueId/logo`
 - `GET|POST /leagues/:leagueId/managers`, `DELETE /leagues/:leagueId/managers/:managerId`
 - `POST|GET /leagues/:leagueId/teams`, `GET|PATCH /leagues/:leagueId/teams/:leagueTeamId`, `POST /leagues/:leagueId/teams/:leagueTeamId/archive`
@@ -361,6 +363,112 @@ Response `201`:
 
 Errors: `400` invalid payload / no active season / completed season / a team from
 another league · `403` not a manager or owner · `404` league not found.
+
+### `GET /leagues/:leagueId/data-completeness` — Data health
+
+Audits the league's **current season** for incomplete data and returns issues
+grouped by category. Read-only; backs the **Data health** tab on
+`AdminLeaguePage`. See [`data-completeness/`](./data-completeness/).
+
+**Auth (three tiers, enforced in the service):**
+
+| Caller                        | Sees                                                              |
+| ----------------------------- | ----------------------------------------------------------------- |
+| League owner / league manager | Everything                                                        |
+| Team manager                  | League-wide game issues + **only their own team's** roster issues |
+| Anyone else                   | `403`                                                             |
+
+**No active season is not an error.** The endpoint returns `200` with
+`seasonId: null` and no categories — an admin who hasn't opened a season has
+nothing wrong with their data.
+
+Response `200`:
+
+```json
+{
+  "seasonId": "…",
+  "seasonName": "Spring 2026",
+  "generatedAt": "2026-08-09T12:00:00.000Z",
+  "counts": { "high": 3, "medium": 5, "low": 12, "dismissed": 2 },
+  "categories": [
+    {
+      "key": "overdue_game",
+      "label": "Overdue games",
+      "severity": "high",
+      "description": "Scheduled more than 48 hours ago but never started.",
+      "items": [
+        {
+          "issueKey": "overdue_game:…",
+          "label": "Hoops at Ballers",
+          "detail": "Scheduled 3 days ago, never started",
+          "href": "/admin/games/…",
+          "dismissed": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+The nine checks, by severity — **high** means the standings are wrong until fixed:
+
+| Check               | Severity | Fires when                                                      |
+| ------------------- | -------- | --------------------------------------------------------------- |
+| `overdue_game`      | high     | `scheduled` and more than **48h** past tip-off                  |
+| `stuck_in_progress` | high     | `in_progress` and more than 48h past tip-off                    |
+| `missing_box_score` | high     | `completed` with no events recorded                             |
+| `no_appearances`    | medium   | active player, 0 appearances, **and** the team has played       |
+| `roster_too_small`  | medium   | fewer than **5** active players (advisory — never blocks)       |
+| `missing_jersey`    | low      | active player with no jersey number (`0` is valid, not missing) |
+| `unclaimed_player`  | low      | active player with no claimed account                           |
+| `no_venue`          | low      | **future** scheduled game with no venue                         |
+| `no_logo`           | low      | team with no logo                                               |
+
+The 48-hour grace period is what keeps the panel usable: without it, a freshly
+built 60-game schedule would report 60 warnings on day one.
+
+Errors: `403` not an owner, league manager, or team manager · `404` league not found.
+
+### `POST /leagues/:leagueId/data-completeness/dismissals`
+
+Marks an issue as acknowledged. Dismissed items stay visible in a collapsed
+section — they are never hidden or deleted.
+
+**Auth:** league owner or league manager only. A **team manager gets `403`** —
+dismissal is a league-wide judgement. Requires an active season.
+
+Request:
+
+```json
+{ "issueKey": "no_logo:507f1f77bcf86cd799439031", "note": "logo arriving later" }
+```
+
+| Field      | Rules                                                      |
+| ---------- | ---------------------------------------------------------- |
+| `issueKey` | required, `<checkType>:<24-char hex ObjectId>`, ≤200 chars |
+| `note`     | optional, trimmed, ≤500 chars, defaults `null`             |
+
+`issueKey` deliberately contains **no mutable data** — a rescheduled game keeps
+the same key, so the dismissal survives. Dismissals are scoped to
+`(leagueId, seasonId, issueKey)` with a unique index, so re-dismissing is
+idempotent rather than an error. They persist for the season and reset naturally
+next season.
+
+Response `201`: `{ "issueKey": "…", "dismissed": true }`
+
+Errors: `400` malformed `issueKey` / no active season · `403` not an owner or
+league manager · `404` league not found.
+
+### `DELETE /leagues/:leagueId/data-completeness/dismissals/:issueKey`
+
+Restores a dismissed issue to the main list. Same auth as dismissing.
+
+The `issueKey` contains a colon, so callers must `encodeURIComponent` it.
+
+Response `200`: `{ "issueKey": "…", "dismissed": false }`
+
+Errors: `400` no active season · `403` not an owner or league manager · `404`
+league not found.
 
 ## Public routes (anonymous-readable)
 

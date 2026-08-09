@@ -16,7 +16,9 @@
 > [`auto-feed-generation/`](./auto-feed-generation/) (Auto Feed Generation
 > plan + live tracker, in progress),
 > [`schedule-builder/`](./schedule-builder/) (bulk league-game creation —
-> design, tracker, verification record). Active work
+> design, tracker, verification record),
+> [`data-completeness/`](./data-completeness/) (Data health admin panel —
+> checks, severities, dismissal model). Active work
 > tracker: [`application-audit/000-OPTIMISATION-TRACKER.md`](./application-audit/000-OPTIMISATION-TRACKER.md)
 > (performance/hardening, OPT-###). The separate `project-improvement-plan/`
 > initiative (targeted bug fixes TSW-001–005) finished 2026-07-08 and was
@@ -124,6 +126,14 @@ Core capabilities:
   `Game.status` value `'scheduled'`** — a fixture, not a live game — and an
   optional free-text `venue`. See §11 ("Schedule Builder") for decisions and
   deferred scope.
+- **Data health (2026-08-09)**: a **Data health** tab on `AdminLeaguePage`
+  audits the league's current season and lists incomplete data — games played
+  but never finalised, completed games with no box score, rosters below five
+  active players, players with no recorded appearances, and cosmetic gaps
+  (missing jersey numbers, venues, logos, unclaimed players). Read-only: every
+  item links to where it gets fixed. Admins can **dismiss** items they've
+  judged fine; dismissed items collapse to the bottom rather than disappearing.
+  See §11 ("Data Health") for the 48-hour rule that keeps it from crying wolf.
 
 The product model is centered on **one tracked team per standalone game**;
 opponents are represented by score totals and labels, not full rosters. League
@@ -285,24 +295,25 @@ existing `leagues.service.js` helper rather than writing the check fresh.
 
 17 collections, all defined inline in repository files:
 
-| Collection                    | Owner module | Notes                                                                                                                                                                                                                                                                                                                                                                         |
-| ----------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                                                                                                                                                                                             |
-| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                                                                                                                                                                                              |
-| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                                                                                                                                               |
-| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                                                                                                                                       |
-| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                                                                                                                                       |
-| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons). `status` is `scheduled\|in_progress\|completed` (`scheduled` added by the Schedule Builder for future fixtures; default is still `in_progress`, no migration). Optional free-text `venue` (≤120)                                                      |
-| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                                                                                                                                                |
-| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                                                                                                                                                 |
-| `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/).                                                                                                                     |
-| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league — deliberately season-independent, carry over across seasons automatically                                                                                                                                                                                                                                                                      |
-| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role` — season-independent                                                                                                                                                                                                                                                                                                                  |
-| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow; blocked when the league has no active season                                                                                                                                                                                                                                                                                                 |
-| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                                                                                                                                                                                    |
-| `LeagueStandings`             | leagues      | materialized standings (OPT-010), keyed `{leagueId, seasonId}` since League Seasons                                                                                                                                                                                                                                                                                           |
-| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011), keyed `{leagueId, seasonId, leagueTeamId, leaguePlayerId}` since League Seasons; also the stats source for unified player profiles (§1) — one `getLeaguePlayerStats` read-through per unique claimed league, not per profile                                                                                                        |
-| `Follow`                      | follows      | polymorphic follow edges (Follow System, §1). `{followerUserId, targetType, targetId}` where `targetType` enum `['user','league','leagueTeam']` (v1.5) and `targetId` is a `User`/`League`/`LeagueTeam` `_id` (no `ref`, polymorphic); unique compound index `{followerUserId, targetType, targetId}` (dedupe → idempotent upsert) + listing index `{followerUserId, _id:-1}` |
+| Collection                    | Owner module | Notes                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `User`                        | auth         | account, `authProvider`, `emailVerified`, `plan`, unused `roles`/`league*` fields                                                                                                                                                                                                                                                                                                    |
+| `Session`                     | auth         | hashed refresh tokens; TTL index                                                                                                                                                                                                                                                                                                                                                     |
+| `AuthToken`                   | auth         | email-verify / password-reset tokens; TTL index                                                                                                                                                                                                                                                                                                                                      |
+| `Team`                        | teams        | roster, branding, **Stripe billing fields**, `processedWebhookEventIds`                                                                                                                                                                                                                                                                                                              |
+| `TeamSeasonSummary`           | teams        | materialized standalone-team season stats (OPT-013) — despite the name, an all-time summary with no real season concept                                                                                                                                                                                                                                                              |
+| `Game`                        | games        | team ref, opponent label, lineup state, **embedded events**; league games carry a nullable `seasonId` (League Seasons). `status` is `scheduled\|in_progress\|completed` (`scheduled` added by the Schedule Builder for future fixtures; default is still `in_progress`, no migration). Optional free-text `venue` (≤120)                                                             |
+| `Post`                        | feed         | `image`/`video`/`game_card`/`player_card`/`team_card`/`highlight_clip`; `playerCard`/`teamCard` carry sibling `teamId`/`playerId` (standalone) or `leagueTeamId`/`leaguePlayerId` (league), mutually exclusive                                                                                                                                                                       |
+| `League`                      | leagues      | metadata, owner, slug, **league billing state** (source of truth), `currentSeasonId` pointer (League Seasons)                                                                                                                                                                                                                                                                        |
+| `Season`                      | leagues      | **League Seasons** (`server/src/modules/leagues/seasons.repository.js`): `{leagueId, label, status: active\|completed, startedAt, completedAt}`; one League has many Seasons, at most one `active` at a time. See [`league-seasons/`](./league-seasons/).                                                                                                                            |
+| `LeagueTeam` / `LeaguePlayer` | leagues      | teams/players within a league — deliberately season-independent, carry over across seasons automatically                                                                                                                                                                                                                                                                             |
+| `LeagueTeamMember`            | leagues      | user ↔ league-team roster link + `role` — season-independent                                                                                                                                                                                                                                                                                                                         |
+| `LeagueJoinRequest`           | leagues      | player/helper/manager join flow; blocked when the league has no active season                                                                                                                                                                                                                                                                                                        |
+| `LeagueManager`               | leagues      | league-wide manager grants                                                                                                                                                                                                                                                                                                                                                           |
+| `LeagueDataIssueDismissal`    | leagues      | **Data health** (`dataCompleteness.repository.js`): `{leagueId, seasonId, issueKey, dismissedByUserId, note}`, unique on `(leagueId, seasonId, issueKey)` so re-dismissing is idempotent. `issueKey` is `<checkType>:<objectId>` and carries **no mutable data**, so a rescheduled game keeps its dismissal. Season-scoped — next season resets naturally. Never deleted on resolve. |
+| `LeagueStandings`             | leagues      | materialized standings (OPT-010), keyed `{leagueId, seasonId}` since League Seasons                                                                                                                                                                                                                                                                                                  |
+| `LeaguePlayerStats`           | leagues      | materialized raw player totals (OPT-011), keyed `{leagueId, seasonId, leagueTeamId, leaguePlayerId}` since League Seasons; also the stats source for unified player profiles (§1) — one `getLeaguePlayerStats` read-through per unique claimed league, not per profile                                                                                                               |
+| `Follow`                      | follows      | polymorphic follow edges (Follow System, §1). `{followerUserId, targetType, targetId}` where `targetType` enum `['user','league','leagueTeam']` (v1.5) and `targetId` is a `User`/`League`/`LeagueTeam` `_id` (no `ref`, polymorphic); unique compound index `{followerUserId, targetType, targetId}` (dedupe → idempotent upsert) + listing index `{followerUserId, _id:-1}`        |
 
 ### Notable design choices
 
@@ -450,6 +461,8 @@ Config in [`queryClient.js`](../client/src/app/providers/queryClient.js): global
   hook reaching for React Query there fails with "No QueryClient set". This bit
   `useExportCsv` (§11, CSV Data Export) and again `AdminLeagueSchedulePage`
   (§11, Schedule Builder) — both were rewritten to plain `useState`/`useEffect`.
+  The Data health tab (§11) followed the same rule pre-emptively and copies
+  `AdminLeaguePage`'s own tab-scoped fetch pattern.
   Until those test trees get a provider, a **new admin page doing a one-shot
   read should fetch imperatively**; save `useQuery` for pages whose test setup
   already provides a client.
@@ -933,6 +946,61 @@ server-persisted/shareable drafts, and publish notifications. Design, plan and
 tracker: [`schedule-builder/`](./schedule-builder/),
 [`superpowers/specs/2026-08-08-schedule-builder-design.md`](./superpowers/specs/2026-08-08-schedule-builder-design.md).
 
+**Data Health (2026-08-09, `feature/data-completeness-dashboard`)**: a **Data
+health** tab on `AdminLeaguePage` audits the league's current season and turns
+silent data rot into a to-do list. Read-only in v1 — every item links to where
+it gets fixed. Backed by `GET /leagues/:leagueId/data-completeness` plus two
+dismissal endpoints (see [`api.md`](./api.md)).
+
+Design decisions worth knowing:
+
+- **The 48-hour grace period is what makes the feature usable.** A `scheduled`
+  fixture is invisible to the panel until 48h past tip-off. Without it, building
+  a 60-game season with the Schedule Builder would produce 60 warnings the same
+  day and train admins to ignore the panel permanently. The same clock applies
+  to `in_progress` games. Defined once as `OVERDUE_AFTER_MS`.
+- **Severity means one specific thing**: `high` = the standings are wrong until
+  this is fixed (overdue, stuck in-progress, missing box score). `medium` =
+  ambiguous or expected early in a season. `low` = cosmetic. Everything renders
+  as a warning; severity orders the list rather than alarming.
+- **The check engine is pure** (`dataCompleteness.checks.js`): no Mongoose, no
+  I/O, and `now` is always injected, so the 48h boundary is deterministically
+  testable. The service loads data and merges dismissals; the engine only
+  decides. `CHECK_META` must contain an entry for **every** emitted check type —
+  `groupIntoCategories` filters through its keys, so an unlisted type would
+  vanish from the dashboard silently.
+- **"Zero minutes" became "no recorded appearances".** The original idea asked
+  for players with zero minutes; **there is no `minutes` field anywhere** in
+  this codebase (`LeaguePlayerStats` holds `gamesCount` plus box-score
+  counters). Appearances come from those materialized rows — **not** from
+  scanning game events, whose `playerId` points at a game's embedded roster
+  _snapshot_, not at `LeaguePlayer._id`.
+- **"No photo" became "unclaimed player".** `playerImage` is a computed
+  feed-card field sourced from the claiming account's avatar
+  (`claimedByUserId → User.avatar.url`), so an unclaimed player _cannot_ have a
+  photo and no admin can upload one. Reporting claim status names the
+  actionable fact instead.
+- **The five-player roster minimum is a new advisory rule.** Nothing in the
+  codebase enforces a minimum roster; this panel is the first thing to assert
+  it, and it only warns — it never blocks.
+- **Three access tiers, enforced in the service** (no middleware RBAC): owner
+  and league manager see everything; a **team manager may view** but sees only
+  their own team's roster issues (league-wide game issues stay visible);
+  everyone else gets 403. **Dismissing is stricter than viewing** — owner or
+  league manager only, since a dismissal is a league-wide judgement.
+- **No active season returns an empty report, not an error.** An admin who
+  hasn't opened a season has nothing wrong with their data. Dismiss/restore do
+  throw 400 there, having no season to scope to.
+- **Computed on read, not materialized** — freshness matters more than the cost
+  at ~16 teams, and materializing would add an invalidation burden to every
+  game, roster, and stat write.
+
+Deferred: inline fix actions, per-league configurable thresholds, cross-league
+operator view, historic seasons, CSV export, and notifications when new issues
+appear. Design, plan and tracker:
+[`data-completeness/`](./data-completeness/),
+[`superpowers/specs/2026-08-09-data-completeness-dashboard-design.md`](./superpowers/specs/2026-08-09-data-completeness-dashboard-design.md).
+
 ---
 
 ## 12. Where to start (by question)
@@ -959,3 +1027,4 @@ tracker: [`schedule-builder/`](./schedule-builder/),
 | Follow System (v1 + v1.5)               | §1 above, §11 ("Follow System v1.5"), [`follow-system/`](./follow-system/), [`follow-system-teams-leagues/`](./follow-system-teams-leagues/) |
 | CSV Data Export                         | §1 above, §11 ("CSV Data Export"), [`data-export/`](./data-export/)                                                                          |
 | Schedule Builder / bulk game creation   | §11 above ("Schedule Builder"), [`schedule-builder/`](./schedule-builder/)                                                                   |
+| Data health / completeness checks       | §11 above ("Data Health"), [`data-completeness/`](./data-completeness/)                                                                      |
