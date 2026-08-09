@@ -862,6 +862,48 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
   return { player, side };
 }
 
+// UX-only flag for the tracking screen's "Add player" affordance. The service
+// gate in addPlayerToGameRoster stays authoritative — this just avoids showing a
+// button that would 403. The case that matters here is a dual-team league game:
+// canManageLeagueGame lets a manager of EITHER side track the game, but
+// assertTeamManagerOrOwner is scoped to one team, so a home-team manager can
+// legitimately track the game while being forbidden from editing the away
+// roster (and vice versa). The flag is true if either side is manageable; the
+// client still resolves per side when it actually submits.
+//
+// Reuses assertTeamManagerOrOwner rather than re-deriving the rule; it throws
+// instead of returning a boolean, hence the wrapper.
+async function canManageGameRoster(userId, game) {
+  if (!userId || !game) return false;
+
+  if (game.gameContext !== 'league') {
+    // Passing assertGameAccess on a standalone game already implies team
+    // ownership, which is exactly what addPlayerToTeam requires.
+    return true;
+  }
+
+  const { assertTeamManagerOrOwner } = require('../leagues/leagues.service');
+  const sides =
+    game.trackingMode === 'dual_team' ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY] : [undefined];
+
+  for (const side of sides) {
+    let target;
+    try {
+      target = resolveRosterTargetForGame(game, side);
+    } catch {
+      continue;
+    }
+
+    const allowed = await assertTeamManagerOrOwner(userId, target.leagueId, target.leagueTeamId)
+      .then(() => true)
+      .catch(() => false);
+
+    if (allowed) return true;
+  }
+
+  return false;
+}
+
 function findLastAddedPlayer(team, displayName) {
   const targetName = displayName.trim();
   const players = Array.isArray(team?.players) ? team.players : [];
@@ -1463,6 +1505,8 @@ async function getGameForUser(userId, gameId) {
     recap.shotSnapshot = null;
   }
 
+  const canManageRoster = await canManageGameRoster(userId, game);
+
   return {
     game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
@@ -1511,6 +1555,7 @@ async function getGameForUser(userId, gameId) {
     gameSummary,
     aiSummary,
     canEditCompletedGame: canEditCompleted,
+    canManageRoster,
   };
 }
 
@@ -1990,5 +2035,6 @@ module.exports = {
   resolveDualGameParticipants,
   resolveRosterTargetForGame,
   addPlayerToGameRoster,
+  canManageGameRoster,
   HIGHLIGHT_STAT_TYPES,
 };

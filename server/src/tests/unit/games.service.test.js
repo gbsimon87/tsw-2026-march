@@ -58,6 +58,9 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   canFinalizeLeagueGame: jest.fn(() => false),
   canEditCompletedLeagueGame: jest.fn(() => false),
   scheduleLeagueAggregateRecompute: jest.fn(),
+  assertTeamManagerOrOwner: jest.fn(() =>
+    Promise.reject(Object.assign(new Error('Forbidden'), { statusCode: 403 }))
+  ),
 }));
 
 jest.mock('../../modules/leagues/leagues.repository', () => ({
