@@ -12,6 +12,8 @@ const {
   bulkCreateLeagueGamesSchema,
 } = require('./leagues.validation');
 const leaguesService = require('./leagues.service');
+const dataCompletenessService = require('./dataCompleteness.service');
+const { dismissIssueSchema } = require('./dataCompleteness.validation');
 const { ApiError } = require('../../utils/apiError');
 const { paginationQuerySchema } = require('../shared/pagination.validation');
 
@@ -455,6 +457,36 @@ async function listPublicSeasonsHandler(req, res) {
   res.status(200).json({ seasons });
 }
 
+async function dataCompleteness(req, res) {
+  const userId = requireAuthUserId(req);
+  const report = await dataCompletenessService.getDataCompletenessForUser(
+    userId,
+    req.params.leagueId
+  );
+  res.status(200).json(report);
+}
+
+async function dismissDataIssue(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = dismissIssueSchema.parse(req.body);
+  const result = await dataCompletenessService.dismissIssueForUser(
+    userId,
+    req.params.leagueId,
+    payload
+  );
+  res.status(201).json(result);
+}
+
+async function restoreDataIssue(req, res) {
+  const userId = requireAuthUserId(req);
+  const result = await dataCompletenessService.restoreIssueForUser(
+    userId,
+    req.params.leagueId,
+    req.params.issueKey
+  );
+  res.status(200).json(result);
+}
+
 module.exports = {
   create,
   list,
@@ -502,4 +534,7 @@ module.exports = {
   listSeasons: listSeasonsHandler,
   completeSeason: completeSeasonHandler,
   listPublicSeasons: listPublicSeasonsHandler,
+  dataCompleteness,
+  dismissDataIssue,
+  restoreDataIssue,
 };

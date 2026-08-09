@@ -116,6 +116,15 @@ leaguesRouter.post(
   '/:leagueId/teams/:leagueTeamId/join-requests/:requestId/cancel',
   asyncHandler(controller.cancelJoin)
 );
+leaguesRouter.get('/:leagueId/data-completeness', asyncHandler(controller.dataCompleteness));
+leaguesRouter.post(
+  '/:leagueId/data-completeness/dismissals',
+  asyncHandler(controller.dismissDataIssue)
+);
+leaguesRouter.delete(
+  '/:leagueId/data-completeness/dismissals/:issueKey',
+  asyncHandler(controller.restoreDataIssue)
+);
 
 module.exports = {
   leaguesRouter,
