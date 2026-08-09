@@ -113,6 +113,17 @@ export const leaguesApi = {
   bulkCreateGames(leagueId, payload) {
     return apiClient.post(`/leagues/${leagueId}/games/bulk`, payload);
   },
+  fetchDataCompleteness(leagueId) {
+    return apiClient.get(`/leagues/${leagueId}/data-completeness`);
+  },
+  dismissDataIssue(leagueId, payload) {
+    return apiClient.post(`/leagues/${leagueId}/data-completeness/dismissals`, payload);
+  },
+  restoreDataIssue(leagueId, issueKey) {
+    return apiClient.delete(
+      `/leagues/${leagueId}/data-completeness/dismissals/${encodeURIComponent(issueKey)}`
+    );
+  },
   listSeasons(leagueId) {
     return apiClient.get(`/leagues/${leagueId}/seasons`);
   },
