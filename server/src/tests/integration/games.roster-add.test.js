@@ -161,7 +161,7 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     expect(freshGame.homeRosterSnapshot || []).toHaveLength(0);
   });
 
-  test('rejects a signed-in user with no role in the league (404 or 403), and makes no write', async () => {
+  test('rejects a signed-in user with no role in the league: 404, and makes no write', async () => {
     const { nonParticipant, homeTeam, game } = await createLeagueFixture();
     const app = createApp();
 
@@ -170,7 +170,7 @@ describe('POST /api/v1/games/:gameId/roster', () => {
       displayName: 'Uninvited Guest',
     });
 
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
 
     const leaguePlayer = await LeaguePlayer.findOne({
       leagueTeamId: homeTeam._id,
@@ -179,29 +179,33 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     expect(leaguePlayer).toBeNull();
   });
 
-  test('rejects a league helper (game-track access, no roster-edit rights): 403 or 404, no write', async () => {
-    const { league, homeTeam, game } = await createLeagueFixture();
-    const helper = await createUser('helper');
+  test('returns 403 when a home-team manager tries to add a player to the away team', async () => {
+    const { league, homeTeam, awayTeam, game } = await createLeagueFixture();
+    const homeManager = await createUser('home-manager');
     await LeagueTeamMember.create({
       leagueId: league._id,
       leagueTeamId: homeTeam._id,
-      userId: helper._id,
-      role: 'helper',
+      userId: homeManager._id,
+      role: 'manager',
       status: 'active',
       createdByUserId: league.ownerUserId,
     });
     const app = createApp();
 
-    const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, helper._id).send({
-      side: 'home',
-      displayName: 'Helper Added Player',
+    // Passes assertGameAccess (canManageLeagueGame accepts a manager of EITHER
+    // side), then fails assertTeamManagerOrOwner for the away team specifically
+    // — a home-team manager is not an active manager of the away team, the
+    // league owner, or a league-wide manager.
+    const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, homeManager._id).send({
+      side: 'away',
+      displayName: 'Smuggled Onto Away Roster',
     });
 
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(403);
 
     const leaguePlayer = await LeaguePlayer.findOne({
-      leagueTeamId: homeTeam._id,
-      displayName: 'Helper Added Player',
+      leagueTeamId: awayTeam._id,
+      displayName: 'Smuggled Onto Away Roster',
     }).lean();
     expect(leaguePlayer).toBeNull();
   });
