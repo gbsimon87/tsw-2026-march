@@ -93,9 +93,98 @@ function buildGameIssues({ games, teamsById, now }) {
   return issues;
 }
 
+function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamIds }) {
+  const issues = [];
+  const activeByTeam = new Map();
+
+  for (const player of players) {
+    if (!player.isActive) continue;
+    const teamId = String(player.leagueTeamId);
+    activeByTeam.set(teamId, (activeByTeam.get(teamId) ?? 0) + 1);
+
+    const teamHasPlayed = completedGameTeamIds.has(teamId);
+    const gamesCount = statsByPlayerId.get(String(player.id))?.gamesCount ?? 0;
+
+    // Before a team's first completed game every player has zero appearances,
+    // and none of it is a problem — so this check needs the played guard.
+    if (teamHasPlayed && gamesCount === 0) {
+      issues.push({
+        issueKey: `no_appearances:${player.id}`,
+        checkType: 'no_appearances',
+        severity: SEVERITY.MEDIUM,
+        label: player.displayName,
+        detail: 'On the roster but has no recorded appearances this season',
+        href: `/admin/leagues/teams/${teamId}`,
+        leagueTeamId: teamId,
+      });
+    }
+
+    // Number 0 is a legal jersey, so test for null/undefined, not falsiness.
+    if (player.jerseyNumber === null || player.jerseyNumber === undefined) {
+      issues.push({
+        issueKey: `missing_jersey:${player.id}`,
+        checkType: 'missing_jersey',
+        severity: SEVERITY.LOW,
+        label: player.displayName,
+        detail: 'No jersey number set',
+        href: `/admin/leagues/teams/${teamId}`,
+        leagueTeamId: teamId,
+      });
+    }
+
+    // A league player's avatar comes from the account that claimed them
+    // (claimedByUserId -> User.avatar.url), so "no picture" really means
+    // "unclaimed". A claimed player who hasn't set an avatar is a personal
+    // account setting no admin can act on, and is deliberately not flagged.
+    if (!player.claimedByUserId) {
+      issues.push({
+        issueKey: `unclaimed_player:${player.id}`,
+        checkType: 'unclaimed_player',
+        severity: SEVERITY.LOW,
+        label: player.displayName,
+        detail: 'Unclaimed — no profile photo, follows, or shareable card',
+        href: `/admin/leagues/teams/${teamId}`,
+        leagueTeamId: teamId,
+      });
+    }
+  }
+
+  for (const team of teams) {
+    const teamId = String(team.id);
+    const activeCount = activeByTeam.get(teamId) ?? 0;
+
+    if (activeCount < MIN_ACTIVE_ROSTER) {
+      issues.push({
+        issueKey: `roster_too_small:${teamId}`,
+        checkType: 'roster_too_small',
+        severity: SEVERITY.MEDIUM,
+        label: team.name,
+        detail: `Only ${activeCount} active ${activeCount === 1 ? 'player' : 'players'} (needs ${MIN_ACTIVE_ROSTER})`,
+        href: `/admin/leagues/teams/${teamId}`,
+        leagueTeamId: teamId,
+      });
+    }
+
+    if (!team.logo) {
+      issues.push({
+        issueKey: `no_logo:${teamId}`,
+        checkType: 'no_logo',
+        severity: SEVERITY.LOW,
+        label: team.name,
+        detail: 'No team logo',
+        href: `/admin/leagues/teams/${teamId}`,
+        leagueTeamId: teamId,
+      });
+    }
+  }
+
+  return issues;
+}
+
 module.exports = {
   OVERDUE_AFTER_MS,
   MIN_ACTIVE_ROSTER,
   SEVERITY,
   buildGameIssues,
+  buildRosterIssues,
 };
