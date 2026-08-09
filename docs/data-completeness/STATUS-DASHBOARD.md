@@ -9,7 +9,7 @@
 | ---------------------------- | ------------------------------------------------------- |
 | **Phase**                    | ✅ All phases complete — awaiting review/merge          |
 | **Tasks complete**           | 11 / 11                                                 |
-| **Server suite**             | ✅ 651 / 651 passing (62 suites)                        |
+| **Server suite**             | ✅ 654 / 654 passing (62 suites)                        |
 | **Client suite**             | ✅ 249 passing; 17 failing = unchanged OPT-026 baseline |
 | **check-env / lint / build** | ✅ all clean                                            |
 | **Blockers**                 | none                                                    |
@@ -50,7 +50,7 @@ Progress  [████████████████████] 100%
 
 | Check            | Result                                                      |
 | ---------------- | ----------------------------------------------------------- |
-| Server suite     | ✅ 651 / 651 (62 suites)                                    |
+| Server suite     | ✅ 654 / 654 (62 suites)                                    |
 | Client suite     | ✅ 249 passing; 17 failing = **unchanged** OPT-026 baseline |
 | `pnpm check-env` | ✅ environment files valid                                  |
 | `pnpm lint`      | ✅ clean, both workspaces                                   |
@@ -85,6 +85,25 @@ scan caught before they shipped:
 | Tests asserting `err.status`                 | `ApiError` stores **`statusCode`** — assertions would have passed **vacuously** |
 | Integration tests using `../helpers/testApp` | No such helper exists; real pattern is `createApp` + Bearer `signAccessToken`   |
 | Route prefix `/api`                          | Actual prefix is **`/api/v1`**                                                  |
+
+## Final whole-branch review (2026-08-09)
+
+The per-task reviews all passed, but the whole-branch review found **2 Critical
+and 3 Important** issues that only a cross-task view could see. All were fixed
+in one wave (`5cd1250`) and confirmed by a scoped re-review.
+
+| #   | Severity  | Finding                                                                                               |
+| --- | --------- | ----------------------------------------------------------------------------------------------------- |
+| 1   | Critical  | **Every issue link was a dead 404.** `/admin/games/:id` and `/admin/leagues/teams/:id` match no route |
+| 2   | Critical  | `DELETE :issueKey` was unvalidated while `POST` validated — asymmetric contract on a write path       |
+| 3   | Important | `canDismiss` hardcoded `true`, so team managers saw Dismiss buttons that always 403                   |
+| 4   | Important | The 48h rule wasn't applied to `missing_box_score` — a just-finalised game flashed a HIGH warning     |
+| 5   | Important | Full `events` arrays loaded for the whole season on every tab open **and** every dismiss              |
+
+**Why per-task review missed #1** — the check engine is pure, so its tests
+assert `href` strings against themselves. Nothing in a unit test compares them
+to the actual router. Worth remembering: purity makes the boundary testable and
+the _contract at the boundary_ untested.
 
 ## Decision log
 

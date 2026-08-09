@@ -85,6 +85,17 @@ tiers aren't vibes.
   team only) but must not dismiss — that's a league-wide judgement.
 - **The engine is pure and `now` is injected.** Keep it that way; it's what
   makes the 48h boundary deterministically testable.
+- **Issue `href`s must match real router paths.** The engine is pure, so its
+  tests assert href strings against themselves — nothing catches a link that
+  points nowhere. The first version shipped `/admin/games/:id` and
+  `/admin/leagues/teams/:id`, neither of which exists; the real routes are
+  `/games/:gameId` and `/admin/leagues/:leagueId/teams/:leagueTeamId`. Check
+  `client/src/app/router/AppRouter.jsx` when adding a check.
+- **Games are loaded through `listLeagueGamesForCompleteness`**, which projects
+  `events: { $slice: 1 }` and uses `.lean()`. The engine only ever tests
+  `events.length === 0`, so a sliced array is sufficient — but if you ever need
+  to _iterate_ events here, that projection will silently give you wrong
+  answers.
 
 ## Before you add a check
 

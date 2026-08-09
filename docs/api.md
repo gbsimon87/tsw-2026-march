@@ -401,7 +401,7 @@ Response `200`:
           "issueKey": "overdue_game:…",
           "label": "Hoops at Ballers",
           "detail": "Scheduled 3 days ago, never started",
-          "href": "/admin/games/…",
+          "href": "/games/…",
           "dismissed": false
         }
       ]
