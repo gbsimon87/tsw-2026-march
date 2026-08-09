@@ -97,6 +97,25 @@ tiers aren't vibes.
   to _iterate_ events here, that projection will silently give you wrong
   answers.
 
+## Deploying to production
+
+**Run the index migration before (or with) the first production deploy:**
+
+```bash
+cd server
+ENV_FILE=../env/server/.env.production node src/scripts/migrate-data-issue-dismissal-index.js --dry-run
+ENV_FILE=../env/server/.env.production node src/scripts/migrate-data-issue-dismissal-index.js
+```
+
+`autoIndex` is **off in production** (OPT-007, `config/db.js`), so the unique
+index on `(leagueId, seasonId, issueKey)` declared in the repository is created
+in dev/test only. Without this migration the constraint simply would not exist
+in production, and two concurrent dismissals of the same issue could each miss
+the other and insert a duplicate row — quietly breaking the idempotent
+re-dismiss behaviour the API documents. The script is idempotent, supports
+`--dry-run`, and clears any pre-existing duplicates (keeping the oldest row)
+before building the index.
+
 ## Before you add a check
 
 Verify the field exists **and** that an admin can act on it. Two checks from the

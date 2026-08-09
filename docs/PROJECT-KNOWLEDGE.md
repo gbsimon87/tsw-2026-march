@@ -994,6 +994,13 @@ Design decisions worth knowing:
 - **Computed on read, not materialized** — freshness matters more than the cost
   at ~16 teams, and materializing would add an invalidation burden to every
   game, roster, and stat write.
+- ⚠️ **Requires an index migration before its first production deploy.**
+  `autoIndex` is off in production (OPT-007), so the unique index on
+  `(leagueId, seasonId, issueKey)` never gets built there automatically — and
+  without it, concurrent dismissals of the same issue can insert duplicate rows.
+  Run `src/scripts/migrate-data-issue-dismissal-index.js` (idempotent,
+  `--dry-run` supported). This is the same trap any future schema-declared index
+  will hit.
 
 Deferred: inline fix actions, per-league configurable thresholds, cross-league
 operator view, historic seasons, CSV export, and notifications when new issues
