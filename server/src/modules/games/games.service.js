@@ -876,15 +876,30 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
 async function canManageGameRoster(userId, game) {
   if (!userId || !game) return false;
 
+  const sides =
+    game.trackingMode === 'dual_team' ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY] : [undefined];
+
   if (game.gameContext !== 'league') {
-    // Passing assertGameAccess on a standalone game already implies team
-    // ownership, which is exactly what addPlayerToTeam requires.
-    return true;
+    // Standalone: the durable write gate is addPlayerToTeam's team ownership.
+    // A one-sided game's owner always owns its team, but a DUAL-TEAM standalone
+    // game is accessible to the owner of EITHER team (canAccessStandaloneDualGame),
+    // so ownership of the side being tracked is not implied — check it per side
+    // rather than assuming access means ownership.
+    if (game.trackingMode !== 'dual_team') {
+      return true;
+    }
+
+    for (const side of sides) {
+      const target = resolveRosterTargetForGame(game, side);
+      if (!target.teamId) continue;
+      const owned = await findTeamByIdAndOwner(target.teamId, userId).catch(() => null);
+      if (owned) return true;
+    }
+
+    return false;
   }
 
   const { assertTeamManagerOrOwner } = require('../leagues/leagues.service');
-  const sides =
-    game.trackingMode === 'dual_team' ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY] : [undefined];
 
   for (const side of sides) {
     let target;
