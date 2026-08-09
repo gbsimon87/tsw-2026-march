@@ -25,7 +25,21 @@ describe('dismissIssueSchema', () => {
 
   it('rejects an unreasonably long note', () => {
     expect(() =>
-      dismissIssueSchema.parse({ issueKey: 'no_logo:1', note: 'x'.repeat(501) })
+      dismissIssueSchema.parse({
+        issueKey: 'no_logo:507f1f77bcf86cd799439031',
+        note: 'x'.repeat(501),
+      })
     ).toThrow();
+  });
+
+  it('rejects an issue key whose target is not an object id', () => {
+    expect(() => dismissIssueSchema.parse({ issueKey: 'overdue_game:1' })).toThrow();
+  });
+
+  it('accepts a 24 character hex object id target', () => {
+    const parsed = dismissIssueSchema.parse({
+      issueKey: 'roster_too_small:507f1f77bcf86cd799439031',
+    });
+    expect(parsed.issueKey).toBe('roster_too_small:507f1f77bcf86cd799439031');
   });
 });

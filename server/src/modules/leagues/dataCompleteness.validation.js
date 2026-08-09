@@ -6,9 +6,8 @@ const { z } = require('zod');
 const issueKeySchema = z
   .string()
   .trim()
-  .min(3)
   .max(200)
-  .regex(/^[a-z_]+:[A-Za-z0-9]+$/, 'issueKey must look like "<checkType>:<id>"');
+  .regex(/^[a-z_]+:[a-f0-9]{24}$/, 'issueKey must look like "<checkType>:<objectId>"');
 
 const dismissIssueSchema = z.object({
   issueKey: issueKeySchema,
