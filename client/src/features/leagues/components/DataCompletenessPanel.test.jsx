@@ -99,6 +99,151 @@ describe('DataCompletenessPanel', () => {
     expect(onRestore).toHaveBeenCalledWith('roster_too_small:2');
   });
 
+  it('renders only the active item from a mixed category in the main list', () => {
+    renderPanel({
+      report: report({
+        counts: { high: 0, medium: 0, low: 2, dismissed: 1 },
+        categories: [
+          {
+            key: 'no_logo',
+            label: 'Teams without a logo',
+            description: 'Affects public league and team pages.',
+            severity: 'low',
+            items: [
+              {
+                issueKey: 'no_logo:1',
+                label: 'Active Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/1',
+                dismissed: false,
+              },
+              {
+                issueKey: 'no_logo:2',
+                label: 'Dismissed Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/2',
+                dismissed: true,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(screen.getByText('Active Team')).toBeInTheDocument();
+    const drawer = document.querySelector('details');
+    expect(drawer).toContainElement(screen.getByText('Dismissed Team'));
+    expect(drawer).not.toContainElement(screen.queryByText('Active Team'));
+  });
+
+  it('shows the dismissed item from a mixed category inside the Dismissed drawer', () => {
+    renderPanel({
+      report: report({
+        counts: { high: 0, medium: 0, low: 2, dismissed: 1 },
+        categories: [
+          {
+            key: 'no_logo',
+            label: 'Teams without a logo',
+            description: 'Affects public league and team pages.',
+            severity: 'low',
+            items: [
+              {
+                issueKey: 'no_logo:1',
+                label: 'Active Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/1',
+                dismissed: false,
+              },
+              {
+                issueKey: 'no_logo:2',
+                label: 'Dismissed Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/2',
+                dismissed: true,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(screen.getByText(/Dismissed \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Dismissed Team')).toBeInTheDocument();
+  });
+
+  it('keeps the Dismissed drawer count in sync with the rows actually shown', () => {
+    renderPanel({
+      report: report({
+        counts: { high: 0, medium: 0, low: 2, dismissed: 1 },
+        categories: [
+          {
+            key: 'no_logo',
+            label: 'Teams without a logo',
+            description: 'Affects public league and team pages.',
+            severity: 'low',
+            items: [
+              {
+                issueKey: 'no_logo:1',
+                label: 'Active Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/1',
+                dismissed: false,
+              },
+              {
+                issueKey: 'no_logo:2',
+                label: 'Dismissed Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/2',
+                dismissed: true,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const summary = screen.getByText(/Dismissed \(\d+\)/i);
+    const dismissedRows = screen.getAllByText('Dismissed Team');
+    expect(summary).toHaveTextContent(`Dismissed (${dismissedRows.length})`);
+  });
+
+  it('makes the category badge match the rows rendered in the main list', () => {
+    renderPanel({
+      report: report({
+        counts: { high: 0, medium: 0, low: 2, dismissed: 1 },
+        categories: [
+          {
+            key: 'no_logo',
+            label: 'Teams without a logo',
+            description: 'Affects public league and team pages.',
+            severity: 'low',
+            items: [
+              {
+                issueKey: 'no_logo:1',
+                label: 'Active Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/1',
+                dismissed: false,
+              },
+              {
+                issueKey: 'no_logo:2',
+                label: 'Dismissed Team',
+                detail: 'No team logo',
+                href: '/admin/leagues/teams/2',
+                dismissed: true,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const headings = screen.getAllByText('Teams without a logo');
+    const mainListSection = headings[0].closest('section');
+    expect(mainListSection).toHaveTextContent('1');
+    expect(mainListSection).not.toHaveTextContent('Dismissed Team');
+  });
+
   it('hides dismiss controls when the viewer cannot dismiss', () => {
     renderPanel({ canDismiss: false });
     expect(screen.queryByRole('button', { name: /Dismiss/i })).not.toBeInTheDocument();

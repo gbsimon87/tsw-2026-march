@@ -136,6 +136,52 @@ describe('getDataCompletenessForUser', () => {
     expect(teamIds).not.toContain(OTHER_TEAM_ID);
   });
 
+  it('still surfaces league-wide game issues to a team manager alongside their own roster issues', async () => {
+    leaguesRepository.findActiveLeagueManager.mockResolvedValue(null);
+    leaguesRepository.findActiveLeagueTeamMember.mockImplementation((teamId) =>
+      String(teamId) === TEAM_ID ? { role: 'manager' } : null
+    );
+    leaguesRepository.listLeagueTeams.mockResolvedValue([
+      { _id: TEAM_ID, name: 'Ballers', logo: { url: 'x' } },
+      { _id: OTHER_TEAM_ID, name: 'Hoops', logo: { url: 'x' } },
+    ]);
+    leaguesRepository.listLeaguePlayers.mockImplementation((teamId) =>
+      Promise.resolve(
+        String(teamId) === TEAM_ID ? activeRoster(TEAM_ID, 5) : activeRoster(OTHER_TEAM_ID, 5)
+      )
+    );
+    // A scheduled game more than 48h past its scheduledAt -> overdue_game,
+    // which is a league-wide issue (leagueTeamId: null).
+    gamesRepository.listLeagueGamesForCompleteness.mockResolvedValue([
+      {
+        _id: '507f1f77bcf86cd799439099',
+        status: 'scheduled',
+        scheduledAt: new Date(Date.now() - 72 * 60 * 60 * 1000),
+        venue: 'Court 1',
+        trackingMode: 'one_sided',
+        homeLeagueTeamId: TEAM_ID,
+        awayLeagueTeamId: OTHER_TEAM_ID,
+        trackedLeagueTeamId: TEAM_ID,
+        events: [],
+      },
+    ]);
+
+    const report = await service.getDataCompletenessForUser(MANAGER_ID, LEAGUE_ID);
+
+    const overdueCategory = report.categories.find((c) => c.key === 'overdue_game');
+    expect(overdueCategory).toBeDefined();
+    expect(overdueCategory.items.length).toBeGreaterThan(0);
+    expect(overdueCategory.items.every((item) => item.leagueTeamId === null)).toBe(true);
+
+    const rosterTeamIds = report.categories
+      .filter((c) => c.key !== 'overdue_game' && c.key !== 'no_venue')
+      .flatMap((c) => c.items)
+      .map((i) => i.leagueTeamId)
+      .filter(Boolean);
+    expect(rosterTeamIds.every((id) => id === TEAM_ID)).toBe(true);
+    expect(rosterTeamIds).not.toContain(OTHER_TEAM_ID);
+  });
+
   it('includes the season name so the panel can say which season it audited', async () => {
     const report = await service.getDataCompletenessForUser(OWNER_ID, LEAGUE_ID);
     expect(report.seasonName).toBe('Spring 2026');

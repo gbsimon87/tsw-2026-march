@@ -73,7 +73,10 @@ function buildGameIssues({ games, teamsById, now }) {
         label,
         detail: 'Marked complete but no stats were recorded',
         href,
-        leagueTeamId: game.trackedLeagueTeamId ? String(game.trackedLeagueTeamId) : null,
+        // League-wide like the other three game checks (games are visible to
+        // any league member via the games list; there is no confidentiality
+        // reason to scope this one to the tracked side).
+        leagueTeamId: null,
       });
     }
 

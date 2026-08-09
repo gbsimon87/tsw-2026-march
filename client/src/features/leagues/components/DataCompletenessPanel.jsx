@@ -44,8 +44,6 @@ function IssueRow({ item, canDismiss, onDismiss, onRestore }) {
 }
 
 function Category({ category, canDismiss, onDismiss, onRestore }) {
-  const active = category.items.filter((item) => !item.dismissed);
-
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -55,7 +53,7 @@ function Category({ category, canDismiss, onDismiss, onRestore }) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <SeverityBadge severity={category.severity} />
-          <span className="text-sm font-semibold text-slate-700">{active.length}</span>
+          <span className="text-sm font-semibold text-slate-700">{category.items.length}</span>
         </div>
       </div>
       <ul className="mt-2">
@@ -103,8 +101,6 @@ export function DataCompletenessPanel({
     );
   }
 
-  const dismissedCount = report.counts?.dismissed ?? 0;
-
   // A clean league should feel reassuring, not blank.
   if (report.categories.length === 0) {
     return (
@@ -115,11 +111,18 @@ export function DataCompletenessPanel({
     );
   }
 
-  const withActive = report.categories.filter((category) =>
-    category.items.some((item) => !item.dismissed)
-  );
-  const onlyDismissed = report.categories.filter((category) =>
-    category.items.every((item) => item.dismissed)
+  // Split item-level, not category-level: a mixed category (some items
+  // dismissed, some not) must show its active items in the main list AND its
+  // dismissed items in the drawer — never both, never neither.
+  const activeCategories = report.categories
+    .map((category) => ({ ...category, items: category.items.filter((item) => !item.dismissed) }))
+    .filter((category) => category.items.length > 0);
+  const dismissedCategories = report.categories
+    .map((category) => ({ ...category, items: category.items.filter((item) => item.dismissed) }))
+    .filter((category) => category.items.length > 0);
+  const dismissedCount = dismissedCategories.reduce(
+    (total, category) => total + category.items.length,
+    0
   );
 
   return (
@@ -138,7 +141,7 @@ export function DataCompletenessPanel({
         <span>{report.seasonName}</span>
       </div>
 
-      {withActive.map((category) => (
+      {activeCategories.map((category) => (
         <Category
           key={category.key}
           category={category}
@@ -154,7 +157,7 @@ export function DataCompletenessPanel({
             Dismissed ({dismissedCount})
           </summary>
           <div className="mt-3 space-y-3">
-            {onlyDismissed.map((category) => (
+            {dismissedCategories.map((category) => (
               <Category
                 key={category.key}
                 category={category}

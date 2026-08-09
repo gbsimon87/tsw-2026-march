@@ -1,4 +1,5 @@
 const { dismissIssueSchema } = require('../../modules/leagues/dataCompleteness.validation');
+const { CHECK_META } = require('../../modules/leagues/dataCompleteness.checks');
 
 describe('dismissIssueSchema', () => {
   it('accepts a well-formed issue key', () => {
@@ -41,5 +42,14 @@ describe('dismissIssueSchema', () => {
       issueKey: 'roster_too_small:507f1f77bcf86cd799439031',
     });
     expect(parsed.issueKey).toBe('roster_too_small:507f1f77bcf86cd799439031');
+  });
+
+  it('accepts an engine-generated key for every check type the engine can emit', () => {
+    const objectId = '507f1f77bcf86cd799439031';
+    for (const checkType of Object.keys(CHECK_META)) {
+      const issueKey = `${checkType}:${objectId}`;
+      expect(() => dismissIssueSchema.parse({ issueKey })).not.toThrow();
+      expect(dismissIssueSchema.parse({ issueKey }).issueKey).toBe(issueKey);
+    }
   });
 });

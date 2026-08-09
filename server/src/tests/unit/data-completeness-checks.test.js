@@ -107,6 +107,26 @@ describe('buildGameIssues', () => {
     const issues = run([game({ scheduledAt })]);
     expect(issues[0].href).toBe(`/games/${GAME_ID}`);
   });
+
+  it('scopes all four game issues league-wide (leagueTeamId: null), even missing_box_score with a tracked side', () => {
+    const scheduledAt = new Date(NOW.getTime() - 49 * 60 * 60 * 1000);
+    const games = [
+      game({ status: 'scheduled', scheduledAt }), // overdue_game
+      game({ status: 'in_progress', scheduledAt }), // stuck_in_progress
+      game({ status: 'completed', events: [], scheduledAt, trackedLeagueTeamId: HOME_ID }), // missing_box_score
+      game({ scheduledAt: new Date(NOW.getTime() + 24 * 60 * 60 * 1000), venue: null }), // no_venue
+    ];
+    const issues = buildGameIssues({ games, teamsById: TEAMS_BY_ID, now: NOW });
+
+    const checkTypes = ['overdue_game', 'stuck_in_progress', 'missing_box_score', 'no_venue'];
+    for (const checkType of checkTypes) {
+      const matches = issues.filter((i) => i.checkType === checkType);
+      expect(matches.length).toBeGreaterThan(0);
+      for (const match of matches) {
+        expect(match.leagueTeamId).toBeNull();
+      }
+    }
+  });
 });
 
 const TEAM_ID = '507f1f77bcf86cd799439031';
