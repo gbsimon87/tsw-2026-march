@@ -26,6 +26,7 @@ describe('POST /api/v1/games/:gameId/roster', () => {
   let LeaguePlayer;
   let LeagueTeamMember;
   let Game;
+  let Team;
 
   beforeAll(async () => {
     await connectDb();
@@ -35,6 +36,7 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     require('../../modules/auth/auth.repository');
     require('../../modules/leagues/leagues.repository');
     require('../../modules/games/games.repository');
+    require('../../modules/teams/teams.repository');
 
     User = mongoose.model('User');
     League = mongoose.model('League');
@@ -42,6 +44,7 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     LeaguePlayer = mongoose.model('LeaguePlayer');
     LeagueTeamMember = mongoose.model('LeagueTeamMember');
     Game = mongoose.model('Game');
+    Team = mongoose.model('Team');
   });
 
   afterAll(async () => {
@@ -93,6 +96,32 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     return { owner, nonParticipant, league, homeTeam, awayTeam, game };
   }
 
+  async function createStandaloneDualFixture() {
+    const owner = await createUser('team-owner');
+
+    const homeTeam = await Team.create({
+      ownerUserId: owner._id,
+      name: 'Home Squad',
+    });
+    const awayTeam = await Team.create({
+      ownerUserId: owner._id,
+      name: 'Away Squad',
+    });
+
+    const game = await Game.create({
+      ownerUserId: owner._id,
+      gameContext: 'standalone',
+      trackingMode: 'dual_team',
+      homeTeamId: homeTeam._id,
+      awayTeamId: awayTeam._id,
+      initialActiveSide: 'home',
+      title: 'Home Squad vs Away Squad',
+      status: 'in_progress',
+    });
+
+    return { owner, homeTeam, awayTeam, game };
+  }
+
   afterEach(async () => {
     await Promise.all([
       User.deleteMany({}),
@@ -101,6 +130,7 @@ describe('POST /api/v1/games/:gameId/roster', () => {
       LeaguePlayer.deleteMany({}),
       LeagueTeamMember.deleteMany({}),
       Game.deleteMany({}),
+      Team.deleteMany({}),
     ]);
   });
 
@@ -225,5 +255,39 @@ describe('POST /api/v1/games/:gameId/roster', () => {
       displayName: 'No Side Given',
     }).lean();
     expect(leaguePlayer).toBeNull();
+  });
+
+  test('owner adds a player to a standalone dual-team game: 201, correct standalone snapshot shape, away untouched', async () => {
+    const { owner, homeTeam, awayTeam, game } = await createStandaloneDualFixture();
+    const app = createApp();
+
+    const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, owner._id).send({
+      side: 'home',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.player.displayName).toBe('Jordan Blake');
+    expect(res.body.side).toBe('home');
+
+    const freshHomeTeam = await Team.findById(homeTeam._id).lean();
+    const teamPlayer = (freshHomeTeam.players || []).find(
+      (player) => player.displayName === 'Jordan Blake'
+    );
+    expect(teamPlayer).toBeDefined();
+    expect(teamPlayer.jerseyNumber).toBe(23);
+
+    const freshGame = await Game.findById(game._id).lean();
+    const homeEntry = (freshGame.homeRosterSnapshot || []).find(
+      (entry) => String(entry.sourcePlayerId) === String(teamPlayer._id)
+    );
+    expect(homeEntry).toBeDefined();
+    expect(homeEntry.sourceType).toBe('team_player');
+    expect(homeEntry.leaguePlayerId).toBeNull();
+    expect(homeEntry.displayName).toBe('Jordan Blake');
+
+    expect(freshGame.awayRosterSnapshot || []).toHaveLength(0);
+    expect(String(freshGame.awayTeamId)).toBe(String(awayTeam._id));
   });
 });

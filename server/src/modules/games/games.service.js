@@ -856,7 +856,7 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
   }
 
   if (target.snapshotField) {
-    await appendPlayerToGameSnapshot(gameId, game, target.snapshotField, player);
+    await appendPlayerToGameSnapshot(gameId, game, target.snapshotField, target.kind, player);
   }
 
   return { player, side };
@@ -918,9 +918,28 @@ function findLastAddedPlayer(team, displayName) {
   throw new ApiError(500, 'Added player could not be located on the team');
 }
 
-// Mirrors buildLeagueRosterSnapshot's field shape (leagues.service.js) so a
-// mid-game addition is indistinguishable from one frozen at game creation.
-function buildSnapshotEntry(player) {
+// Mirrors buildLeagueRosterSnapshot's field shape (leagues.service.js) for a
+// league target, and buildRosterSnapshotFromStandaloneTeam's field shape
+// (above) for a standalone target, so a mid-game addition is indistinguishable
+// from one frozen at game creation or one read live off a standalone Team.
+// These two source functions use genuinely different shapes (leaguePlayerId
+// vs sourceType/sourcePlayerId) — see PROJECT-KNOWLEDGE §5 (TSW-004) — so this
+// must branch on target kind rather than emit one shape for both.
+function buildSnapshotEntry(targetKind, player) {
+  if (targetKind === 'standalone') {
+    return {
+      sourceType: 'team_player',
+      sourcePlayerId: player.id ?? player._id,
+      leaguePlayerId: null,
+      displayName: player.displayName,
+      jerseyNumber: player.jerseyNumber ?? null,
+      position: player.position ?? null,
+      claimedByUserId: null,
+      isClaimed: false,
+      isActive: true,
+    };
+  }
+
   const claimedUserId = player.claimedUserId ?? player.claimedByUserId ?? null;
   return {
     leaguePlayerId: player.id ?? player._id,
@@ -937,8 +956,8 @@ function buildSnapshotEntry(player) {
 // the same moment makes this save throw VersionError. The append is pure, so
 // replaying it on a freshly loaded game is safe — and far better than surfacing a
 // conflict to someone mid-game. The roster write above is NOT replayed.
-async function appendPlayerToGameSnapshot(gameId, game, snapshotField, player) {
-  const entry = buildSnapshotEntry(player);
+async function appendPlayerToGameSnapshot(gameId, game, snapshotField, targetKind, player) {
+  const entry = buildSnapshotEntry(targetKind, player);
 
   try {
     game[snapshotField] = [...(game[snapshotField] || []), entry];

@@ -48,6 +48,21 @@ function leagueDualGame(overrides = {}) {
   };
 }
 
+function standaloneDualGame(overrides = {}) {
+  return {
+    _id: GAME_ID,
+    ownerUserId: OWNER,
+    status: 'in_progress',
+    gameContext: 'standalone',
+    trackingMode: 'dual_team',
+    homeTeamId: '507f1f77bcf86cd799439016',
+    awayTeamId: '507f1f77bcf86cd799439017',
+    homeRosterSnapshot: [],
+    awayRosterSnapshot: [],
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   // Shaped like the real sanitizeLeaguePlayer output (leagues.service.js:174).
@@ -233,5 +248,58 @@ describe('addPlayerToGameRoster', () => {
       isClaimed: true,
       claimedByUserId: 'user-99',
     });
+  });
+
+  it('appends the league-shaped snapshot entry for a league dual-team add (no sourceType)', async () => {
+    const game = leagueDualGame();
+    findGameById.mockResolvedValue(game);
+
+    await addPlayerToGameRoster(OWNER, GAME_ID, {
+      side: 'home',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+
+    expect(game.homeRosterSnapshot[0]).toMatchObject({
+      leaguePlayerId: 'lp-1',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+      isActive: true,
+      isClaimed: false,
+    });
+    // Must match buildLeagueRosterSnapshot's shape exactly: no sourceType/sourcePlayerId.
+    expect(game.homeRosterSnapshot[0]).not.toHaveProperty('sourceType');
+    expect(game.homeRosterSnapshot[0]).not.toHaveProperty('sourcePlayerId');
+  });
+
+  it('appends the standalone-shaped snapshot entry for a standalone dual-team add', async () => {
+    const game = standaloneDualGame();
+    findGameById.mockResolvedValue(game);
+
+    const result = await addPlayerToGameRoster(OWNER, GAME_ID, {
+      side: 'home',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+
+    expect(teamsService.addPlayerToTeam).toHaveBeenCalledWith(OWNER, '507f1f77bcf86cd799439016', {
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+    expect(saveGame).toHaveBeenCalledWith(game);
+    expect(game.homeRosterSnapshot).toHaveLength(1);
+    expect(game.homeRosterSnapshot[0]).toMatchObject({
+      sourceType: 'team_player',
+      sourcePlayerId: 'p-1',
+      leaguePlayerId: null,
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+      claimedByUserId: null,
+      isClaimed: false,
+      isActive: true,
+    });
+    expect(game.awayRosterSnapshot).toHaveLength(0);
+    expect(result.player.displayName).toBe('Jordan Blake');
+    expect(result.side).toBe('home');
   });
 });
