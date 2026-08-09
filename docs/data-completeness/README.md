@@ -4,7 +4,7 @@ An admin panel that audits a league's current season and lists incomplete data �
 unfinalised games, missing box scores, roster gaps — so silent data rot becomes
 a to-do list.
 
-**Status:** ✅ shipped — 11/11 tasks, server 651/651, client baseline unchanged, lint + build clean
+**Status:** ✅ shipped — 11/11 tasks, server 654/654, client baseline unchanged, lint + build clean
 **Branch:** `feature/data-completeness-dashboard` (not yet merged to `dev` at time of writing)
 **Built:** 2026-08-09
 **Origin:** Idea #10 in [`../league-admin-ideas.md`](../league-admin-ideas.md)

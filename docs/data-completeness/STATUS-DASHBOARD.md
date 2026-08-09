@@ -13,7 +13,7 @@
 | **Client suite**             | ✅ 249 passing; 17 failing = unchanged OPT-026 baseline |
 | **check-env / lint / build** | ✅ all clean                                            |
 | **Blockers**                 | none                                                    |
-| **Next step**                | Final whole-branch review, then merge → `dev`           |
+| **Next step**                | Merge → `dev` (final review passed after one fix wave)  |
 
 ```
 Progress  [████████████████████] 100%
