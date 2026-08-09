@@ -305,7 +305,7 @@ module.exports = {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter server test -- data-completeness-checks`
-Expected: PASS, 11 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Mutation-test the 48h boundary**
 
@@ -579,7 +579,7 @@ module.exports = {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter server test -- data-completeness-checks`
-Expected: PASS, 24 tests total.
+Expected: PASS, 23 tests total.
 
 - [ ] **Step 5: Commit**
 
@@ -825,7 +825,7 @@ module.exports = {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter server test -- data-completeness-checks`
-Expected: PASS, 32 tests total.
+Expected: PASS, 31 tests total.
 
 - [ ] **Step 5: Commit**
 
@@ -1072,8 +1072,22 @@ describe('dismissIssueSchema', () => {
 
   it('rejects an unreasonably long note', () => {
     expect(() =>
-      dismissIssueSchema.parse({ issueKey: 'no_logo:1', note: 'x'.repeat(501) })
+      dismissIssueSchema.parse({
+        issueKey: 'no_logo:507f1f77bcf86cd799439031',
+        note: 'x'.repeat(501),
+      })
     ).toThrow();
+  });
+
+  it('rejects an issue key whose target is not an object id', () => {
+    expect(() => dismissIssueSchema.parse({ issueKey: 'overdue_game:1' })).toThrow();
+  });
+
+  it('accepts a 24 character hex object id target', () => {
+    const parsed = dismissIssueSchema.parse({
+      issueKey: 'roster_too_small:507f1f77bcf86cd799439031',
+    });
+    expect(parsed.issueKey).toBe('roster_too_small:507f1f77bcf86cd799439031');
   });
 });
 ```
@@ -1090,15 +1104,16 @@ Create `server/src/modules/leagues/dataCompleteness.validation.js`:
 ```js
 const { z } = require('zod');
 
-// Issue keys are always `<checkType>:<targetId>`. Requiring the colon keeps
-// malformed keys — which would silently never match a real issue — out of the
-// dismissal collection.
+// Issue keys are always `<checkType>:<objectId>`. Every target the check engine
+// emits is a Mongo ObjectId (game.id / player.id / teamId), so the target is
+// validated as 24 hex chars — a looser pattern would let a malformed key be
+// persisted that can never match a real issue, which the user experiences as
+// "dismiss silently does nothing".
 const issueKeySchema = z
   .string()
   .trim()
-  .min(3)
   .max(200)
-  .regex(/^[a-z_]+:[A-Za-z0-9]+$/, 'issueKey must look like "<checkType>:<id>"');
+  .regex(/^[a-z_]+:[a-f0-9]{24}$/, 'issueKey must look like "<checkType>:<objectId>"');
 
 const dismissIssueSchema = z.object({
   issueKey: issueKeySchema,
@@ -1116,7 +1131,7 @@ module.exports = { dismissIssueSchema, issueKeySchema };
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter server test -- data-completeness-validation`
-Expected: PASS, 5 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
 
