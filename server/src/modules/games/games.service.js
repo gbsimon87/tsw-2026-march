@@ -760,6 +760,50 @@ function fillEmptySnapshot(game, fieldName, snapshot) {
   return true;
 }
 
+// Mid-game roster add: which roster does this game's players actually come from?
+//
+// A standalone one-sided game reads team.players live from the Team doc (see
+// resolveGameTeamContext), so it needs NO game write — snapshotField is null.
+// Every other shape reads a frozen snapshot array on the Game doc, which must be
+// appended to or the new player stays invisible in the game they were added for.
+function resolveRosterTargetForGame(game, side) {
+  const isDual = game.trackingMode === 'dual_team';
+
+  if (isDual && !side) {
+    throw new ApiError(400, 'side is required for dual-team games');
+  }
+
+  const snapshotField = isDual
+    ? side === TEAM_SIDES.HOME
+      ? 'homeRosterSnapshot'
+      : 'awayRosterSnapshot'
+    : null;
+
+  if (game.gameContext === 'league') {
+    const leagueTeamId = isDual
+      ? side === TEAM_SIDES.HOME
+        ? game.homeLeagueTeamId
+        : game.awayLeagueTeamId
+      : game.trackedLeagueTeamId;
+
+    return {
+      kind: 'league',
+      leagueId: String(game.leagueId),
+      leagueTeamId: String(leagueTeamId),
+      // A one-sided league game freezes its tracked roster in `rosterSnapshot`.
+      snapshotField: snapshotField || 'rosterSnapshot',
+    };
+  }
+
+  const teamId = isDual
+    ? side === TEAM_SIDES.HOME
+      ? game.homeTeamId
+      : game.awayTeamId
+    : game.teamId;
+
+  return { kind: 'standalone', teamId: String(teamId), snapshotField };
+}
+
 async function repairGameRosterSnapshots(game) {
   if (!game || game.status !== 'in_progress') {
     return false;
@@ -1833,5 +1877,6 @@ module.exports = {
   canEditStandaloneDualGame,
   canAccessGame,
   resolveDualGameParticipants,
+  resolveRosterTargetForGame,
   HIGHLIGHT_STAT_TYPES,
 };
