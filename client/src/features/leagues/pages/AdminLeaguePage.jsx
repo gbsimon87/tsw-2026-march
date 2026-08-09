@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
+import { DataCompletenessPanel } from '../components/DataCompletenessPanel';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
@@ -104,6 +105,24 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: 'completeness',
+    label: 'Data health',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
+        <path d="M8 1.5 2.5 4v4c0 3.2 2.3 5.6 5.5 6.5 3.2-.9 5.5-3.3 5.5-6.5V4L8 1.5Z" />
+        <path d="M8 5.5v3.5" strokeLinecap="round" />
+        <path d="M8 11h.01" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 function getLeagueRoleLabel(viewerRole) {
@@ -145,6 +164,9 @@ export function AdminLeaguePage() {
   const [newSeasonLabel, setNewSeasonLabel] = useState('');
   const [isCreatingSeason, setIsCreatingSeason] = useState(false);
   const [seasonError, setSeasonError] = useState('');
+  const [completenessReport, setCompletenessReport] = useState(null);
+  const [completenessLoading, setCompletenessLoading] = useState(false);
+  const [completenessError, setCompletenessError] = useState(null);
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -228,6 +250,52 @@ export function AdminLeaguePage() {
       .catch(() => {})
       .finally(() => setIsLoadingRequests(false));
   }, [activeTab, leagueId, league?.teams]);
+
+  useEffect(() => {
+    if (activeTab !== 'completeness' || !leagueId) return;
+
+    let cancelled = false;
+    setCompletenessLoading(true);
+    setCompletenessError(null);
+
+    leaguesApi
+      .fetchDataCompleteness(leagueId)
+      .then((report) => {
+        if (!cancelled) setCompletenessReport(report);
+      })
+      .catch((fetchError) => {
+        // Surface the server's message — "League has no active season" is far
+        // more useful than a generic failure string.
+        if (!cancelled) setCompletenessError(fetchError?.message ?? 'Could not load data health');
+      })
+      .finally(() => {
+        if (!cancelled) setCompletenessLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, leagueId]);
+
+  async function handleDismissIssue(issueKey) {
+    try {
+      await leaguesApi.dismissDataIssue(leagueId, { issueKey, note: null });
+      const report = await leaguesApi.fetchDataCompleteness(leagueId);
+      setCompletenessReport(report);
+    } catch (dismissError) {
+      setCompletenessError(dismissError?.message ?? 'Could not dismiss this item');
+    }
+  }
+
+  async function handleRestoreIssue(issueKey) {
+    try {
+      await leaguesApi.restoreDataIssue(leagueId, issueKey);
+      const report = await leaguesApi.fetchDataCompleteness(leagueId);
+      setCompletenessReport(report);
+    } catch (restoreError) {
+      setCompletenessError(restoreError?.message ?? 'Could not restore this item');
+    }
+  }
 
   async function onApproveJoin(teamId, requestId) {
     await leaguesApi.approveJoinRequest(leagueId, teamId, requestId);
@@ -1290,6 +1358,24 @@ export function AdminLeaguePage() {
                   </div>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'completeness' ? (
+            <div
+              id="admin-league-tabpanel-completeness"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-completeness"
+              tabIndex={0}
+            >
+              <DataCompletenessPanel
+                report={completenessReport}
+                isLoading={completenessLoading}
+                error={completenessError}
+                canDismiss
+                onDismiss={handleDismissIssue}
+                onRestore={handleRestoreIssue}
+              />
             </div>
           ) : null}
         </div>
