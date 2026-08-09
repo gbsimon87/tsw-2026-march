@@ -181,10 +181,104 @@ function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamI
   return issues;
 }
 
+// Severity is "does this corrupt the competition record?" — high means the
+// standings are wrong until it is fixed.
+const CHECK_META = {
+  overdue_game: {
+    label: 'Overdue games',
+    description: 'Scheduled more than 48 hours ago but never started.',
+    severity: SEVERITY.HIGH,
+  },
+  stuck_in_progress: {
+    label: 'Unfinalised games',
+    description: 'Started but never finalised, so they are missing from standings.',
+    severity: SEVERITY.HIGH,
+  },
+  missing_box_score: {
+    label: 'Missing box scores',
+    description: 'Marked complete but no stats were recorded.',
+    severity: SEVERITY.HIGH,
+  },
+  no_appearances: {
+    label: 'Players with no appearances',
+    description: 'On an active roster but never recorded in a completed game.',
+    severity: SEVERITY.MEDIUM,
+  },
+  roster_too_small: {
+    label: 'Rosters below minimum',
+    description: `Fewer than ${MIN_ACTIVE_ROSTER} active players.`,
+    severity: SEVERITY.MEDIUM,
+  },
+  missing_jersey: {
+    label: 'Missing jersey numbers',
+    description: 'Harder to identify these players in a box score.',
+    severity: SEVERITY.LOW,
+  },
+  unclaimed_player: {
+    label: 'Unclaimed players',
+    description: 'Resolved when the player claims their account — not by admin entry.',
+    severity: SEVERITY.LOW,
+  },
+  no_venue: {
+    label: 'Games without a venue',
+    description: 'Upcoming games with no location set.',
+    severity: SEVERITY.LOW,
+  },
+  no_logo: {
+    label: 'Teams without a logo',
+    description: 'Affects public league and team pages.',
+    severity: SEVERITY.LOW,
+  },
+};
+
+const SEVERITY_ORDER = [SEVERITY.HIGH, SEVERITY.MEDIUM, SEVERITY.LOW];
+const CATEGORY_ORDER = Object.keys(CHECK_META).sort(
+  (a, b) =>
+    SEVERITY_ORDER.indexOf(CHECK_META[a].severity) - SEVERITY_ORDER.indexOf(CHECK_META[b].severity)
+);
+
+function groupIntoCategories(issues) {
+  const byType = new Map();
+
+  for (const issue of issues) {
+    if (!byType.has(issue.checkType)) byType.set(issue.checkType, []);
+    byType.get(issue.checkType).push(issue);
+  }
+
+  return CATEGORY_ORDER.filter((key) => byType.has(key)).map((key) => ({
+    key,
+    label: CHECK_META[key].label,
+    description: CHECK_META[key].description,
+    severity: CHECK_META[key].severity,
+    // Dismissed items stay visible but always sink to the bottom.
+    items: byType
+      .get(key)
+      .slice()
+      .sort((a, b) => Number(a.dismissed) - Number(b.dismissed)),
+  }));
+}
+
+function countBySeverity(issues) {
+  const counts = { high: 0, medium: 0, low: 0, dismissed: 0 };
+
+  for (const issue of issues) {
+    if (issue.dismissed) {
+      counts.dismissed += 1;
+      continue;
+    }
+    counts[issue.severity] += 1;
+  }
+
+  return counts;
+}
+
 module.exports = {
   OVERDUE_AFTER_MS,
   MIN_ACTIVE_ROSTER,
   SEVERITY,
+  CHECK_META,
   buildGameIssues,
   buildRosterIssues,
+  groupIntoCategories,
+  countBySeverity,
 };

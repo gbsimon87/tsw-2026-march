@@ -216,3 +216,96 @@ describe('buildRosterIssues', () => {
     expect(issues.every((i) => i.leagueTeamId === TEAM_ID)).toBe(true);
   });
 });
+
+const {
+  groupIntoCategories,
+  countBySeverity,
+  CHECK_META,
+} = require('../../modules/leagues/dataCompleteness.checks');
+
+function issue(checkType, severity, overrides = {}) {
+  return {
+    issueKey: `${checkType}:${overrides.id ?? '1'}`,
+    checkType,
+    severity,
+    label: overrides.label ?? 'Item',
+    detail: 'detail',
+    href: '/x',
+    leagueTeamId: null,
+    dismissed: false,
+    ...overrides,
+  };
+}
+
+describe('groupIntoCategories', () => {
+  it('orders categories high severity first', () => {
+    const categories = groupIntoCategories([
+      issue('no_logo', SEVERITY.LOW),
+      issue('overdue_game', SEVERITY.HIGH),
+      issue('roster_too_small', SEVERITY.MEDIUM),
+    ]);
+    expect(categories.map((c) => c.key)).toEqual(['overdue_game', 'roster_too_small', 'no_logo']);
+  });
+
+  it('groups issues of the same type together', () => {
+    const categories = groupIntoCategories([
+      issue('overdue_game', SEVERITY.HIGH, { id: '1' }),
+      issue('overdue_game', SEVERITY.HIGH, { id: '2' }),
+    ]);
+    expect(categories).toHaveLength(1);
+    expect(categories[0].items).toHaveLength(2);
+  });
+
+  it('omits categories that have no issues', () => {
+    const categories = groupIntoCategories([issue('overdue_game', SEVERITY.HIGH)]);
+    expect(categories.map((c) => c.key)).toEqual(['overdue_game']);
+  });
+
+  it('sorts dismissed items last within a category', () => {
+    const categories = groupIntoCategories([
+      issue('overdue_game', SEVERITY.HIGH, { id: '1', dismissed: true, label: 'Dismissed' }),
+      issue('overdue_game', SEVERITY.HIGH, { id: '2', dismissed: false, label: 'Active' }),
+    ]);
+    expect(categories[0].items.map((i) => i.label)).toEqual(['Active', 'Dismissed']);
+  });
+
+  it('carries a human label and description onto each category', () => {
+    const categories = groupIntoCategories([issue('overdue_game', SEVERITY.HIGH)]);
+    expect(categories[0].label).toBe(CHECK_META.overdue_game.label);
+    expect(categories[0].description).toBe(CHECK_META.overdue_game.description);
+  });
+
+  it('has metadata for every check type the engine can emit', () => {
+    const emitted = [
+      'overdue_game',
+      'stuck_in_progress',
+      'missing_box_score',
+      'no_venue',
+      'no_appearances',
+      'missing_jersey',
+      'unclaimed_player',
+      'roster_too_small',
+      'no_logo',
+    ];
+    for (const checkType of emitted) {
+      expect(CHECK_META[checkType]).toBeDefined();
+      expect(typeof CHECK_META[checkType].label).toBe('string');
+    }
+  });
+});
+
+describe('countBySeverity', () => {
+  it('counts active issues by severity and dismissed separately', () => {
+    const counts = countBySeverity([
+      issue('overdue_game', SEVERITY.HIGH),
+      issue('missing_box_score', SEVERITY.HIGH),
+      issue('roster_too_small', SEVERITY.MEDIUM),
+      issue('no_logo', SEVERITY.LOW, { dismissed: true }),
+    ]);
+    expect(counts).toEqual({ high: 2, medium: 1, low: 0, dismissed: 1 });
+  });
+
+  it('returns zeroes for an empty list', () => {
+    expect(countBySeverity([])).toEqual({ high: 0, medium: 0, low: 0, dismissed: 0 });
+  });
+});
