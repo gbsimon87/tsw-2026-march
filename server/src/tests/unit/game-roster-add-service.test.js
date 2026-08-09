@@ -50,17 +50,36 @@ function leagueDualGame(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Shaped like the real sanitizeLeaguePlayer output (leagues.service.js:174).
   leaguesService.addPlayerToLeagueTeam.mockResolvedValue({
     id: 'lp-1',
+    leaguePlayerId: 'lp-1',
+    leagueTeamId: '507f1f77bcf86cd799439014',
     displayName: 'Jordan Blake',
     jerseyNumber: 23,
     position: null,
     isActive: true,
+    isClaimed: false,
+    claimedUserId: null,
+    claimedBadgeLabel: null,
+    avatarUrl: null,
   });
+  // Shaped like the real sanitizeTeam output (teams.service.js:58) — the WHOLE
+  // team, with the newly added player appended to `players`.
   teamsService.addPlayerToTeam.mockResolvedValue({
-    id: 'p-1',
-    displayName: 'Jordan Blake',
-    jerseyNumber: 23,
+    id: '507f1f77bcf86cd799439016',
+    name: 'Wildcats',
+    ownerUserId: OWNER,
+    logo: null,
+    colors: [],
+    homeVenue: null,
+    billing: {},
+    entitlements: {},
+    players: [
+      { id: 'p-1', displayName: 'Jordan Blake', jerseyNumber: 23, position: null, isActive: true },
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
 });
 
@@ -114,6 +133,10 @@ describe('addPlayerToGameRoster', () => {
     });
     expect(saveGame).not.toHaveBeenCalled();
     expect(result.side).toBeNull();
+    // Regression: addPlayerToTeam returns the whole sanitized Team, not the
+    // player. The service must extract the player, not pass the team through.
+    expect(result.player.displayName).toBe('Jordan Blake');
+    expect(result.player).not.toHaveProperty('players');
   });
 
   it('rejects a completed game with 409 and writes nothing', async () => {
@@ -181,5 +204,34 @@ describe('addPlayerToGameRoster', () => {
     // The roster write must NOT be repeated by the retry — that would create a
     // second real player.
     expect(leaguesService.addPlayerToLeagueTeam).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the snapshot entry claimed when the delegate returns a claimed player', async () => {
+    const game = leagueDualGame();
+    findGameById.mockResolvedValue(game);
+    leaguesService.addPlayerToLeagueTeam.mockResolvedValue({
+      id: 'lp-2',
+      leaguePlayerId: 'lp-2',
+      leagueTeamId: '507f1f77bcf86cd799439014',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+      position: null,
+      isActive: true,
+      isClaimed: true,
+      claimedUserId: 'user-99',
+      claimedBadgeLabel: 'Claimed profile',
+      avatarUrl: null,
+    });
+
+    await addPlayerToGameRoster(OWNER, GAME_ID, {
+      side: 'home',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+
+    expect(game.homeRosterSnapshot[0]).toMatchObject({
+      isClaimed: true,
+      claimedByUserId: 'user-99',
+    });
   });
 });

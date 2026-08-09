@@ -847,7 +847,12 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
     // Lazily required to avoid a require cycle — teams.service.js requires
     // games.service.js for computeBoxScore.
     const { addPlayerToTeam } = require('../teams/teams.service');
-    player = await addPlayerToTeam(userId, target.teamId, rosterPayload);
+    // addPlayerToTeam returns sanitizeTeam's output (the WHOLE team), not the
+    // added player. Pull the just-added player back out of team.players,
+    // matching on the trimmed name we sent and preferring the last match so an
+    // existing inactive same-name row can't shadow the one we just appended.
+    const team = await addPlayerToTeam(userId, target.teamId, rosterPayload);
+    player = findLastAddedPlayer(team, rosterPayload.displayName);
   }
 
   if (target.snapshotField) {
@@ -857,16 +862,31 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
   return { player, side };
 }
 
+function findLastAddedPlayer(team, displayName) {
+  const targetName = displayName.trim();
+  const players = Array.isArray(team?.players) ? team.players : [];
+  for (let i = players.length - 1; i >= 0; i -= 1) {
+    if (players[i]?.displayName === targetName) {
+      return players[i];
+    }
+  }
+
+  // The delegate's own contract changed underneath us if we get here — fail
+  // loudly rather than returning undefined to the caller.
+  throw new ApiError(500, 'Added player could not be located on the team');
+}
+
 // Mirrors buildLeagueRosterSnapshot's field shape (leagues.service.js) so a
 // mid-game addition is indistinguishable from one frozen at game creation.
 function buildSnapshotEntry(player) {
+  const claimedUserId = player.claimedUserId ?? player.claimedByUserId ?? null;
   return {
     leaguePlayerId: player.id ?? player._id,
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
     position: player.position ?? null,
-    claimedByUserId: player.claimedByUserId ?? null,
-    isClaimed: Boolean(player.claimedByUserId),
+    claimedByUserId: claimedUserId,
+    isClaimed: Boolean(claimedUserId),
     isActive: true,
   };
 }
