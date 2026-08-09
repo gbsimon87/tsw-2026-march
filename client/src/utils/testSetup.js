@@ -1,5 +1,10 @@
 import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+afterEach(() => {
+  cleanup();
+});
 
 vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:4000/api/v1');
 vi.stubEnv('VITE_STRIPE_PUBLISHABLE_KEY', 'pk_test_tsw');
