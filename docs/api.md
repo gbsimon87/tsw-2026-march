@@ -194,7 +194,17 @@ Example (tracked shot):
 
 ### Update Game (`PATCH /games/:gameId`)
 
-All fields optional; at least one must be provided: `title`, `opponent` (nullable string), `scheduledAt` (ISO datetime, nullable), `videoUrl` (YouTube URL, nullable), `initialActiveSide` (`"home"` | `"away"`).
+All fields optional; at least one must be provided: `title`, `opponent` (nullable string), `scheduledAt` (ISO datetime, nullable), `venue` (string ≤120, nullable — **league games only**), `videoUrl` (YouTube URL, nullable), `initialActiveSide` (`"home"` | `"away"`).
+
+`venue` is trimmed; `null` clears it. It is ignored for standalone games, which
+carry location on the team's `homeVenue` instead.
+
+### Venue on league games (`POST /games`, `PATCH /games/:gameId`)
+
+League game payloads (`gameContext: "league"`, both one-sided and `dual_team`)
+accept an optional free-text `venue` (trimmed, ≤120 chars) — the same rules as
+the Schedule Builder's bulk endpoint, so a game created one at a time and one
+created in bulk behave identically. Omitted means no venue.
 
 ### Update Event (`PATCH /games/:gameId/events/:eventId`)
 

@@ -237,6 +237,7 @@ export function AdminNewLeagueGamePage() {
 
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [venue, setVenue] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -302,6 +303,7 @@ export function AdminNewLeagueGamePage() {
         initialActiveSide: effectiveSide,
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
+        ...(venue.trim() ? { venue: venue.trim() } : {}),
         ...(videoUrl.trim() ? { videoUrl: videoUrl.trim() } : {}),
       });
       navigate(`/games/${response.game.id}/track`);
@@ -530,6 +532,17 @@ export function AdminNewLeagueGamePage() {
                 className="w-full max-w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
+              />
+            </label>
+            <label className="block min-w-0">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Venue</span>
+              <input
+                type="text"
+                maxLength={120}
+                className="w-full max-w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                placeholder="e.g. Central Court"
+                value={venue}
+                onChange={(e) => setVenue(e.target.value)}
               />
             </label>
             <label className="block min-w-0">

@@ -1049,6 +1049,7 @@ async function createGameForUser(userId, payload) {
       awayRosterSnapshot,
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       status: 'in_progress',
     });
@@ -1069,6 +1070,7 @@ async function createGameForUser(userId, payload) {
       trackedLeagueTeamId: payload.trackedLeagueTeamId,
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       status: 'in_progress',
       rosterSnapshot: context.rosterSnapshot,
@@ -1187,6 +1189,12 @@ async function updateGameForUser(userId, gameId, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
     game.scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   }
+  // Venue is league-only: standalone games use the team's homeVenue instead, and
+  // nothing in the standalone UI surfaces a per-game location.
+  if (Object.prototype.hasOwnProperty.call(payload, 'venue') && game.gameContext === 'league') {
+    game.venue = payload.venue?.trim() || null;
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
     game.videoUrl = payload.videoUrl?.trim() || null;
   }
