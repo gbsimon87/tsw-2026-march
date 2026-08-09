@@ -25,7 +25,7 @@ jest.mock('../../modules/leagues/seasons.repository', () => {
 });
 
 jest.mock('../../modules/games/games.repository', () => ({
-  listLeagueGamesByLeagueId: jest.fn(),
+  listLeagueGamesForCompleteness: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/dataCompleteness.repository', () => ({
@@ -72,7 +72,7 @@ beforeEach(() => {
     Promise.resolve(String(teamId) === TEAM_ID ? activeRoster(TEAM_ID, 5) : [])
   );
   leaguesRepository.listLeaguePlayerStats.mockResolvedValue([]);
-  gamesRepository.listLeagueGamesByLeagueId.mockResolvedValue([]);
+  gamesRepository.listLeagueGamesForCompleteness.mockResolvedValue([]);
   dismissalRepository.listDismissals.mockResolvedValue([]);
 });
 

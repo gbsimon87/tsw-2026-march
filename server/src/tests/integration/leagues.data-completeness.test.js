@@ -107,6 +107,17 @@ describe('data completeness routes', () => {
     );
   });
 
+  it('rejects a malformed issue key on restore with 400', async () => {
+    const app = createApp();
+    const response = await authedDelete(
+      app,
+      `/api/v1/leagues/${LEAGUE_ID}/data-completeness/dismissals/nope`
+    );
+
+    expect(response.status).toBe(400);
+    expect(dataCompletenessService.restoreIssueForUser).not.toHaveBeenCalled();
+  });
+
   it('propagates a service 403', async () => {
     dataCompletenessService.getDataCompletenessForUser.mockRejectedValue(
       new ApiError(403, 'Forbidden')

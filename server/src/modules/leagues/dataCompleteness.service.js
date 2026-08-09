@@ -10,7 +10,7 @@ const {
   listLeaguePlayerStats,
 } = require('./leagues.repository');
 const { findSeasonById } = require('./seasons.repository');
-const { listLeagueGamesByLeagueId } = require('../games/games.repository');
+const { listLeagueGamesForCompleteness } = require('../games/games.repository');
 const {
   listDismissals,
   upsertDismissal,
@@ -118,7 +118,7 @@ async function getDataCompletenessForUser(userId, leagueId) {
   const [players, games, statsRows, dismissals] = await Promise.all([
     listAllLeaguePlayers(teams),
     // Signature is positional: (leagueId, seasonId) — not an options object.
-    listLeagueGamesByLeagueId(league._id, seasonId),
+    listLeagueGamesForCompleteness(league._id, seasonId),
     listLeaguePlayerStats(league._id, seasonId),
     listDismissals(league._id, seasonId),
   ]);
@@ -172,6 +172,7 @@ async function getDataCompletenessForUser(userId, leagueId) {
     })),
     statsByPlayerId,
     completedGameTeamIds,
+    leagueId: String(league._id),
   });
 
   const dismissedKeys = new Set(dismissals.map((row) => row.issueKey));

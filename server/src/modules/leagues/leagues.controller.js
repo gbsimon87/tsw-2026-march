@@ -13,7 +13,7 @@ const {
 } = require('./leagues.validation');
 const leaguesService = require('./leagues.service');
 const dataCompletenessService = require('./dataCompleteness.service');
-const { dismissIssueSchema } = require('./dataCompleteness.validation');
+const { dismissIssueSchema, issueKeySchema } = require('./dataCompleteness.validation');
 const { ApiError } = require('../../utils/apiError');
 const { paginationQuerySchema } = require('../shared/pagination.validation');
 
@@ -479,10 +479,11 @@ async function dismissDataIssue(req, res) {
 
 async function restoreDataIssue(req, res) {
   const userId = requireAuthUserId(req);
+  const issueKey = issueKeySchema.parse(req.params.issueKey);
   const result = await dataCompletenessService.restoreIssueForUser(
     userId,
     req.params.leagueId,
-    req.params.issueKey
+    issueKey
   );
   res.status(200).json(result);
 }

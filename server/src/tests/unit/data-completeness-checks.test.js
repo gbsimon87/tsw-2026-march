@@ -63,12 +63,20 @@ describe('buildGameIssues', () => {
   });
 
   it('does not flag a completed one-sided game whose tracked side has events', () => {
-    const issues = run([game({ status: 'completed' })]);
+    const scheduledAt = new Date(NOW.getTime() - 49 * 60 * 60 * 1000);
+    const issues = run([game({ status: 'completed', scheduledAt })]);
     expect(issues.filter((i) => i.checkType === 'missing_box_score')).toHaveLength(0);
   });
 
-  it('flags a completed game with no events at all', () => {
-    const issues = run([game({ status: 'completed', events: [] })]);
+  it('does not flag a completed game with no events when it finished less than 48h ago', () => {
+    const scheduledAt = new Date(NOW.getTime() - 1 * 60 * 60 * 1000);
+    const issues = run([game({ status: 'completed', events: [], scheduledAt })]);
+    expect(issues.filter((i) => i.checkType === 'missing_box_score')).toHaveLength(0);
+  });
+
+  it('flags a completed game with no events once 49 hours have passed', () => {
+    const scheduledAt = new Date(NOW.getTime() - 49 * 60 * 60 * 1000);
+    const issues = run([game({ status: 'completed', events: [], scheduledAt })]);
     const missing = issues.filter((i) => i.checkType === 'missing_box_score');
     expect(missing).toHaveLength(1);
     expect(missing[0].severity).toBe(SEVERITY.HIGH);
@@ -97,12 +105,13 @@ describe('buildGameIssues', () => {
   it('gives every issue a link to where it gets fixed', () => {
     const scheduledAt = new Date(NOW.getTime() - 49 * 60 * 60 * 1000);
     const issues = run([game({ scheduledAt })]);
-    expect(issues[0].href).toBe(`/admin/games/${GAME_ID}`);
+    expect(issues[0].href).toBe(`/games/${GAME_ID}`);
   });
 });
 
 const TEAM_ID = '507f1f77bcf86cd799439031';
 const USER_ID = '507f1f77bcf86cd799439061';
+const LEAGUE_ID = '507f1f77bcf86cd799439011';
 
 function player(index, overrides = {}) {
   return {
@@ -120,13 +129,14 @@ function roster(count, overrides = {}) {
   return Array.from({ length: count }, (_, i) => player(i + 1, overrides));
 }
 
-function runRoster({ players, teams, stats, completed } = {}) {
+function runRoster({ players, teams, stats, completed, leagueId } = {}) {
   const list = players ?? roster(5);
   return buildRosterIssues({
     teams: teams ?? [{ id: TEAM_ID, name: 'Ballers', logo: { url: 'x' } }],
     players: list,
     statsByPlayerId: stats ?? new Map(list.map((p) => [p.id, { gamesCount: 3 }])),
     completedGameTeamIds: completed ?? new Set([TEAM_ID]),
+    leagueId: leagueId ?? LEAGUE_ID,
   });
 }
 
@@ -214,6 +224,15 @@ describe('buildRosterIssues', () => {
   it('tags every roster issue with its team for per-team filtering', () => {
     const issues = runRoster({ players: roster(4) });
     expect(issues.every((i) => i.leagueTeamId === TEAM_ID)).toBe(true);
+  });
+
+  it('includes the leagueId in every roster issue href so the link actually resolves', () => {
+    const issues = runRoster({ players: roster(4) });
+    expect(issues.length).toBeGreaterThan(0);
+    for (const issue of issues) {
+      expect(issue.href).toBe(`/admin/leagues/${LEAGUE_ID}/teams/${TEAM_ID}`);
+      expect(issue.href).toContain(LEAGUE_ID);
+    }
   });
 });
 

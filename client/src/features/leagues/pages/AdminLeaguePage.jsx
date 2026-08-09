@@ -1372,7 +1372,7 @@ export function AdminLeaguePage() {
                 report={completenessReport}
                 isLoading={completenessLoading}
                 error={completenessError}
-                canDismiss
+                canDismiss={canEditLeague}
                 onDismiss={handleDismissIssue}
                 onRestore={handleRestoreIssue}
               />

@@ -368,6 +368,28 @@ async function listLeagueGamesByLeagueId(leagueId, seasonId) {
   });
 }
 
+// Data health only needs events.length, never the events themselves. Slicing to
+// one element keeps the payload flat for seasons with thousands of events.
+async function listLeagueGamesForCompleteness(leagueId, seasonId) {
+  return Game.find(
+    {
+      gameContext: 'league',
+      leagueId,
+      ...(seasonId !== undefined ? { seasonId } : {}),
+    },
+    {
+      status: 1,
+      scheduledAt: 1,
+      venue: 1,
+      trackingMode: 1,
+      homeLeagueTeamId: 1,
+      awayLeagueTeamId: 1,
+      trackedLeagueTeamId: 1,
+      events: { $slice: 1 },
+    }
+  ).lean();
+}
+
 async function findGameByLeagueIdAndId(leagueId, gameId) {
   return Game.findOne({ _id: gameId, leagueId, gameContext: 'league' });
 }
@@ -486,6 +508,7 @@ module.exports = {
   listCompletedGames,
   listPublicCompletedGames,
   listLeagueGamesByLeagueId,
+  listLeagueGamesForCompleteness,
   listLeagueGameIdsByLeagueId,
   findGameByLeagueIdAndId,
   saveGame,

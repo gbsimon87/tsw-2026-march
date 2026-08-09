@@ -32,7 +32,7 @@ function buildGameIssues({ games, teamsById, now }) {
 
   for (const game of games) {
     const label = matchupLabel(teamsById, game);
-    const href = `/admin/games/${game.id}`;
+    const href = `/games/${game.id}`;
     const scheduledAt = game.scheduledAt ? new Date(game.scheduledAt) : null;
     const isPastDue = scheduledAt && now.getTime() - scheduledAt.getTime() > OVERDUE_AFTER_MS;
 
@@ -61,8 +61,11 @@ function buildGameIssues({ games, teamsById, now }) {
     }
 
     // Only the tracked side is ever expected to carry events (spec D5): in a
-    // one_sided game the opponent legitimately has none.
-    if (game.status === 'completed' && (game.events?.length ?? 0) === 0) {
+    // one_sided game the opponent legitimately has none. Guarded by isPastDue
+    // for the same reason as overdue_game/stuck_in_progress: a game finalised
+    // minutes ago (or a same-day forfeit) shouldn't flash a HIGH warning before
+    // anyone's had a realistic chance to enter stats.
+    if (game.status === 'completed' && (game.events?.length ?? 0) === 0 && isPastDue) {
       issues.push({
         issueKey: `missing_box_score:${game.id}`,
         checkType: 'missing_box_score',
@@ -93,7 +96,7 @@ function buildGameIssues({ games, teamsById, now }) {
   return issues;
 }
 
-function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamIds }) {
+function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamIds, leagueId }) {
   const issues = [];
   const activeByTeam = new Map();
 
@@ -114,7 +117,7 @@ function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamI
         severity: SEVERITY.MEDIUM,
         label: player.displayName,
         detail: 'On the roster but has no recorded appearances this season',
-        href: `/admin/leagues/teams/${teamId}`,
+        href: `/admin/leagues/${leagueId}/teams/${teamId}`,
         leagueTeamId: teamId,
       });
     }
@@ -127,7 +130,7 @@ function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamI
         severity: SEVERITY.LOW,
         label: player.displayName,
         detail: 'No jersey number set',
-        href: `/admin/leagues/teams/${teamId}`,
+        href: `/admin/leagues/${leagueId}/teams/${teamId}`,
         leagueTeamId: teamId,
       });
     }
@@ -143,7 +146,7 @@ function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamI
         severity: SEVERITY.LOW,
         label: player.displayName,
         detail: 'Unclaimed — no profile photo, follows, or shareable card',
-        href: `/admin/leagues/teams/${teamId}`,
+        href: `/admin/leagues/${leagueId}/teams/${teamId}`,
         leagueTeamId: teamId,
       });
     }
@@ -160,7 +163,7 @@ function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamI
         severity: SEVERITY.MEDIUM,
         label: team.name,
         detail: `Only ${activeCount} active ${activeCount === 1 ? 'player' : 'players'} (needs ${MIN_ACTIVE_ROSTER})`,
-        href: `/admin/leagues/teams/${teamId}`,
+        href: `/admin/leagues/${leagueId}/teams/${teamId}`,
         leagueTeamId: teamId,
       });
     }
@@ -172,7 +175,7 @@ function buildRosterIssues({ teams, players, statsByPlayerId, completedGameTeamI
         severity: SEVERITY.LOW,
         label: team.name,
         detail: 'No team logo',
-        href: `/admin/leagues/teams/${teamId}`,
+        href: `/admin/leagues/${leagueId}/teams/${teamId}`,
         leagueTeamId: teamId,
       });
     }
