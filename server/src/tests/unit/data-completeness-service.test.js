@@ -60,9 +60,11 @@ beforeEach(() => {
     status: 'active',
     currentSeasonId: SEASON_ID,
   });
+  // Season's display field is `label` — mocking a `name` here is what let a real
+  // bug (seasonName always null) pass review twice.
   seasonsRepository.findSeasonById.mockResolvedValue({
     _id: SEASON_ID,
-    name: 'Spring 2026',
+    label: 'Spring 2026',
     status: 'active',
   });
   leaguesRepository.listLeagueTeams.mockResolvedValue([

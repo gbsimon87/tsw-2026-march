@@ -8,6 +8,8 @@ require('../modules/teams/teams.repository');
 require('../modules/games/games.repository');
 require('../modules/feed/feed.repository');
 require('../modules/leagues/leagues.repository');
+require('../modules/leagues/seasons.repository');
+require('../modules/leagues/dataCompleteness.repository');
 
 const User = mongoose.model('User');
 const Session = mongoose.model('Session');
@@ -20,6 +22,10 @@ const LeagueTeam = mongoose.model('LeagueTeam');
 const LeaguePlayer = mongoose.model('LeaguePlayer');
 const LeagueTeamMember = mongoose.model('LeagueTeamMember');
 const LeagueJoinRequest = mongoose.model('LeagueJoinRequest');
+const Season = mongoose.model('Season');
+const LeagueStandings = mongoose.model('LeagueStandings');
+const LeaguePlayerStats = mongoose.model('LeaguePlayerStats');
+const LeagueDataIssueDismissal = mongoose.model('LeagueDataIssueDismissal');
 
 const seedConfig = {
   userCount: Number(process.env.SEED_USER_COUNT || 10),
@@ -190,7 +196,25 @@ const seededLeagueBlueprint = {
   slug: 'metro-spring-league',
   seasonLabel: '2026 Spring',
   ownerEmail: 'user1@user1.com',
-  teamNames: ['City Ballers', 'Coastal Heat', 'Skyline Elite', 'Valley Storm'],
+  // The first four teams play the round-robin below. "Late Entry FC" is added
+  // deliberately under-rostered and without games so the Data health panel has
+  // a real roster_too_small / no_appearances target (see DATA_HEALTH_FIXTURES).
+  teamNames: ['City Ballers', 'Coastal Heat', 'Skyline Elite', 'Valley Storm', 'Late Entry FC'],
+};
+
+// Data Health (docs/data-completeness/) needs each severity tier represented in
+// dev data, otherwise the tab renders only cosmetic Low warnings and the HIGH
+// checks — the ones that mean "the standings are wrong" — can never be clicked
+// through. These constants drive the deliberately-broken fixtures below.
+const DATA_HEALTH_FIXTURES = {
+  // Comfortably past the 48h grace period the checks apply to fixtures.
+  overdueDaysAgo: 5,
+  stuckDaysAgo: 3,
+  missingBoxScoreDaysAgo: 4,
+  // A healthy future fixture, so no_venue has a target and the panel also shows
+  // that not every scheduled game is a problem.
+  upcomingDaysAhead: 6,
+  shortRosterSize: 3,
 };
 
 const feedImageUrls = [
@@ -630,14 +654,19 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
     [1, 2],
   ];
 
-  return matchups.map(([homeIndex, awayIndex], gameIndex) => {
+  const completedGames = matchups.map(([homeIndex, awayIndex], gameIndex) => {
     const home = leagueTeamsWithPlayers[homeIndex];
     const away = leagueTeamsWithPlayers[awayIndex];
     const scheduledAt = new Date(startDate.getTime() + gameIndex * 5 * 24 * 60 * 60 * 1000);
     scheduledAt.setHours(18 + (gameIndex % 3), gameIndex % 2 === 0 ? 0 : 30, 0, 0);
     const completedAt = new Date(scheduledAt.getTime() + 2 * 60 * 60 * 1000);
-    const homeRosterSnapshot = buildLeagueRosterSnapshot(home.players);
-    const awayRosterSnapshot = buildLeagueRosterSnapshot(away.players);
+    // The last player on each roster is a late signing who joined AFTER these
+    // games were played, so they are absent from the historical roster snapshot
+    // and get no stats row — the real-world shape the no_appearances check looks
+    // for. (LeaguePlayerStats is built from the snapshot, not from events, so
+    // merely withholding events would still produce a gamesCount for them.)
+    const homeRosterSnapshot = buildLeagueRosterSnapshot(home.players.slice(0, -1));
+    const awayRosterSnapshot = buildLeagueRosterSnapshot(away.players.slice(0, -1));
     const homeEvents = attachTeamSide(
       buildLeagueGameEvents(homeRosterSnapshot.slice(0, 8), scheduledAt),
       TEAM_SIDES.HOME
@@ -696,6 +725,100 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
       ),
     };
   });
+
+  return [...completedGames, ...buildDataHealthGames(ownerUserId, league, leagueTeamsWithPlayers)];
+}
+
+// Deliberately-broken league games so every Data Health severity tier has a
+// target in dev. Each one is a state a real league reaches by accident:
+// a fixture nobody played, a game left mid-tracking, a game finalised with no
+// stats entered, and an upcoming fixture with no venue booked yet.
+function buildDataHealthGames(ownerUserId, league, leagueTeamsWithPlayers) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  function participant(entry, side) {
+    return {
+      side,
+      participantType: 'league_team',
+      teamId: null,
+      leagueTeamId: entry.team._id,
+      displayName: entry.team.name,
+      logo: null,
+      colors: entry.team.colors || ['#0f172a', '#38bdf8'],
+      billingSnapshot: { plan: 'league', subscriptionStatus: 'active' },
+      entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+    };
+  }
+
+  function baseGame(home, away, { status, scheduledAt, venue = null, completedAt = null }) {
+    const homeRosterSnapshot = buildLeagueRosterSnapshot(home.players);
+    const awayRosterSnapshot = buildLeagueRosterSnapshot(away.players);
+
+    return {
+      ownerUserId,
+      gameContext: 'league',
+      trackingMode: 'dual_team',
+      leagueId: league._id,
+      homeLeagueTeamId: home.team._id,
+      awayLeagueTeamId: away.team._id,
+      trackedLeagueTeamId: home.team._id,
+      initialActiveSide: TEAM_SIDES.HOME,
+      homeParticipant: participant(home, TEAM_SIDES.HOME),
+      awayParticipant: participant(away, TEAM_SIDES.AWAY),
+      title: `${away.team.name} at ${home.team.name}`,
+      status,
+      scheduledAt,
+      completedAt,
+      venue,
+      rosterSnapshot: homeRosterSnapshot,
+      homeRosterSnapshot,
+      awayRosterSnapshot,
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      homeStartingLineupPlayerIds: [],
+      homeCurrentLineupPlayerIds: [],
+      awayStartingLineupPlayerIds: [],
+      awayCurrentLineupPlayerIds: [],
+      // Every fixture here is deliberately eventless — that is precisely what
+      // makes missing_box_score fire, and fixtures never carry events anyway.
+      events: [],
+    };
+  }
+
+  const [ballers, heat, skyline, storm] = leagueTeamsWithPlayers;
+
+  return [
+    // HIGH — overdue_game: a fixture whose date passed and nobody started it.
+    baseGame(ballers, heat, {
+      status: 'scheduled',
+      scheduledAt: new Date(now - DATA_HEALTH_FIXTURES.overdueDaysAgo * dayMs),
+      venue: 'Central Court',
+    }),
+    // HIGH — stuck_in_progress: tracking started and was never finalised, so
+    // the result is silently missing from the standings.
+    baseGame(skyline, storm, {
+      status: 'in_progress',
+      scheduledAt: new Date(now - DATA_HEALTH_FIXTURES.stuckDaysAgo * dayMs),
+      venue: 'Riverside Gym',
+    }),
+    // HIGH — missing_box_score: marked complete but no stats were ever entered.
+    baseGame(heat, skyline, {
+      status: 'completed',
+      scheduledAt: new Date(now - DATA_HEALTH_FIXTURES.missingBoxScoreDaysAgo * dayMs),
+      completedAt: new Date(
+        now - DATA_HEALTH_FIXTURES.missingBoxScoreDaysAgo * dayMs + 2 * 60 * 60 * 1000
+      ),
+      venue: 'Central Court',
+    }),
+    // LOW — no_venue: an upcoming fixture with no location booked. Also proves
+    // future fixtures are NOT flagged as overdue (the 48h grace period).
+    baseGame(storm, ballers, {
+      status: 'scheduled',
+      scheduledAt: new Date(now + DATA_HEALTH_FIXTURES.upcomingDaysAhead * dayMs),
+      venue: null,
+    }),
+  ];
 }
 
 async function upsertSeedUsers() {
@@ -749,6 +872,13 @@ async function resetSeedData() {
     LeagueTeamMember.deleteMany({}),
     LeaguePlayer.deleteMany({}),
     LeagueTeam.deleteMany({}),
+    // Season + the materialized aggregates and Data Health dismissals that hang
+    // off it. Leaving these behind would orphan them against deleted leagues and
+    // let a stale dismissal silently hide a freshly seeded issue.
+    Season.deleteMany({}),
+    LeagueStandings.deleteMany({}),
+    LeaguePlayerStats.deleteMany({}),
+    LeagueDataIssueDismissal.deleteMany({}),
     League.deleteMany({}),
     Team.deleteMany({}),
     Session.deleteMany({}),
@@ -775,6 +905,19 @@ async function seedLeagueForUser(userEntry) {
     cancelAtPeriodEnd: false,
   });
 
+  // League Seasons: every league game carries a seasonId, and the Data Health
+  // panel resolves league.currentSeasonId. Without a Season the seeded league
+  // reports "no active season" and none of its data can be audited.
+  const season = await Season.create({
+    leagueId: league._id,
+    label: seededLeagueBlueprint.seasonLabel,
+    status: 'active',
+    startedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    createdByUserId: userEntry.user._id,
+  });
+  league.currentSeasonId = season._id;
+  await league.save();
+
   let leagueTeamCount = 0;
   let leaguePlayerCount = 0;
   let leagueGameCount = 0;
@@ -782,6 +925,10 @@ async function seedLeagueForUser(userEntry) {
   const leagueTeamsWithPlayers = [];
 
   for (const [index, teamName] of seededLeagueBlueprint.teamNames.entries()) {
+    // The last team is the deliberately-incomplete one (see
+    // DATA_HEALTH_FIXTURES): no logo, a short roster, and no games.
+    const isDataHealthTeam = index === seededLeagueBlueprint.teamNames.length - 1;
+
     const leagueTeam = await LeagueTeam.create({
       leagueId: league._id,
       name: teamName,
@@ -790,13 +937,23 @@ async function seedLeagueForUser(userEntry) {
       status: 'active',
     });
 
+    // Playing teams get one extra player beyond the 8 that game events cover
+    // (buildLeagueGameEvents uses rosterSnapshot.slice(0, 8)). That last player
+    // is a genuine late signing who never appears in a box score — the target
+    // for the no_appearances check.
+    const rosterSize = isDataHealthTeam
+      ? DATA_HEALTH_FIXTURES.shortRosterSize
+      : seedConfig.leaguePlayersPerTeam + 1;
+
     const roster = buildPlayerBlueprints(100 + index, {
-      playersPerTeam: seedConfig.leaguePlayersPerTeam,
-    }).map((player) => ({
+      playersPerTeam: rosterSize,
+    }).map((player, playerIndex) => ({
       leagueId: league._id,
       leagueTeamId: leagueTeam._id,
       displayName: player.displayName,
-      jerseyNumber: player.jerseyNumber,
+      // LOW — missing_jersey: one player per playing team has no number, so the
+      // check has a target without making the whole roster look broken.
+      jerseyNumber: !isDataHealthTeam && playerIndex === 0 ? null : player.jerseyNumber,
       position: null,
       isActive: true,
       claimedByUserId: null,
@@ -812,14 +969,27 @@ async function seedLeagueForUser(userEntry) {
   }
 
   const leagueGames = await Game.insertMany(
-    buildSeedLeagueGames(userEntry.user._id, league, leagueTeamsWithPlayers),
+    // Only the first four teams play; the last is the under-rostered team that
+    // deliberately has no games (so no_appearances stays a team-level signal).
+    buildSeedLeagueGames(userEntry.user._id, league, leagueTeamsWithPlayers.slice(0, 4)).map(
+      (game) => ({ ...game, seasonId: season._id })
+    ),
     { ordered: true }
   );
   leagueGameCount += leagueGames.length;
   leagueEventCount += leagueGames.reduce((total, game) => total + game.events.length, 0);
 
+  // Materialize standings + per-player stats through the real recompute path.
+  // Without this, LeaguePlayerStats is empty and the Data Health panel's
+  // no_appearances check flags EVERY rostered player, burying the real issues.
+  // Requiring lazily keeps the seed's module graph free of the service layer
+  // until this point.
+  const { recomputeLeagueAggregates } = require('../modules/leagues/leagues.service');
+  await recomputeLeagueAggregates(league._id, season._id);
+
   return {
     league,
+    season,
     leagueTeamCount,
     leaguePlayerCount,
     leagueGameCount,

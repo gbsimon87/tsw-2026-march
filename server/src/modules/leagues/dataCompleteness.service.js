@@ -189,7 +189,8 @@ async function getDataCompletenessForUser(userId, leagueId) {
 
   return {
     seasonId,
-    seasonName: season?.name ?? null,
+    // Season's display field is `label`, not `name` (seasons.repository.js).
+    seasonName: season?.label ?? null,
     generatedAt: generatedAt.toISOString(),
     counts: countBySeverity(issues),
     categories: groupIntoCategories(issues),
