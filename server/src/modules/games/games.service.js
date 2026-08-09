@@ -804,6 +804,97 @@ function resolveRosterTargetForGame(game, side) {
   return { kind: 'standalone', teamId: String(teamId), snapshotField };
 }
 
+const ROSTER_EDITABLE_STATUSES = new Set(['in_progress', 'scheduled']);
+
+// Mid-game roster add. Two writes, deliberately ordered:
+//
+//   1. the durable roster row, delegated to the module that owns it, and
+//   2. this game's frozen roster snapshot (skipped when the game reads live).
+//
+// Delegating (1) is load-bearing: addPlayerToLeagueTeam/addPlayerToTeam carry
+// their own permission gates and duplicate-name rules, so this endpoint inherits
+// the existing matrix rather than re-deriving it. PROJECT-KNOWLEDGE §4 (TSW-001)
+// records what re-deriving an affiliation gate from scratch actually costs.
+//
+// Roster-first ordering means a failed snapshot append leaves a real player with
+// no game row (recoverable, adjacent to repairGameRosterSnapshots). The reverse
+// would leave a phantom snapshot entry with no LeaguePlayer behind it, breaking
+// the leaguePlayerId linkage LeaguePlayerStats and public player pages rely on.
+async function addPlayerToGameRoster(userId, gameId, payload) {
+  const game = await assertGameAccess(userId, gameId);
+
+  if (!ROSTER_EDITABLE_STATUSES.has(game.status)) {
+    throw new ApiError(409, 'Cannot add a player to a completed game');
+  }
+
+  const side = payload.side ?? null;
+  const target = resolveRosterTargetForGame(game, side);
+  const rosterPayload = {
+    displayName: payload.displayName,
+    jerseyNumber: payload.jerseyNumber ?? null,
+  };
+
+  let player;
+  if (target.kind === 'league') {
+    const { addPlayerToLeagueTeam } = require('../leagues/leagues.service');
+    player = await addPlayerToLeagueTeam(
+      userId,
+      target.leagueId,
+      target.leagueTeamId,
+      rosterPayload
+    );
+  } else {
+    // Lazily required to avoid a require cycle — teams.service.js requires
+    // games.service.js for computeBoxScore.
+    const { addPlayerToTeam } = require('../teams/teams.service');
+    player = await addPlayerToTeam(userId, target.teamId, rosterPayload);
+  }
+
+  if (target.snapshotField) {
+    await appendPlayerToGameSnapshot(gameId, game, target.snapshotField, player);
+  }
+
+  return { player, side };
+}
+
+// Mirrors buildLeagueRosterSnapshot's field shape (leagues.service.js) so a
+// mid-game addition is indistinguishable from one frozen at game creation.
+function buildSnapshotEntry(player) {
+  return {
+    leaguePlayerId: player.id ?? player._id,
+    displayName: player.displayName,
+    jerseyNumber: player.jerseyNumber ?? null,
+    position: player.position ?? null,
+    claimedByUserId: player.claimedByUserId ?? null,
+    isClaimed: Boolean(player.claimedByUserId),
+    isActive: true,
+  };
+}
+
+// The Game schema uses optimisticConcurrency, so a co-tracker saving an event at
+// the same moment makes this save throw VersionError. The append is pure, so
+// replaying it on a freshly loaded game is safe — and far better than surfacing a
+// conflict to someone mid-game. The roster write above is NOT replayed.
+async function appendPlayerToGameSnapshot(gameId, game, snapshotField, player) {
+  const entry = buildSnapshotEntry(player);
+
+  try {
+    game[snapshotField] = [...(game[snapshotField] || []), entry];
+    await saveGame(game);
+  } catch (error) {
+    if (error?.name !== 'VersionError') {
+      throw error;
+    }
+
+    const fresh = await findGameById(gameId);
+    if (!fresh) {
+      throw new ApiError(404, 'Game not found');
+    }
+    fresh[snapshotField] = [...(fresh[snapshotField] || []), entry];
+    await saveGame(fresh);
+  }
+}
+
 async function repairGameRosterSnapshots(game) {
   if (!game || game.status !== 'in_progress') {
     return false;
@@ -1878,5 +1969,6 @@ module.exports = {
   canAccessGame,
   resolveDualGameParticipants,
   resolveRosterTargetForGame,
+  addPlayerToGameRoster,
   HIGHLIGHT_STAT_TYPES,
 };
