@@ -350,4 +350,26 @@ describe('billing routes', () => {
       expect(res.body.url).toBe('https://checkout.stripe.com/legacy');
     });
   });
+
+  // ─── GET /billing/catalog (public served catalog) ───────────────────────────
+
+  describe('GET /api/v1/billing/catalog', () => {
+    test('returns the display catalog without auth', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/v1/billing/catalog');
+
+      expect(res.statusCode).toBe(200);
+      expect(Array.isArray(res.body.plans)).toBe(true);
+      const ids = res.body.plans.map((p) => p.id).sort();
+      expect(ids).toEqual(['league', 'starter', 'team_pro']);
+    });
+
+    test('never leaks Stripe price IDs to the client', async () => {
+      const app = createApp();
+      const res = await request(app).get('/api/v1/billing/catalog');
+
+      expect(JSON.stringify(res.body)).not.toContain('price_');
+      expect(JSON.stringify(res.body)).not.toContain('STRIPE_PRICE_ID');
+    });
+  });
 });

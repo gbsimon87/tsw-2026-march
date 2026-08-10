@@ -63,7 +63,11 @@ const {
   saveSeason,
 } = require('./seasons.repository');
 const { findUserByEmail, findUserById } = require('../auth/auth.repository');
-const { listLeagueGamesByLeagueId } = require('../games/games.repository');
+const {
+  listLeagueGamesByLeagueId,
+  insertManyGames,
+  deleteReplaceableLeagueGames,
+} = require('../games/games.repository');
 const { logger } = require('../../config/logger');
 const {
   uploadImageBuffer,
@@ -429,8 +433,8 @@ async function getActiveSeasonForLeague(leagueId) {
 
 async function createSeasonForLeague(userId, leagueId, payload) {
   const league = await assertLeagueOwner(userId, leagueId);
-  const { getLeagueEntitlements } = require('../billing/billing.service');
-  if (!getLeagueEntitlements(league).canManageLeague) {
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
     throw new ApiError(402, 'An active League subscription is required to start a new season');
   }
   if (league.currentSeasonId) {
@@ -538,7 +542,7 @@ async function createLeagueForUser(userId, payload) {
   // League documents are created by the Stripe webhook after checkout.
   // This function configures the stub league (name, slug, settings) that the
   // webhook created. It finds the most recent unconfigured league for this owner.
-  const { isLeagueActive } = require('../billing/billing.service');
+  const { resolveForLeague } = require('../billing/entitlements.service');
   const { League } = require('./leagues.repository');
 
   const stub = await League.findOne({
@@ -553,7 +557,7 @@ async function createLeagueForUser(userId, payload) {
     );
   }
 
-  if (!isLeagueActive(stub)) {
+  if (!resolveForLeague(stub).entitlements.canManageLeague) {
     throw new ApiError(402, 'League subscription is not active. Complete checkout first.');
   }
 
@@ -804,9 +808,9 @@ async function archiveLeagueForUser(userId, leagueId) {
 }
 
 async function createLeagueTeamForLeague(userId, leagueId, payload) {
-  const { isLeagueActive } = require('../billing/billing.service');
+  const { resolveForLeague } = require('../billing/entitlements.service');
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
-  if (!isLeagueActive(league)) {
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
     throw new ApiError(402, 'An active League subscription is required to add teams');
   }
   ensureLeagueEditable(league);
@@ -1255,7 +1259,12 @@ async function getPublicLeaguePlayerBySlug(
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
-  const highlights = buildLeaguePlayerHighlights(games, team._id, player._id);
+  // Audit H6: highlight clips are gated (Team Pro, bundled into League) — a
+  // free/lapsed league exposes no clips on its public player profiles.
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  const highlights = resolveForLeague(league).entitlements.canViewHighlightClips
+    ? buildLeaguePlayerHighlights(games, team._id, player._id)
+    : [];
 
   const highlightEventIds = highlights.map((h) => h.eventId).filter(Boolean);
   const sharedEventIds = await findSharedEventIds(highlightEventIds);
@@ -2022,6 +2031,23 @@ async function listLeagueGames(
   return games.map((game) => createLeagueGameRow(game, byId));
 }
 
+// Season-scoped game data for the export module. Returns the summarised result
+// rows (same shape as listLeagueGames, but filtered to one season) alongside the
+// raw game docs — the raw docs carry each completed game's frozen `boxScore`,
+// which the CSV export replays into per-game player game-logs. Reuses the same
+// internals as the league-detail compositions so there is no new query logic.
+async function getLeagueSeasonGames(leagueId, seasonId) {
+  const [teams, games] = await Promise.all([
+    listLeagueTeams(leagueId),
+    listLeagueGamesByLeagueId(leagueId, seasonId),
+  ]);
+  return {
+    teams,
+    games,
+    rows: await listLeagueGames(leagueId, { teams, games }),
+  };
+}
+
 // OPT-010: the pure LIVE standings compute (the source of truth). Renamed from
 // getLeagueStandings; the public getLeagueStandings is now a materialised read
 // that falls back to this. OPT-005: same pre-fetch escape hatch as listLeagueGames.
@@ -2360,6 +2386,79 @@ async function getLeagueRosterSnapshotForTeam(leagueTeamId) {
   return buildLeagueRosterSnapshot(players);
 }
 
+// Schedule Builder: create a whole fixture list in one request.
+//
+// All-or-nothing: every row is validated against this league's teams BEFORE any
+// write, so a single bad id can never leave half a schedule behind. Games are
+// born `scheduled` (not `in_progress`) — they are fixtures, not live games —
+// and mirror the one-sided league-game shape built by getLeagueContextForGame.
+async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
+  if (!mongoose.Types.ObjectId.isValid(leagueId)) {
+    throw new ApiError(400, 'Invalid league id');
+  }
+
+  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+  ensureLeagueEditable(league);
+
+  if (!league.currentSeasonId) {
+    throw new ApiError(400, 'League has no active season');
+  }
+  const season = await findSeasonById(league.currentSeasonId);
+  ensureSeasonEditable(season);
+
+  // Resolve every referenced team once, then validate all rows up front.
+  const teams = await listLeagueTeams(leagueId);
+  const teamsById = new Map(teams.map((team) => [String(team._id), team]));
+
+  const docs = payload.games.map((row) => {
+    const homeTeam = teamsById.get(String(row.homeLeagueTeamId));
+    const awayTeam = teamsById.get(String(row.awayLeagueTeamId));
+
+    if (!homeTeam || !awayTeam) {
+      throw new ApiError(400, 'Every game must be between two teams in this league');
+    }
+
+    return {
+      ownerUserId: userId,
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId,
+      seasonId: league.currentSeasonId,
+      homeLeagueTeamId: homeTeam._id,
+      awayLeagueTeamId: awayTeam._id,
+      // A fixture has no tracked side yet; default to home, matching the
+      // single-game create form's default. Editable once the game starts.
+      trackedLeagueTeamId: homeTeam._id,
+      title: `${awayTeam.name} at ${homeTeam.name}`,
+      scheduledAt: new Date(row.scheduledAt),
+      venue: row.venue?.trim() ? row.venue.trim() : undefined,
+      status: 'scheduled',
+    };
+  });
+
+  const replaced = payload.replaceExisting
+    ? await deleteReplaceableLeagueGames(leagueId, league.currentSeasonId)
+    : 0;
+
+  const created = await insertManyGames(docs);
+
+  return {
+    created: created.length,
+    replaced,
+    games: created.map((game) => ({
+      id: String(game._id),
+      leagueId: String(game.leagueId),
+      seasonId: game.seasonId ? String(game.seasonId) : null,
+      homeLeagueTeamId: String(game.homeLeagueTeamId),
+      awayLeagueTeamId: String(game.awayLeagueTeamId),
+      title: game.title,
+      status: game.status,
+      scheduledAt: game.scheduledAt ?? null,
+      venue: game.venue ?? null,
+    })),
+  };
+}
+
 async function getLeagueContextForGame(userId, payload, options = {}) {
   if (!mongoose.Types.ObjectId.isValid(payload.leagueId)) {
     throw new ApiError(400, 'Invalid league id');
@@ -2434,8 +2533,10 @@ async function getLeagueTeamRosterSnapshotForGame(game) {
         position: player.position ?? null,
         isActive: true,
       })),
-      plan: 'pro',
-      subscriptionStatus: 'active',
+      // Audit H8: no hard-coded plan/subscriptionStatus. Callers resolve
+      // entitlements from the real league doc (resolveForLeague); this synthetic
+      // object is only used for roster/box-score. An always-active legacy object
+      // here would re-open the bypass T-13 removed if a future caller trusted it.
     },
   };
 }
@@ -2630,6 +2731,12 @@ module.exports = {
   // league/leagueTeam follow gating (reuse-the-canonical-helper rule,
   // PROJECT-KNOWLEDGE.md §4).
   assertLeagueVisible,
+  // Canonical resource + league-role gates. Exported for the export module's
+  // CSV endpoints (reuse-the-canonical-helper rule, PROJECT-KNOWLEDGE.md §4):
+  // owner/league_manager for league-wide exports, and additionally a team's
+  // manager for team-scoped exports.
+  assertLeagueManagerOrOwner,
+  assertTeamManagerOrOwner,
   getPublicLeagueTeamById,
   getPublicLeaguePlayerById,
   updateLeagueTeamForLeague,
@@ -2652,6 +2759,7 @@ module.exports = {
   cancelJoinRequest,
   unclaimLeaguePlayer,
   listLeagueGames,
+  getLeagueSeasonGames,
   getLeagueStandings,
   computeLeagueStandings,
   computeLeaguePlayerStats,
@@ -2660,6 +2768,7 @@ module.exports = {
   recomputeLeagueAggregates,
   scheduleLeagueAggregateRecompute,
   getLeagueContextForGame,
+  bulkCreateLeagueGamesForUser,
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canManageLeagueGame,

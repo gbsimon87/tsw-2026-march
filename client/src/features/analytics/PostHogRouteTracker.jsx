@@ -52,12 +52,14 @@ function getRoutePattern(pathname) {
 
 function getSafeUserProperties(user) {
   return {
-    plan: user.plan || 'free',
+    // Audit M7: the server sends canonical plan ids ('starter'/'team_pro') and no
+    // longer serializes user.leagueBilling (dropped in T-25), so the old
+    // leaguePlan/leagueSubscriptionStatus props reported 'free' for every user.
+    // Drop them and use the canonical fallback.
+    plan: user.plan || 'starter',
     roles: user.roles || [],
     emailVerified: Boolean(user.emailVerified),
     authProvider: user.authProvider || 'password',
-    leaguePlan: user.leagueBilling?.plan || 'free',
-    leagueSubscriptionStatus: user.leagueBilling?.subscriptionStatus || 'inactive',
   };
 }
 

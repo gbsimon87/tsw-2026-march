@@ -52,7 +52,7 @@ describe('BillingSuccessPage', () => {
 
     renderSuccessPage();
 
-    expect(await screen.findByText(/TSW A is now on the Team plan/i)).toBeInTheDocument();
+    expect(await screen.findByText(/TSW A is now on the Team Pro plan/i)).toBeInTheDocument();
   });
 
   test('keeps polling while the team is still pending, then resolves active', async () => {
@@ -78,9 +78,9 @@ describe('BillingSuccessPage', () => {
 
     renderSuccessPage();
 
-    expect(await screen.findByText(/Team plan is still being finalized/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Team Pro plan is still being finalized/i)).toBeInTheDocument();
     expect(
-      await screen.findByText(/TSW A is now on the Team plan/i, {}, { timeout: 4000 })
+      await screen.findByText(/TSW A is now on the Team Pro plan/i, {}, { timeout: 4000 })
     ).toBeInTheDocument();
   }, 7000);
 

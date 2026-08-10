@@ -90,6 +90,26 @@ const createSeasonSchema = z.object({
   label: z.string().trim().min(1).max(80),
 });
 
+// Schedule Builder: one row of a bulk-created fixture list. Team ids are only
+// checked for shape here — that they belong to *this* league is a service-layer
+// concern, since it needs a DB read.
+const bulkGameRowSchema = z
+  .object({
+    homeLeagueTeamId: z.string().trim().min(1),
+    awayLeagueTeamId: z.string().trim().min(1),
+    scheduledAt: z.string().datetime(),
+    venue: z.string().trim().max(120).optional(),
+  })
+  .refine((row) => row.homeLeagueTeamId !== row.awayLeagueTeamId, {
+    message: 'A team cannot play itself',
+    path: ['awayLeagueTeamId'],
+  });
+
+const bulkCreateLeagueGamesSchema = z.object({
+  replaceExisting: z.boolean().optional().default(false),
+  games: z.array(bulkGameRowSchema).min(1).max(200),
+});
+
 module.exports = {
   createLeagueSchema,
   updateLeagueSchema,
@@ -101,4 +121,5 @@ module.exports = {
   updateMemberSchema,
   createJoinRequestSchema,
   createSeasonSchema,
+  bulkCreateLeagueGamesSchema,
 };

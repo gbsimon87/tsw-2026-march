@@ -158,6 +158,7 @@ Returns the feature entitlements for the specified team. Requires authentication
 - `DELETE /games/:gameId/events/:eventId`
 - `POST /games/:gameId/finish`
 - `DELETE /games/:gameId`
+- `POST /games/:gameId/roster`
 
 ### Game Event Payload (`POST /games/:gameId/events`)
 
@@ -194,7 +195,17 @@ Example (tracked shot):
 
 ### Update Game (`PATCH /games/:gameId`)
 
-All fields optional; at least one must be provided: `title`, `opponent` (nullable string), `scheduledAt` (ISO datetime, nullable), `videoUrl` (YouTube URL, nullable), `initialActiveSide` (`"home"` | `"away"`).
+All fields optional; at least one must be provided: `title`, `opponent` (nullable string), `scheduledAt` (ISO datetime, nullable), `venue` (string ≤120, nullable — **league games only**), `videoUrl` (YouTube URL, nullable), `initialActiveSide` (`"home"` | `"away"`).
+
+`venue` is trimmed; `null` clears it. It is ignored for standalone games, which
+carry location on the team's `homeVenue` instead.
+
+### Venue on league games (`POST /games`, `PATCH /games/:gameId`)
+
+League game payloads (`gameContext: "league"`, both one-sided and `dual_team`)
+accept an optional free-text `venue` (trimmed, ≤120 chars) — the same rules as
+the Schedule Builder's bulk endpoint, so a game created one at a time and one
+created in bulk behave identically. Omitted means no venue.
 
 ### Update Event (`PATCH /games/:gameId/events/:eventId`)
 
@@ -207,6 +218,48 @@ Inserts a new event immediately before the referenced event. Accepts the same pa
 ### Delete Game (`DELETE /games/:gameId`)
 
 Permanently deletes the game and all its events.
+
+### Add Roster Player (`POST /games/:gameId/roster`)
+
+Mid-game roster add: adds a player to the game's roster without leaving the
+live tracking screen. Works for both league and standalone games; auth
+required (same game-access gate as the rest of this section).
+
+```json
+{ "side": "home", "displayName": "Jordan Lee", "jerseyNumber": 23 }
+```
+
+| Field          | Rules                                                                              |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `side`         | `"home"` \| `"away"` — **required for dual-team games**, ignored/omitted otherwise |
+| `displayName`  | required, trimmed, 1–120 chars                                                     |
+| `jerseyNumber` | optional, integer 0–999, nullable                                                  |
+
+No `position` field — deliberately name + jersey only.
+
+The write always goes to the durable roster (`LeaguePlayer` for league games,
+`team.players` for standalone), gated by the same permission rules as the
+admin roster pages (`assertTeamManagerOrOwner` / team ownership) — this
+endpoint does not widen who can edit a roster. For any game shape that reads a
+frozen roster snapshot (league one-sided, or any dual-team game), the new
+player is also appended to that game's snapshot array so it appears in the
+game being tracked. New players land on the bench; use the existing
+substitution flow to sub them in.
+
+Response `201`:
+
+```json
+{
+  "player": { "id": "…", "displayName": "Jordan Lee", "jerseyNumber": 23, "isActive": true },
+  "side": "home"
+}
+```
+
+Errors: `400` missing `side` on a dual-team game, or invalid body · `403`
+insufficient roster permission for the targeted team (e.g. a home-team manager
+adding to the away roster of a dual-team league game) · `404` game not found /
+no access · `409` game is `completed` (only `in_progress`/`scheduled` games are
+editable), or a duplicate active player name on that roster.
 
 ### `statType` values
 
@@ -287,8 +340,9 @@ Image/video size limits come from `FEED_IMAGE_MAX_BYTES` / `FEED_VIDEO_MAX_BYTES
 
 Checkout/portal endpoints require auth and return a hosted Stripe URL. `interval`
 accepts `monthly` (default) or `season`. Entitlements and plan state are updated by
-webhooks. See [`billing.md`](./billing.md) and
-[`stripe-development-setup.md`](./stripe-development-setup.md).
+webhooks. See [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md) §6 for today's billing,
+and [`pricing-overhaul/`](./pricing-overhaul/) for the planned redesign. (The former
+`billing.md` and `stripe-development-setup.md` were removed 2026-07-16.)
 
 ## Contact
 
@@ -302,6 +356,9 @@ Mounted under `/leagues`. Authorization per action is defined in
 - `POST /leagues`, `GET /leagues` _(keyset-paginated)_, `GET /leagues/my-profiles`
 - `GET /leagues/:leagueId`, `PATCH /leagues/:leagueId`, `POST /leagues/:leagueId/archive`
 - `GET /leagues/:leagueId/standings`, `GET /leagues/:leagueId/games`
+- `POST /leagues/:leagueId/games/bulk` — Schedule Builder bulk create (see below)
+- `GET /leagues/:leagueId/data-completeness` — Data health audit (see below)
+- `POST /leagues/:leagueId/data-completeness/dismissals`, `DELETE /leagues/:leagueId/data-completeness/dismissals/:issueKey`
 - `POST|DELETE /leagues/:leagueId/logo`
 - `GET|POST /leagues/:leagueId/managers`, `DELETE /leagues/:leagueId/managers/:managerId`
 - `POST|GET /leagues/:leagueId/teams`, `GET|PATCH /leagues/:leagueId/teams/:leagueTeamId`, `POST /leagues/:leagueId/teams/:leagueTeamId/archive`
@@ -309,6 +366,162 @@ Mounted under `/leagues`. Authorization per action is defined in
 - `POST /leagues/:leagueId/teams/:leagueTeamId/players`, `PATCH|DELETE /leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId`, `POST /leagues/:leagueId/teams/:leagueTeamId/players/:leaguePlayerId/unclaim`
 - `GET /leagues/:leagueId/teams/:leagueTeamId/members`, `POST /leagues/:leagueId/teams/:leagueTeamId/managers`, `PATCH|DELETE /leagues/:leagueId/teams/:leagueTeamId/members/:memberId`
 - Join requests: `POST|GET /leagues/:leagueId/teams/:leagueTeamId/join-requests`, and `POST .../join-requests/:requestId/{approve,reject,cancel}`
+
+### `POST /leagues/:leagueId/games/bulk` — Schedule Builder
+
+Creates a whole fixture list in one all-or-nothing request. Backs the
+`/admin/leagues/:leagueId/schedule` builder page; see
+[`schedule-builder/`](./schedule-builder/).
+
+**Auth:** `assertLeagueManagerOrOwner` (league owner or active league manager).
+Requires an **active season** — 400 otherwise.
+
+Request:
+
+```json
+{
+  "replaceExisting": false,
+  "games": [
+    {
+      "homeLeagueTeamId": "…",
+      "awayLeagueTeamId": "…",
+      "scheduledAt": "2026-09-05T10:00:00.000Z",
+      "venue": "Court 1"
+    }
+  ]
+}
+```
+
+| Field                                   | Rules                                                  |
+| --------------------------------------- | ------------------------------------------------------ |
+| `games`                                 | required, 1–**200** rows                               |
+| `homeLeagueTeamId` / `awayLeagueTeamId` | required; must differ; both must belong to this league |
+| `scheduledAt`                           | required ISO-8601 datetime                             |
+| `venue`                                 | optional, trimmed, ≤120 chars                          |
+| `replaceExisting`                       | optional, defaults `false`                             |
+
+Games are created with `status: 'scheduled'`, `gameContext: 'league'`,
+`trackingMode: 'one_sided'`, the league's current `seasonId`, and a
+`"{away} at {home}"` title. `trackedLeagueTeamId` defaults to the home team.
+
+`replaceExisting: true` first deletes league games in the active season that are
+**`scheduled` and carry no events** — completed and in-progress games are never
+touched.
+
+Response `201`:
+
+```json
+{ "created": 6, "replaced": 0, "games": [{ "id": "…", "status": "scheduled", "venue": "Court 1" }] }
+```
+
+Errors: `400` invalid payload / no active season / completed season / a team from
+another league · `403` not a manager or owner · `404` league not found.
+
+### `GET /leagues/:leagueId/data-completeness` — Data health
+
+Audits the league's **current season** for incomplete data and returns issues
+grouped by category. Read-only; backs the **Data health** tab on
+`AdminLeaguePage`. See [`data-completeness/`](./data-completeness/).
+
+**Auth (three tiers, enforced in the service):**
+
+| Caller                        | Sees                                                              |
+| ----------------------------- | ----------------------------------------------------------------- |
+| League owner / league manager | Everything                                                        |
+| Team manager                  | League-wide game issues + **only their own team's** roster issues |
+| Anyone else                   | `403`                                                             |
+
+**No active season is not an error.** The endpoint returns `200` with
+`seasonId: null` and no categories — an admin who hasn't opened a season has
+nothing wrong with their data.
+
+Response `200`:
+
+```json
+{
+  "seasonId": "…",
+  "seasonName": "Spring 2026",
+  "generatedAt": "2026-08-09T12:00:00.000Z",
+  "counts": { "high": 3, "medium": 5, "low": 12, "dismissed": 2 },
+  "categories": [
+    {
+      "key": "overdue_game",
+      "label": "Overdue games",
+      "severity": "high",
+      "description": "Scheduled more than 48 hours ago but never started.",
+      "items": [
+        {
+          "issueKey": "overdue_game:…",
+          "label": "Hoops at Ballers",
+          "detail": "Scheduled 3 days ago, never started",
+          "href": "/games/…",
+          "dismissed": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+The nine checks, by severity — **high** means the standings are wrong until fixed:
+
+| Check               | Severity | Fires when                                                      |
+| ------------------- | -------- | --------------------------------------------------------------- |
+| `overdue_game`      | high     | `scheduled` and more than **48h** past tip-off                  |
+| `stuck_in_progress` | high     | `in_progress` and more than 48h past tip-off                    |
+| `missing_box_score` | high     | `completed` with no events recorded                             |
+| `no_appearances`    | medium   | active player, 0 appearances, **and** the team has played       |
+| `roster_too_small`  | medium   | fewer than **5** active players (advisory — never blocks)       |
+| `missing_jersey`    | low      | active player with no jersey number (`0` is valid, not missing) |
+| `unclaimed_player`  | low      | active player with no claimed account                           |
+| `no_venue`          | low      | **future** scheduled game with no venue                         |
+| `no_logo`           | low      | team with no logo                                               |
+
+The 48-hour grace period is what keeps the panel usable: without it, a freshly
+built 60-game schedule would report 60 warnings on day one.
+
+Errors: `403` not an owner, league manager, or team manager · `404` league not found.
+
+### `POST /leagues/:leagueId/data-completeness/dismissals`
+
+Marks an issue as acknowledged. Dismissed items stay visible in a collapsed
+section — they are never hidden or deleted.
+
+**Auth:** league owner or league manager only. A **team manager gets `403`** —
+dismissal is a league-wide judgement. Requires an active season.
+
+Request:
+
+```json
+{ "issueKey": "no_logo:507f1f77bcf86cd799439031", "note": "logo arriving later" }
+```
+
+| Field      | Rules                                                      |
+| ---------- | ---------------------------------------------------------- |
+| `issueKey` | required, `<checkType>:<24-char hex ObjectId>`, ≤200 chars |
+| `note`     | optional, trimmed, ≤500 chars, defaults `null`             |
+
+`issueKey` deliberately contains **no mutable data** — a rescheduled game keeps
+the same key, so the dismissal survives. Dismissals are scoped to
+`(leagueId, seasonId, issueKey)` with a unique index, so re-dismissing is
+idempotent rather than an error. They persist for the season and reset naturally
+next season.
+
+Response `201`: `{ "issueKey": "…", "dismissed": true }`
+
+Errors: `400` malformed `issueKey` / no active season · `403` not an owner or
+league manager · `404` league not found.
+
+### `DELETE /leagues/:leagueId/data-completeness/dismissals/:issueKey`
+
+Restores a dismissed issue to the main list. Same auth as dismissing.
+
+The `issueKey` contains a colon, so callers must `encodeURIComponent` it.
+
+Response `200`: `{ "issueKey": "…", "dismissed": false }`
+
+Errors: `400` no active season · `403` not an owner or league manager · `404`
+league not found.
 
 ## Public routes (anonymous-readable)
 

@@ -63,15 +63,15 @@ function authedPost(app, path, userId = 'user-1') {
     .set('Origin', CSRF_ORIGIN);
 }
 
-describe('game tracking gate', () => {
+describe('game tracking is free (T-12 — no subscription gate)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('14.1 POST /games/:gameId/events returns 402 for free (unsubscribed) team', async () => {
-    gamesService.appendEventForUser.mockRejectedValue(
-      new ApiError(402, 'An active Team subscription is required to track stats')
-    );
+  // Tracking is free: the service no longer 402s on create/track/finish for a
+  // free team, so these routes succeed. (Previously 14.1–14.3 asserted a 402.)
+  test('14.1 POST /games/:gameId/events succeeds for a free (unsubscribed) team', async () => {
+    gamesService.appendEventForUser.mockResolvedValue({ game: { id: 'game-1' } });
 
     const app = createApp();
     // OPP_FG2_MADE is a valid opponent aggregate event that passes the union schema
@@ -79,13 +79,12 @@ describe('game tracking gate', () => {
       statType: 'OPP_FG2_MADE',
     });
 
-    expect(res.statusCode).toBe(402);
+    expect(res.statusCode).toBe(200);
+    expect(gamesService.appendEventForUser).toHaveBeenCalled();
   });
 
-  test('14.2 POST /games/:gameId/lineup returns 402 for free team', async () => {
-    gamesService.setGameLineup.mockRejectedValue(
-      new ApiError(402, 'An active Team subscription is required to track stats')
-    );
+  test('14.2 POST /games/:gameId/lineup succeeds for a free team', async () => {
+    gamesService.setGameLineup.mockResolvedValue({ game: { id: 'game-1' } });
 
     const app = createApp();
     // setLineupSchema requires exactly 5 playerIds
@@ -93,18 +92,18 @@ describe('game tracking gate', () => {
       playerIds: ['p1', 'p2', 'p3', 'p4', 'p5'],
     });
 
-    expect(res.statusCode).toBe(402);
+    expect(res.statusCode).toBe(200);
+    expect(gamesService.setGameLineup).toHaveBeenCalled();
   });
 
-  test('14.3 POST /games/:gameId/finish returns 402 for free team', async () => {
-    gamesService.finishGameForUser.mockRejectedValue(
-      new ApiError(402, 'An active Team subscription is required to track stats')
-    );
+  test('14.3 POST /games/:gameId/finish succeeds for a free team', async () => {
+    gamesService.finishGameForUser.mockResolvedValue({ game: { id: 'game-1' } });
 
     const app = createApp();
     const res = await authedPost(app, '/api/v1/games/game-1/finish').send({});
 
-    expect(res.statusCode).toBe(402);
+    expect(res.statusCode).toBe(200);
+    expect(gamesService.finishGameForUser).toHaveBeenCalled();
   });
 
   test('14.4 GET /api/v1/public/teams/:teamId returns 200 for free team (public reads always open)', async () => {

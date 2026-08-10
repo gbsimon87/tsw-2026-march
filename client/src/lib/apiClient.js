@@ -7,9 +7,30 @@ let csrfToken =
     ?.split('=')[1] ?? null;
 let refreshPromise = null;
 
+// Bare fetch() never times out on its own — a stalled network/backend leaves any
+// caller gating UI on the promise's settlement (e.g. GameTrackPage's isSaving)
+// permanently disabled with no error. Every request gets an AbortController-based
+// ceiling so it always eventually rejects.
+const REQUEST_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your connection and try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function refreshSession() {
   if (!refreshPromise) {
-    refreshPromise = fetch(`${env.apiBaseUrl}/auth/refresh`, {
+    refreshPromise = fetchWithTimeout(`${env.apiBaseUrl}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
@@ -49,7 +70,7 @@ async function request(path, options = {}, retryState = {}) {
     headers['x-csrf-token'] = csrfToken;
   }
 
-  const response = await fetch(`${env.apiBaseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${env.apiBaseUrl}${path}`, {
     credentials: 'include',
     ...options,
     headers,
@@ -90,9 +111,69 @@ async function request(path, options = {}, retryState = {}) {
   return data;
 }
 
+// Parse the download filename out of a Content-Disposition header, if present.
+function parseContentDispositionFilename(header) {
+  if (!header) {
+    return null;
+  }
+  const utf8Match = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1].replace(/^"|"$/g, ''));
+    } catch {
+      // fall through to the plain filename form
+    }
+  }
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match ? match[1] : null;
+}
+
+async function requestBlob(path, retryState = {}) {
+  const response = await fetchWithTimeout(`${env.apiBaseUrl}${path}`, {
+    credentials: 'include',
+  });
+
+  const nextCsrfToken = response.headers.get('x-csrf-token');
+  if (nextCsrfToken) {
+    csrfToken = nextCsrfToken;
+  }
+
+  if (response.status === 401 && !retryState.didRefresh) {
+    try {
+      await refreshSession();
+      return requestBlob(path, { didRefresh: true });
+    } catch {
+      // Fall through to the error handling below.
+    }
+  }
+
+  if (!response.ok) {
+    let message = 'Request failed';
+    try {
+      const data = await response.json();
+      message = data?.error?.message || message;
+    } catch {
+      // non-JSON error body — keep the generic message
+    }
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const filename = parseContentDispositionFilename(response.headers.get('Content-Disposition'));
+  return { blob, filename };
+}
+
 export const apiClient = {
   get(path) {
     return request(path);
+  },
+  // Fetch a binary/file response (e.g. a CSV export) as a Blob, reusing the same
+  // cookie-auth + 401→refresh→retry-once behaviour as request(). GET only, so no
+  // CSRF token is required.
+  getBlob(path) {
+    return requestBlob(path);
   },
   post(path, body) {
     return request(path, {

@@ -9,18 +9,12 @@ const userSchema = new mongoose.Schema(
     emailVerified: { type: Boolean, default: false },
     emailVerifiedAt: { type: Date },
     authProvider: { type: String, enum: ['local', 'google', 'system'], default: 'local' },
-    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
-    leaguePlan: { type: String, enum: ['free', 'pro'], default: 'free' },
-    leagueSubscriptionStatus: {
-      type: String,
-      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
-      default: 'inactive',
-    },
-    leagueCurrentPeriodEnd: { type: Date, default: null },
-    leagueCancelAtPeriodEnd: { type: Boolean, default: false },
-    leagueStripeCustomerId: { type: String, default: null },
-    leagueStripeSubscriptionId: { type: String, default: null },
-    leagueStripePriceId: { type: String, default: null },
+    // Resolver-derived cache of the owner's aggregate plan (T-17), canonical-only
+    // (Phase 6 / T-26). syncOwnerPlan writes 'starter'/'team_pro'; the resolver still
+    // tolerates legacy values at read time.
+    plan: { type: String, enum: ['starter', 'team_pro'], default: 'starter' },
+    // The seven dead User.league* mirror fields were removed (Phase 6 / T-25) — league
+    // billing lives on the League doc; migrate-drop-user-league-fields.js $unsets them.
     roles: { type: [String], default: ['user'] },
     avatar: {
       url: { type: String, default: null },

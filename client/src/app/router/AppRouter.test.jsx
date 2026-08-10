@@ -129,7 +129,7 @@ describe('AppRouter', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Start your free trial today/i)).toBeInTheDocument();
+      expect(screen.getByText(/Track for free\. Upgrade for the extras\./i)).toBeInTheDocument();
     });
 
     expect(screen.getByTestId('location')).toHaveTextContent('/pricing');

@@ -53,6 +53,11 @@ const standaloneDualGameSchema = z.object({
   videoUrl: youtubeUrlSchema.optional(),
 });
 
+// Free-text venue, same rules as the Schedule Builder's bulk row schema
+// (leagues.validation.js) so a game created one-at-a-time and one created in
+// bulk accept exactly the same input.
+const venueSchema = z.string().trim().max(120).optional();
+
 const leagueGameSchema = z.object({
   gameContext: z.literal('league'),
   leagueId: z.string().min(1),
@@ -61,6 +66,7 @@ const leagueGameSchema = z.object({
   trackedLeagueTeamId: z.string().min(1),
   title: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
+  venue: venueSchema,
   videoUrl: youtubeUrlSchema.optional(),
 });
 
@@ -73,6 +79,7 @@ const leagueDualGameSchema = z.object({
   initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
   title: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
+  venue: venueSchema,
   videoUrl: youtubeUrlSchema.optional(),
 });
 
@@ -88,6 +95,8 @@ const updateGameSchema = z
     title: z.string().trim().min(1).max(120).optional(),
     opponent: z.string().trim().min(1).max(120).nullable().optional(),
     scheduledAt: z.string().datetime().nullable().optional(),
+    // Nullable so an admin can clear a venue, not only correct it.
+    venue: z.string().trim().max(120).nullable().optional(),
     videoUrl: youtubeUrlSchema.nullable().optional(),
     initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
   })
@@ -225,7 +234,17 @@ const updateEventSchema = z.object({
 const listGamesSchema = z.object({
   ...paginationQueryShape,
   teamId: z.string().min(1).optional(),
-  status: z.enum(['in_progress', 'completed']).optional(),
+  status: z.enum(['scheduled', 'in_progress', 'completed']).optional(),
+});
+
+// Mid-game roster add. Name + optional jersey only — position is deliberately
+// omitted (unused by tracking, and this form is filled with a game running).
+// Mirrors leagues.validation.js's jerseyNumber rules so a player added here
+// validates identically to one added on the admin roster page.
+const addRosterPlayerSchema = z.object({
+  side: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+  displayName: z.string().trim().min(1).max(120),
+  jerseyNumber: z.number().int().min(0).max(999).nullable().optional(),
 });
 
 module.exports = {
@@ -236,4 +255,5 @@ module.exports = {
   statTypeSchema,
   updateEventSchema,
   listGamesSchema,
+  addRosterPlayerSchema,
 };

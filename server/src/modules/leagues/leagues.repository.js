@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { claimWebhookEvent } = require('../../utils/webhookIdempotency');
+const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
 
 const logoSchema = new mongoose.Schema(
@@ -33,7 +33,14 @@ const leagueSchema = new mongoose.Schema(
     status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
     isPublic: { type: Boolean, default: true },
     logo: { type: logoSchema, default: null },
-    plan: { type: String, enum: ['free', 'pro', 'league'], default: 'free' },
+    // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro' were rewritten by
+    // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
+    // legacy values at read time; this enum only constrains writes.
+    plan: { type: String, enum: ['starter', 'league'], default: 'starter' },
+    // How this league's plan is granted. 'stripe' = billed via Stripe (webhooks own
+    // it); 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
+    // We-ball Saturday becomes a real billingSource:'comp' doc (Phase 6 migration).
+    billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
     subscriptionStatus: {
       type: String,
       enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
@@ -50,6 +57,9 @@ const leagueSchema = new mongoose.Schema(
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     trialEnd: { type: Date, default: null },
+    // Audit H1: set once this league has ever been granted a Stripe trial, so an
+    // owner can't farm a fresh trial by cancelling and re-checking-out.
+    hasTrialed: { type: Boolean, default: false },
     billingEmail: { type: String, default: null },
     processedWebhookEventIds: { type: [String], default: [] },
     lastWebhookEventId: { type: String, default: null },
@@ -58,6 +68,15 @@ const leagueSchema = new mongoose.Schema(
 );
 
 leagueSchema.index({ ownerUserId: 1, status: 1 });
+// Audit C3/M13: unique + PARTIAL (not sparse) on stripeCustomerId. The schema
+// defaults this field to explicit null, which a sparse index would still index and
+// collide on; a partial index on { $type:'string' } indexes only real customer
+// ids — deduping the league-create webhook and indexing every webhook lookup.
+// migrate-league-stripe-customer-index.js builds the same index on existing DBs.
+leagueSchema.index(
+  { stripeCustomerId: 1 },
+  { unique: true, partialFilterExpression: { stripeCustomerId: { $type: 'string' } } }
+);
 
 const leagueTeamSchema = new mongoose.Schema(
   {
@@ -320,6 +339,12 @@ function claimLeagueWebhookEvent(filter, eventId) {
   return claimWebhookEvent(League, filter, eventId);
 }
 
+// Audit H3: release a claim if the handler's apply step throws, so a Stripe retry
+// can re-apply the effect.
+function releaseLeagueWebhookEvent(filter, eventId) {
+  return releaseWebhookEvent(League, filter, eventId);
+}
+
 function createLeagueTeam(input) {
   return LeagueTeam.create(input);
 }
@@ -534,6 +559,7 @@ module.exports = {
   listLeaguesByIds,
   saveLeague,
   claimLeagueWebhookEvent,
+  releaseLeagueWebhookEvent,
   createLeagueTeam,
   listLeagueTeams,
   findLeagueTeamById,

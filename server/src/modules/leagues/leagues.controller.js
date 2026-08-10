@@ -9,8 +9,11 @@ const {
   updateMemberSchema,
   createJoinRequestSchema,
   createSeasonSchema,
+  bulkCreateLeagueGamesSchema,
 } = require('./leagues.validation');
 const leaguesService = require('./leagues.service');
+const dataCompletenessService = require('./dataCompleteness.service');
+const { dismissIssueSchema, issueKeySchema } = require('./dataCompleteness.validation');
 const { ApiError } = require('../../utils/apiError');
 const { paginationQuerySchema } = require('../shared/pagination.validation');
 
@@ -393,6 +396,17 @@ async function games(req, res) {
   res.status(200).json({ games });
 }
 
+async function bulkCreateGames(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = bulkCreateLeagueGamesSchema.parse(req.body);
+  const result = await leaguesService.bulkCreateLeagueGamesForUser(
+    userId,
+    req.params.leagueId,
+    payload
+  );
+  res.status(201).json(result);
+}
+
 async function publicGames(req, res) {
   const league = await leaguesService.getPublicLeagueBySlug(
     req.params.leagueSlug,
@@ -443,6 +457,37 @@ async function listPublicSeasonsHandler(req, res) {
   res.status(200).json({ seasons });
 }
 
+async function dataCompleteness(req, res) {
+  const userId = requireAuthUserId(req);
+  const report = await dataCompletenessService.getDataCompletenessForUser(
+    userId,
+    req.params.leagueId
+  );
+  res.status(200).json(report);
+}
+
+async function dismissDataIssue(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = dismissIssueSchema.parse(req.body);
+  const result = await dataCompletenessService.dismissIssueForUser(
+    userId,
+    req.params.leagueId,
+    payload
+  );
+  res.status(201).json(result);
+}
+
+async function restoreDataIssue(req, res) {
+  const userId = requireAuthUserId(req);
+  const issueKey = issueKeySchema.parse(req.params.issueKey);
+  const result = await dataCompletenessService.restoreIssueForUser(
+    userId,
+    req.params.leagueId,
+    issueKey
+  );
+  res.status(200).json(result);
+}
+
 module.exports = {
   create,
   list,
@@ -480,6 +525,7 @@ module.exports = {
   standings,
   publicStandings,
   games,
+  bulkCreateGames,
   publicGames,
   getPublicLeaders,
   listLeagueManagers,
@@ -489,4 +535,7 @@ module.exports = {
   listSeasons: listSeasonsHandler,
   completeSeason: completeSeasonHandler,
   listPublicSeasons: listPublicSeasonsHandler,
+  dataCompleteness,
+  dismissDataIssue,
+  restoreDataIssue,
 };

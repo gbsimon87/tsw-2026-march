@@ -45,7 +45,7 @@ export function BillingSuccessPage() {
         setResourceName(team.name);
         setAttemptCount(nextAttempt);
 
-        if (isActivePlan(team.billing, ['team', 'pro'])) {
+        if (isActivePlan(team.billing, ['team_pro', 'team', 'pro'])) {
           setTrialEnd(team.billing?.trialEnd ?? null);
           setStatus('active');
           return;
@@ -128,7 +128,7 @@ export function BillingSuccessPage() {
   }, [trialEnd]);
 
   const body = useMemo(() => {
-    const planLabel = isLeague ? 'League plan' : 'Team plan';
+    const planLabel = isLeague ? 'League plan' : 'Team Pro plan';
 
     if (status === 'active') {
       const trialNote = trialEndLabel

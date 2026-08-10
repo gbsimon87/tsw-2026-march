@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
+import { DataCompletenessPanel } from '../components/DataCompletenessPanel';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
@@ -10,6 +11,17 @@ import { useAuth } from '../../../app/store/AuthContext';
 import { gamesApi } from '../../games/api/gamesApi';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { ExportCsvButton } from '../../export/components/ExportCsvButton';
+import { exportApi } from '../../export/api/exportApi';
+
+const LEAGUE_EXPORT_DATASETS = [
+  { value: 'all', label: 'Everything' },
+  { value: 'standings', label: 'Standings' },
+  { value: 'leaders', label: 'Statistical leaders' },
+  { value: 'players', label: 'Player stats' },
+  { value: 'games', label: 'Games' },
+  { value: 'gamelogs', label: 'Game logs (per game)' },
+];
 
 const TABS = [
   {
@@ -93,6 +105,24 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: 'completeness',
+    label: 'Data health',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
+        <path d="M8 1.5 2.5 4v4c0 3.2 2.3 5.6 5.5 6.5 3.2-.9 5.5-3.3 5.5-6.5V4L8 1.5Z" />
+        <path d="M8 5.5v3.5" strokeLinecap="round" />
+        <path d="M8 11h.01" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 function getLeagueRoleLabel(viewerRole) {
@@ -134,6 +164,9 @@ export function AdminLeaguePage() {
   const [newSeasonLabel, setNewSeasonLabel] = useState('');
   const [isCreatingSeason, setIsCreatingSeason] = useState(false);
   const [seasonError, setSeasonError] = useState('');
+  const [completenessReport, setCompletenessReport] = useState(null);
+  const [completenessLoading, setCompletenessLoading] = useState(false);
+  const [completenessError, setCompletenessError] = useState(null);
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -217,6 +250,52 @@ export function AdminLeaguePage() {
       .catch(() => {})
       .finally(() => setIsLoadingRequests(false));
   }, [activeTab, leagueId, league?.teams]);
+
+  useEffect(() => {
+    if (activeTab !== 'completeness' || !leagueId) return;
+
+    let cancelled = false;
+    setCompletenessLoading(true);
+    setCompletenessError(null);
+
+    leaguesApi
+      .fetchDataCompleteness(leagueId)
+      .then((report) => {
+        if (!cancelled) setCompletenessReport(report);
+      })
+      .catch((fetchError) => {
+        // Surface the server's message — "League has no active season" is far
+        // more useful than a generic failure string.
+        if (!cancelled) setCompletenessError(fetchError?.message ?? 'Could not load data health');
+      })
+      .finally(() => {
+        if (!cancelled) setCompletenessLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, leagueId]);
+
+  async function handleDismissIssue(issueKey) {
+    try {
+      await leaguesApi.dismissDataIssue(leagueId, { issueKey, note: null });
+      const report = await leaguesApi.fetchDataCompleteness(leagueId);
+      setCompletenessReport(report);
+    } catch (dismissError) {
+      setCompletenessError(dismissError?.message ?? 'Could not dismiss this item');
+    }
+  }
+
+  async function handleRestoreIssue(issueKey) {
+    try {
+      await leaguesApi.restoreDataIssue(leagueId, issueKey);
+      const report = await leaguesApi.fetchDataCompleteness(leagueId);
+      setCompletenessReport(report);
+    } catch (restoreError) {
+      setCompletenessError(restoreError?.message ?? 'Could not restore this item');
+    }
+  }
 
   async function onApproveJoin(teamId, requestId) {
     await leaguesApi.approveJoinRequest(leagueId, teamId, requestId);
@@ -673,6 +752,18 @@ export function AdminLeaguePage() {
         </div>
       </section>
 
+      {canEditLeague && league.currentSeason?.id ? (
+        <div className="flex justify-end">
+          <ExportCsvButton
+            label="Export CSV"
+            datasets={LEAGUE_EXPORT_DATASETS}
+            fetcher={(dataset) =>
+              exportApi.getLeagueCsv(leagueId, league.currentSeason.id, dataset)
+            }
+          />
+        </div>
+      ) : null}
+
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -725,12 +816,20 @@ export function AdminLeaguePage() {
                 >
                   League Games
                 </h2>
-                <Link
-                  to={`/admin/leagues/${league.id}/games/new`}
-                  className="rounded-xl bg-[#141414] px-4 py-2 text-sm font-semibold text-white text-center transition hover:bg-[#1B4332]"
-                >
-                  Schedule Game
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to={`/admin/leagues/${league.id}/schedule`}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-center text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
+                  >
+                    Build Schedule
+                  </Link>
+                  <Link
+                    to={`/admin/leagues/${league.id}/games/new`}
+                    className="rounded-xl bg-[#141414] px-4 py-2 text-sm font-semibold text-white text-center transition hover:bg-[#1B4332]"
+                  >
+                    Schedule Game
+                  </Link>
+                </div>
               </div>
               {(league.games || []).length === 0 ? (
                 <p className="mt-3 text-sm text-slate-600">No league games yet.</p>
@@ -1261,6 +1360,24 @@ export function AdminLeaguePage() {
               </div>
             </div>
           ) : null}
+
+          {activeTab === 'completeness' ? (
+            <div
+              id="admin-league-tabpanel-completeness"
+              role="tabpanel"
+              aria-labelledby="admin-league-tab-completeness"
+              tabIndex={0}
+            >
+              <DataCompletenessPanel
+                report={completenessReport}
+                isLoading={completenessLoading}
+                error={completenessError}
+                canDismiss={canEditLeague}
+                onDismiss={handleDismissIssue}
+                onRestore={handleRestoreIssue}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
       <Modal
@@ -1301,9 +1418,25 @@ export function AdminLeaguePage() {
         <p className="text-sm text-slate-500">
           Standings and stats will be frozen as a permanent record. No new games can be scheduled
           until you start a new season. This cannot be undone.
-          {(league.games || []).some((game) => game.status !== 'completed')
-            ? ` ${(league.games || []).filter((game) => game.status !== 'completed').length} game(s) are still in progress and will not count toward final standings.`
-            : ''}
+          {(() => {
+            // A scheduled game has not started, so calling it "in progress" is
+            // wrong — but it still matters here, because completing the season
+            // strands it. Count and describe the two states separately.
+            const games = league.games || [];
+            const inProgress = games.filter((game) => game.status === 'in_progress').length;
+            const scheduled = games.filter((game) => game.status === 'scheduled').length;
+
+            return (
+              <>
+                {inProgress > 0
+                  ? ` ${inProgress} game(s) are still in progress and will not count toward final standings.`
+                  : ''}
+                {scheduled > 0
+                  ? ` ${scheduled} scheduled game(s) have not been played and will not count toward final standings.`
+                  : ''}
+              </>
+            );
+          })()}
         </p>
         <div className="mt-5 flex gap-3">
           <button

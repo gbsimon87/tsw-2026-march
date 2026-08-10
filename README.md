@@ -198,6 +198,10 @@ Legacy `/leagues/:id/...` paths redirect to their `/admin/leagues/...` equivalen
 
 ### Billing
 
+> **A pricing/billing overhaul is planned.** The bullets below describe the billing as
+> it exists in code today. The future model (3 plans, free tracking, config-driven
+> pricing) is specified in [`docs/pricing-overhaul/`](docs/pricing-overhaul/).
+
 - Pricing page supports team-level checkout and billing management.
 - Stripe Checkout starts Team Pro subscriptions.
 - Stripe Billing Portal manages existing subscriptions.

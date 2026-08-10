@@ -60,11 +60,14 @@ import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
+import { ExportCsvButton } from '../../export/components/ExportCsvButton';
+import { exportApi } from '../../export/api/exportApi';
 
 export function AdminLeagueTeamPage() {
   const { leagueId, leagueTeamId } = useParams();
   const [team, setTeam] = useState(null);
   const [leagueName, setLeagueName] = useState('');
+  const [seasonId, setSeasonId] = useState(null);
   const [viewerContext, setViewerContext] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,6 +92,7 @@ export function AdminLeagueTeamPage() {
       .then(([teamResponse, leagueResponse]) => {
         setTeam(teamResponse.team);
         setLeagueName(leagueResponse.league?.name || '');
+        setSeasonId(leagueResponse.league?.currentSeason?.id || null);
         setViewerContext(leagueResponse.league?.viewerContext || null);
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load league team'))
@@ -417,6 +421,12 @@ export function AdminLeagueTeamPage() {
         }
       >
         {logoError ? <p className="text-xs text-red-600">{logoError}</p> : null}
+        {canEditRoster && seasonId ? (
+          <ExportCsvButton
+            label="Export team CSV"
+            fetcher={() => exportApi.getTeamCsv(leagueId, leagueTeamId, seasonId)}
+          />
+        ) : null}
       </PageHeader>
 
       {error ? (

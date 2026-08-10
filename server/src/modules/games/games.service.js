@@ -23,11 +23,8 @@ const {
   applyEventToPlayerStatLine,
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
-const {
-  getTeamEntitlements,
-  getBillingSummary,
-  isTeamActive,
-} = require('../billing/billing.service');
+const { getBillingSummary, getLeagueBillingSummary } = require('../billing/billing.service');
+const { resolveForTeam, resolveForLeague } = require('../billing/entitlements.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
 const {
@@ -332,6 +329,7 @@ function sanitizeGame(game, options = {}) {
       ? game.awayCurrentLineupPlayerIds.map(String)
       : [],
     scheduledAt: game.scheduledAt ?? null,
+    venue: game.venue ?? null,
     completedAt: game.completedAt ?? null,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
@@ -727,7 +725,10 @@ function buildParticipantFromStandaloneTeam(team, side) {
     logo: sanitizeLogo(team.logo),
     colors: Array.isArray(team.colors) ? team.colors : [],
     billingSnapshot: getBillingSummary(team),
-    entitlementsSnapshot: getTeamEntitlements(team),
+    // Freeze the full resolver-derived entitlement set at record time (T-13). Old
+    // participants stored only {canViewReplay, canViewShotMaps}; readers default
+    // absent keys to false. A later downgrade never retroactively locks this game.
+    entitlementsSnapshot: resolveForTeam(team).entitlements,
   };
 }
 
@@ -757,6 +758,237 @@ function fillEmptySnapshot(game, fieldName, snapshot) {
 
   game[fieldName] = snapshot;
   return true;
+}
+
+// Mid-game roster add: which roster does this game's players actually come from?
+//
+// A standalone one-sided game reads team.players live from the Team doc (see
+// resolveGameTeamContext), so it needs NO game write — snapshotField is null.
+// Every other shape reads a frozen snapshot array on the Game doc, which must be
+// appended to or the new player stays invisible in the game they were added for.
+function resolveRosterTargetForGame(game, side) {
+  const isDual = game.trackingMode === 'dual_team';
+
+  if (isDual && !side) {
+    throw new ApiError(400, 'side is required for dual-team games');
+  }
+
+  const snapshotField = isDual
+    ? side === TEAM_SIDES.HOME
+      ? 'homeRosterSnapshot'
+      : 'awayRosterSnapshot'
+    : null;
+
+  if (game.gameContext === 'league') {
+    const leagueTeamId = isDual
+      ? side === TEAM_SIDES.HOME
+        ? game.homeLeagueTeamId
+        : game.awayLeagueTeamId
+      : game.trackedLeagueTeamId;
+
+    return {
+      kind: 'league',
+      leagueId: String(game.leagueId),
+      leagueTeamId: String(leagueTeamId),
+      // A one-sided league game freezes its tracked roster in `rosterSnapshot`.
+      snapshotField: snapshotField || 'rosterSnapshot',
+    };
+  }
+
+  const teamId = isDual
+    ? side === TEAM_SIDES.HOME
+      ? game.homeTeamId
+      : game.awayTeamId
+    : game.teamId;
+
+  return { kind: 'standalone', teamId: String(teamId), snapshotField };
+}
+
+const ROSTER_EDITABLE_STATUSES = new Set(['in_progress', 'scheduled']);
+
+// Mid-game roster add. Two writes, deliberately ordered:
+//
+//   1. the durable roster row, delegated to the module that owns it, and
+//   2. this game's frozen roster snapshot (skipped when the game reads live).
+//
+// Delegating (1) is load-bearing: addPlayerToLeagueTeam/addPlayerToTeam carry
+// their own permission gates and duplicate-name rules, so this endpoint inherits
+// the existing matrix rather than re-deriving it. PROJECT-KNOWLEDGE §4 (TSW-001)
+// records what re-deriving an affiliation gate from scratch actually costs.
+//
+// Roster-first ordering means a failed snapshot append leaves a real player with
+// no game row (recoverable, adjacent to repairGameRosterSnapshots). The reverse
+// would leave a phantom snapshot entry with no LeaguePlayer behind it, breaking
+// the leaguePlayerId linkage LeaguePlayerStats and public player pages rely on.
+async function addPlayerToGameRoster(userId, gameId, payload) {
+  const game = await assertGameAccess(userId, gameId);
+
+  if (!ROSTER_EDITABLE_STATUSES.has(game.status)) {
+    throw new ApiError(409, 'Cannot add a player to a completed game');
+  }
+
+  const side = payload.side ?? null;
+  const target = resolveRosterTargetForGame(game, side);
+  const rosterPayload = {
+    displayName: payload.displayName,
+    jerseyNumber: payload.jerseyNumber ?? null,
+  };
+
+  let player;
+  if (target.kind === 'league') {
+    const { addPlayerToLeagueTeam } = require('../leagues/leagues.service');
+    player = await addPlayerToLeagueTeam(
+      userId,
+      target.leagueId,
+      target.leagueTeamId,
+      rosterPayload
+    );
+  } else {
+    // Lazily required to avoid a require cycle — teams.service.js requires
+    // games.service.js for computeBoxScore.
+    const { addPlayerToTeam } = require('../teams/teams.service');
+    // addPlayerToTeam returns sanitizeTeam's output (the WHOLE team), not the
+    // added player. Pull the just-added player back out of team.players,
+    // matching on the trimmed name we sent and preferring the last match so an
+    // existing inactive same-name row can't shadow the one we just appended.
+    const team = await addPlayerToTeam(userId, target.teamId, rosterPayload);
+    player = findLastAddedPlayer(team, rosterPayload.displayName);
+  }
+
+  if (target.snapshotField) {
+    await appendPlayerToGameSnapshot(gameId, game, target.snapshotField, target.kind, player);
+  }
+
+  return { player, side };
+}
+
+// UX-only flag for the tracking screen's "Add player" affordance. The service
+// gate in addPlayerToGameRoster stays authoritative — this just avoids showing a
+// button that would 403. The case that matters here is a dual-team league game:
+// canManageLeagueGame lets a manager of EITHER side track the game, but
+// assertTeamManagerOrOwner is scoped to one team, so a home-team manager can
+// legitimately track the game while being forbidden from editing the away
+// roster (and vice versa). The flag is true if either side is manageable; the
+// client still resolves per side when it actually submits.
+//
+// Reuses assertTeamManagerOrOwner rather than re-deriving the rule; it throws
+// instead of returning a boolean, hence the wrapper.
+async function canManageGameRoster(userId, game) {
+  if (!userId || !game) return false;
+
+  const sides =
+    game.trackingMode === 'dual_team' ? [TEAM_SIDES.HOME, TEAM_SIDES.AWAY] : [undefined];
+
+  if (game.gameContext !== 'league') {
+    // Standalone: the durable write gate is addPlayerToTeam's team ownership.
+    // A one-sided game's owner always owns its team, but a DUAL-TEAM standalone
+    // game is accessible to the owner of EITHER team (canAccessStandaloneDualGame),
+    // so ownership of the side being tracked is not implied — check it per side
+    // rather than assuming access means ownership.
+    if (game.trackingMode !== 'dual_team') {
+      return true;
+    }
+
+    for (const side of sides) {
+      const target = resolveRosterTargetForGame(game, side);
+      if (!target.teamId) continue;
+      const owned = await findTeamByIdAndOwner(target.teamId, userId).catch(() => null);
+      if (owned) return true;
+    }
+
+    return false;
+  }
+
+  const { assertTeamManagerOrOwner } = require('../leagues/leagues.service');
+
+  for (const side of sides) {
+    let target;
+    try {
+      target = resolveRosterTargetForGame(game, side);
+    } catch {
+      continue;
+    }
+
+    const allowed = await assertTeamManagerOrOwner(userId, target.leagueId, target.leagueTeamId)
+      .then(() => true)
+      .catch(() => false);
+
+    if (allowed) return true;
+  }
+
+  return false;
+}
+
+function findLastAddedPlayer(team, displayName) {
+  const targetName = displayName.trim();
+  const players = Array.isArray(team?.players) ? team.players : [];
+  for (let i = players.length - 1; i >= 0; i -= 1) {
+    if (players[i]?.displayName === targetName) {
+      return players[i];
+    }
+  }
+
+  // The delegate's own contract changed underneath us if we get here — fail
+  // loudly rather than returning undefined to the caller.
+  throw new ApiError(500, 'Added player could not be located on the team');
+}
+
+// Mirrors buildLeagueRosterSnapshot's field shape (leagues.service.js) for a
+// league target, and buildRosterSnapshotFromStandaloneTeam's field shape
+// (above) for a standalone target, so a mid-game addition is indistinguishable
+// from one frozen at game creation or one read live off a standalone Team.
+// These two source functions use genuinely different shapes (leaguePlayerId
+// vs sourceType/sourcePlayerId) — see PROJECT-KNOWLEDGE §5 (TSW-004) — so this
+// must branch on target kind rather than emit one shape for both.
+function buildSnapshotEntry(targetKind, player) {
+  if (targetKind === 'standalone') {
+    return {
+      sourceType: 'team_player',
+      sourcePlayerId: player.id ?? player._id,
+      leaguePlayerId: null,
+      displayName: player.displayName,
+      jerseyNumber: player.jerseyNumber ?? null,
+      position: player.position ?? null,
+      claimedByUserId: null,
+      isClaimed: false,
+      isActive: true,
+    };
+  }
+
+  const claimedUserId = player.claimedUserId ?? player.claimedByUserId ?? null;
+  return {
+    leaguePlayerId: player.id ?? player._id,
+    displayName: player.displayName,
+    jerseyNumber: player.jerseyNumber ?? null,
+    position: player.position ?? null,
+    claimedByUserId: claimedUserId,
+    isClaimed: Boolean(claimedUserId),
+    isActive: true,
+  };
+}
+
+// The Game schema uses optimisticConcurrency, so a co-tracker saving an event at
+// the same moment makes this save throw VersionError. The append is pure, so
+// replaying it on a freshly loaded game is safe — and far better than surfacing a
+// conflict to someone mid-game. The roster write above is NOT replayed.
+async function appendPlayerToGameSnapshot(gameId, game, snapshotField, targetKind, player) {
+  const entry = buildSnapshotEntry(targetKind, player);
+
+  try {
+    game[snapshotField] = [...(game[snapshotField] || []), entry];
+    await saveGame(game);
+  } catch (error) {
+    if (error?.name !== 'VersionError') {
+      throw error;
+    }
+
+    const fresh = await findGameById(gameId);
+    if (!fresh) {
+      throw new ApiError(404, 'Game not found');
+    }
+    fresh[snapshotField] = [...(fresh[snapshotField] || []), entry];
+    await saveGame(fresh);
+  }
 }
 
 async function repairGameRosterSnapshots(game) {
@@ -822,8 +1054,9 @@ function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
     id: participant.teamId || participant.leagueTeamId || participant.displayName,
     name: participant.displayName,
     logo: participant.logo,
-    plan: participant.billing?.plan || 'pro',
-    subscriptionStatus: participant.billing?.subscriptionStatus || 'active',
+    // Audit L4: no hard-coded 'pro'/'active' fallback — this doc feeds only
+    // roster/box-score, never entitlement resolution. A truthy default here is the
+    // always-premium footgun class T-13 removed.
     players: (rosterSnapshot || []).map((player) => ({
       _id: player._id || player.sourcePlayerId || player.leaguePlayerId,
       id: player._id || player.sourcePlayerId || player.leaguePlayerId,
@@ -891,16 +1124,18 @@ async function resolveGameTeamContext(userId, game) {
         id: primary.teamId || primary.leagueTeamId,
         name: primary.displayName,
         logo: primary.logo,
-        billing: primary.billing || { plan: 'pro', subscriptionStatus: 'active' },
-        entitlements: primary.entitlements || { canViewReplay: true, canViewShotMaps: true },
+        billing: primary.billing || null,
+        // Read the frozen snapshot; absent keys default to false (T-13). No hard-coded
+        // 'pro' fallback — a missing snapshot must not grant premium views.
+        entitlements: primary.entitlements || {},
         players: primary.players,
       },
       opponentTeam: {
         id: secondary.teamId || secondary.leagueTeamId,
         name: secondary.displayName,
         logo: secondary.logo,
-        billing: secondary.billing || { plan: 'pro', subscriptionStatus: 'active' },
-        entitlements: secondary.entitlements || { canViewReplay: true, canViewShotMaps: true },
+        billing: secondary.billing || null,
+        entitlements: secondary.entitlements || {},
         players: secondary.players,
       },
       participants,
@@ -911,19 +1146,16 @@ async function resolveGameTeamContext(userId, game) {
 
   if (game.gameContext === 'league') {
     const { league, trackedTeam, team } = await getLeagueTeamRosterSnapshotForGame(game);
+    // Live league entitlements (T-13): a lapsed/free league correctly loses premium
+    // views instead of the old hard-coded 'pro'. Comp leagues resolve via billingSource.
     return {
       team: {
         id: String(trackedTeam._id),
         slug: trackedTeam.slug,
         name: trackedTeam.name,
         logo: sanitizeLogo(trackedTeam.logo),
-        billing: {
-          plan: 'pro',
-          subscriptionStatus: 'active',
-          cancelAtPeriodEnd: false,
-          currentPeriodEnd: null,
-        },
-        entitlements: { canViewReplay: true, canViewShotMaps: true },
+        billing: getLeagueBillingSummary(league),
+        entitlements: resolveForLeague(league).entitlements,
         players: team.players.map(sanitizePlayer),
       },
       opponentTeam: null,
@@ -934,13 +1166,16 @@ async function resolveGameTeamContext(userId, game) {
   }
 
   const team = await assertTeamOwnership(userId || game.ownerUserId, game.teamId);
+  // Audit H7: prefer the entitlements frozen at record time; fall back to live
+  // resolution only for legacy one-sided games created before the snapshot existed.
+  const entitlements = game.entitlementsSnapshot ?? resolveForTeam(team).entitlements;
   return {
     team: {
       id: String(team._id),
       name: team.name,
       logo: sanitizeLogo(team.logo),
       billing: getBillingSummary(team),
-      entitlements: getTeamEntitlements(team),
+      entitlements,
       players: team.players.map(sanitizePlayer),
     },
     opponentTeam: null,
@@ -1026,8 +1261,8 @@ async function createGameForUser(userId, payload) {
         displayName: context.homeTeam.name,
         logo: sanitizeLogo(context.homeTeam.logo),
         colors: Array.isArray(context.homeTeam.colors) ? context.homeTeam.colors : [],
-        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
-        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+        billingSnapshot: getLeagueBillingSummary(context.league),
+        entitlementsSnapshot: resolveForLeague(context.league).entitlements,
       },
       awayParticipant: {
         side: TEAM_SIDES.AWAY,
@@ -1038,13 +1273,14 @@ async function createGameForUser(userId, payload) {
         displayName: context.awayTeam.name,
         logo: sanitizeLogo(context.awayTeam.logo),
         colors: Array.isArray(context.awayTeam.colors) ? context.awayTeam.colors : [],
-        billingSnapshot: { plan: 'pro', subscriptionStatus: 'active' },
-        entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
+        billingSnapshot: getLeagueBillingSummary(context.league),
+        entitlementsSnapshot: resolveForLeague(context.league).entitlements,
       },
       homeRosterSnapshot,
       awayRosterSnapshot,
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       status: 'in_progress',
     });
@@ -1065,6 +1301,7 @@ async function createGameForUser(userId, payload) {
       trackedLeagueTeamId: payload.trackedLeagueTeamId,
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       status: 'in_progress',
       rosterSnapshot: context.rosterSnapshot,
@@ -1073,10 +1310,10 @@ async function createGameForUser(userId, payload) {
     return sanitizeGame(game);
   }
 
-  const ownedTeam = await assertTeamOwnership(userId, payload.teamId);
-  if (!isTeamActive(ownedTeam)) {
-    throw new ApiError(402, 'An active Team subscription is required to track games');
-  }
+  // Tracking is free (T-12): ownership is still required, but no active-subscription
+  // gate — a Starter team can create and track games. Starter maxTeams is a
+  // config-driven fast-follow (F-02).
+  const team = await assertTeamOwnership(userId, payload.teamId);
   const game = await createGame({
     ownerUserId: userId,
     teamId: payload.teamId,
@@ -1086,6 +1323,9 @@ async function createGameForUser(userId, payload) {
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
     videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
     status: 'in_progress',
+    // Audit H7: freeze entitlements at record time (mirrors the dual-team
+    // participant snapshot) so a later downgrade never retroactively locks this game.
+    entitlementsSnapshot: resolveForTeam(team).entitlements,
   });
 
   return sanitizeGame(game);
@@ -1155,6 +1395,7 @@ async function listGamesForUser(userId, filter = {}) {
       opponent: game.opponent ?? null,
       status: game.status,
       scheduledAt: game.scheduledAt ?? null,
+      venue: game.venue ?? null,
       completedAt: game.completedAt ?? null,
       eventCount: (game.events || []).length,
       createdAt: game.createdAt,
@@ -1179,6 +1420,12 @@ async function updateGameForUser(userId, gameId, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
     game.scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   }
+  // Venue is league-only: standalone games use the team's homeVenue instead, and
+  // nothing in the standalone UI surfaces a per-game location.
+  if (Object.prototype.hasOwnProperty.call(payload, 'venue') && game.gameContext === 'league') {
+    game.venue = payload.venue?.trim() || null;
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
     game.videoUrl = payload.videoUrl?.trim() || null;
   }
@@ -1275,6 +1522,25 @@ async function getGameForUser(userId, gameId) {
 
   const aiSummary = sanitizeAiSummary(game.aiSummary);
 
+  // T-14: light server guard on premium view data. Read the (frozen) entitlement
+  // surface for the tracked team — absent keys default to false — and omit replay
+  // clips / the shot-map snapshot when unentitled, so a scraper can't pull data the
+  // UI hides. Downgrade-safe: for recorded games this reads the frozen snapshot.
+  const viewEntitlements = team?.entitlements || {};
+  const highlights = viewEntitlements.canViewReplay
+    ? buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc))
+    : [];
+  const recap = buildGameRecap(
+    game,
+    game.trackingMode === 'dual_team' ? participants : teamDoc,
+    boxScore
+  );
+  if (recap && !viewEntitlements.canViewShotMaps) {
+    recap.shotSnapshot = null;
+  }
+
+  const canManageRoster = await canManageGameRoster(userId, game);
+
   return {
     game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
@@ -1315,18 +1581,15 @@ async function getGameForUser(userId, gameId) {
           logo: league.logo?.url ? { url: transformCloudinaryUrl(league.logo.url) } : null,
         }
       : null,
-    highlights: buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc)),
+    highlights,
     boxScore,
     replayFilters: game.trackingMode === 'dual_team' ? ['all', 'home', 'away'] : ['all'],
     teamEntitlements: team.entitlements,
-    recap: buildGameRecap(
-      game,
-      game.trackingMode === 'dual_team' ? participants : teamDoc,
-      boxScore
-    ),
+    recap,
     gameSummary,
     aiSummary,
     canEditCompletedGame: canEditCompleted,
+    canManageRoster,
   };
 }
 
@@ -1395,12 +1658,7 @@ function requireBothLineups(game) {
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
 
-  if (game.gameContext === 'standalone' && game.teamId) {
-    const gameTeam = await findTeamById(String(game.teamId));
-    if (gameTeam && !isTeamActive(gameTeam)) {
-      throw new ApiError(402, 'An active Team subscription is required to track stats');
-    }
-  }
+  // Tracking is free (T-12): no active-subscription gate on appending events.
 
   const context = await resolveGameTeamContext(userId, game);
   const insertBeforeEventId = options.insertBeforeEventId || null;
@@ -1602,7 +1860,12 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
   const game = await assertGameAccess(userId, gameId);
   if (game.status !== 'in_progress') {
-    throw new ApiError(400, 'Cannot change lineup on a completed game');
+    throw new ApiError(
+      400,
+      game.status === 'scheduled'
+        ? 'Cannot change lineup on a game that has not started'
+        : 'Cannot change lineup on a completed game'
+    );
   }
 
   const payload = Array.isArray(payloadOrPlayerIds)
@@ -1804,5 +2067,8 @@ module.exports = {
   canEditStandaloneDualGame,
   canAccessGame,
   resolveDualGameParticipants,
+  resolveRosterTargetForGame,
+  addPlayerToGameRoster,
+  canManageGameRoster,
   HIGHLIGHT_STAT_TYPES,
 };

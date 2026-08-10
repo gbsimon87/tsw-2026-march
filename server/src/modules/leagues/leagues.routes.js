@@ -46,6 +46,7 @@ leaguesRouter.post(
 );
 leaguesRouter.get('/:leagueId/standings', asyncHandler(controller.standings));
 leaguesRouter.get('/:leagueId/games', asyncHandler(controller.games));
+leaguesRouter.post('/:leagueId/games/bulk', asyncHandler(controller.bulkCreateGames));
 leaguesRouter.post(
   '/:leagueId/logo',
   upload.single('logo'),
@@ -114,6 +115,15 @@ leaguesRouter.post(
 leaguesRouter.post(
   '/:leagueId/teams/:leagueTeamId/join-requests/:requestId/cancel',
   asyncHandler(controller.cancelJoin)
+);
+leaguesRouter.get('/:leagueId/data-completeness', asyncHandler(controller.dataCompleteness));
+leaguesRouter.post(
+  '/:leagueId/data-completeness/dismissals',
+  asyncHandler(controller.dismissDataIssue)
+);
+leaguesRouter.delete(
+  '/:leagueId/data-completeness/dismissals/:issueKey',
+  asyncHandler(controller.restoreDataIssue)
 );
 
 module.exports = {

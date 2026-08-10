@@ -43,9 +43,11 @@ jest.mock('../../config/env', () => ({
 
 const {
   isLeagueActive,
-  getLeagueEntitlements,
   getLeagueBillingSummary,
 } = require('../../modules/billing/billing.service');
+// Audit M11: entitlement resolution is via the central resolver, not the deleted
+// getLeagueEntitlements map.
+const { resolveForLeague } = require('../../modules/billing/entitlements.service');
 
 // Mirrors the production We-ball Saturday document exactly:
 // manually set plan + status, no Stripe fields attached.
@@ -89,8 +91,8 @@ describe('We-ball Saturday backward compatibility', () => {
     expect(isLeagueActive(league)).toBe(true);
   });
 
-  test('31.3 getLeagueEntitlements returns all true', () => {
-    const entitlements = getLeagueEntitlements(league);
+  test('31.3 resolveForLeague returns all premium entitlements for the comp league', () => {
+    const { entitlements } = resolveForLeague(league);
     expect(entitlements.canManageLeague).toBe(true);
     expect(entitlements.canTrackStats).toBe(true);
     expect(entitlements.canViewReplay).toBe(true);
@@ -113,7 +115,7 @@ describe('We-ball Saturday backward compatibility', () => {
   test('31.5 plan field remains pro after reading through billing functions (not mutated)', () => {
     const leagueCopy = buildWeballLeague();
     isLeagueActive(leagueCopy);
-    getLeagueEntitlements(leagueCopy);
+    resolveForLeague(leagueCopy);
     getLeagueBillingSummary(leagueCopy);
     expect(leagueCopy.plan).toBe('pro');
   });
@@ -121,7 +123,7 @@ describe('We-ball Saturday backward compatibility', () => {
   test('31.6 subscriptionStatus remains active after reading through billing functions', () => {
     const leagueCopy = buildWeballLeague();
     isLeagueActive(leagueCopy);
-    getLeagueEntitlements(leagueCopy);
+    resolveForLeague(leagueCopy);
     getLeagueBillingSummary(leagueCopy);
     expect(leagueCopy.subscriptionStatus).toBe('active');
   });

@@ -55,7 +55,13 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_ID_PRO_MONTHLY
+      - key: STRIPE_PRICE_ID_TEAM_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ID_TEAM_SEASON
+        sync: false
+      - key: STRIPE_PRICE_ID_LEAGUE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ID_LEAGUE_SEASON
         sync: false
       - key: STRIPE_SUCCESS_URL
         sync: false
@@ -161,7 +167,13 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_ID_PRO_MONTHLY
+      - key: STRIPE_PRICE_ID_TEAM_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ID_TEAM_SEASON
+        sync: false
+      - key: STRIPE_PRICE_ID_LEAGUE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ID_LEAGUE_SEASON
         sync: false
       - key: STRIPE_SUCCESS_URL
         sync: false

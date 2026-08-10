@@ -69,7 +69,7 @@ field to the sanitizer).
    - Public league pages: season selector (`PublicLeagueStandingsPage.jsx`, `PublicLeagueGamesPage.jsx`, leaders view)
    - Client tests (Vitest + RTL)
 4. **Docs**
-   - `billingInterval` vs `Season` naming-collision comment in `leagues.repository.js` + `docs/billing.md` callout
+   - `billingInterval` vs `Season` naming-collision comment in `leagues.repository.js`
 
 ## 5. Task checklist
 
@@ -99,7 +99,7 @@ See the live TodoWrite list in the active session for granular in-progress track
   Production rollout must follow the staged sequence in §10 of the plan
   (additive schema deploy → backfill → index swap → contract).
 - **`billingInterval` naming collision** with the `Season` entity is documented
-  (code comment + `docs/billing.md`) but remains an inherent naming overlap.
+  (code comment in `leagues.repository.js`) but remains an inherent naming overlap.
 - Client test suite still carries ~19 pre-existing OPT-026 drift failures in
   unrelated files (feed/games/court) — untouched by this feature.
 

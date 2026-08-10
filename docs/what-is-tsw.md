@@ -27,7 +27,7 @@ Team roles: Manager, Helper, Player
 Public league pages (standings, games, team pages, player profiles)
 League managers (multi-admin support)
 "My Sporty" page — player's league profile overview
-Pro features (Team Pro: $12/mo or $89/season per team; League Pro: $49/mo or $299/season per league)
+Pro features (Team Pro, per team; League Pro, per league — see [PROJECT-KNOWLEDGE.md](./PROJECT-KNOWLEDGE.md) §6 for the prices in today's code, and [pricing-overhaul/](./pricing-overhaul/) for the planned redesign)
 Replay tab — event-by-event progression with live-updating box score
 Public shot maps — visual shot location charts on public game pages
 Priority billing support (stated, not technically enforced)
@@ -39,4 +39,4 @@ Recreational / amateur coaches A coach of a local rec league team, school team, 
 League administrators/organizers Someone who runs a recreational basketball league (5-20 teams) Manage the full league: standings, team rosters, game scheduling, public-facing pages for all teams
 Semi-pro / competitive club teams Club teams, AAU programs, academy teams Serious stat review — shot maps, replay analysis, season trends, public player pages for recruiting exposure
 
-For current, shipped pricing and the entitlement model, see [PROJECT-KNOWLEDGE.md](./PROJECT-KNOWLEDGE.md) §6 and [billing.md](./billing.md). (A historical pricing-strategy proposal that previously lived here has been removed; the shipped model — Team Pro $12/mo·$89/season, League Pro $49/mo·$299/season — is the source of truth.)
+For the billing/entitlement model as it exists in code today, see [PROJECT-KNOWLEDGE.md](./PROJECT-KNOWLEDGE.md) §6. **A pricing/billing overhaul is planned** — [pricing-overhaul/](./pricing-overhaul/) is the source of truth for the future model (3 plans, free tracking, config-driven catalog). The former `billing.md` was removed 2026-07-16.
