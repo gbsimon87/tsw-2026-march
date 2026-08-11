@@ -1,6 +1,6 @@
 // Central entitlement resolver. Replaces the scattered isTeamActive/isLeagueActive
 // checks and the dead auth.service league path.
-// See docs/pricing-overhaul/05-architecture.md §2, 08-entitlements-and-gating.md.
+// See docs/pricing.md.
 
 jest.mock('../../config/env', () => ({ env: {} }));
 

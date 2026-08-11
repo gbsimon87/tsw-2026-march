@@ -12,6 +12,7 @@
 ```bash
 bash scripts/bootstrap.sh
 pnpm check-env
+pnpm check-secrets
 pnpm dev
 ```
 
@@ -19,6 +20,7 @@ pnpm dev
 
 ```bash
 pnpm check-env
+pnpm check-secrets
 pnpm lint
 pnpm test
 pnpm build

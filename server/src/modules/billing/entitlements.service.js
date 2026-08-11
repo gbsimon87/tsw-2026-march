@@ -6,7 +6,7 @@
 // billingSource, mirroring the compute-cheaply-with-a-request-cache convention of
 // the league-aggregate materialization path.
 //
-// Design: docs/pricing-overhaul/05-architecture.md §2, 08-entitlements-and-gating.md.
+// Design: docs/pricing.md.
 
 const { entitlementsForPlan, normalizePlanId, getPlan } = require('./plan-catalog');
 

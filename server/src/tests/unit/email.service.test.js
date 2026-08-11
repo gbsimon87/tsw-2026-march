@@ -13,7 +13,8 @@ jest.mock('../../config/env', () => ({
 }));
 
 const { logger } = require('../../config/logger');
-const { sendTemplateEmailAsync } = require('../../services/email.service');
+const { env } = require('../../config/env');
+const { sendTemplateEmail, sendTemplateEmailAsync } = require('../../services/email.service');
 
 function flushMicrotasksAndImmediate() {
   return new Promise((resolve) => setImmediate(resolve));
@@ -62,5 +63,29 @@ describe('sendTemplateEmailAsync (OPT-020)', () => {
     // degrade to a warn fallback, so no async error is logged. Either way the
     // caller was never affected — assert we got here without an unhandled throw.
     errorSpy.mockRestore();
+  });
+
+  test('fallback logs do not contain token-bearing email text', async () => {
+    const originalApiKey = env.RESEND_API_KEY;
+    env.RESEND_API_KEY = '';
+    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await sendTemplateEmail({
+        to: 'a@example.com',
+        subject: 'Reset password',
+        text: 'Reset at https://example.com/reset?token=secret-token',
+        fallbackLabel: 'password_reset',
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        { to: 'a@example.com', fallbackLabel: 'password_reset' },
+        'Resend not configured; email not sent'
+      );
+      expect(warnSpy.mock.calls.flat().join(' ')).not.toContain('secret-token');
+    } finally {
+      env.RESEND_API_KEY = originalApiKey;
+      warnSpy.mockRestore();
+    }
   });
 });

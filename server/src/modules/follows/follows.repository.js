@@ -7,7 +7,7 @@ const { applyIdCursor } = require('../../utils/pagination');
 // ['user'] to also cover 'league' and 'leagueTeam' — an additive change with no
 // migration (existing 'user' rows are untouched). `targetId` intentionally has
 // no `ref` because it is polymorphic. Standalone `Team` is deliberately absent
-// (no public surface / visibility model yet). See docs/follow-system-teams-leagues/.
+// (no public surface / visibility model yet).
 const followSchema = new mongoose.Schema(
   {
     followerUserId: {

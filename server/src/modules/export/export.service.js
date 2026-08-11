@@ -12,7 +12,7 @@ const { toCsvSection, joinSections } = require('../../utils/csv');
 // grant access to a league's org data. The message says "League" accordingly; it no
 // longer over-promises "Team Pro". The advertised Team-Pro-scoped CSV export
 // (a team's own season stats) is a separate, unbuilt endpoint — see
-// docs/pricing-overhaul/OUTSTANDING-MANUAL-ACTIONS.md.
+// docs/pricing-manual-actions.md.
 function assertCanExportCsv(league) {
   if (!resolveForLeague(league).entitlements.canExportCsv) {
     throw new ApiError(402, 'An active League subscription is required to export league CSV data');

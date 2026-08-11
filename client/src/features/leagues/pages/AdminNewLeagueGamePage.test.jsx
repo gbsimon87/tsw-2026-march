@@ -60,10 +60,8 @@ describe('AdminNewLeagueGamePage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/fewer than five active players/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Home Squad 4\/5/i })).toBeInTheDocument();
     });
-
-    expect(screen.getByText(/Home Squad: 4\/5 active/i)).toBeInTheDocument();
 
     const submitButton = screen.getByRole('button', { name: /Create and Start Tracking/i });
     expect(submitButton).toBeEnabled();

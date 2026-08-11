@@ -2,7 +2,7 @@
 //
 // The four Stripe test-clock scenarios (trial→active, dunning, cancel, reactivate)
 // are exercised manually against a live Stripe + CLI webhook forwarding — see
-// docs/pricing-overhaul/stripe-test-clock-runbook.md. This file is their
+// docs/stripe-test-clock-runbook.md. This file is their
 // CI-runnable equivalent: it drives one resource doc through the same webhook
 // sequence via the real handleWebhookEvent and asserts the *resolved entitlements*
 // (real entitlements.service + plan-catalog, no mocks) after every transition.

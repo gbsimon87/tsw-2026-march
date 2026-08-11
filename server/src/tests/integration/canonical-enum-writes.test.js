@@ -1,4 +1,4 @@
-// Audit fix H9 (docs/pricing-overhaul/18-audit-findings.md) — regression net for
+// Audit fix H9 (docs/pricing.md) — regression net for
 // the canonical-enum write paths that shipped broken through a green suite (C1/C2).
 //
 // The existing tests mock the repositories, so a service writing a legacy plan

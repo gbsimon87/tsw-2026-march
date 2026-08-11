@@ -202,7 +202,7 @@ const seededLeagueBlueprint = {
   teamNames: ['City Ballers', 'Coastal Heat', 'Skyline Elite', 'Valley Storm', 'Late Entry FC'],
 };
 
-// Data Health (docs/data-completeness/) needs each severity tier represented in
+// Data Health (docs/data-completeness.md) needs each severity tier represented in
 // dev data, otherwise the tab renders only cosmetic Low warnings and the HIGH
 // checks — the ones that mean "the standings are wrong" — can never be clicked
 // through. These constants drive the deliberately-broken fixtures below.
@@ -1152,7 +1152,6 @@ async function main() {
 
     console.log('Seed complete');
     console.log(`Users: ${seededUsers.length}`);
-    console.log(`Password: ${seedConfig.password}`);
     console.log(`Teams: ${teamCount}`);
     console.log(`Leagues: ${leagueCount}`);
     console.log(`League Teams: ${leagueTeamCount}`);

@@ -21,7 +21,7 @@ const {
 //   assertFollowable(id, viewerUserId) -> throws ApiError(404) if the target is
 //       missing or not visible to this viewer; league/leagueTeam gate visibility
 //       by REUSING assertLeagueVisible (never a hand-rolled isPublic check —
-//       PROJECT-KNOWLEDGE.md §4 / follow-system decision D8)
+//       PROJECT-KNOWLEDGE.md authorization rules)
 //   hydrateMany(rows, viewerUserId)    -> batch-fetch + shape the following-list
 //       entries for this type (no N+1). For league/leagueTeam this re-checks
 //       CURRENT visibility and nulls profileHref server-side for now-private

@@ -61,7 +61,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             <img
               alt="TSW Blue logo badge"
               class="h-full w-full object-cover"
+              decoding="async"
+              height="80"
+              loading="lazy"
+              sizes="80px"
               src="https://example.com/team-logo.png"
+              width="80"
             />
           </div>
           <div
@@ -92,19 +97,10 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               </p>
             </div>
             <div
-              class="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.24em]"
+              class="mt-4 text-[11px] font-bold uppercase tracking-[0.24em]"
               style="color: rgb(212, 175, 55);"
             >
-              <span>
-                Final
-              </span>
-              <span
-                class="h-1 w-1 rounded-full"
-                style="background-color: rgb(56, 189, 248);"
-              />
-              <span>
-                Live Box Score
-              </span>
+              Final
             </div>
           </div>
         </div>
@@ -112,7 +108,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
         >
           <div
-            class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+            class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
           >
             <p
               class="text-sm text-slate-200"
@@ -127,12 +123,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
                 class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
               >
                 <p
-                  class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                  class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
                 >
                   PTS
                 </p>
                 <p
-                  class="mt-1 font-black text-xl text-slate-100"
+                  class="mt-1 text-center font-black text-xl text-slate-100"
                 >
                   70
                 </p>
@@ -141,12 +137,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
                 class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
               >
                 <p
-                  class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                  class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
                 >
                   REB
                 </p>
                 <p
-                  class="mt-1 font-black text-xl text-slate-100"
+                  class="mt-1 text-center font-black text-xl text-slate-100"
                 >
                   10
                 </p>
@@ -155,12 +151,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
                 class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
               >
                 <p
-                  class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                  class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
                 >
                   AST
                 </p>
                 <p
-                  class="mt-1 font-black text-xl text-slate-100"
+                  class="mt-1 text-center font-black text-xl text-slate-100"
                 >
                   12
                 </p>
@@ -232,14 +228,19 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             <img
               alt="Jordan Miles card avatar"
               class="h-full min-h-[9.5rem] w-full object-cover"
+              decoding="async"
+              height="152"
+              loading="lazy"
+              sizes="120px"
               src="https://example.com/team-logo.png"
+              width="120"
             />
           </div>
           <div
             class="min-w-0"
           >
             <h3
-              class="text-[1.9rem] font-black leading-[1.02] text-white "
+              class="text-[1.75rem] font-black leading-[1.02] text-white "
               style="display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;"
             >
               Jordan Miles
@@ -261,12 +262,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 PPG
               </p>
               <p
-                class="mt-1 font-black text-xl text-slate-100"
+                class="mt-1 text-center font-black text-xl text-slate-100"
               >
                 12.0
               </p>
@@ -275,12 +276,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 RPG
               </p>
               <p
-                class="mt-1 font-black text-xl text-slate-100"
+                class="mt-1 text-center font-black text-xl text-slate-100"
               >
                 5.0
               </p>
@@ -289,12 +290,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 APG
               </p>
               <p
-                class="mt-1 font-black text-xl text-slate-100"
+                class="mt-1 text-center font-black text-xl text-slate-100"
               >
                 4.0
               </p>
@@ -361,30 +362,23 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             <img
               alt="TSW Blue card logo"
               class="h-full w-full object-cover"
+              decoding="async"
+              height="80"
+              loading="lazy"
+              sizes="80px"
               src="https://example.com/team-logo.png"
+              width="80"
             />
           </div>
           <div
             class="min-w-0 flex-1"
           >
             <h3
-              class="text-[1.9rem] font-black leading-[1.02] text-white "
+              class="text-[1.75rem] font-black leading-[1.02] text-white "
               style="display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;"
             >
               TSW Blue
             </h3>
-            <p
-              class="text-sm font-medium text-slate-300 mt-3"
-            >
-              12
-               completed public games
-            </p>
-            <p
-              class="mt-4 text-[11px] font-bold uppercase tracking-[0.24em]"
-              style="color: rgb(212, 175, 55);"
-            >
-              Public Team Snapshot
-            </p>
           </div>
         </div>
         <div
@@ -397,12 +391,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 Points
               </p>
               <p
-                class="mt-1 font-black text-2xl text-white"
+                class="mt-1 text-center font-black text-2xl text-white"
               >
                 88
               </p>
@@ -411,12 +405,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 FG2%
               </p>
               <p
-                class="mt-1 font-black text-xl text-slate-100"
+                class="mt-1 text-center font-black text-xl text-slate-100"
               >
                 50%
               </p>
@@ -425,12 +419,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 FG3%
               </p>
               <p
-                class="mt-1 font-black text-xl text-slate-100"
+                class="mt-1 text-center font-black text-xl text-slate-100"
               >
                 40%
               </p>
@@ -439,12 +433,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
             >
               <p
-                class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
+                class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
               >
                 FT%
               </p>
               <p
-                class="mt-1 font-black text-xl text-slate-100"
+                class="mt-1 text-center font-black text-xl text-slate-100"
               >
                 75%
               </p>

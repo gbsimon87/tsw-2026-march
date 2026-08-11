@@ -120,6 +120,26 @@ function getActiveCourt() {
   return screen.getAllByTestId('interactive-court-image').at(-1);
 }
 
+function pointerDown(element, coordinates = {}) {
+  fireEvent(element, new MouseEvent('pointerdown', { bubbles: true, ...coordinates }));
+}
+
+async function waitForEventPicker() {
+  await waitFor(() => {
+    expect(screen.getAllByRole('button', { name: /Close event picker/i }).length).toBeGreaterThan(
+      0
+    );
+  });
+}
+
+async function selectPickerPlayer(playerName) {
+  const button = within(getEventPicker()).getByRole('button', {
+    name: playerButtonName(playerName),
+  });
+  fireEvent.click(button);
+  await waitFor(() => expect(button).toHaveClass('bg-slate-900'));
+}
+
 function getFirstButtonByName(name) {
   return screen.getAllByRole('button', { name })[0];
 }
@@ -281,7 +301,7 @@ describe('GameTrackPage', () => {
     expect(screen.queryByText(/Fullscreen Tracking/i)).not.toBeInTheDocument();
   });
 
-  test('inserts a missed quick stat before a selected recent event', async () => {
+  test('inserts a quick stat before a selected recent event', async () => {
     currentResponse = createResponse({
       game: {
         events: [
@@ -297,18 +317,25 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Events' }));
       expect(screen.getByText(/Recent Events/i)).toBeInTheDocument();
     });
 
-    const insertButtons = screen.getAllByRole('button', { name: 'Insert Before' });
+    const insertButtons = screen.getAllByRole('button', {
+      name: 'Insert stat before this event',
+    });
     fireEvent.click(insertButtons[1]);
-    fireEvent.click(screen.getByRole('button', { name: 'Assist' }));
+    pointerDown(getActiveCourt(), { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
 
     await waitFor(() => {
-      expect(apiMocks.insertEventBefore).toHaveBeenCalledWith('game-1', 'event-2', {
-        playerId: 'player-1',
-        statType: 'AST',
-      });
+      expect(apiMocks.insertEventBefore).toHaveBeenCalledWith(
+        'game-1',
+        'event-2',
+        expect.objectContaining({ playerId: 'player-1', statType: 'STL' })
+      );
     });
   });
 
@@ -378,7 +405,7 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(getFirstButtonByName('Home Squad')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Select Home Squad' })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
@@ -387,7 +414,7 @@ describe('GameTrackPage', () => {
       expect(screen.getAllByRole('button', { name: 'Away Squad' }).length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(getActiveCourt());
+    pointerDown(getActiveCourt());
 
     await waitFor(() => {
       expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0);
@@ -523,8 +550,6 @@ describe('GameTrackPage', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
-    fireEvent.click(getLastButtonByName('Blake'));
-
     const court = getActiveCourt();
     court.getBoundingClientRect = () => ({
       left: 0,
@@ -538,7 +563,9 @@ describe('GameTrackPage', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.click(court, { clientX: 475, clientY: 900 });
+    pointerDown(court, { clientX: 475, clientY: 900 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
 
     await waitFor(() => {
@@ -551,10 +578,10 @@ describe('GameTrackPage', () => {
       within(overlay).queryByRole('button', { name: playerButtonName('Flynn') })
     ).not.toBeInTheDocument();
     expect(
-      within(overlay).queryByRole('button', { name: playerButtonName('Blake') })
+      within(overlay).queryByRole('button', { name: playerButtonName('Alex') })
     ).not.toBeInTheDocument();
     expect(
-      within(overlay).getByRole('button', { name: playerButtonName('Alex') })
+      within(overlay).getByRole('button', { name: playerButtonName('Blake') })
     ).toBeInTheDocument();
     expect(
       within(overlay).getByRole('button', { name: playerButtonName('Casey') })
@@ -597,7 +624,9 @@ describe('GameTrackPage', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.click(court, { clientX: 250, clientY: 800 });
+    pointerDown(court, { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'FT-' }));
 
     await waitFor(() => {
@@ -621,10 +650,12 @@ describe('GameTrackPage', () => {
       expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
     });
 
-    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual({ statType: 'OPP_REB' });
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ statType: 'OPP_REB' })
+    );
   });
 
-  test('records modal quick stats without coordinates and modal opponent scoring without player selection', async () => {
+  test('records court quick stats and opponent scoring', async () => {
     currentResponse = createResponse({
       game: {
         currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
@@ -639,8 +670,6 @@ describe('GameTrackPage', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
-    fireEvent.click(getLastButtonByName('Casey'));
-
     const court = getActiveCourt();
     court.getBoundingClientRect = () => ({
       left: 0,
@@ -654,29 +683,35 @@ describe('GameTrackPage', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.click(court, { clientX: 250, clientY: 800 });
+    pointerDown(court, { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
 
     await waitFor(() => {
-      expect(apiMocks.appendEvent).toHaveBeenCalledWith('game-1', {
-        playerId: 'player-3',
-        statType: 'STL',
-      });
+      expect(apiMocks.appendEvent).toHaveBeenCalledWith(
+        'game-1',
+        expect.objectContaining({ playerId: 'player-1', statType: 'STL' })
+      );
+      expect(screen.queryByRole('button', { name: /Close event picker/i })).not.toBeInTheDocument();
     });
 
-    fireEvent.click(court, { clientX: 250, clientY: 800 });
+    const updatedCourt = getActiveCourt();
+    updatedCourt.getBoundingClientRect = court.getBoundingClientRect;
+    pointerDown(updatedCourt, { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: '+2' }));
 
     await waitFor(() => {
-      expect(apiMocks.appendEvent).toHaveBeenCalledWith('game-1', {
-        statType: 'OPP_FG2_MADE',
-      });
+      expect(apiMocks.appendEvent).toHaveBeenCalledWith(
+        'game-1',
+        expect.objectContaining({ statType: 'OPP_FG2_MADE' })
+      );
     });
 
     const quickStatPayload = apiMocks.appendEvent.mock.calls[0][1];
-    expect(quickStatPayload.x).toBeUndefined();
-    expect(quickStatPayload.y).toBeUndefined();
-    expect(quickStatPayload.zoneId).toBeUndefined();
+    expect(quickStatPayload).toEqual(expect.objectContaining({ x: 50, y: 85.11, zoneId: 'PAINT' }));
   });
 
   test('updates on-court and bench lists after a substitution', async () => {
@@ -693,9 +728,9 @@ describe('GameTrackPage', () => {
       expect(screen.getByRole('button', { name: playerButtonName('Alex') })).toBeInTheDocument();
     });
 
-    const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'player-1' } });
-    fireEvent.change(selects[1], { target: { value: 'player-6' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Subs' }));
+    fireEvent.click(getLastButtonByName('Alex'));
+    fireEvent.click(getLastButtonByName('Flynn'));
     fireEvent.click(screen.getByRole('button', { name: /Record Sub/i }));
 
     await waitFor(() => {
@@ -712,8 +747,7 @@ describe('GameTrackPage', () => {
     });
 
     expect(screen.getByRole('button', { name: playerButtonName('Flynn') })).toBeInTheDocument();
-    expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Substitution recorded/i)).toBeInTheDocument();
+    expect(screen.getByText(/On Bench/i)).toBeInTheDocument();
   });
 
   test('renders the score summary and tracking quick actions', async () => {
@@ -791,7 +825,8 @@ describe('GameTrackPage', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.click(court, { clientX: 250, clientY: 800 });
+    pointerDown(court, { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
 
     const overlay = getEventPicker();
     expect(within(overlay).getByRole('button', { name: 'STL' })).toBeInTheDocument();

@@ -28,6 +28,9 @@ jobs:
       - name: Validate env templates
         run: pnpm check-env
 
+      - name: Scan for secrets
+        run: pnpm check-secrets
+
       - name: Lint
         run: pnpm lint
 

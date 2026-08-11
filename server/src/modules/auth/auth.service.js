@@ -264,7 +264,7 @@ async function resetPassword(token, newPassword) {
 let cachedSystemUserId = null;
 
 // Reserved author for auto-generated feed content (see
-// docs/auto-feed-generation/000-TRACKER.md). Cached after first lookup since
+// docs/auto-feed.md). Cached after first lookup since
 // the system user never changes for the lifetime of the process.
 async function getSystemUserId() {
   if (cachedSystemUserId) {

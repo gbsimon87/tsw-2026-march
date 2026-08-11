@@ -13,6 +13,7 @@
 ## Testing
 
 - [ ] `pnpm check-env`
+- [ ] `pnpm check-secrets`
 - [ ] `pnpm lint`
 - [ ] `pnpm test`
 - [ ] `pnpm build`

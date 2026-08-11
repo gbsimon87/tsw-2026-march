@@ -1,44 +1,26 @@
-# Security Policy
+# Security
 
-## Reporting a Vulnerability
+Report vulnerabilities privately to the maintainer. Include the affected
+component, reproduction, and impact; do not open a public issue containing
+sensitive details.
 
-Do not open public issues for sensitive vulnerabilities.
+## Controls
 
-Report privately to your project maintainer/security contact with:
+- Never commit secrets. Render stores deployed secrets; dev and production use
+  separate MongoDB, JWT, OAuth, Resend, Stripe, Cloudinary, and OpenAI values.
+- Run `pnpm check-secrets` before pushing. The pre-commit hook scans staged
+  content and CI scans every tracked file.
+- Keep local env files owner-readable only (`chmod 600 env/*/.env.*`).
+- All mutations require the double-submit `x-csrf-token`; the validated Google
+  OAuth callback is exempt.
+- CORS uses `CLIENT_ORIGIN` in production and permits local-network origins only
+  in development.
+- Helmet and request IDs are applied globally.
+- Rate limits: API 300/15 minutes; login/register/refresh 20/15 minutes; auth
+  recovery 8/15 minutes; checkout 5/10 minutes; contact 5/hour.
+- Refresh tokens are hashed, persisted, rotated, and expired with a TTL index.
+- Uploaded media is MIME- and size-limited before Cloudinary upload.
 
-- affected component and endpoint
-- reproduction steps
-- impact assessment
-- suggested remediation (if known)
-
-The maintainer will acknowledge receipt within 3 business days and provide remediation status updates until resolved.
-
-## Secret Management
-
-- Never commit `.env` files or production secrets. Env files live under `env/server/` and `env/client/` and are excluded from git. Production secrets are injected at deploy time through the Render dashboard — never stored in `render.yaml`.
-- Use separate credentials for prod (`main`) and dev (`dev`) environments. Note: `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are currently shared between both env files and should be rotated to distinct values per environment.
-- Rotate JWT, OAuth, Resend API key, Stripe secret and webhook keys, Cloudinary API secret, OpenAI API key, and database credentials after exposure or team-member offboarding.
-- SMTP variables (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, etc.) remain present in `env/server/.env.production` and `render.yaml` as legacy config from the nodemailer era. Email sending now runs exclusively through Resend. These SMTP vars are unused by the application and should be cleaned up to avoid confusion about active credentials.
-
-## Security Controls
-
-### CSRF Protection
-
-All non-idempotent requests (POST, PUT, PATCH, DELETE) require a valid `x-csrf-token` request header. The server issues a `_csrfSecret` HttpOnly cookie and a corresponding `XSRF-TOKEN` readable cookie on every response. Clients must echo the token back in the `x-csrf-token` header.
-
-The Google OAuth callback route (`/api/v1/auth/google/callback`) is exempt. For browsers that block third-party cookies (Safari ITP, Chrome Privacy Sandbox), a validated `Origin` header is accepted as a fallback.
-
-### Rate Limiting
-
-- General API (`/api/*`): 300 requests per 15-minute window.
-- Auth credential endpoints (`/register`, `/login`, `/refresh`): 20 requests per 15-minute window (`authCredentialLimiter`). Note: in-memory store, so per-process — revisit for multi-instance.
-- Auth recovery endpoints (forgot-password, reset-password, verify-email, request-verification): 8 requests per 15-minute window.
-- Contact form: 5 requests per hour.
-
-### HTTP Security Headers
-
-Helmet is applied globally to set security-relevant HTTP response headers (CSP, X-Frame-Options, etc.).
-
-### CORS
-
-In production, only origins matching `CLIENT_ORIGIN` are allowed. In development, any `localhost`, `127.0.0.1`, `192.168.x.x`, or `10.x.x.x` origin is permitted.
+Rotate affected credentials after exposure or team-member offboarding. The
+current rate-limit store is process-local; use a shared store before running
+multiple API instances.

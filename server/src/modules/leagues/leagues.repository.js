@@ -211,7 +211,7 @@ const leagueStandingsSchema = new mongoose.Schema(
 
 // Stage-1 (additive) index. The unique {leagueId, seasonId} compound index is
 // created by migrate-leaguestandings-season-index.js after the seasons
-// backfill runs — see docs/league-seasons/000-SEASONS-TRACKER.md.
+// backfill runs — see docs/league-seasons.md.
 leagueStandingsSchema.index({ leagueId: 1, seasonId: 1 });
 
 // OPT-011: materialised per-player league aggregates. One doc per
@@ -477,7 +477,7 @@ function saveLeagueManager(manager) {
 }
 
 // OPT-010: materialised standings read/write. seasonId scopes the doc to a
-// single season (see docs/league-seasons/000-SEASONS-TRACKER.md).
+// single season (see docs/league-seasons.md).
 function findLeagueStandings(leagueId, seasonId) {
   return LeagueStandings.findOne({ leagueId, seasonId });
 }

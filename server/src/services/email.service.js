@@ -27,10 +27,7 @@ async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLab
       throw new Error('RESEND_API_KEY is required in production to send emails.');
     }
 
-    logger.warn(
-      { to, fallbackLabel, text },
-      'Resend not configured; emitting local email fallback'
-    );
+    logger.warn({ to, fallbackLabel }, 'Resend not configured; email not sent');
     return { delivery: 'fallback' };
   }
 
@@ -48,10 +45,7 @@ async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLab
       throw new Error(error.message);
     }
 
-    logger.warn(
-      { err: error, to, fallbackLabel, text },
-      'Resend delivery failed; emitting local email fallback'
-    );
+    logger.warn({ err: error, to, fallbackLabel }, 'Resend delivery failed; email not sent');
     return { delivery: 'fallback' };
   }
 

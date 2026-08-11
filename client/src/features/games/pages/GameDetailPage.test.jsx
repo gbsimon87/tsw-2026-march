@@ -313,7 +313,7 @@ describe('GameDetailPage', () => {
     expect(screen.getByRole('tab', { name: 'Replay' })).toBeInTheDocument();
     expect(screen.getByTitle('vs Wildcats')).toHaveAttribute(
       'src',
-      'https://www.youtube.com/embed/dQw4w9WgXcQ'
+      'https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1'
     );
     expect(screen.queryByRole('tab', { name: 'Game Info' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Share Game Recap/i })).not.toBeInTheDocument();
@@ -388,7 +388,7 @@ describe('GameDetailPage', () => {
     expect(screen.getAllByText(/: Defensive Rebound/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Alex: 2PT Make/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
-    expect(screen.getByText('AST')).toBeInTheDocument();
+    expect(screen.getAllByText('AST').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /PTS/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /REB O\/D\/T/i })).toBeInTheDocument();
     expect(screen.getAllByText('0/1/1').length).toBeGreaterThan(0);
@@ -894,7 +894,10 @@ describe('GameDetailPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Game Video')).toBeInTheDocument();
+    expect(await screen.findByTitle('League Final')).toHaveAttribute(
+      'src',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1'
+    );
     const summaryHeading = screen.getByText('Game Summary');
     const gameStatsHeading = screen.getByText('Game Stats');
     expect(screen.getByText(/Home Squad held off Away Squad/i)).toBeInTheDocument();

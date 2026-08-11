@@ -996,7 +996,7 @@ describe('feed service', () => {
     });
   });
 
-  // PERF-002 (docs/performance-investigation): game_card creation must persist
+  // PERF-002 (historical performance investigation): game_card creation must persist
   // a cardSnapshot like player/team cards already do, so the feed read path
   // never pays the full getPublicGame pipeline per card on first render. Uses
   // the exact buildGameCardSnapshot key set (TSW-004 lesson: assert the shape,
