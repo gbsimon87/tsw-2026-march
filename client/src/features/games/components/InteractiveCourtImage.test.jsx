@@ -18,6 +18,10 @@ function setElementRect(element, rect) {
   }));
 }
 
+function pointerDown(element, coordinates) {
+  fireEvent(element, new MouseEvent('pointerdown', { bubbles: true, ...coordinates }));
+}
+
 function mockMatchMedia(matches) {
   const mediaQueryList = {
     matches,
@@ -56,7 +60,7 @@ describe('InteractiveCourtImage', () => {
     const image = screen.getByTestId('interactive-court-image');
     setElementRect(image, { width: 200, height: 400 });
 
-    fireEvent.click(image, { clientX: 50, clientY: 300 });
+    pointerDown(image, { clientX: 50, clientY: 300 });
 
     expect(onSelect).toHaveBeenCalledWith({ x: 25, y: 75 });
   });
@@ -68,7 +72,7 @@ describe('InteractiveCourtImage', () => {
     const image = screen.getByTestId('interactive-court-image');
     setElementRect(image, { width: 200, height: 400 });
 
-    fireEvent.click(image, { clientX: 50, clientY: 300 });
+    pointerDown(image, { clientX: 50, clientY: 300 });
 
     expect(onSelect).toHaveBeenCalledWith({ x: 75, y: 75 });
   });

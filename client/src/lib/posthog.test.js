@@ -37,7 +37,7 @@ describe('posthog lib', () => {
       api_host: 'https://app.posthog.com',
       autocapture: false,
       capture_pageview: false,
-      capture_pageleave: false,
+      capture_pageleave: true,
       disable_session_recording: true,
       persistence: 'localStorage+cookie',
     });

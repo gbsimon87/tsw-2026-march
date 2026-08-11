@@ -22,7 +22,7 @@ export function AppLayout() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
           <Link to="/pulse" className="text-lg font-semibold">
-            {import.meta.env.VITE_APP_NAME}
+            {import.meta.env.VITE_APP_NAME || 'TSW'}
           </Link>
 
           <nav className="ml-auto hidden items-center gap-4 md:flex">

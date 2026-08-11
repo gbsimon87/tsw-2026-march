@@ -105,7 +105,7 @@ describe('FeedPage', () => {
       'https://example.com/team-logo.png'
     );
     expect(screen.getByRole('button', { name: 'Create post' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Post' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'post-submit' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Create post' }));
 
@@ -135,7 +135,7 @@ describe('FeedPage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Post' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'post-submit' })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
@@ -157,7 +157,7 @@ describe('FeedPage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Post' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'post-submit' })).toBeInTheDocument();
     });
   });
 });
