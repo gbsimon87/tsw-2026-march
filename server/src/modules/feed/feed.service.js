@@ -246,7 +246,7 @@ function buildTeamCardSnapshot(payload) {
 // persists the result — self-backfilling, same pattern as the OPT-010/011/013
 // materialisations. `refresh: true` forces a live re-resolve + re-persist
 // (the "slim refresh path for stale cards").
-// PERF-002 (docs/performance-investigation): game_card creation snapshots the
+// PERF-002 (historical performance investigation): game_card creation snapshots the
 // card like player/team cards already do, so the feed read path never pays the
 // full getPublicGame pipeline (whole events[] doc + team/league lookups) per
 // card on first render. Best-effort: a resolve failure just creates the post
@@ -451,7 +451,7 @@ async function listFeedPosts(viewerUserId, options = {}) {
     ])
   );
 
-  // PERF-003 (docs/performance-investigation): sanitize posts concurrently
+  // PERF-003 (historical performance investigation): sanitize posts concurrently
   // instead of one-at-a-time — a page of snapshot-miss cards used to stack
   // its 3-6 fallback queries per card sequentially. Concurrency is bounded
   // below maxPoolSize (10) so a cold page can't exhaust the connection pool.
@@ -1072,7 +1072,7 @@ async function createHighlightClipPostForUser(userId, input) {
   return sanitizePost(post, userId);
 }
 
-// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): creates the
+// Auto Feed Generation (docs/auto-feed.md): creates the
 // system-authored game-card for a finalised public-league game. Mirrors
 // createGameCardPostForUser but skips the billing gate (the system user is
 // not a paying customer) and marks gameCard.auto so the partial unique index
@@ -1111,7 +1111,7 @@ async function autoCreateGameCardPost(systemUserId, game) {
 
 // Per-game cap on auto-generated highlight clips so one video-rich game can't
 // flood the feed. Priority favors made shots (most exciting) over misses/
-// assists/steals. See docs/auto-feed-generation/000-TRACKER.md (B3).
+// assists/steals. See docs/auto-feed.md (B3).
 const AUTO_HIGHLIGHT_CAP = 5;
 const AUTO_HIGHLIGHT_PRIORITY = [
   'FG3_MADE',
@@ -1198,7 +1198,7 @@ async function autoCreateHighlightClipPosts(systemUserId, game) {
   return { created, skipped, capped };
 }
 
-// Auto Feed Generation entry point (docs/auto-feed-generation/000-TRACKER.md):
+// Auto Feed Generation entry point (docs/auto-feed.md):
 // invoked post-response from games.service.js#scheduleAutoFeedForGame after a
 // game finishes. This is the SINGLE enforcement point for the public-league
 // restriction — private leagues and standalone games are never published,
@@ -1228,7 +1228,7 @@ async function autoPublishForFinalizedGame(gameId) {
   );
 }
 
-// Auto Feed Generation (B2, docs/auto-feed-generation/000-TRACKER.md): reverse
+// Auto Feed Generation (B2, docs/auto-feed.md): reverse
 // (delete) auto-generated posts for a league that just flipped from public to
 // private. Only removes system-authored auto content — a user's own manual
 // game_card/highlight_clip shares for that league's games are left alone.
@@ -1262,7 +1262,7 @@ module.exports = {
   buildGameCardSnapshot,
   buildPlayerCardSnapshot,
   buildTeamCardSnapshot,
-  // Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md).
+  // Auto Feed Generation (docs/auto-feed.md).
   autoPublishForFinalizedGame,
   autoCreateGameCardPost,
   autoCreateHighlightClipPosts,

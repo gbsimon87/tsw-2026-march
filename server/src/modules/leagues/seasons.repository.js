@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // A League Season scopes games/standings/stats to a bounded competitive
 // period. Rosters (LeagueTeam/LeaguePlayer/LeagueTeamMember/LeagueManager)
 // deliberately do NOT reference seasonId — they carry over across seasons
-// automatically (see docs/league-seasons/000-SEASONS-TRACKER.md decision #4).
+// automatically (see docs/league-seasons.md decision #4).
 const seasonSchema = new mongoose.Schema(
   {
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', required: true, index: true },

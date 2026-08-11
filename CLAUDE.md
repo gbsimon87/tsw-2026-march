@@ -60,12 +60,12 @@ Backfill scripts: `ENV_FILE=../env/server/.env.development node src/scripts/<nam
 - **Billing is resource-scoped** (per Team / per League), Stripe **hosted**
   Checkout (no client Stripe.js), webhook mounted before `express.json()`, Stripe
   is the source of truth. See [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md)
-  §6 for today's code, and [`docs/pricing-overhaul/`](docs/pricing-overhaul/) for the
-  planned pricing/billing redesign.
+  §6 for today's code, and [`docs/pricing.md`](docs/pricing.md) for the
+  current pricing/billing model.
 - **Routing**: feed is `/pulse`; admin is `/admin`; `/pricing` is dev-only.
 - **`OPT-###` comments** are an inline changelog of perf/correctness decisions —
-  don't delete them. The active tracker is
-  `docs/application-audit/000-OPTIMISATION-TRACKER.md`.
+  don't delete them. The old optimisation tracker was removed from `docs/`
+  because it no longer represented current build work.
 - **Frontend data fetching is mid-migration**: prefer TanStack Query (`useQuery`)
   for new pages; ~22 pages still fetch imperatively with `useEffect`. Named
   exports everywhere; Zod for validation; Tailwind inline; no path aliases.

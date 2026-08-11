@@ -82,7 +82,7 @@ async function findUserById(id) {
 async function findUsersByIds(ids) {
   const uniqueIds = [...new Set((ids || []).filter(Boolean).map(String))];
   if (uniqueIds.length === 0) return [];
-  // PERF-004 (docs/performance-investigation): both callers (feed creator
+  // PERF-004 (historical performance investigation): both callers (feed creator
   // batch, follows hydration) are read-only display paths.
   return User.find({ _id: { $in: uniqueIds } }).lean();
 }
@@ -121,7 +121,7 @@ const SYSTEM_USER_EMAIL = 'system@tsw.internal';
 const SYSTEM_USER_NAME = 'TSW';
 
 // Reserved account that authors auto-generated feed content (see
-// docs/auto-feed-generation/000-TRACKER.md). Has no passwordHash and
+// docs/auto-feed.md). Has no passwordHash and
 // authProvider:'system', so auth.service#login rejects it even without the
 // explicit guard there.
 async function findOrCreateSystemUser() {

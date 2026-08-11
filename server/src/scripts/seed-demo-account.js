@@ -14,7 +14,7 @@
 // documented login always works), but nothing else on that account is
 // touched or deleted.
 //
-// See docs/demo-data-generation/ for the full plan, tracker, and decisions.
+// See docs/demo-data-generation.md for operating notes.
 //
 // Usage:
 //   node src/scripts/seed-demo-account.js            # create/update demo data
@@ -262,7 +262,7 @@ async function upsertLeague(blueprint, ownerUserId) {
   });
 
   // League Seasons: every league needs a resolvable currentSeasonId (see
-  // docs/league-seasons/000-SEASONS-TRACKER.md) — new seeded leagues get one
+  // docs/league-seasons.md) — new seeded leagues get one
   // active season upfront, matching what backfill-league-seasons.js produces
   // for pre-existing leagues.
   const season = await Season.create({
@@ -857,7 +857,7 @@ async function main() {
 
     log('');
     log('Demo seed complete.');
-    log(`Login: ${DEMO_USER.email} / ${DEMO_USER.password}`);
+    log(`Login email: ${DEMO_USER.email}`);
     log(
       'Reminder: run `node src/scripts/backfill-league-standings.js` to warm materialized standings/player-stats (optional — compute-on-miss serves the same data live).'
     );

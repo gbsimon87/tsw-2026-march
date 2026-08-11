@@ -12,7 +12,7 @@
 // - --dry-run: prints per-doc before→after + counts; no writes.
 //
 // RUN ORDER: always --dry-run first, on a snapshot. Tighten the schema enums only
-// AFTER this reports zero non-canonical values. See docs/pricing-overhaul/13-migration-plan.md.
+// AFTER this reports zero non-canonical values. See docs/pricing.md.
 //
 // Usage:
 //   node src/scripts/migrate-unify-plan-enums.js --dry-run

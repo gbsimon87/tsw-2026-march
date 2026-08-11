@@ -53,7 +53,7 @@ async function main() {
 
   await connectDb();
 
-  // League Seasons (docs/league-seasons/000-SEASONS-TRACKER.md): standings/
+  // League Seasons (docs/league-seasons.md): standings/
   // player-stats are now scoped per (league, season) — this script only
   // (re)computes each league's CURRENT season. Leagues without a
   // currentSeasonId yet haven't run backfill-league-seasons.js — skip them.

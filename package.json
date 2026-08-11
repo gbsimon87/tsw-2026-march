@@ -17,6 +17,8 @@
     "format": "prettier . --check",
     "format:write": "prettier . --write",
     "check-env": "node scripts/validate-env.mjs",
+    "check-secrets": "node scripts/check-secrets.mjs --all",
+    "check-secrets:staged": "node scripts/check-secrets.mjs",
     "prepare": "husky",
     "commitlint": "commitlint",
     "commitlint:range": "commitlint --from=HEAD~1 --to=HEAD"

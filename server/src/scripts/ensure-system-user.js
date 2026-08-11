@@ -1,5 +1,5 @@
 // Idempotently creates the reserved system User that authors auto-generated
-// feed content (see docs/auto-feed-generation/000-TRACKER.md). Safe to re-run:
+// feed content (see docs/auto-feed.md). Safe to re-run:
 // looks up by authProvider:'system' before creating.
 //
 // Usage:

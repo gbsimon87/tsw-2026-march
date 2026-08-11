@@ -217,7 +217,7 @@ function scheduleFeedCardRefreshForGame(gameId) {
   });
 }
 
-// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): after a
+// Auto Feed Generation (docs/auto-feed.md): after a
 // game finishes, offer it to the feed's auto-publish gate. Post-response,
 // non-blocking, errors logged not thrown — same shape as the other
 // finish-time schedulers above. The public-league restriction and all

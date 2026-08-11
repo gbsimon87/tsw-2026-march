@@ -36,7 +36,7 @@ const gameCardSchema = new mongoose.Schema(
     cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
     // Auto Feed Generation: true only for game-cards created by the system
     // user when a public-league game is finalised (see
-    // docs/auto-feed-generation/000-TRACKER.md). Distinguishes auto cards from
+    // docs/auto-feed.md). Distinguishes auto cards from
     // user-shared ones so a manual share and an auto card can coexist while
     // still guaranteeing at most one auto card per game (see the partial
     // unique index below).
@@ -166,7 +166,7 @@ async function listPosts({ limit, cursor } = {}) {
     query._id = { $lt: cursor };
   }
 
-  // PERF-004 (docs/performance-investigation): read-only list path — plain
+  // PERF-004 (historical performance investigation): read-only list path — plain
   // objects, no per-doc hydration for up to limit+10 posts per page.
   return Post.find(query)
     .sort({ _id: -1 })
@@ -199,7 +199,7 @@ async function deletePostsByGameId(gameId) {
 
 // Auto Feed Generation: reverse auto-generated posts for a set of games (used
 // when a league flips from public to private — B2 in
-// docs/auto-feed-generation/000-TRACKER.md). Manually-shared posts (auto:
+// docs/auto-feed.md). Manually-shared posts (auto:
 // false/unset, or any highlight_clip a user shared directly) are left alone —
 // only content the system itself authored is removed. highlight_clip has no
 // `auto` flag (every one currently in the schema could in principle be

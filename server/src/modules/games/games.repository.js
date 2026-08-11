@@ -151,7 +151,7 @@ const gameSchema = new mongoose.Schema(
     },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
     // Null for standalone games and for league games created before the
-    // Season feature shipped (see docs/league-seasons/000-SEASONS-TRACKER.md).
+    // Season feature shipped (see docs/league-seasons.md).
     // New league games always have this set, resolved server-side from
     // League.currentSeasonId — never client-supplied.
     seasonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Season', default: null, index: true },
@@ -394,7 +394,7 @@ async function findGameByLeagueIdAndId(leagueId, gameId) {
   return Game.findOne({ _id: gameId, leagueId, gameContext: 'league' });
 }
 
-// Auto Feed Generation (docs/auto-feed-generation/000-TRACKER.md): lean id-only
+// Auto Feed Generation (docs/auto-feed.md): lean id-only
 // lookup used when a league flips private, to find which games' auto-posts
 // need reversing — avoids loading full Game docs (events etc.) for a cleanup
 // pass that only needs ids.

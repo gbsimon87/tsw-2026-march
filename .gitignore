@@ -14,6 +14,18 @@ coverage
 .env.local
 .env.production
 .env.development
+.env.*
+!.env.example
+!.env.*.example
+
+# Private keys and credential bundles
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_ed25519
 
 # OS files
 .DS_Store

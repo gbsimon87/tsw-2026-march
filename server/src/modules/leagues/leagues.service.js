@@ -359,7 +359,7 @@ function ensureLeagueEditable(league) {
 // Scope: ONLY new league game creation and new join requests are gated by
 // this. Roster/member edits (add/update player, add/remove manager) remain
 // editable after a season completes — do not add this guard to those paths.
-// See docs/league-seasons/000-SEASONS-TRACKER.md decision #4.
+// See docs/league-seasons.md decision #4.
 function ensureSeasonEditable(season) {
   if (!season || season.status === 'completed') {
     throw new ApiError(400, 'Season is completed');
@@ -737,7 +737,7 @@ async function getPublicLeagueBySlug(slug, viewerUserId = null, requestedSeasonI
       includeGames: games,
       includeCurrentSeason: currentSeason ? sanitizeSeason(currentSeason) : null,
     }),
-    // Powers the public season selector (docs/league-seasons/000-SEASONS-TRACKER.md
+    // Powers the public season selector (docs/league-seasons.md
     // decision #9) without a second round trip from the client.
     seasons: seasons.map(sanitizeSeason),
   };
@@ -781,7 +781,7 @@ async function updateLeagueForUser(userId, leagueId, payload) {
 
   await saveLeague(league);
 
-  // Auto Feed Generation (B2, docs/auto-feed-generation/000-TRACKER.md): a
+  // Auto Feed Generation (B2, docs/auto-feed.md): a
   // league flipping public -> private should reverse any auto-generated feed
   // content, since it was only ever published because the league was public.
   // Best-effort — a feed-side failure must not block the league update

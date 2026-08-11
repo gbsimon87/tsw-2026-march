@@ -5,8 +5,7 @@
 // = edit this file." Features must never branch on `plan === 'x'`; they read
 // entitlements resolved from this catalog (see entitlements.service.js).
 //
-// Design + rationale: docs/pricing-overhaul/05-architecture.md §1,
-// 03-feature-packaging.md. Interval keys are 'monthly' | 'season' to match the
+// Design + rationale: docs/pricing.md. Interval keys are 'monthly' | 'season' to match the
 // checkout validation enum and the STRIPE_PRICE_ID_*_{MONTHLY,SEASON} env vars;
 // display strings ('$79/yr') are copy only — Stripe price amounts are the
 // authoritative charge.

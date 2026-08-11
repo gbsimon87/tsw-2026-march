@@ -1,5 +1,5 @@
 // Plan catalog — the single source of truth for plans, prices, and entitlements.
-// See docs/pricing-overhaul/05-architecture.md §1 and 03-feature-packaging.md.
+// See docs/pricing.md.
 
 jest.mock('../../config/env', () => ({
   env: {

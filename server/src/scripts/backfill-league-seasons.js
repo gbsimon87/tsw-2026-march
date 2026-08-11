@@ -1,4 +1,4 @@
-// League Seasons backfill (Stage 1 of docs/league-seasons/000-SEASONS-TRACKER.md):
+// League Seasons backfill (Stage 1 of docs/league-seasons.md):
 // creates one Season per pre-existing League (status: 'active'), sets
 // League.currentSeasonId, and reassigns every existing league Game's seasonId
 // to that season. Run BEFORE migrate-leaguestandings-season-index.js.

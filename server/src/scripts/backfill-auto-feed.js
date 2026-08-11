@@ -1,4 +1,4 @@
-// Auto Feed Generation backfill (docs/auto-feed-generation/000-TRACKER.md):
+// Auto Feed Generation backfill (docs/auto-feed.md):
 // seeds auto-generated game_card/highlight_clip posts for already-completed
 // public-league games — covers games finalised before AUTO_FEED_ENABLED was
 // turned on, and games in a league that was private at finalise time but has
