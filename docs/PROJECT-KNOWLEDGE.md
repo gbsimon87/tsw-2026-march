@@ -156,7 +156,9 @@ The default is four 10-minute quarters and five-minute overtimes. The server
 owns a persisted, anchored countdown clock; it stops at zero and period/OT
 transitions are manual. A tracker may also finish a running or paused quarter,
 half, or overtime early when the app clock trails the real game. Starting the
-clock requires the starting five(s), while finishing a game early is allowed.
+clock requires at least one selected starter for each tracked team. A lineup
+may contain fewer than five players; starting the game then requires explicit
+confirmation in the tracker. Finishing a game early is allowed.
 Every stat event stores an independent
 period/clock snapshot in addition to its optional video timestamp.
 

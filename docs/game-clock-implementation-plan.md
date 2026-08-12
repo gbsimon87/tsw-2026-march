@@ -423,8 +423,8 @@ screen and Save Lineup always fails. Unit 5 resolves this explicitly — see
 - Optimistic UI is transition-only (pickers close before the request resolves,
   chained through `inflightRef` at 343) and rolls back only via `.catch` →
   `setError` + `clearEventPicker()`.
-- Starting lineup: `LineupPicker` component at line 101 (requires exactly 5,
-  line 135). `homeLineupReady`/`awayLineupReady` (567-568), `lineupSetupStep`
+- Starting lineup: `LineupPicker` component at line 101 (allows 1–5 active,
+  unique players). `homeLineupReady`/`awayLineupReady`, `lineupSetupStep`
   (569-576), auto-switch effect (579-589), full-screen gate render (1989-2012),
   second inline picker for one-sided games (2317-2335). Every entry path calls
   `requireLineup()` (635-652) from `onCourtSelect` (689),
@@ -579,9 +579,10 @@ remain useful for future sports and localization.
 ## Clock And Event Behavior
 
 1. A newly created game starts at segment 1 with a full clock in `ready` state.
-2. Starting lineups are required before the game clock may start. After the
-   required starting lineup(s) are saved, the setup screen shows a deliberate
-   `Start game` button; pressing it starts the clock.
+2. A non-empty starting lineup is required for each tracked team before the
+   game clock may start. Lineups may contain 1–5 active, unique players. When
+   either lineup has fewer than five, `Start game` opens the reusable warning
+   modal so the tracker can continue as-is or return to add more players.
 3. The tracker shows the current segment, `MM:SS`, tenths below one minute,
    and Start/Pause controls after the initial game start.
 4. Start and pause are server commands. The response supplies the **full
@@ -1136,8 +1137,9 @@ for actively in-progress work and `[x]` only after tests for that unit pass.
 4. The clock stops at zero and requires an explicit next-period action.
    A running or paused quarter, half, or overtime can also be finished manually
    when the tracker clock trails the real game.
-5. Starting lineup(s) are required before `Start game` enables and starts the
-   clock. (Requires resolving the server-side ordering inversion — Unit 5.)
+5. At least one starter per tracked team is required before `Start game`
+   enables. A 1–4-player lineup is valid but requires explicit confirmation;
+   the warning can continue as-is or return to lineup editing.
 6. A game may finish before the last period reaches zero, with a warning.
 7. Overtime starts manually, uses the configured duration, and supports
    repeated `OT1`, `OT2`, and later periods.

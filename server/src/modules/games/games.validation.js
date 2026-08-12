@@ -231,7 +231,7 @@ const appendEventSchema = eventClockSnapshotSchema.and(
 );
 
 const setLineupSchema = z.object({
-  playerIds: z.array(z.string().min(1)).length(5),
+  playerIds: z.array(z.string().min(1)).min(1).max(5),
   teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 

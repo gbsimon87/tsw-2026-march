@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Modal } from '../../../components/ui/Modal';
 import {
   effectiveRemainingMilliseconds,
   formatClock,
@@ -16,6 +17,7 @@ export function GameClockControls({
   const [editing, setEditing] = useState(false);
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const clock = game.clock;
 
   useEffect(() => {
@@ -45,8 +47,7 @@ export function GameClockControls({
   }[clock.status];
 
   function finishSegment() {
-    const period = segmentLabel(game.gameFormat, clock.segmentKind, clock.segmentNumber);
-    if (!window.confirm(`Finish ${period} now? The game clock will be set to 0.0.`)) return;
+    setShowFinishConfirm(false);
     onCommand({ action: 'finish_segment' });
   }
 
@@ -142,7 +143,7 @@ export function GameClockControls({
           <button
             type="button"
             disabled={disabled}
-            onClick={finishSegment}
+            onClick={() => setShowFinishConfirm(true)}
             className="min-h-9 rounded-lg border border-red-400/60 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
           >
             {finishLabel}
@@ -186,6 +187,32 @@ export function GameClockControls({
           </button>
         </div>
       ) : null}
+      <Modal
+        open={showFinishConfirm}
+        onClose={() => setShowFinishConfirm(false)}
+        title={`Finish ${segmentLabel(game.gameFormat, clock.segmentKind, clock.segmentNumber)}?`}
+        panelClassName="max-w-md text-slate-900"
+      >
+        <p className="text-sm text-slate-600">
+          The game clock will be set to 0.0 and this period will be marked complete.
+        </p>
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => setShowFinishConfirm(false)}
+            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Keep tracking
+          </button>
+          <button
+            type="button"
+            onClick={finishSegment}
+            className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500"
+          >
+            Finish period
+          </button>
+        </div>
+      </Modal>
     </section>
   );
 }

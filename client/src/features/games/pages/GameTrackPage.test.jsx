@@ -107,6 +107,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/games/game-1/track']}>
       <Routes>
         <Route path="/games/:gameId/track" element={<GameTrackPage />} />
+        <Route path="/admin" element={<div>Admin destination</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -360,6 +361,80 @@ describe('GameTrackPage', () => {
     expect(await screen.findByText('The game clock kept running')).toBeInTheDocument();
   });
 
+  test('corrects a recovered clock through the reusable modal', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+    apiMocks.updateClock.mockResolvedValue(currentResponse);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct time' }));
+    fireEvent.change(screen.getByLabelText('Corrected time'), { target: { value: '4:32.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply corrected time' }));
+
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', {
+        action: 'correct',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 272500,
+      })
+    );
+  });
+
+  test('uses a reusable modal before pausing a running clock and exiting', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+    apiMocks.updateClock.mockResolvedValue(currentResponse);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByText('Save & Exit'));
+
+    expect(screen.getByRole('dialog', { name: 'Pause the clock and exit?' })).toBeInTheDocument();
+    expect(apiMocks.updateClock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Pause and exit' }));
+
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+    );
+    expect(await screen.findByText('Admin destination')).toBeInTheDocument();
+  });
+
   test('blocks full-screen tracking until the starting five is set', async () => {
     renderPage();
 
@@ -369,7 +444,7 @@ describe('GameTrackPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
 
-    expect(screen.getByText(/Set starting five before tracking/i)).toBeInTheDocument();
+    expect(screen.getByText(/Set a starting lineup before tracking/i)).toBeInTheDocument();
     expect(screen.queryByText(/Fullscreen Tracking/i)).not.toBeInTheDocument();
   });
 
@@ -433,6 +508,75 @@ describe('GameTrackPage', () => {
     expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     expect(screen.getByText(/Starting five set/i)).toBeInTheDocument();
     expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
+  });
+
+  test('warns before starting a game with a short lineup and allows continuing', async () => {
+    currentResponse = createResponse({
+      game: {
+        status: 'scheduled',
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+    });
+    apiMocks.updateClock.mockResolvedValue(currentResponse);
+
+    renderPage();
+    fireEvent.click(await screen.findByLabelText('Alex'));
+    fireEvent.click(screen.getByLabelText('Blake'));
+    fireEvent.click(screen.getByLabelText('Casey'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Lineup' }));
+
+    await waitFor(() => expect(apiMocks.setLineup).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Start game' }));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Start with fewer than five players?' })
+    ).toBeInTheDocument();
+    expect(apiMocks.updateClock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue and start' }));
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+    );
+  });
+
+  test('returns to lineup editing from the short-lineup warning', async () => {
+    currentResponse = createResponse({
+      game: {
+        status: 'scheduled',
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Go back to lineup' }));
+
+    expect(screen.queryByText('Start with fewer than five players?')).not.toBeInTheDocument();
+    expect(screen.getByText('Starting Lineup')).toBeInTheDocument();
   });
 
   test('switches active side in fullscreen and clears transient event state for dual-team games', async () => {

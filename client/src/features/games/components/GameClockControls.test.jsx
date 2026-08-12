@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { GameClockControls } from './GameClockControls';
 
 function game(clockOverrides = {}, formatOverrides = {}) {
@@ -22,26 +22,22 @@ function game(clockOverrides = {}, formatOverrides = {}) {
 }
 
 describe('GameClockControls manual period finish', () => {
-  afterEach(() => vi.restoreAllMocks());
-
   test('confirms and finishes the current quarter', () => {
     const onCommand = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<GameClockControls game={game()} onCommand={onCommand} />);
 
     expect(screen.getByText('Paused')).toBeInTheDocument();
     expect(screen.getByLabelText('Game clock')).toHaveClass('text-3xl');
     fireEvent.click(screen.getByRole('button', { name: 'Finish quarter' }));
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Finish Q2 now? The game clock will be set to 0.0.'
-    );
+    expect(screen.getByRole('dialog', { name: 'Finish Q2?' })).toBeInTheDocument();
+    expect(onCommand).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish period' }));
     expect(onCommand).toHaveBeenCalledWith({ action: 'finish_segment' });
   });
 
   test('labels overtime correctly and honors cancellation', () => {
     const onCommand = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(
       <GameClockControls
         game={game({ segmentKind: 'overtime', segmentNumber: 3 })}
@@ -51,9 +47,9 @@ describe('GameClockControls manual period finish', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish overtime' }));
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Finish OT3 now? The game clock will be set to 0.0.'
-    );
+    expect(screen.getByRole('dialog', { name: 'Finish OT3?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep tracking' }));
+    expect(screen.queryByRole('dialog', { name: 'Finish OT3?' })).not.toBeInTheDocument();
     expect(onCommand).not.toHaveBeenCalled();
   });
 

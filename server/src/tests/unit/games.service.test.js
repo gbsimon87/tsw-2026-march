@@ -1231,6 +1231,28 @@ describe('games service clock commands', () => {
     expect(Math.abs(game.clock.runningSince.getTime() - now.getTime())).toBeLessThan(50);
   });
 
+  test('starts a scheduled game when both teams have short lineups', async () => {
+    const game = buildDualLeagueGame({
+      status: 'scheduled',
+      homeCurrentLineupPlayerIds: ['home-player-1', 'home-player-2', 'home-player-3'],
+      awayCurrentLineupPlayerIds: ['away-player-1', 'away-player-2', 'away-player-3'],
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date());
+
+    expect(game.status).toBe('in_progress');
+    expect(game.clock.status).toBe('running');
+  });
+
   test('prepares the next quarter at full duration without starting it', async () => {
     const game = buildDualLeagueGame({
       clock: {

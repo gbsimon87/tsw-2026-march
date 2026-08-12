@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
+import { Modal } from '../../../components/ui/Modal';
 import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
@@ -130,7 +131,7 @@ function LineupPicker({
           <button
             type="button"
             onClick={onSave}
-            disabled={isSaving || lineupDraft.length !== 5}
+            disabled={isSaving || lineupDraft.length === 0 || lineupDraft.length > 5}
             className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
           >
             {isSaving ? 'Saving...' : 'Save Lineup'}
@@ -340,6 +341,10 @@ export function GameTrackPage() {
   );
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
   const [showClockRecovery, setShowClockRecovery] = useState(false);
+  const [showShortLineupWarning, setShowShortLineupWarning] = useState(false);
+  const [pendingExitDestination, setPendingExitDestination] = useState('');
+  const [isClockRecoveryCorrectionOpen, setIsClockRecoveryCorrectionOpen] = useState(false);
+  const [clockRecoveryTimeDraft, setClockRecoveryTimeDraft] = useState('10:00');
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
@@ -596,11 +601,16 @@ export function GameTrackPage() {
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
   const isCompleted = game?.status === 'completed';
-  const homeLineupReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length === 5;
-  const awayLineupReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length === 5;
+  const homeLineupCount = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length;
+  const awayLineupCount = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length;
+  const homeLineupReady = homeLineupCount > 0;
+  const awayLineupReady = awayLineupCount > 0;
   const allStartingLineupsReady = isDualTeam
     ? homeLineupReady && awayLineupReady
-    : (game?.currentLineupPlayerIds || []).length === 5;
+    : (game?.currentLineupPlayerIds || []).length > 0;
+  const hasShortStartingLineup = isDualTeam
+    ? homeLineupCount < 5 || awayLineupCount < 5
+    : (game?.currentLineupPlayerIds || []).length < 5;
   const lineupSetupStep =
     isLeagueGame && isDualTeam
       ? !homeLineupReady
@@ -676,17 +686,17 @@ export function GameTrackPage() {
       return false;
     }
     if (isDualTeam) {
-      const homeReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length === 5;
-      const awayReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length === 5;
+      const homeReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length > 0;
+      const awayReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length > 0;
       if (!homeReady || !awayReady) {
-        setError('Set both starting fives before tracking');
+        setError('Set a starting lineup for both teams before tracking');
         return false;
       }
       return true;
     }
 
-    if (lineupIds.length !== 5) {
-      setError('Set starting five before tracking');
+    if (lineupIds.length === 0) {
+      setError('Set a starting lineup before tracking');
       return false;
     }
 
@@ -1347,8 +1357,8 @@ export function GameTrackPage() {
       return;
     }
 
-    if (currentSideState.lineupDraft.length !== 5) {
-      setError('Select exactly 5 players for the starting five');
+    if (currentSideState.lineupDraft.length === 0 || currentSideState.lineupDraft.length > 5) {
+      setError('Select between 1 and 5 players for the starting lineup');
       return;
     }
 
@@ -1477,14 +1487,15 @@ export function GameTrackPage() {
     }
   }
 
-  async function runClockCommand(command) {
-    if (isSaving) return;
+  async function executeClockCommand(command) {
+    if (isSaving) return false;
     clockOperatedThisMountRef.current = true;
     setError('');
     setIsSaving(true);
     try {
       const response = await gamesApi.updateClock(gameId, command);
       updateData(response);
+      return true;
     } catch (clockError) {
       if (clockError.status === 409) {
         await loadGame();
@@ -1492,25 +1503,75 @@ export function GameTrackPage() {
       } else {
         setError(clockError.message || 'Failed to update game clock');
       }
+      return false;
     } finally {
       setIsSaving(false);
     }
   }
 
-  async function leaveTracker(destination) {
+  function runClockCommand(command) {
+    const isStartingGame =
+      command.action === 'start' &&
+      game?.status === 'scheduled' &&
+      game?.clock?.segmentKind === 'regulation' &&
+      game?.clock?.segmentNumber === 1;
+
+    if (isStartingGame && hasShortStartingLineup) {
+      setIsTrackingFullscreen(false);
+      setShowShortLineupWarning(true);
+      return;
+    }
+
+    return executeClockCommand(command);
+  }
+
+  function returnToShortLineup() {
+    setShowShortLineupWarning(false);
+    setActivePanel('court');
+    if (isDualTeam) {
+      setActiveSide(homeLineupCount < 5 ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY);
+    }
+  }
+
+  function leaveTracker(destination) {
     if (data?.game?.clock?.status === 'running') {
-      const shouldPause = window.confirm(
-        'Pause the game clock and exit? Select Cancel to keep tracking.'
-      );
-      if (!shouldPause) return;
-      try {
-        await gamesApi.updateClock(gameId, { action: 'pause' });
-      } catch (clockError) {
-        setError(clockError.message || 'Could not pause the clock; tracking remains open');
-        return;
-      }
+      setPendingExitDestination(destination);
+      return;
     }
     navigate(destination);
+  }
+
+  async function pauseClockAndLeave() {
+    if (!pendingExitDestination || isSaving) return;
+    setIsSaving(true);
+    try {
+      await gamesApi.updateClock(gameId, { action: 'pause' });
+      navigate(pendingExitDestination);
+      setPendingExitDestination('');
+    } catch (clockError) {
+      setError(clockError.message || 'Could not pause the clock; tracking remains open');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function correctRecoveredClock() {
+    const match = clockRecoveryTimeDraft.trim().match(/^(\d+):([0-5]?\d(?:\.\d)?)$/);
+    if (!match) {
+      setError('Enter the clock time as minutes:seconds, for example 4:32.5');
+      return;
+    }
+    const remainingMilliseconds = (Number(match[1]) * 60 + Number(match[2])) * 1000;
+    const corrected = await executeClockCommand({
+      action: 'correct',
+      segmentKind: game.clock.segmentKind,
+      segmentNumber: game.clock.segmentNumber,
+      remainingMilliseconds,
+    });
+    if (corrected) {
+      setIsClockRecoveryCorrectionOpen(false);
+      setShowClockRecovery(false);
+    }
   }
 
   if (!data || !game || !boxScore) {
@@ -3168,19 +3229,56 @@ export function GameTrackPage() {
             })()
           : null}
 
-        {showClockRecovery ? (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4">
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Recover running game clock"
-              className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
-            >
-              <h2 className="text-lg font-bold text-slate-900">The game clock kept running</h2>
-              <p className="mt-2 text-sm text-slate-600">
+        <Modal
+          open={showClockRecovery}
+          onClose={() => {}}
+          title="The game clock kept running"
+          panelClassName="max-w-md"
+          showCloseButton={false}
+        >
+          {isClockRecoveryCorrectionOpen ? (
+            <>
+              <label
+                htmlFor="recovery-clock-time"
+                className="block text-sm font-semibold text-slate-800"
+              >
+                Corrected time
+              </label>
+              <input
+                id="recovery-clock-time"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={clockRecoveryTimeDraft}
+                onChange={(event) => setClockRecoveryTimeDraft(event.target.value)}
+                placeholder="10:00"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-mono text-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+              />
+              <p className="mt-2 text-xs text-slate-500">Use minutes:seconds, such as 4:32.5.</p>
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setIsClockRecoveryCorrectionOpen(false)}
+                  className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={correctRecoveredClock}
+                  className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Apply corrected time
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">
                 Accept the elapsed time, or correct it before recording more stats.
               </p>
-              <div className="mt-5 flex gap-3">
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => setShowClockRecovery(false)}
@@ -3190,29 +3288,43 @@ export function GameTrackPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
-                    const entered = window.prompt(
-                      'Enter the corrected time as minutes:seconds',
-                      '10:00'
-                    );
-                    if (!entered) return;
-                    const [minutes, seconds = '0'] = entered.split(':');
-                    await runClockCommand({
-                      action: 'correct',
-                      segmentKind: game.clock.segmentKind,
-                      segmentNumber: game.clock.segmentNumber,
-                      remainingMilliseconds: (Number(minutes) * 60 + Number(seconds)) * 1000,
-                    });
-                    setShowClockRecovery(false);
-                  }}
+                  onClick={() => setIsClockRecoveryCorrectionOpen(true)}
                   className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800"
                 >
                   Correct time
                 </button>
               </div>
-            </div>
+            </>
+          )}
+        </Modal>
+
+        <Modal
+          open={Boolean(pendingExitDestination)}
+          onClose={() => setPendingExitDestination('')}
+          title="Pause the clock and exit?"
+          panelClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-600">
+            The game clock is running. Pause it before leaving this tracking session.
+          </p>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setPendingExitDestination('')}
+              className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+            >
+              Keep tracking
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={pauseClockAndLeave}
+              className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {isSaving ? 'Pausing…' : 'Pause and exit'}
+            </button>
           </div>
-        ) : null}
+        </Modal>
 
         {showFinishConfirm ? (
           // Escape handling only — the actual dismiss control is the invisible
@@ -3275,6 +3387,41 @@ export function GameTrackPage() {
           onSubmit={handleAddRosterPlayer}
           teamName={isDualTeam ? participantsBySide[activeSide]?.displayName : team?.name}
         />
+
+        <Modal
+          open={showShortLineupWarning}
+          onClose={returnToShortLineup}
+          title="Start with fewer than five players?"
+          panelClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-600">
+            {isDualTeam
+              ? `Selected players: ${participantsBySide[TEAM_SIDES.HOME]?.displayName || 'Home'} ${homeLineupCount}, ${participantsBySide[TEAM_SIDES.AWAY]?.displayName || 'Away'} ${awayLineupCount}.`
+              : `This starting lineup has ${(game?.currentLineupPlayerIds || []).length} player${(game?.currentLineupPlayerIds || []).length === 1 ? '' : 's'}.`}{' '}
+            Basketball teams normally begin with five players. You can still start and track this
+            game with the selected lineup.
+          </p>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={returnToShortLineup}
+              className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Go back to lineup
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => {
+                setShowShortLineupWarning(false);
+                executeClockCommand({ action: 'start' });
+              }}
+              className="flex-1 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+            >
+              Continue and start
+            </button>
+          </div>
+        </Modal>
 
         {isTrackingFullscreen ? (
           <div

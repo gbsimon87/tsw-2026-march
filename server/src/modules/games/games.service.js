@@ -395,8 +395,11 @@ function isOpponentEvent(statType) {
 
 function validateLineupPlayers(team, playerIds) {
   const uniquePlayerIds = [...new Set(playerIds.map(String))];
-  if (uniquePlayerIds.length !== 5) {
-    throw new ApiError(400, 'Starting lineup must include exactly 5 unique players');
+  if (uniquePlayerIds.length !== playerIds.length) {
+    throw new ApiError(400, 'Starting lineup must use unique players');
+  }
+  if (uniquePlayerIds.length === 0 || uniquePlayerIds.length > 5) {
+    throw new ApiError(400, 'Starting lineup must include between 1 and 5 unique players');
   }
 
   for (const playerId of uniquePlayerIds) {
@@ -1676,10 +1679,10 @@ function requireBothLineups(game) {
     return;
   }
   if (
-    (game.homeCurrentLineupPlayerIds || []).length !== 5 ||
-    (game.awayCurrentLineupPlayerIds || []).length !== 5
+    (game.homeCurrentLineupPlayerIds || []).length === 0 ||
+    (game.awayCurrentLineupPlayerIds || []).length === 0
   ) {
-    throw new ApiError(400, 'Set both starting fives before tracking');
+    throw new ApiError(400, 'Set a starting lineup for both teams before tracking');
   }
 }
 
@@ -1749,8 +1752,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     }
 
     if (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN) {
-      if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
-        throw new ApiError(400, 'Set starting five before making substitutions');
+      if (lineupIds.length === 0 && payload.statType === STAT_TYPES.SUB_OUT) {
+        throw new ApiError(400, 'Set a starting lineup before making substitutions');
       }
 
       if (payload.statType === STAT_TYPES.SUB_OUT) {
@@ -1837,8 +1840,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 
   if (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN) {
     const lineupIds = (game.currentLineupPlayerIds || []).map(String);
-    if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
-      throw new ApiError(400, 'Set starting five before making substitutions');
+    if (lineupIds.length === 0 && payload.statType === STAT_TYPES.SUB_OUT) {
+      throw new ApiError(400, 'Set a starting lineup before making substitutions');
     }
     if (payload.statType === STAT_TYPES.SUB_OUT) {
       if (!payload.playerId || !lineupIds.includes(String(payload.playerId))) {
@@ -1937,8 +1940,8 @@ function requireStartingLineups(game) {
     requireBothLineups(game);
     return;
   }
-  if ((game.currentLineupPlayerIds || []).length !== 5) {
-    throw new ApiError(400, 'Set the starting five before starting the game');
+  if ((game.currentLineupPlayerIds || []).length === 0) {
+    throw new ApiError(400, 'Set a starting lineup before starting the game');
   }
 }
 
