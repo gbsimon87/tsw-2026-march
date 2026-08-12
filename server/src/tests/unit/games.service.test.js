@@ -111,11 +111,23 @@ const {
   finishGameForUser,
   getGameForUser,
   setGameLineup,
+  updateClockForUser,
   computeGameFinalScore,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 const { autoPublishForFinalizedGame } = require('../../modules/feed/feed.service');
 const { env } = require('../../config/env');
+
+const GAME_FORMAT = {
+  regulationSegmentType: 'quarter',
+  regulationSegmentDurationSeconds: 600,
+  overtimeDurationSeconds: 300,
+};
+const EVENT_CLOCK = {
+  segmentKind: 'regulation',
+  segmentNumber: 1,
+  clockMillisecondsRemaining: 600000,
+};
 
 // The post-response schedulers (scheduleLeagueRecomputeForGame,
 // scheduleTeamSummaryRecomputeForGame, scheduleFeedCardRefreshForGame) fire
@@ -171,6 +183,7 @@ function buildDualLeagueGame(overrides = {}) {
     ownerUserId: 'user-1',
     gameContext: 'league',
     trackingMode: 'dual_team',
+    gameFormat: GAME_FORMAT,
     leagueId: 'league-1',
     homeLeagueTeamId: 'home-team',
     awayLeagueTeamId: 'away-team',
@@ -353,6 +366,7 @@ describe('games service create game', () => {
       ownerUserId: 'user-1',
       gameContext: 'standalone',
       trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
       teamId: 'team-1',
       rosterSnapshot: [],
       events: buildEvents([]),
@@ -368,6 +382,7 @@ describe('games service create game', () => {
     saveGame.mockResolvedValue(game);
 
     const result = await appendEventForUser('user-1', 'game-1', {
+      ...EVENT_CLOCK,
       playerId: 'p1',
       statType: STAT_TYPES.FG2_MADE,
     });
@@ -742,6 +757,7 @@ describe('games service finish summaries', () => {
     canEditCompletedLeagueGame.mockResolvedValue(true);
 
     await appendEventForUser('user-1', 'game-1', {
+      ...EVENT_CLOCK,
       teamSide: 'home',
       playerId: 'home-snap-1',
       statType: STAT_TYPES.FG2_MADE,
@@ -1171,6 +1187,7 @@ describe('games service frozen box score (OPT-012)', () => {
     canEditCompletedLeagueGame.mockResolvedValue(true);
 
     const result = await appendEventForUser('user-1', 'game-1', {
+      ...EVENT_CLOCK,
       teamSide: 'home',
       playerId: 'home-snap-1',
       statType: STAT_TYPES.FG3_MADE,
@@ -1179,6 +1196,105 @@ describe('games service frozen box score (OPT-012)', () => {
     // The stale frozen summary (all zeroes) must have been refreshed.
     expect(game.gameSummary.homePoints).toBe(3);
     expect(result.gameSummary.homePoints).toBe(3);
+  });
+});
+
+describe('games service clock commands', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  test('starts a scheduled game only after both starting fives are set', async () => {
+    const players = Array.from({ length: 5 }, (_, index) => `player-${index + 1}`);
+    const game = buildDualLeagueGame({
+      status: 'scheduled',
+      homeCurrentLineupPlayerIds: players,
+      awayCurrentLineupPlayerIds: players.map((id) => `away-${id}`),
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    const now = new Date();
+
+    await updateClockForUser('user-1', 'game-1', { action: 'start' }, now);
+
+    expect(game.status).toBe('in_progress');
+    expect(game.clock.status).toBe('running');
+    expect(game.clock.runningSince).toBeInstanceOf(Date);
+    expect(Math.abs(game.clock.runningSince.getTime() - now.getTime())).toBeLessThan(50);
+  });
+
+  test('prepares the next quarter at full duration without starting it', async () => {
+    const game = buildDualLeagueGame({
+      clock: {
+        status: 'segment_complete',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 0,
+        runningSince: null,
+      },
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await updateClockForUser('user-1', 'game-1', { action: 'next_segment' });
+
+    expect(game.clock).toEqual({
+      status: 'ready',
+      segmentKind: 'regulation',
+      segmentNumber: 2,
+      remainingMilliseconds: 600000,
+      runningSince: null,
+    });
+  });
+
+  test('manually finishes a running overtime and sets its clock to zero', async () => {
+    const game = buildDualLeagueGame({
+      clock: {
+        status: 'running',
+        segmentKind: 'overtime',
+        segmentNumber: 2,
+        remainingMilliseconds: 125000,
+        runningSince: new Date(),
+      },
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await updateClockForUser('user-1', 'game-1', { action: 'finish_segment' });
+
+    expect(game.clock).toMatchObject({
+      status: 'segment_complete',
+      segmentKind: 'overtime',
+      segmentNumber: 2,
+      remainingMilliseconds: 0,
+      runningSince: null,
+    });
+  });
+
+  test('does not manually finish a period that has not started', async () => {
+    const game = buildDualLeagueGame({
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    });
+    findGameById.mockResolvedValue(game);
+
+    await expect(
+      updateClockForUser('user-1', 'game-1', { action: 'finish_segment' })
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(saveGame).not.toHaveBeenCalled();
   });
 });
 
@@ -1218,6 +1334,7 @@ describe('games service event mutation contract (OPT-015)', () => {
     saveGame.mockResolvedValue(game);
 
     const result = await appendEventForUser('user-1', 'game-1', {
+      ...EVENT_CLOCK,
       teamSide: 'home',
       playerId: 'home-snap-1',
       statType: STAT_TYPES.FG2_MADE,
@@ -1249,6 +1366,7 @@ describe('games service event mutation contract (OPT-015)', () => {
     saveGame.mockResolvedValue(game);
 
     await appendEventForUser('user-1', 'game-1', {
+      ...EVENT_CLOCK,
       teamSide: 'home',
       playerId: 'home-snap-1',
       statType: STAT_TYPES.FG2_MADE,
@@ -1268,6 +1386,7 @@ describe('games service event mutation contract (OPT-015)', () => {
 
     await expect(
       appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
         teamSide: 'home',
         playerId: 'home-snap-1',
         statType: STAT_TYPES.FG2_MADE,
@@ -1282,6 +1401,7 @@ describe('games service event mutation contract (OPT-015)', () => {
 
     await expect(
       appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
         teamSide: 'home',
         playerId: 'home-snap-1',
         statType: STAT_TYPES.FG2_MADE,

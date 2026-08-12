@@ -69,6 +69,7 @@ const {
   deleteReplaceableLeagueGames,
 } = require('../games/games.repository');
 const { logger } = require('../../config/logger');
+const { SPORTS, createReadyClock } = require('../shared/gameClock');
 const {
   uploadImageBuffer,
   destroyImage,
@@ -143,6 +144,8 @@ function sanitizeLeague(league, options = {}) {
     slug: league.slug,
     description: league.description ?? null,
     seasonLabel: league.seasonLabel ?? null,
+    sport: league.sport,
+    defaultGameFormat: league.defaultGameFormat?.toObject?.() || league.defaultGameFormat,
     currentSeasonId: league.currentSeasonId ? String(league.currentSeasonId) : null,
     status: league.status,
     isPublic: Boolean(league.isPublic),
@@ -575,6 +578,8 @@ async function createLeagueForUser(userId, payload) {
   stub.slug = slug;
   stub.description = payload.description?.trim() || stub.description || undefined;
   stub.seasonLabel = payload.seasonLabel?.trim() || stub.seasonLabel || undefined;
+  if (payload.sport) stub.sport = payload.sport;
+  if (payload.defaultGameFormat) stub.defaultGameFormat = payload.defaultGameFormat;
   stub.status = 'active';
   stub.isPublic = payload.isPublic !== false;
 
@@ -750,8 +755,12 @@ async function listPublicSeasonsForLeague(leagueSlug, viewerUserId = null) {
 }
 
 async function updateLeagueForUser(userId, leagueId, payload) {
-  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+  const { league, role } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
+
+  if (payload.defaultGameFormat && role !== 'owner') {
+    throw new ApiError(403, 'Only the league owner can change the default game format');
+  }
 
   if (payload.name) {
     league.name = payload.name.trim();
@@ -772,6 +781,9 @@ async function updateLeagueForUser(userId, leagueId, payload) {
 
   if (Object.prototype.hasOwnProperty.call(payload, 'seasonLabel')) {
     league.seasonLabel = payload.seasonLabel?.trim() || null;
+  }
+  if (payload.defaultGameFormat) {
+    league.defaultGameFormat = payload.defaultGameFormat;
   }
 
   const wasPublic = Boolean(league.isPublic);
@@ -2419,6 +2431,11 @@ async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
     }
 
     return {
+      sport: SPORTS.BASKETBALL,
+      gameFormat: {
+        ...(league.defaultGameFormat.toObject?.() || league.defaultGameFormat),
+      },
+      clock: createReadyClock(league.defaultGameFormat),
       ownerUserId: userId,
       gameContext: 'league',
       trackingMode: 'one_sided',

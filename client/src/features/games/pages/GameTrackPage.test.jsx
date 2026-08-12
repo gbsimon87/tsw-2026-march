@@ -11,6 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   removeEvent: vi.fn(),
   finish: vi.fn(),
   update: vi.fn(),
+  updateClock: vi.fn(),
 }));
 
 vi.mock('../api/gamesApi', () => ({
@@ -169,6 +170,8 @@ describe('GameTrackPage', () => {
     apiMocks.removeEvent.mockReset();
     apiMocks.finish.mockReset();
     apiMocks.update.mockReset();
+    apiMocks.updateClock.mockReset();
+    sessionStorage.clear();
 
     apiMocks.getById.mockImplementation(() => Promise.resolve(currentResponse));
 
@@ -286,6 +289,75 @@ describe('GameTrackPage', () => {
         gameSummary: currentResponse.gameSummary,
       });
     });
+  });
+
+  test('does not show clock recovery immediately after starting the game', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+    });
+    apiMocks.updateClock.mockImplementation(async (gameId, command) => {
+      expect(command).toEqual({ action: 'start' });
+      currentResponse = {
+        ...currentResponse,
+        game: {
+          ...currentResponse.game,
+          clock: {
+            ...currentResponse.game.clock,
+            status: 'running',
+            runningSince: new Date().toISOString(),
+          },
+        },
+      };
+      return currentResponse;
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
+
+    await waitFor(() => expect(apiMocks.updateClock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('The game clock kept running')).not.toBeInTheDocument();
+  });
+
+  test('still shows recovery when the page initially loads a running clock', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('The game clock kept running')).toBeInTheDocument();
   });
 
   test('blocks full-screen tracking until the starting five is set', async () => {
@@ -833,11 +905,12 @@ describe('GameTrackPage', () => {
     expect(within(overlay).getByRole('button', { name: 'TOV' })).toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'FOUL' })).toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'DREB' })).toBeInTheDocument();
-    expect(screen.getByText('66.7%')).toBeInTheDocument();
-    expect(screen.getByText('50.0%')).toBeInTheDocument();
-    expect(screen.getByText('24')).toBeInTheDocument();
-    expect(screen.getByText('18')).toBeInTheDocument();
+    expect(screen.getAllByText('66.7%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('50.0%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('24').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('18').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Opponent').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('game-track-score-header')).toHaveLength(2);
   });
 
   test('rotates the court orientation from the More tab and applies it in both Court and fullscreen views', async () => {

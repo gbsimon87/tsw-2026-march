@@ -98,6 +98,8 @@ export function PricingPage() {
   const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
   const [isSubmittingLeague, setIsSubmittingLeague] = useState(false);
   const [error, setError] = useState('');
+  const isCreatingLeague =
+    searchParams.get('resourceType') === 'league' && searchParams.get('action') === 'create';
 
   // Public catalog — fetched for everyone (drives all pricing copy; no client drift).
   useEffect(() => {
@@ -183,10 +185,14 @@ export function PricingPage() {
     setIsSubmittingLeague(true);
     try {
       let response;
-      if (leagueIsActive && selectedLeagueId) {
+      if (leagueIsActive && selectedLeagueId && !isCreatingLeague) {
         response = await billingApi.createCustomerPortalSession({ leagueId: selectedLeagueId });
       } else {
         response = await billingApi.createLeagueCheckoutSession(interval);
+      }
+      if (response?.devRedirectPath) {
+        window.location.assign(response.devRedirectPath);
+        return;
       }
       if (!response?.url || !isSafeStripeUrl(response.url)) {
         throw new Error('Invalid or missing checkout URL');
@@ -207,7 +213,7 @@ export function PricingPage() {
         : 'Subscribe';
   const leagueCtaLabel = isSubmittingLeague
     ? 'Redirecting…'
-    : leagueIsActive
+    : leagueIsActive && !isCreatingLeague
       ? 'Manage League Billing'
       : trialLabel(leaguePlan, interval)
         ? 'Start free trial'

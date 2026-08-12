@@ -2,12 +2,19 @@ const { z } = require('zod');
 const { playerPositionSchema } = require('../teams/teams.validation');
 
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color');
+const defaultGameFormatSchema = z.object({
+  regulationSegmentType: z.enum(['quarter', 'half']),
+  regulationSegmentDurationSeconds: z.number().int().min(60).max(3600),
+  overtimeDurationSeconds: z.number().int().min(60).max(3600),
+});
 
 const createLeagueSchema = z.object({
   name: z.string().trim().min(1).max(120),
   slug: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().max(500).optional(),
   seasonLabel: z.string().trim().max(80).optional(),
+  sport: z.literal('basketball'),
+  defaultGameFormat: defaultGameFormatSchema,
 });
 
 const updateLeagueSchema = z
@@ -17,6 +24,7 @@ const updateLeagueSchema = z
     description: z.string().trim().max(500).nullable().optional(),
     seasonLabel: z.string().trim().max(80).nullable().optional(),
     isPublic: z.boolean().optional(),
+    defaultGameFormat: defaultGameFormatSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

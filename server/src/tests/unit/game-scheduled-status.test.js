@@ -38,7 +38,7 @@ describe('Game.status enum', () => {
   });
 });
 
-describe('setGameLineup rejects a game that has not started', () => {
+describe('setGameLineup status handling', () => {
   const gameId = new mongoose.Types.ObjectId().toString();
   const userId = new mongoose.Types.ObjectId().toString();
 
@@ -59,14 +59,6 @@ describe('setGameLineup rejects a game that has not started', () => {
   afterEach(() => {
     jest.resetModules();
     jest.restoreAllMocks();
-  });
-
-  it('says the game has not started for a scheduled game', async () => {
-    const service = loadServiceWithGameStatus('scheduled');
-
-    await expect(service.setGameLineup(userId, gameId, { playerIds: [] })).rejects.toThrow(
-      /has not started/i
-    );
   });
 
   it('still says completed for a completed game', async () => {

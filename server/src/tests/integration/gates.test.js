@@ -77,6 +77,9 @@ describe('game tracking is free (T-12 — no subscription gate)', () => {
     // OPP_FG2_MADE is a valid opponent aggregate event that passes the union schema
     const res = await authedPost(app, '/api/v1/games/game-1/events').send({
       statType: 'OPP_FG2_MADE',
+      segmentKind: 'regulation',
+      segmentNumber: 1,
+      clockMillisecondsRemaining: 600000,
     });
 
     expect(res.statusCode).toBe(200);

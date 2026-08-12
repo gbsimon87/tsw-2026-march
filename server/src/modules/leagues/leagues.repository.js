@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
+const { DEFAULT_GAME_FORMAT, SPORTS } = require('../shared/gameClock');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -13,6 +14,15 @@ const logoSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const gameFormatSchema = new mongoose.Schema(
+  {
+    regulationSegmentType: { type: String, enum: ['quarter', 'half'], required: true },
+    regulationSegmentDurationSeconds: { type: Number, required: true, min: 60, max: 3600 },
+    overtimeDurationSeconds: { type: Number, required: true, min: 60, max: 3600 },
+  },
+  { _id: false }
+);
+
 const leagueSchema = new mongoose.Schema(
   {
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -20,6 +30,12 @@ const leagueSchema = new mongoose.Schema(
     slug: { type: String, required: true, trim: true, unique: true, index: true },
     description: { type: String, trim: true, default: null },
     seasonLabel: { type: String, trim: true, default: null },
+    sport: { type: String, enum: [SPORTS.BASKETBALL], default: SPORTS.BASKETBALL, required: true },
+    defaultGameFormat: {
+      type: gameFormatSchema,
+      default: () => ({ ...DEFAULT_GAME_FORMAT }),
+      required: true,
+    },
     // Pointer to the League's active `Season` doc — denormalized so hot paths
     // (game creation, standings/stats reads) resolve it in the same round trip
     // as the League doc they already load. Null until backfill-league-seasons.js

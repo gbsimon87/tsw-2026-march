@@ -155,7 +155,7 @@ export function AdminPage() {
                   </p>
                 </div>
                 <Link
-                  to="/pricing"
+                  to="/pricing?resourceType=league&action=create"
                   className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
                 >
                   New League
@@ -168,7 +168,7 @@ export function AdminPage() {
                   <p className="text-sm text-slate-600">
                     No leagues yet.{' '}
                     <Link
-                      to="/pricing"
+                      to="/pricing?resourceType=league&action=create"
                       className="font-medium text-slate-900 underline decoration-[#F4A300] decoration-2 underline-offset-4 hover:text-[#1B4332]"
                     >
                       Start your 14-day trial →

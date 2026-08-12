@@ -57,6 +57,11 @@ describe('bulkCreateLeagueGamesForUser', () => {
       ownerUserId: OWNER_ID,
       status: 'active',
       currentSeasonId: SEASON_ID,
+      defaultGameFormat: {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      },
     });
     seasonsRepository.findSeasonById.mockResolvedValue({ _id: SEASON_ID, status: 'active' });
     leaguesRepository.listLeagueTeams.mockResolvedValue([

@@ -327,6 +327,12 @@ describe('season scoping on games/standings endpoints (?seasonId=)', () => {
     const app = createApp();
     const res = await authedRequest(app, 'post', '/api/v1/games').send({
       gameContext: 'league',
+      trackingMode: 'one_sided',
+      gameFormat: {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      },
       leagueId: 'league-1',
       homeLeagueTeamId: 'team-a',
       awayLeagueTeamId: 'team-b',
@@ -344,6 +350,12 @@ describe('season scoping on games/standings endpoints (?seasonId=)', () => {
     const app = createApp();
     const res = await authedRequest(app, 'post', '/api/v1/games').send({
       gameContext: 'league',
+      trackingMode: 'one_sided',
+      gameFormat: {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      },
       leagueId: 'league-1',
       homeLeagueTeamId: 'team-a',
       awayLeagueTeamId: 'team-b',
@@ -366,6 +378,12 @@ describe('season scoping on games/standings endpoints (?seasonId=)', () => {
     const app = createApp();
     const res = await authedRequest(app, 'post', '/api/v1/games').send({
       gameContext: 'league',
+      trackingMode: 'one_sided',
+      gameFormat: {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      },
       leagueId: 'league-1',
       homeLeagueTeamId: 'team-a',
       awayLeagueTeamId: 'team-b',

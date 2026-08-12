@@ -96,10 +96,14 @@ describe('NewGamePage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Create and Start Tracking/i }));
 
     await waitFor(() => {
-      expect(gamesApi.create).toHaveBeenCalledWith({
-        teamId: 't1',
-        title: 'Saturday Game',
-      });
+      expect(gamesApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teamId: 't1',
+          title: 'Saturday Game',
+          gameContext: 'standalone',
+          trackingMode: 'one_sided',
+        })
+      );
     });
   });
 
@@ -127,11 +131,15 @@ describe('NewGamePage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Create and Start Tracking/i }));
 
     await waitFor(() => {
-      expect(gamesApi.create).toHaveBeenCalledWith({
-        teamId: 't1',
-        title: 'Film Session',
-        videoUrl: 'https://youtu.be/dQw4w9WgXcQ',
-      });
+      expect(gamesApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teamId: 't1',
+          title: 'Film Session',
+          videoUrl: 'https://youtu.be/dQw4w9WgXcQ',
+          gameContext: 'standalone',
+          trackingMode: 'one_sided',
+        })
+      );
     });
   });
 });

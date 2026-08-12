@@ -150,11 +150,25 @@ Finishing a game freezes scores and summaries, updates league aggregates, and
 may publish an automatic feed post when `AUTO_FEED_ENABLED=true` and the league
 is public.
 
+Games are currently basketball-only and have an immutable format snapshot:
+four quarters or two halves, a per-segment duration, and an overtime duration.
+The default is four 10-minute quarters and five-minute overtimes. The server
+owns a persisted, anchored countdown clock; it stops at zero and period/OT
+transitions are manual. A tracker may also finish a running or paused quarter,
+half, or overtime early when the app clock trails the real game. Starting the
+clock requires the starting five(s), while finishing a game early is allowed.
+Every stat event stores an independent
+period/clock snapshot in addition to its optional video timestamp.
+
 ## Leagues
 
 Every league game, standing, player-stat record, export, schedule, and
 data-health result is season-scoped. New league-game flows must resolve an
 active `seasonId`.
+
+League owners configure the default game format in Settings. Managers can read
+but cannot edit it. Single-game creation can override the league default;
+schedule-builder games always snapshot it without a batch override.
 
 The schedule builder creates up to 200 scheduled games in one request. Replace
 mode removes only event-free scheduled games in the active season. Data health
@@ -185,6 +199,10 @@ Checkout and customer management use Stripe-hosted Checkout and Billing Portal
 URLs. Stripe webhooks are mounted with a raw body before JSON parsing and are
 the authority for subscription state. Comped resources use
 `billingSource: 'comp'` and must not be changed by Stripe events.
+
+In `NODE_ENV=development`, starting a new league checkout provisions a local
+comped league and redirects directly to league setup. Existing-resource billing
+management and every production billing path continue to use Stripe.
 
 The production pricing route is still disabled. See [`pricing.md`](./pricing.md)
 and [`pricing-manual-actions.md`](./pricing-manual-actions.md).

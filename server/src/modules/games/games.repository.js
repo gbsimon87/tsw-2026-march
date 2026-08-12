@@ -1,6 +1,31 @@
 const mongoose = require('mongoose');
 const { STAT_TYPES, SHOT_ZONE_IDS, TEAM_SIDES } = require('../shared/stats.constants');
 const { applyIdCursor } = require('../../utils/pagination');
+const { SPORTS, DEFAULT_GAME_FORMAT, createReadyClock } = require('../shared/gameClock');
+
+const gameFormatSchema = new mongoose.Schema(
+  {
+    regulationSegmentType: { type: String, enum: ['quarter', 'half'], required: true },
+    regulationSegmentDurationSeconds: { type: Number, required: true, min: 60, max: 3600 },
+    overtimeDurationSeconds: { type: Number, required: true, min: 60, max: 3600 },
+  },
+  { _id: false }
+);
+
+const clockSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ['ready', 'running', 'paused', 'segment_complete'],
+      required: true,
+    },
+    segmentKind: { type: String, enum: ['regulation', 'overtime'], required: true },
+    segmentNumber: { type: Number, min: 1, required: true },
+    remainingMilliseconds: { type: Number, min: 0, required: true },
+    runningSince: { type: Date, default: null },
+  },
+  { _id: false }
+);
 
 const participantSchema = new mongoose.Schema(
   {
@@ -98,6 +123,9 @@ const shotEventSchema = new mongoose.Schema(
       required: false,
     },
     videoTimestamp: { type: Number, min: 0, required: false },
+    segmentKind: { type: String, enum: ['regulation', 'overtime'], required: true },
+    segmentNumber: { type: Number, min: 1, required: true },
+    clockMillisecondsRemaining: { type: Number, min: 0, required: true },
     occurredAt: { type: Date, default: Date.now },
   },
   { _id: true }
@@ -148,6 +176,17 @@ const gameSchema = new mongoose.Schema(
       enum: ['one_sided', 'dual_team'],
       default: 'one_sided',
       index: true,
+    },
+    sport: { type: String, enum: [SPORTS.BASKETBALL], default: SPORTS.BASKETBALL, required: true },
+    gameFormat: {
+      type: gameFormatSchema,
+      default: () => ({ ...DEFAULT_GAME_FORMAT }),
+      required: true,
+    },
+    clock: {
+      type: clockSchema,
+      default: () => createReadyClock(DEFAULT_GAME_FORMAT),
+      required: true,
     },
     leagueId: { type: mongoose.Schema.Types.ObjectId, ref: 'League', default: null, index: true },
     // Null for standalone games and for league games created before the

@@ -2,6 +2,14 @@ const { z } = require('zod');
 const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { paginationQueryShape } = require('../shared/pagination.validation');
 
+const gameFormatSchema = z.object({
+  regulationSegmentType: z.enum(['quarter', 'half']),
+  regulationSegmentDurationSeconds: z.number().int().min(60).max(3600),
+  overtimeDurationSeconds: z.number().int().min(60).max(3600),
+});
+
+const gameFormatEnvelopeSchema = z.object({ gameFormat: gameFormatSchema });
+
 function isSupportedYouTubeUrl(value) {
   try {
     const url = new URL(value);
@@ -35,6 +43,8 @@ const youtubeUrlSchema = z
   .refine(isSupportedYouTubeUrl, 'Video URL must be a valid YouTube link');
 
 const standaloneGameSchema = z.object({
+  gameContext: z.literal('standalone'),
+  trackingMode: z.literal('one_sided'),
   teamId: z.string().min(1),
   title: z.string().trim().min(1).max(120),
   opponent: z.string().trim().min(1).max(120).optional(),
@@ -43,7 +53,7 @@ const standaloneGameSchema = z.object({
 });
 
 const standaloneDualGameSchema = z.object({
-  gameContext: z.literal('standalone').optional(),
+  gameContext: z.literal('standalone'),
   trackingMode: z.literal('dual_team'),
   homeTeamId: z.string().min(1),
   awayTeamId: z.string().min(1),
@@ -60,6 +70,7 @@ const venueSchema = z.string().trim().max(120).optional();
 
 const leagueGameSchema = z.object({
   gameContext: z.literal('league'),
+  trackingMode: z.literal('one_sided'),
   leagueId: z.string().min(1),
   homeLeagueTeamId: z.string().min(1),
   awayLeagueTeamId: z.string().min(1),
@@ -83,12 +94,9 @@ const leagueDualGameSchema = z.object({
   videoUrl: youtubeUrlSchema.optional(),
 });
 
-const createGameSchema = z.union([
-  standaloneGameSchema,
-  standaloneDualGameSchema,
-  leagueGameSchema,
-  leagueDualGameSchema,
-]);
+const createGameSchema = gameFormatEnvelopeSchema.and(
+  z.union([standaloneGameSchema, standaloneDualGameSchema, leagueGameSchema, leagueDualGameSchema])
+);
 
 const updateGameSchema = z
   .object({
@@ -168,6 +176,11 @@ const opponentStatTypeSchema = z.enum([
 ]);
 
 const videoTimestampField = { videoTimestamp: z.number().min(0).optional() };
+const eventClockSnapshotSchema = z.object({
+  segmentKind: z.enum(['regulation', 'overtime']),
+  segmentNumber: z.number().int().min(1),
+  clockMillisecondsRemaining: z.number().min(0),
+});
 
 const baseEventSchema = z.object({
   playerId: z.string().min(1),
@@ -208,27 +221,58 @@ const appendOpponentEventSchema = z.object({
   ...videoTimestampField,
 });
 
-const appendEventSchema = z.union([
-  appendTrackedShotEventSchema,
-  appendNonShotEventSchema,
-  appendSubstitutionEventSchema,
-  appendOpponentEventSchema,
-]);
+const appendEventSchema = eventClockSnapshotSchema.and(
+  z.union([
+    appendTrackedShotEventSchema,
+    appendNonShotEventSchema,
+    appendSubstitutionEventSchema,
+    appendOpponentEventSchema,
+  ])
+);
 
 const setLineupSchema = z.object({
   playerIds: z.array(z.string().min(1)).length(5),
   teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 
-const updateEventSchema = z.object({
-  playerId: z.string().min(1).optional(),
-  teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
-  statType: statTypeSchema.optional(),
-  zoneId: zoneIdSchema.optional(),
-  x: z.number().min(0).max(100).optional(),
-  y: z.number().min(0).max(100).optional(),
-  videoTimestamp: z.number().min(0).nullable().optional(),
-});
+const updateEventSchema = z
+  .object({
+    playerId: z.string().min(1).optional(),
+    teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+    statType: statTypeSchema.optional(),
+    zoneId: zoneIdSchema.optional(),
+    x: z.number().min(0).max(100).optional(),
+    y: z.number().min(0).max(100).optional(),
+    videoTimestamp: z.number().min(0).nullable().optional(),
+    segmentKind: z.enum(['regulation', 'overtime']).optional(),
+    segmentNumber: z.number().int().min(1).optional(),
+    clockMillisecondsRemaining: z.number().min(0).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const keys = ['segmentKind', 'segmentNumber', 'clockMillisecondsRemaining'];
+    const present = keys.filter((key) => value[key] !== undefined);
+    if (present.length > 0 && present.length !== keys.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['segmentKind'],
+        message: 'Complete period and clock snapshot is required',
+      });
+    }
+  });
+
+const clockCommandSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('start') }),
+  z.object({ action: z.literal('pause') }),
+  z.object({ action: z.literal('finish_segment') }),
+  z.object({
+    action: z.literal('correct'),
+    segmentKind: z.enum(['regulation', 'overtime']),
+    segmentNumber: z.number().int().min(1),
+    remainingMilliseconds: z.number().min(0),
+  }),
+  z.object({ action: z.literal('next_segment') }),
+  z.object({ action: z.literal('start_overtime') }),
+]);
 
 // OPT-018: query validation for the paginated GET /games list.
 const listGamesSchema = z.object({
@@ -256,4 +300,6 @@ module.exports = {
   updateEventSchema,
   listGamesSchema,
   addRosterPlayerSchema,
+  gameFormatSchema,
+  clockCommandSchema,
 };

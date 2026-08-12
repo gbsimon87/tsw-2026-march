@@ -31,6 +31,9 @@ export const gamesApi = {
   setLineup(gameId, payload) {
     return apiClient.post(`/games/${gameId}/lineup`, payload);
   },
+  updateClock(gameId, command) {
+    return apiClient.patch(`/games/${gameId}/clock`, command);
+  },
   addRosterPlayer(gameId, payload) {
     return apiClient.post(`/games/${gameId}/roster`, payload);
   },

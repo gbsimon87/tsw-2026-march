@@ -13,6 +13,8 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
+import { GameFormatFields } from '../../games/components/GameFormatFields';
+import { DEFAULT_GAME_FORMAT } from '../../games/gameClock';
 
 const LEAGUE_EXPORT_DATASETS = [
   { value: 'all', label: 'Everything' },
@@ -107,7 +109,7 @@ const TABS = [
   },
   {
     id: 'completeness',
-    label: 'Data health',
+    label: 'Health',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -167,6 +169,7 @@ export function AdminLeaguePage() {
   const [completenessReport, setCompletenessReport] = useState(null);
   const [completenessLoading, setCompletenessLoading] = useState(false);
   const [completenessError, setCompletenessError] = useState(null);
+  const [defaultGameFormatDraft, setDefaultGameFormatDraft] = useState({ ...DEFAULT_GAME_FORMAT });
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -192,7 +195,12 @@ export function AdminLeaguePage() {
   useEffect(() => {
     leaguesApi
       .getById(leagueId)
-      .then((response) => setLeague(response.league))
+      .then((response) => {
+        setLeague(response.league);
+        setDefaultGameFormatDraft({
+          ...(response.league.defaultGameFormat || DEFAULT_GAME_FORMAT),
+        });
+      })
       .catch((loadError) => setError(loadError.message || 'Failed to load league'))
       .finally(() => setIsLoading(false));
   }, [leagueId]);
@@ -427,6 +435,25 @@ export function AdminLeaguePage() {
       setLeague(response.league);
     } catch (submitError) {
       setError(submitError.message || 'Failed to update league visibility');
+    } finally {
+      setIsUpdatingLeague(false);
+    }
+  }
+
+  async function onSaveDefaultGameFormat() {
+    if (!isOwner || isUpdatingLeague) return;
+    setError('');
+    setIsUpdatingLeague(true);
+    try {
+      const response = await leaguesApi.update(league.id, {
+        defaultGameFormat: defaultGameFormatDraft,
+      });
+      setLeague(response.league);
+      setDefaultGameFormatDraft({
+        ...(response.league.defaultGameFormat || DEFAULT_GAME_FORMAT),
+      });
+    } catch (submitError) {
+      setError(submitError.message || 'Failed to update default game format');
     } finally {
       setIsUpdatingLeague(false);
     }
@@ -1269,6 +1296,32 @@ export function AdminLeaguePage() {
                 Current visibility:{' '}
                 <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
               </p>
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <GameFormatFields
+                  value={defaultGameFormatDraft}
+                  onChange={setDefaultGameFormatDraft}
+                  legend="Default basketball game format"
+                  disabled={!isOwner || isUpdatingLeague}
+                />
+                <p className="mt-2 text-sm text-slate-600">
+                  This default applies only to games created after it is saved.
+                </p>
+                {isOwner ? (
+                  <button
+                    type="button"
+                    onClick={onSaveDefaultGameFormat}
+                    disabled={isUpdatingLeague}
+                    className="mt-3 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {isUpdatingLeague ? 'Saving…' : 'Save game format'}
+                  </button>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Only the league owner can change this setting.
+                  </p>
+                )}
+              </div>
 
               <div className="mt-8 border-t border-slate-200 pt-6">
                 <h2

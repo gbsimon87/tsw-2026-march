@@ -1,8 +1,30 @@
-const { createGameSchema, appendEventSchema } = require('../../modules/games/games.validation');
+const {
+  createGameSchema,
+  appendEventSchema,
+  clockCommandSchema,
+} = require('../../modules/games/games.validation');
+
+const GAME_FORMAT = {
+  regulationSegmentType: 'quarter',
+  regulationSegmentDurationSeconds: 600,
+  overtimeDurationSeconds: 300,
+};
+const CLOCK_SNAPSHOT = {
+  segmentKind: 'regulation',
+  segmentNumber: 1,
+  clockMillisecondsRemaining: 600000,
+};
 
 describe('games validation', () => {
+  test('accepts the manual finish-period clock command', () => {
+    expect(clockCommandSchema.parse({ action: 'finish_segment' })).toEqual({
+      action: 'finish_segment',
+    });
+  });
+
   test('accepts FREE_THROW_LINE zone with coordinates', () => {
     const parsed = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
       playerId: 'player-1',
       statType: 'FT_MADE',
       zoneId: 'FREE_THROW_LINE',
@@ -16,6 +38,7 @@ describe('games validation', () => {
   test('rejects shot event without coordinates', () => {
     expect(() =>
       appendEventSchema.parse({
+        ...CLOCK_SNAPSHOT,
         playerId: 'player-1',
         statType: 'FG3_MADE',
         zoneId: 'WING_LEFT_3',
@@ -25,6 +48,7 @@ describe('games validation', () => {
 
   test('accepts rebound event without coordinates', () => {
     const parsed = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
       playerId: 'player-1',
       statType: 'OREB',
     });
@@ -34,6 +58,7 @@ describe('games validation', () => {
 
   test('accepts assist event without coordinates', () => {
     const parsed = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
       playerId: 'player-1',
       statType: 'AST',
     });
@@ -43,6 +68,7 @@ describe('games validation', () => {
 
   test('accepts opponent rebound without player id', () => {
     const parsed = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
       statType: 'OPP_REB',
     });
 
@@ -51,6 +77,7 @@ describe('games validation', () => {
 
   test('accepts substitution event with related player id', () => {
     const parsed = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
       playerId: 'player-1',
       relatedPlayerId: 'player-6',
       statType: 'SUB_OUT',
@@ -62,6 +89,9 @@ describe('games validation', () => {
 
   test('accepts optional opponent when creating game', () => {
     const parsed = createGameSchema.parse({
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
       teamId: 'team-1',
       title: 'Playoff game',
       opponent: 'Wildcats',
@@ -73,6 +103,9 @@ describe('games validation', () => {
   test('rejects blank opponent when provided', () => {
     expect(() =>
       createGameSchema.parse({
+        gameContext: 'standalone',
+        trackingMode: 'one_sided',
+        gameFormat: GAME_FORMAT,
         teamId: 'team-1',
         title: 'Playoff game',
         opponent: '   ',
@@ -82,6 +115,9 @@ describe('games validation', () => {
 
   test('accepts YouTube video URL when creating game', () => {
     const parsed = createGameSchema.parse({
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
       teamId: 'team-1',
       title: 'Playoff game',
       videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -93,6 +129,9 @@ describe('games validation', () => {
   test('rejects non-YouTube video URL when creating game', () => {
     expect(() =>
       createGameSchema.parse({
+        gameContext: 'standalone',
+        trackingMode: 'one_sided',
+        gameFormat: GAME_FORMAT,
         teamId: 'team-1',
         title: 'Playoff game',
         videoUrl: 'https://vimeo.com/123456',

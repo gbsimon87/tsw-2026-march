@@ -4,6 +4,8 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { gamesApi } from '../api/gamesApi';
+import { GameFormatFields } from '../components/GameFormatFields';
+import { DEFAULT_GAME_FORMAT } from '../gameClock';
 
 export function NewGamePage() {
   const navigate = useNavigate();
@@ -19,6 +21,7 @@ export function NewGamePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
 
   useEffect(() => {
     Promise.allSettled([teamsApi.list(), gamesApi.list()])
@@ -67,8 +70,11 @@ export function NewGamePage() {
 
     try {
       const payload = {
+        gameContext: 'standalone',
+        trackingMode: 'one_sided',
         teamId,
         title,
+        gameFormat,
       };
 
       const resolvedOpponent = (
@@ -254,6 +260,8 @@ export function NewGamePage() {
             />
           </label>
         </section>
+
+        <GameFormatFields value={gameFormat} onChange={setGameFormat} />
 
         <section aria-labelledby="video-heading" className="space-y-3">
           <h2 id="video-heading" className="text-xl font-semibold text-slate-900">

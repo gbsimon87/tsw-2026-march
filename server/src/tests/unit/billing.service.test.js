@@ -71,6 +71,7 @@ const {
 } = require('../../modules/leagues/leagues.repository');
 const { updateUserPlan } = require('../../modules/auth/auth.repository');
 const { sendPaymentFailedEmail, sendTrialEndingEmail } = require('../../services/email.service');
+const { env } = require('../../config/env');
 const {
   isTeamActive,
   isLeagueActive,
@@ -674,6 +675,32 @@ describe('createLeagueCheckoutSession trial farming (audit H1)', () => {
 
     const arg = mockCheckoutCreate.mock.calls[0][0];
     expect(arg.subscription_data.trial_period_days).toBe(14);
+  });
+});
+
+describe('createLeagueCheckoutSession development bypass', () => {
+  test('provisions an active comped league without calling Stripe', async () => {
+    jest.clearAllMocks();
+    env.NODE_ENV = 'development';
+    League.create.mockResolvedValue({ _id: 'league-dev' });
+
+    try {
+      await expect(createLeagueCheckoutSession('user-1', 'season')).resolves.toEqual({
+        devRedirectPath: '/admin/leagues/new',
+      });
+      expect(League.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerUserId: 'user-1',
+          plan: 'league',
+          subscriptionStatus: 'active',
+          billingSource: 'comp',
+          billingInterval: 'season',
+        })
+      );
+      expect(mockCheckoutCreate).not.toHaveBeenCalled();
+    } finally {
+      delete env.NODE_ENV;
+    }
   });
 });
 

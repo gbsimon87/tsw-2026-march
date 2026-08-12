@@ -8,6 +8,7 @@ const {
   updateEventSchema,
   listGamesSchema,
   addRosterPlayerSchema,
+  clockCommandSchema,
 } = require('./games.validation');
 
 function requireAuthUserId(req) {
@@ -104,6 +105,13 @@ async function finish(req, res) {
   res.status(200).json(result);
 }
 
+async function updateClock(req, res) {
+  const userId = requireAuthUserId(req);
+  const command = clockCommandSchema.parse(req.body);
+  const result = await gamesService.updateClockForUser(userId, req.params.gameId, command);
+  res.status(200).json(result);
+}
+
 async function deleteGame(req, res) {
   const userId = requireAuthUserId(req);
   await gamesService.deleteGameForUser(userId, req.params.gameId);
@@ -128,6 +136,7 @@ module.exports = {
   updateEvent,
   setLineup,
   removeEvent,
+  updateClock,
   deleteGame,
   finish,
   addRosterPlayer,
