@@ -74,7 +74,7 @@ describe('FeedPage', () => {
     cleanup();
   });
 
-  test('routes logged-out composer action to login', async () => {
+  test('routes logged-out composer action to register', async () => {
     authMocks.useAuth.mockReturnValue({ user: null });
 
     render(
@@ -82,7 +82,7 @@ describe('FeedPage', () => {
         <MemoryRouter initialEntries={['/pulse']}>
           <Routes>
             <Route path="/pulse" element={<FeedPage />} />
-            <Route path="/login" element={<div>Login page</div>} />
+            <Route path="/register" element={<div>Register page</div>} />
           </Routes>
         </MemoryRouter>
       )
@@ -110,7 +110,7 @@ describe('FeedPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create post' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Login page')).toBeInTheDocument();
+      expect(screen.getByText('Register page')).toBeInTheDocument();
     });
   });
 

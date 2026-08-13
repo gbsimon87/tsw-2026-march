@@ -39,13 +39,13 @@ describe('FollowButton', () => {
     cleanup();
   });
 
-  test('logged-out viewer sees a "Log in to follow" link', () => {
+  test('logged-out viewer sees a "Join to follow" link pointing at register', () => {
     useAuth.mockReturnValue({ user: null });
 
     renderButton({ targetUserId: 'target-1' });
 
-    const cta = screen.getByText(/log in to follow/i);
-    expect(cta.closest('a')).toHaveAttribute('href', '/login');
+    const cta = screen.getByText(/join to follow/i);
+    expect(cta.closest('a')).toHaveAttribute('href', '/register');
     expect(followsApi.getStatuses).not.toHaveBeenCalled();
   });
 

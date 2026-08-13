@@ -66,8 +66,8 @@ export function FollowButton({
       ? 'border border-white/30 text-white hover:border-[#F4A300] hover:text-[#F4A300]'
       : 'border border-[#141414] text-[#141414] hover:bg-[#141414] hover:text-white';
     return (
-      <Link to="/login" className={`${baseClass} ${ctaClass} ${className}`}>
-        Log in to follow
+      <Link to="/register" className={`${baseClass} ${ctaClass} ${className}`}>
+        Join to follow
       </Link>
     );
   }

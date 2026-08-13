@@ -30,7 +30,7 @@ function GoogleIcon() {
 const inputClass =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20';
 
-export function RegisterForm({ redirectTo, onRegistered, onSwitchToLogin }) {
+export function RegisterForm({ redirectTo = '/pulse', onRegistered, onSwitchToLogin }) {
   const { register } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(
@@ -38,11 +38,13 @@ export function RegisterForm({ redirectTo, onRegistered, onSwitchToLogin }) {
     registerSchema,
     async (payload) => {
       await register(payload);
+      // Registration signs the user in, so go straight to the destination
+      // rather than sending them to the login form to re-enter what they
+      // just typed. Mirrors LoginForm.
       if (onRegistered) {
         onRegistered();
       } else {
-        const next = redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login';
-        navigate(next);
+        navigate(redirectTo);
       }
     }
   );

@@ -27,21 +27,21 @@ values, or other personal data.** Autocapture and session recording stay off.
 
 ### Outstanding problems
 
-1. **Server `POSTHOG_KEY` is empty** in both server env files, so `posthogClient`
-   is `null` and every server capture returns `{captured: false}`. The three
-   server events in §7 cannot fire until this is set.
-2. **`render.yaml` still has three US hosts and analytics off** — see §2.
-   A US host with an EU key is accepted and ingests nothing: no error, no
-   warning, no events. Both env-validator defaults
-   ([`client/src/lib/env.js`](../client/src/lib/env.js),
-   [`server/src/config/env.js`](../server/src/config/env.js)) also fall back to
-   the US host, so the value must be set explicitly everywhere.
-3. **Cookies are written before consent.** `persistence: 'localStorage+cookie'`
+1. **Cookies are written before consent.** `persistence: 'localStorage+cookie'`
    and `initPostHog()` runs on first route render for every visitor. This is the
-   main compliance gap (§3).
-4. **`trackEvent.js` checks only `env.enableAnalytics`**, not whether PostHog
+   main compliance gap (§3) and the reason analytics stays disabled on both
+   deployed client services until the banner ships.
+2. **`trackEvent.js` checks only `env.enableAnalytics`**, not whether PostHog
    initialised — inconsistent with `lib/posthog.js`, and a real bug once consent
    gating lands.
+3. **Both env-validator defaults point at the US host** —
+   [`client/src/lib/env.js`](../client/src/lib/env.js) and
+   [`server/src/config/env.js`](../server/src/config/env.js) fall back to
+   `https://app.posthog.com` when the variable is unset. Every environment now
+   sets it explicitly (§2), but an unset variable would fail silently: a US host
+   with an EU key is accepted and ingests nothing.
+
+Environment configuration (keys, hosts) is resolved — see §2.
 
 ## 2. Environment separation — **DECIDED**
 

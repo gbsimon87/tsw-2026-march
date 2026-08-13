@@ -106,7 +106,7 @@ async function issuePasswordReset(user) {
   });
 }
 
-async function register(input) {
+async function register(input, metadata) {
   const existing = await findUserByEmail(input.email);
   if (existing) {
     throw new ApiError(409, 'Email is already in use');
@@ -124,11 +124,9 @@ async function register(input) {
     // the User enum is canonical-only since T-26 and rejects legacy 'free').
   });
 
-  return {
-    user: sanitizeUser(user),
-    message: 'Registration successful. You can now sign in.',
-    verificationUrl: null,
-  };
+  // Sign the new user straight in rather than redirecting them to the login form
+  // to re-enter the credentials they just chose. Same token path as login().
+  return issueAuthTokens(user, metadata);
 }
 
 async function login(input, metadata) {

@@ -34,7 +34,7 @@ describe('auth service', () => {
     jest.clearAllMocks();
   });
 
-  test('register creates a local account without requiring email verification', async () => {
+  test('register creates a local account and signs the user in', async () => {
     repository.findUserByEmail.mockResolvedValue(null);
     repository.createUser.mockResolvedValue({
       _id: 'user-1',
@@ -46,14 +46,35 @@ describe('auth service', () => {
       authProvider: 'local',
     });
 
-    const result = await authService.register({
-      email: 'player@example.com',
-      name: 'Player One',
-      password: 'password123',
-    });
+    const result = await authService.register(
+      {
+        email: 'player@example.com',
+        name: 'Player One',
+        password: 'password123',
+      },
+      { userAgent: 'jest', ip: '127.0.0.1' }
+    );
 
-    expect(result.message).toBe('Registration successful. You can now sign in.');
-    expect(result.verificationUrl).toBeNull();
+    // Registration issues a session directly rather than bouncing the new user
+    // to the login form to re-enter the credentials they just chose.
+    expect(result.accessToken).toEqual(expect.any(String));
+    expect(result.refreshToken).toEqual(expect.any(String));
+    expect(result.user.email).toBe('player@example.com');
+    expect(repository.upsertSession).toHaveBeenCalledTimes(1);
+  });
+
+  test('register rejects an email that is already in use', async () => {
+    repository.findUserByEmail.mockResolvedValue({ _id: 'existing', email: 'taken@example.com' });
+
+    await expect(
+      authService.register(
+        { email: 'taken@example.com', name: 'Someone', password: 'password123' },
+        { userAgent: 'jest', ip: '127.0.0.1' }
+      )
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(repository.createUser).not.toHaveBeenCalled();
+    expect(repository.upsertSession).not.toHaveBeenCalled();
   });
 
   test('requestEmailVerification returns a generic response when verification is not required', async () => {

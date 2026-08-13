@@ -54,8 +54,8 @@ export function AppLayout() {
               Contact
             </NavLink>
             {!user ? (
-              <NavLink to="/login" className={desktopNavLinkClass}>
-                Sign in
+              <NavLink to="/register" className={desktopNavLinkClass}>
+                Sign in / Join
               </NavLink>
             ) : (
               <button type="button" className="rounded py-1 text-sm text-dark" onClick={logout}>
@@ -185,11 +185,11 @@ export function AppLayout() {
             </NavLink>
             {!user ? (
               <NavLink
-                to="/login"
+                to="/register"
                 className={mobileNavLinkClass}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Sign in
+                Sign in / Join
               </NavLink>
             ) : (
               <button

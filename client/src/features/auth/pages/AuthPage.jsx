@@ -10,7 +10,6 @@ export function AuthPage() {
   const isRegister = location.pathname === '/register';
   const redirectTo = searchParams.get('redirectTo') || undefined;
   const verifyEmail = searchParams.get('verifyEmail') === '1';
-  const registered = searchParams.get('registered') === '1';
   const oauthError = searchParams.get('oauthError');
 
   function buildQuery(extra = {}) {
@@ -30,7 +29,9 @@ export function AuthPage() {
   }
 
   function handleRegistered() {
-    goToLogin({ registered: '1' });
+    // Registration issues a session, so land on the destination rather than
+    // bouncing back to the login form.
+    navigate(redirectTo || '/pulse', { replace: true });
   }
 
   return (
@@ -50,11 +51,6 @@ export function AuthPage() {
       {verifyEmail ? (
         <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           Check your inbox and verify your email before signing in.
-        </p>
-      ) : null}
-      {registered ? (
-        <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          Account created — you can now log in.
         </p>
       ) : null}
       {oauthError === 'google_unavailable' ? (

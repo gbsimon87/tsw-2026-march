@@ -87,7 +87,7 @@ export function FeedPage() {
       trackEvent('feed_composer_opened');
       return;
     }
-    navigate(`/login?redirectTo=${encodeURIComponent(composeRedirectTarget)}`);
+    navigate(`/register?redirectTo=${encodeURIComponent(composeRedirectTarget)}`);
   }
 
   function closeComposer() {
