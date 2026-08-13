@@ -50,8 +50,9 @@ function clearAuthCookies(res) {
 
 async function register(req, res) {
   const payload = registerSchema.parse(req.body);
-  const result = await authService.register(payload);
-  res.status(201).json(result);
+  const result = await authService.register(payload, metadata(req));
+  setAuthCookies(res, result.accessToken, result.refreshToken);
+  res.status(201).json({ user: result.user });
 }
 
 async function login(req, res) {

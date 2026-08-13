@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
+import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEvents';
 import { billingApi } from '../api/billingApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { leaguesApi } from '../../leagues/api/leaguesApi';
@@ -340,6 +341,7 @@ export function PricingPage() {
             <Link
               to="/register?redirectTo=/pricing"
               className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PRICING)}
             >
               Start free trial
             </Link>
@@ -403,6 +405,7 @@ export function PricingPage() {
             <Link
               to="/register?redirectTo=/pricing"
               className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PRICING)}
             >
               Start free trial
             </Link>

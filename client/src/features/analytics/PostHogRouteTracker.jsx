@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { useAuth } from '../../app/store/AuthContext';
+import { onConsentChange } from '../../lib/consent';
 import { env } from '../../lib/env';
 import {
   capturePostHogPageLeave,
@@ -17,6 +18,7 @@ const routePatterns = [
   '/pulse',
   '/login',
   '/register',
+  '/privacy',
   '/auth/google/complete',
   '/forgot-password',
   '/reset-password',
@@ -70,6 +72,7 @@ export function PostHogRouteTracker() {
   const lastPagePropsRef = useRef(null);
   const maxScrollDepthRef = useRef(0);
   const identifiedUserIdRef = useRef('');
+  const [consentRevision, setConsentRevision] = useState(0);
   const routePattern = useMemo(() => getRoutePattern(location.pathname), [location.pathname]);
   const routeKey = `${location.pathname}${location.search}`;
 
@@ -78,6 +81,8 @@ export function PostHogRouteTracker() {
   }, []);
 
   useScrollDepth(onScrollDepthReached, routeKey);
+
+  useEffect(() => onConsentChange(() => setConsentRevision((value) => value + 1)), []);
 
   useEffect(() => {
     // Init here (after first paint, before the first capture) rather than at
@@ -121,8 +126,13 @@ export function PostHogRouteTracker() {
     }
 
     if (user?.id) {
-      identifiedUserIdRef.current = user.id;
-      identifyPostHogUser(user.id, getSafeUserProperties(user));
+      // Only record the id once identify actually happened. identifyPostHogUser
+      // is a no-op before consent, and setting the ref regardless would make
+      // the consentRevision re-run below think the work was already done —
+      // leaving a signed-in user anonymous for the rest of the session.
+      if (identifyPostHogUser(user.id, getSafeUserProperties(user))) {
+        identifiedUserIdRef.current = user.id;
+      }
       return;
     }
 
@@ -130,7 +140,9 @@ export function PostHogRouteTracker() {
       identifiedUserIdRef.current = '';
       resetPostHogUser();
     }
-  }, [isLoading, user]);
+    // consentRevision re-runs this after the visitor accepts, so someone
+    // already signed in is identified without needing a page reload.
+  }, [isLoading, user, consentRevision]);
 
   return null;
 }

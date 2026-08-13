@@ -69,7 +69,10 @@ export function AuthProvider({ children }) {
         const result = await authApi.register(payload);
         authRevisionRef.current += 1;
         purgePrivateCache();
-        queryClient.setQueryData(AUTH_ME_QUERY_KEY, null);
+        // Registration now issues a session (server sets the auth cookies), so
+        // seed the cache with the new user exactly as login does. Previously
+        // this set null because the user still had to log in separately.
+        queryClient.setQueryData(AUTH_ME_QUERY_KEY, result.user);
         return result;
       },
       async loginWithGoogleExchange(token) {

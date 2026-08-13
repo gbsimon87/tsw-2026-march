@@ -182,7 +182,7 @@ describe('AppRouter', () => {
     });
   });
 
-  test('logged-out pulse fab routes to login with compose redirect', async () => {
+  test('logged-out pulse fab routes to register with compose redirect', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 
     renderWithProviders(
@@ -199,9 +199,9 @@ describe('AppRouter', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create post' }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: 'Log in' }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: 'Create account' }).length).toBeGreaterThan(0);
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/login?redirectTo=%2Fpulse%3Fcompose%3D1'
+        '/register?redirectTo=%2Fpulse%3Fcompose%3D1'
       );
     });
   });

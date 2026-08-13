@@ -1,8 +1,12 @@
 import posthog from 'posthog-js';
-import { env } from '../../lib/env';
+import { isPostHogEnabled, isPostHogInitialized } from '../../lib/posthog';
 
 export function trackEvent(event, properties = {}) {
-  if (!env.enableAnalytics) {
+  // Gate on initialisation, not just the env flag: PostHogRouteTracker calls
+  // initPostHog() after first paint, so a call made before that would reach an
+  // uninitialised client. Capture is safe pre-consent — init runs in
+  // memory-only persistence until the visitor accepts (docs/analytics-plan.md §3).
+  if (!isPostHogEnabled() || !isPostHogInitialized()) {
     return;
   }
 
