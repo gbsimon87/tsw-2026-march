@@ -1,7 +1,8 @@
 # Analytics (PostHog)
 
-**Status: designed, not yet implemented.** Single source of truth for PostHog in
-this repo. §11 lists what is still outstanding.
+**Status: Phase 1 implemented, not yet enabled in production.** Single source of
+truth for PostHog in this repo. §11 lists what is still outstanding — chiefly
+the Render dashboard keys and flipping `VITE_ENABLE_ANALYTICS` on.
 
 Goal: get trustworthy baseline numbers before onboarding more leagues. Today we
 cannot answer "how many people are signing up or viewing pages".
@@ -27,13 +28,10 @@ values, or other personal data.** Autocapture and session recording stay off.
 
 ### Outstanding problems
 
-1. **Cookies are written before consent.** `persistence: 'localStorage+cookie'`
-   and `initPostHog()` runs on first route render for every visitor. This is the
-   main compliance gap (§3) and the reason analytics stays disabled on both
-   deployed client services until the banner ships.
-2. **`trackEvent.js` checks only `env.enableAnalytics`**, not whether PostHog
-   initialised — inconsistent with `lib/posthog.js`, and a real bug once consent
-   gating lands.
+1. ~~Cookies written before consent~~ — **resolved.** PostHog initialises with
+   `persistence: 'memory'` and upgrades only on accept (§3).
+2. ~~`trackEvent.js` gated only on `env.enableAnalytics`~~ — **resolved.** It now
+   also checks initialisation.
 3. **Both env-validator defaults point at the US host** —
    [`client/src/lib/env.js`](../client/src/lib/env.js) and
    [`server/src/config/env.js`](../server/src/config/env.js) fall back to
@@ -516,22 +514,39 @@ From [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md):
 - [ ] ⏳ Deferred: `render.yaml` lines 106 and 217 → `true`, **as part of
       shipping the consent banner**
 
-**Implementation**, three independent pieces:
+**Implementation — Phase 1 complete** _(2026-08-13)_:
 
-- [ ] **Consent infrastructure** — banner, consent state, memory→localStorage
-      switch, `consent_decision`. Largest piece; gates production
-- [ ] **Auth changes** — auto-login on register, repoint nav/CTAs to `/register`,
-      three server events, `trackEvent.js` init gate
-- [ ] **CTA + tracking** — `signup_cta_clicked` with `source`,
-      `auth_page_viewed`, remove four `game_stat_recorded` calls
+- [x] **Privacy policy page** at `/privacy` (§13) — the banner links to it, so
+      informed consent required it first
+- [x] **Consent infrastructure** — `lib/consent.js`, `ConsentBanner`,
+      memory→localStorage switch, footer "Cookie settings", `consent_decision`
+- [x] **Auth changes** — auto-login on register, nav/CTAs repointed to
+      `/register`, three server events, `trackEvent.js` init gate
+- [x] **CTA + tracking** — `signup_cta_clicked` with `source`,
+      `auth_page_viewed`, register CTA on `/home`, four `game_stat_recorded`
+      calls removed
 
-**Prerequisite:**
+Two implementation notes worth keeping:
 
-- [ ] **Privacy policy page** (§13) — blocks the banner
+- **`user_logged_in` is emitted from the sign-in entry points, not from
+  `issueAuthTokens`.** That function is also called by `refresh()`, which
+  rotates tokens every ~15 minutes for an active user — emitting there would
+  turn an engagement metric into a session-duration proxy and inflate volume.
+  The two Google steps would double-count for the same reason. A test pins this.
+- **Server capture is detached and swallows its own failures.** A PostHog
+  outage must never delay or fail a registration.
+
+**Before this reaches production:**
+
+- [ ] Four Render dashboard keys (§2)
+- [ ] PostHog per-project settings (§8)
+- [ ] `render.yaml` lines 106 and 217 → `VITE_ENABLE_ANALYTICS: true`
+- [ ] Verify against §12 in each environment
 
 **Later:**
 
 - [ ] Email verification (§6)
+- [ ] Phase 2 events (§9), once Phase 1 shows there is traffic to analyse
 - [ ] Dashboards, once data flows
 
 ## 12. Verification
