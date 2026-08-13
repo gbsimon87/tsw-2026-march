@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { trackAuthPageViewed } from '../../analytics/signupEvents';
 import { LoginForm } from '../components/LoginForm';
 import { RegisterForm } from '../components/RegisterForm';
 
@@ -11,6 +13,13 @@ export function AuthPage() {
   const redirectTo = searchParams.get('redirectTo') || undefined;
   const verifyEmail = searchParams.get('verifyEmail') === '1';
   const oauthError = searchParams.get('oauthError');
+
+  // Keyed on mode so switching tabs counts as reaching that form, and on
+  // redirectTo so a gated entry (composer, follow) is distinguishable from a
+  // direct visit.
+  useEffect(() => {
+    trackAuthPageViewed({ mode: isRegister ? 'register' : 'login', redirectTo });
+  }, [isRegister, redirectTo]);
 
   function buildQuery(extra = {}) {
     const sp = new URLSearchParams();

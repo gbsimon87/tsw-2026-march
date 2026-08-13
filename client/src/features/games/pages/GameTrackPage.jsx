@@ -879,7 +879,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -1039,10 +1038,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', {
-      game_id: gameId,
-      stat_type: buildShotStatType(selectedShot.shotFamily, outcome),
-    });
 
     const payload = buildEventPayload({
       playerId: currentSideState.selectedPlayerId,
@@ -1108,10 +1103,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', {
-      game_id: gameId,
-      stat_type: outcome === 'made' ? 'FT_MADE' : 'FT_MISS',
-    });
 
     const inferred = buildFreeThrowPayload(
       selectedShot?.nearestHoop || lastTappedHoop,
@@ -1187,7 +1178,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);

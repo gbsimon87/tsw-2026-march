@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CloudinaryImage from '../features/media/CloudinaryImage';
+import { useAuth } from '../app/store/AuthContext';
+import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../features/analytics/signupEvents';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { DiscoverablePlayers } from '../features/players/components/DiscoverablePlayers';
@@ -86,6 +88,7 @@ function matchesSearch(text, query) {
 }
 
 export function HomePage() {
+  const { user } = useAuth();
   const [publicLeagues, setPublicLeagues] = useState([]);
   const [publicTeams, setPublicTeams] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -147,6 +150,21 @@ export function HomePage() {
           <StatReadout value={publicLeagues.length} label="Active leagues" />
           <StatReadout value={publicTeams.length} label="Teams on the board" />
         </dl>
+
+        {/* Discover is one of the two pages anonymous visitors land on, and it
+            had no route into the product — browsing led nowhere. */}
+        {!user ? (
+          <div className="flex flex-wrap items-center gap-4 pt-6">
+            <Link
+              to="/register"
+              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.HOME)}
+              className="rounded-lg bg-[#F4A300] px-5 py-2.5 text-sm font-semibold text-[#141414] transition-colors hover:bg-[#d98f00]"
+            >
+              Run your own league
+            </Link>
+            <span className="text-sm text-white/60">Free to start. No card needed.</span>
+          </div>
+        ) : null}
       </DarkPageHeader>
 
       {/* Discover: leagues, teams, players */}

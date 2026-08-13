@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { trackEvent } from '../../analytics/trackEvent';
+import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEvents';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { FloatingActionButton } from '../../../components/ui/FloatingActionButton';
 import { Modal } from '../../../components/ui/Modal';
@@ -87,6 +88,7 @@ export function FeedPage() {
       trackEvent('feed_composer_opened');
       return;
     }
+    trackSignupCtaClicked(SIGNUP_SOURCE.FEED_COMPOSER);
     navigate(`/register?redirectTo=${encodeURIComponent(composeRedirectTarget)}`);
   }
 

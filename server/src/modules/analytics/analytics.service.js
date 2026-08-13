@@ -27,6 +27,37 @@ async function captureEvent(input) {
   };
 }
 
+const crypto = require('crypto');
+
+/**
+ * Capture without making the caller wait, and without letting a failure reach
+ * them. Analytics must never delay or fail an auth flow, so callers on the
+ * critical path (registration, login) use this rather than awaiting
+ * captureEvent directly.
+ */
+function captureEventDetached(input) {
+  Promise.resolve()
+    .then(() => captureEvent(input))
+    .catch((error) => {
+      logger.warn({ err: error, event: input.event }, 'PostHog capture failed');
+    });
+}
+
+/**
+ * A stable pseudonymous id for someone with no account yet — used so repeated
+ * failures by one person group together. The email is hashed, never stored:
+ * a failed registration must not put an address into analytics.
+ */
+function pseudonymousId(email) {
+  return `anon_${crypto
+    .createHash('sha256')
+    .update(String(email).trim().toLowerCase())
+    .digest('hex')
+    .slice(0, 32)}`;
+}
+
 module.exports = {
   captureEvent,
+  captureEventDetached,
+  pseudonymousId,
 };

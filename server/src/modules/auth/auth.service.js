@@ -23,6 +23,7 @@ const {
   destroyImage,
   isCloudinaryConfigured,
 } = require('../feed/cloudinary.client');
+const { captureEventDetached, pseudonymousId } = require('../analytics/analytics.service');
 const { ApiError } = require('../../utils/apiError');
 const { env } = require('../../config/env');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
@@ -64,7 +65,7 @@ function buildClientUrl(pathname, token) {
   return `${getPrimaryClientOrigin()}${pathname}?token=${encodeURIComponent(token)}`;
 }
 
-async function issueAuthTokens(user, metadata) {
+async function issueAuthTokens(user, metadata, { isFirstLogin = false } = {}) {
   const payload = createSessionPayload(user._id);
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
@@ -79,11 +80,31 @@ async function issueAuthTokens(user, metadata) {
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   });
 
+  // NOT emitted here. issueAuthTokens is also called by refresh(), which
+  // rotates tokens every ~15 minutes for an active user — firing here would
+  // turn an engagement metric into a session-duration proxy. The two Google
+  // steps would double-count for the same reason. Callers that represent a
+  // real sign-in call captureLogin() instead.
+  if (isFirstLogin) {
+    captureLogin(user, { isFirstLogin: true });
+  }
+
   return {
     accessToken,
     refreshToken,
     user: sanitizeUser(user),
   };
+}
+
+function captureLogin(user, { isFirstLogin = false } = {}) {
+  captureEventDetached({
+    distinctId: String(user._id),
+    event: 'user_logged_in',
+    properties: {
+      auth_provider: user.authProvider || 'local',
+      is_first_login: isFirstLogin,
+    },
+  });
 }
 
 async function issuePasswordReset(user) {
@@ -109,6 +130,13 @@ async function issuePasswordReset(user) {
 async function register(input, metadata) {
   const existing = await findUserByEmail(input.email);
   if (existing) {
+    // Distinguishes "chose not to" from "could not". A high email_in_use rate
+    // means returning users are landing on the register form by mistake.
+    captureEventDetached({
+      distinctId: pseudonymousId(input.email),
+      event: 'registration_failed',
+      properties: { reason: 'email_in_use' },
+    });
     throw new ApiError(409, 'Email is already in use');
   }
 
@@ -124,9 +152,15 @@ async function register(input, metadata) {
     // the User enum is canonical-only since T-26 and rejects legacy 'free').
   });
 
+  captureEventDetached({
+    distinctId: String(user._id),
+    event: 'user_registered',
+    properties: { auth_provider: 'local' },
+  });
+
   // Sign the new user straight in rather than redirecting them to the login form
   // to re-enter the credentials they just chose. Same token path as login().
-  return issueAuthTokens(user, metadata);
+  return issueAuthTokens(user, metadata, { isFirstLogin: true });
 }
 
 async function login(input, metadata) {
@@ -139,6 +173,8 @@ async function login(input, metadata) {
   if (!valid) {
     throw new ApiError(401, 'Invalid credentials');
   }
+
+  captureLogin(user);
 
   return issueAuthTokens(user, metadata);
 }
@@ -347,6 +383,10 @@ async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
   if (!user) {
     throw new ApiError(401, 'User not found');
   }
+
+  // Captured here rather than in loginWithGoogle: the two are steps of one
+  // sign-in, and this is the one that completes it.
+  captureLogin(user);
 
   return issueAuthTokens(user, metadata);
 }

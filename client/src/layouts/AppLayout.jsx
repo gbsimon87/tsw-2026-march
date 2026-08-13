@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
 import { ConsentBanner, openConsentSettings } from '../features/analytics/ConsentBanner';
+import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../features/analytics/signupEvents';
 import { FeedTabBar } from '../features/feed/components/FeedTabBar';
 
 const desktopNavLinkClass = ({ isActive }) =>
@@ -55,7 +56,11 @@ export function AppLayout() {
               Contact
             </NavLink>
             {!user ? (
-              <NavLink to="/register" className={desktopNavLinkClass}>
+              <NavLink
+                to="/register"
+                className={desktopNavLinkClass}
+                onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.NAV)}
+              >
                 Sign in / Join
               </NavLink>
             ) : (
@@ -188,7 +193,10 @@ export function AppLayout() {
               <NavLink
                 to="/register"
                 className={mobileNavLinkClass}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={() => {
+                  trackSignupCtaClicked(SIGNUP_SOURCE.NAV);
+                  setIsMobileMenuOpen(false);
+                }}
               >
                 Sign in / Join
               </NavLink>
