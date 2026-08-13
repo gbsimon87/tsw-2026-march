@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { trackOauthStarted } from '../../analytics/signupEvents';
 import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
@@ -108,6 +109,7 @@ export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
       <a
         className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:bg-slate-100"
         href={`${env.apiBaseUrl}/auth/google/start`}
+        onClick={() => trackOauthStarted({ provider: 'google', mode: 'login' })}
       >
         <GoogleIcon />
         Continue with Google

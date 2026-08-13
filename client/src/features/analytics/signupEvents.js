@@ -22,3 +22,12 @@ export function trackAuthPageViewed({ mode, redirectTo }) {
   // the form itself from failure to get there at all.
   trackEvent('auth_page_viewed', { mode, redirect_to: Boolean(redirectTo) });
 }
+
+/**
+ * The visitor is leaving for an external identity provider. Without this, an
+ * abandoned OAuth round-trip — cancelled, wrong account, provider error — is
+ * indistinguishable from someone who simply never filled the form in.
+ */
+export function trackOauthStarted({ provider, mode }) {
+  trackEvent('oauth_started', { provider, mode });
+}
