@@ -44,7 +44,7 @@ services:
       - key: POSTHOG_KEY
         sync: false
       - key: POSTHOG_HOST
-        value: https://app.posthog.com
+        value: https://eu.i.posthog.com
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_GAME_SUMMARY_MODEL
@@ -107,7 +107,7 @@ services:
       - key: VITE_POSTHOG_KEY
         sync: false
       - key: VITE_POSTHOG_HOST
-        value: https://app.posthog.com
+        value: https://eu.i.posthog.com
       - key: VITE_STRIPE_PUBLISHABLE_KEY
         sync: false
 
@@ -156,7 +156,7 @@ services:
       - key: POSTHOG_KEY
         sync: false
       - key: POSTHOG_HOST
-        value: https://app.posthog.com
+        value: https://eu.i.posthog.com
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_GAME_SUMMARY_MODEL
@@ -219,6 +219,6 @@ services:
       - key: VITE_POSTHOG_KEY
         sync: false
       - key: VITE_POSTHOG_HOST
-        value: https://app.posthog.com
+        value: https://eu.i.posthog.com
       - key: VITE_STRIPE_PUBLISHABLE_KEY
         sync: false
