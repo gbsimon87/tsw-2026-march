@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
+import { ConsentBanner, openConsentSettings } from '../features/analytics/ConsentBanner';
 import { FeedTabBar } from '../features/feed/components/FeedTabBar';
 
 const desktopNavLinkClass = ({ isActive }) =>
@@ -211,7 +212,28 @@ export function AppLayout() {
         <Outlet />
       </main>
 
+      <footer className="mx-auto max-w-5xl px-4 pb-24 pt-2 text-sm text-slate-500 md:pb-8">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4">
+          <Link to="/privacy" className="hover:text-slate-700">
+            Privacy
+          </Link>
+          <Link to="/contact" className="hover:text-slate-700">
+            Contact
+          </Link>
+          {/* Withdrawing consent must be as easy as giving it (GDPR Art. 7(3)),
+              so this stays reachable from every page. */}
+          <button
+            type="button"
+            onClick={openConsentSettings}
+            className="hover:text-slate-700 hover:underline"
+          >
+            Cookie settings
+          </button>
+        </div>
+      </footer>
+
       <FeedTabBar />
+      <ConsentBanner />
     </div>
   );
 }

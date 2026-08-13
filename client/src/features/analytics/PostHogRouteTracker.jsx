@@ -17,6 +17,7 @@ const routePatterns = [
   '/pulse',
   '/login',
   '/register',
+  '/privacy',
   '/auth/google/complete',
   '/forgot-password',
   '/reset-password',
