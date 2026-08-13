@@ -14,7 +14,12 @@ vi.mock('../../lib/posthog', () => posthogLibMocks);
 vi.mock('./trackEvent', () => ({ trackEvent: trackEventMock }));
 
 import { ConsentBanner, openConsentSettings } from './ConsentBanner';
-import { CONSENT_ACCEPTED, CONSENT_DECLINED, readConsent } from '../../lib/consent';
+import {
+  CONSENT_ACCEPTED,
+  CONSENT_DECLINED,
+  CONSENT_VERSION,
+  readConsent,
+} from '../../lib/consent';
 
 // This project's jsdom exposes window.localStorage as a bare object with no
 // Storage methods, so storage-backed tests supply their own.
@@ -150,6 +155,46 @@ describe('ConsentBanner', () => {
 
     renderBanner();
 
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('applies an accepted decision received from another tab', () => {
+    renderBanner();
+    window.localStorage.setItem(
+      'tsw_consent',
+      JSON.stringify({
+        decision: CONSENT_ACCEPTED,
+        version: CONSENT_VERSION,
+        decidedAt: new Date().toISOString(),
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'tsw_consent' }));
+    });
+
+    expect(posthogLibMocks.acceptPostHogConsent).toHaveBeenCalledTimes(1);
+    expect(posthogLibMocks.declinePostHogConsent).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('applies a declined decision received from another tab', () => {
+    renderBanner();
+    window.localStorage.setItem(
+      'tsw_consent',
+      JSON.stringify({
+        decision: CONSENT_DECLINED,
+        version: CONSENT_VERSION,
+        decidedAt: new Date().toISOString(),
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'tsw_consent' }));
+    });
+
+    expect(posthogLibMocks.declinePostHogConsent).toHaveBeenCalledTimes(1);
+    expect(posthogLibMocks.acceptPostHogConsent).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

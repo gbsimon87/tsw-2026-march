@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { trackEvent } from '../../analytics/trackEvent';
 import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEvents';
@@ -110,6 +110,18 @@ export function FeedPage() {
         <p className="fixed left-4 right-4 top-20 z-50 rounded-lg bg-red-600 px-4 py-2 text-sm text-white shadow-lg md:static md:mb-4">
           {displayedError}
         </p>
+      ) : null}
+
+      {!user ? (
+        <div className="fixed left-1/2 top-4 z-30 -translate-x-1/2 md:static md:mb-4 md:translate-x-0">
+          <Link
+            to="/register"
+            onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PULSE)}
+            className="inline-flex whitespace-nowrap rounded-full bg-[#F4A300] px-4 py-2 text-sm font-semibold text-[#141414] shadow-lg transition-colors hover:bg-[#d98f00]"
+          >
+            Join The Sporty Way
+          </Link>
+        </div>
       ) : null}
 
       {/* FeedList handles its own layout: fixed snap-scroll on mobile, normal flow on desktop */}

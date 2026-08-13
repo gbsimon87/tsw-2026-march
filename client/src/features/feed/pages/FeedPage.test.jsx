@@ -25,6 +25,14 @@ const authMocks = vi.hoisted(() => ({
   useAuth: vi.fn(() => ({ user: null })),
 }));
 
+const signupEventMocks = vi.hoisted(() => ({
+  trackSignupCtaClicked: vi.fn(),
+  SIGNUP_SOURCE: {
+    PULSE: 'pulse',
+    FEED_COMPOSER: 'feed_composer',
+  },
+}));
+
 vi.mock('../api/feedApi', () => ({
   feedApi: apiMocks,
 }));
@@ -32,6 +40,8 @@ vi.mock('../api/feedApi', () => ({
 vi.mock('../../../app/store/AuthContext', () => ({
   useAuth: authMocks.useAuth,
 }));
+
+vi.mock('../../analytics/signupEvents', () => signupEventMocks);
 
 describe('FeedPage', () => {
   beforeEach(() => {
@@ -109,9 +119,32 @@ describe('FeedPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Create post' }));
 
+    expect(signupEventMocks.trackSignupCtaClicked).toHaveBeenCalledWith('feed_composer');
+
     await waitFor(() => {
       expect(screen.getByText('Register page')).toBeInTheDocument();
     });
+  });
+
+  test('offers and tracks the dedicated Pulse signup CTA', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null });
+
+    render(
+      withQueryClient(
+        <MemoryRouter initialEntries={['/pulse']}>
+          <Routes>
+            <Route path="/pulse" element={<FeedPage />} />
+            <Route path="/register" element={<div>Register page</div>} />
+          </Routes>
+        </MemoryRouter>
+      )
+    );
+
+    const joinLink = await screen.findByRole('link', { name: 'Join The Sporty Way' });
+    fireEvent.click(joinLink);
+
+    expect(signupEventMocks.trackSignupCtaClicked).toHaveBeenCalledWith('pulse');
+    expect(await screen.findByText('Register page')).toBeInTheDocument();
   });
 
   test('shows modal composer and delete button when logged in', async () => {

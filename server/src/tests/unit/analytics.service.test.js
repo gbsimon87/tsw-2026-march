@@ -6,6 +6,8 @@ jest.mock('posthog-node', () => ({
 
 jest.mock('../../config/env', () => ({
   env: {
+    NODE_ENV: 'production',
+    APP_ENV: 'development',
     POSTHOG_KEY: 'phc_test_key',
     POSTHOG_HOST: 'https://eu.i.posthog.com',
   },
@@ -39,7 +41,7 @@ describe('analytics service', () => {
       expect(mockCapture).toHaveBeenCalledWith({
         distinctId: 'user-1',
         event: 'user_registered',
-        properties: { auth_provider: 'local' },
+        properties: { auth_provider: 'local', app_env: 'development' },
       });
     });
 

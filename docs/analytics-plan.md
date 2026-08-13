@@ -1,8 +1,8 @@
 # Analytics (PostHog)
 
-**Status: Phase 1 implemented, not yet enabled in production.** Single source of
-truth for PostHog in this repo. §11 lists what is still outstanding — chiefly
-the Render dashboard keys and flipping `VITE_ENABLE_ANALYTICS` on.
+**Status: Phase 1 implemented and enabled in the Render blueprint.** Single
+source of truth for PostHog in this repo. §11 lists the remaining dashboard and
+live-environment checks that cannot be completed from the repository.
 
 Goal: get trustworthy baseline numbers before onboarding more leagues. Today we
 cannot answer "how many people are signing up or viewing pages".
@@ -19,6 +19,7 @@ cannot answer "how many people are signing up or viewing pages".
 | Identify          | Internal user ID only, with `plan`, `roles`, `emailVerified`, `authProvider`                                                              |
 | Custom events     | ~13 `trackEvent` calls (feed, game detail, game tracking)                                                                                 |
 | Server endpoint   | `POST /api/v1/analytics/event`, auth required, `distinctId` bound to `req.auth.userId` (OPT-024)                                          |
+| Environment tag   | `app_env` on both browser and server events                                                                                               |
 
 ### Privacy rules — preserve these
 
@@ -32,12 +33,9 @@ values, or other personal data.** Autocapture and session recording stay off.
    `persistence: 'memory'` and upgrades only on accept (§3).
 2. ~~`trackEvent.js` gated only on `env.enableAnalytics`~~ — **resolved.** It now
    also checks initialisation.
-3. **Both env-validator defaults point at the US host** —
-   [`client/src/lib/env.js`](../client/src/lib/env.js) and
-   [`server/src/config/env.js`](../server/src/config/env.js) fall back to
-   `https://app.posthog.com` when the variable is unset. Every environment now
-   sets it explicitly (§2), but an unset variable would fail silently: a US host
-   with an EU key is accepted and ingests nothing.
+3. ~~Env-validator defaults pointed at the US host~~ — **resolved.** Both client
+   and server now default to `https://eu.i.posthog.com`, matching both projects;
+   every environment still sets the host explicitly (§2).
 
 Environment configuration (keys, hosts) is resolved — see §2.
 
@@ -47,7 +45,9 @@ Two projects: **Prod - The Sporty Way** (`phc_CkHe…`) and **Dev - The Sporty
 Way** (`phc_royF…`), both EU-hosted. Two projects _plus_ an `app_env` property
 on every event, as a safety net against key misconfiguration.
 
-Six key slots, two keys — the server sends independently of the client:
+Six key slots, two keys — the server sends independently of the client. Render
+also sets `APP_ENV` on each API because both deployed APIs correctly run with
+`NODE_ENV=production`; `NODE_ENV` therefore cannot distinguish the dev service:
 
 | Environment           | Client key | Server key |
 | --------------------- | ---------- | ---------- |
@@ -55,7 +55,7 @@ Six key slots, two keys — the server sends independently of the client:
 | Render `dev` service  | Dev        | Dev        |
 | Render `main` service | **Prod**   | **Prod**   |
 
-### Local env files — mostly done
+### Local env files — complete
 
 All four files verified correct on 2026-08-13 — right key per environment, EU
 host throughout:
@@ -67,28 +67,13 @@ host throughout:
 | `env/server/.env.development` | ✅ `phc_royF…` | ✅ EU |
 | `env/server/.env.production`  | ✅ `phc_CkHe…` | ✅ EU |
 
-### `render.yaml` — hosts done, analytics intentionally off
+### `render.yaml` — complete
 
-> Editing `render.yaml` and env files is blocked by repo policy
-> ([`security.md`](./security.md)). Applied by hand.
-
-All four hosts (lines 47, 110, 159, 222) are on `https://eu.i.posthog.com`.
-
-#### ⏳ Deferred — enable analytics **when the consent banner ships**
-
-| Line | Service       | Now     | Then   |
-| ---- | ------------- | ------- | ------ |
-| 106  | `client-prod` | `false` | `true` |
-| 217  | `client-dev`  | `false` | `true` |
-
-**`false` is the correct state until the banner exists.** Enabling either
-earlier means the deployed service writes cookies pre-consent (§3) against real
-visitors. Flip both as part of shipping the banner, not before.
-
-**Do not forget:** until then, neither PostHog project receives anything from a
-deployed environment, and any dev-vs-prod comparison will look wrong for reasons
-unrelated to the code. Local development is unaffected — it does not route
-through Render.
+All four hosts are on `https://eu.i.posthog.com`; both clients set
+`VITE_ENABLE_ANALYTICS: true`; the prod API sets `APP_ENV: production` and the
+dev API sets `APP_ENV: development`. The consent banner ships with the client,
+so enabling browser analytics does not permit durable PostHog storage before an
+explicit Accept decision (§3).
 
 ### Render dashboard — outstanding
 
@@ -96,12 +81,12 @@ through Render.
 value, so the key is never committed. Set under **Dashboard → service →
 Environment**:
 
-| Line | Service                      | Variable           | Value                |
-| ---- | ---------------------------- | ------------------ | -------------------- |
-| 45   | `tsw-2026-march-api-prod`    | `POSTHOG_KEY`      | **prod** `phc_CkHe…` |
-| 108  | `tsw-2026-march-client-prod` | `VITE_POSTHOG_KEY` | **prod** `phc_CkHe…` |
-| 157  | `tsw-2026-march-api-dev`     | `POSTHOG_KEY`      | **dev** `phc_royF…`  |
-| 220  | `tsw-2026-march-client-dev`  | `VITE_POSTHOG_KEY` | **dev** `phc_royF…`  |
+| Service                      | Variable           | Value                |
+| ---------------------------- | ------------------ | -------------------- |
+| `tsw-2026-march-api-prod`    | `POSTHOG_KEY`      | **prod** `phc_CkHe…` |
+| `tsw-2026-march-client-prod` | `VITE_POSTHOG_KEY` | **prod** `phc_CkHe…` |
+| `tsw-2026-march-api-dev`     | `POSTHOG_KEY`      | **dev** `phc_royF…`  |
+| `tsw-2026-march-client-dev`  | `VITE_POSTHOG_KEY` | **dev** `phc_royF…`  |
 
 > ⚠️ The pairing is the point: both prod services take the prod key, both dev
 > services take the dev key. A dev key on a prod service silently merges the
@@ -126,13 +111,13 @@ relying on it.**
 - **Before consent:** `persistence: 'memory'`, no device storage, no PUECR
   trigger. Anonymous pageviews still counted, so traffic totals stay honest even
   for people who decline.
-- **On accept:** switch to `localStorage+cookie`, `posthog.opt_in_capturing()`.
+- **On accept:** switch to `localStorage+cookie`; capture remains enabled.
 - **On decline:** stay in memory mode. Counted, never persisted, never attributed.
 - Pre-consent sessions cannot be linked across visits. Accepted trade-off.
 
-Built in-house, no third-party CMP. PostHog supports this natively via
-`persistence: 'memory'`, `opt_out_capturing_by_default: true`, and
-`opt_in_capturing()` — the banner UI is the real work.
+Built in-house, no third-party CMP. PostHog supports the storage boundary via
+`persistence: 'memory'` and runtime `set_config`. Capturing is intentionally not
+opted out because anonymous, memory-only pageviews are part of the baseline.
 
 ### Banner — placement, copy, behaviour
 
@@ -167,9 +152,8 @@ insufficiently informed.
   purposes, or processors change) or after **12 months**.
 - **Withdrawal must be as easy as giving it** (GDPR Art. 7(3)). Persistent
   "Cookie settings" link in the footer re-opens the banner. Declining after
-  having accepted calls `posthog.opt_out_capturing()` **and** clears the PostHog
-  cookie and `localStorage` entries — opting out alone leaves the identifier on
-  the device.
+  having accepted switches back to memory, resets the PostHog identity, and
+  clears the PostHog cookie and `localStorage` entries.
 - Fires `consent_decision` (§7) either way.
 
 ## 4. Instrumentation sequence — **DECIDED**
@@ -299,7 +283,7 @@ Eight events. Client-side unless stated.
 | `$pageleave`          | Leaving a route                              | `scroll_depth`                                                                          | Implemented                                                                                                                                                                                                                                                       |
 | `signup_cta_clicked`  | Any "Sign in / Join" or register CTA clicked | `source`: `nav` \| `home` \| `pulse` \| `feed_composer` \| `follow_button` \| `pricing` | **The key new event.** `source` is what makes the funnel attributable                                                                                                                                                                                             |
 | `auth_page_viewed`    | `/login` or `/register` renders              | `mode`: `login` \| `register`, `redirect_to`: bool                                      | Separates "reached the form" from "completed it"                                                                                                                                                                                                                  |
-| `user_registered`     | Registration succeeds                        | `auth_provider`: `local` \| `google`                                                    | **Server.** Acquisition; once per account ever                                                                                                                                                                                                                    |
+| `user_registered`     | Registration succeeds                        | `auth_provider`: `local` \| `google`                                                    | **Server.** Acquisition; once per account ever. Google creation is detected by `findOrCreateGoogleUser` and carried through the exchange token so first login remains accurate                                                                                    |
 | `user_logged_in`      | Login succeeds                               | `auth_provider`, `is_first_login`: bool                                                 | **Server.** Engagement; every return. `is_first_login` marks the auto-login after registration                                                                                                                                                                    |
 | `registration_failed` | Registration rejected                        | `reason`: `email_in_use`                                                                | **Server.** High rates mean returning users are hitting the register form by mistake. Only `email_in_use` is emitted: Zod rejects malformed input in the controller before the service runs, so a `validation` reason would need a separate controller-level hook |
 | `consent_decision`    | Banner accepted or declined                  | `decision`: `accepted` \| `declined`                                                    | The denominator for what fraction of traffic is attributable                                                                                                                                                                                                      |
@@ -343,8 +327,7 @@ of not writing a cookie before consent, and no implementation recovers it.
 
 Implementation:
 
-1. On **Accept**: `posthog.set_config({ persistence: 'localStorage+cookie' })`
-   then `posthog.opt_in_capturing()`.
+1. On **Accept**: `posthog.set_config({ persistence: 'localStorage+cookie' })`.
 2. On **first login** (including auto-login after registration):
    `posthog.identify(user.id, safeProperties)`. PostHog merges accumulated
    anonymous history automatically.
@@ -352,9 +335,13 @@ Implementation:
    identified person with no history and no way to link later sessions, which
    looks like it worked but did not.
 4. `resetPostHogUser()` on logout stays as-is.
+5. Consent changes received through the browser `storage` event immediately
+   reconfigure every open tab. Accept upgrades that tab to persistent storage;
+   decline or clearing the decision returns it to memory and resets its id.
 
-`PostHogRouteTracker`'s identify effect (L118-133) is correctly placed for step
-2; it needs the consent gate added, not restructuring.
+`PostHogRouteTracker`'s identify effect implements step 2 and retries when
+consent changes, so a signed-in visitor who accepts is identified without a
+reload.
 
 **Reading the data:** top-of-funnel is "consented visitors", not "all visitors".
 Compare against total `$pageview` — which includes decliners — to see what share
@@ -505,14 +492,14 @@ From [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md):
 
 ## 11. Outstanding
 
-**Configuration** (§2, by hand):
+**Configuration** (§2):
 
 - [x] All four env files — correct key per environment, EU host _(2026-08-13)_
-- [x] `render.yaml` hosts, lines 47/110/159/222 → EU _(2026-08-13)_
+- [x] All four `render.yaml` PostHog hosts → EU _(2026-08-13)_
+- [x] Both Render clients → `VITE_ENABLE_ANALYTICS: true` _(2026-08-13)_
+- [x] Render APIs declare `APP_ENV` explicitly _(2026-08-13)_
 - [ ] Four Render dashboard keys (§2 table)
 - [ ] PostHog per-project settings (§8)
-- [ ] ⏳ Deferred: `render.yaml` lines 106 and 217 → `true`, **as part of
-      shipping the consent banner**
 
 **Implementation — Phase 1 complete** _(2026-08-13)_:
 
@@ -523,8 +510,12 @@ From [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md):
 - [x] **Auth changes** — auto-login on register, nav/CTAs repointed to
       `/register`, three server events, `trackEvent.js` init gate
 - [x] **CTA + tracking** — `signup_cta_clicked` with `source`,
-      `auth_page_viewed`, register CTA on `/home`, four `game_stat_recorded`
-      calls removed
+      `auth_page_viewed`, register CTAs on `/home` and `/pulse`, four
+      `game_stat_recorded` calls removed
+- [x] **Google acquisition** — new Google accounts emit `user_registered`, and
+      their completed exchange emits `user_logged_in` with `is_first_login`
+- [x] **Cross-tab consent** — a decision in one tab immediately changes PostHog
+      persistence in every other open tab
 
 Two implementation notes worth keeping:
 
@@ -536,11 +527,10 @@ Two implementation notes worth keeping:
 - **Server capture is detached and swallows its own failures.** A PostHog
   outage must never delay or fail a registration.
 
-**Before this reaches production:**
+**Dashboard/deployment checks still required:**
 
 - [ ] Four Render dashboard keys (§2)
 - [ ] PostHog per-project settings (§8)
-- [ ] `render.yaml` lines 106 and 217 → `VITE_ENABLE_ANALYTICS: true`
 - [ ] Verify against §12 in each environment
 
 **Later:**
@@ -558,24 +548,25 @@ After any analytics config change, check **per environment**:
   dashboard you happen to have open;
 - identity properties contain no names, emails, or form values;
 - autocapture and session recordings remain absent;
-- no events captured and no cookie or `localStorage` written pre-consent
-  (DevTools → Application → Storage);
+- before consent, only intended anonymous events are captured; no PostHog cookie
+  or PostHog `localStorage` entry is written (the strictly necessary
+  `tsw_consent` decision record exists only after a choice);
+- accepting in one open tab upgrades persistence in another; declining in one
+  returns every open tab to memory-only capture and clears its PostHog id;
 - server capture returns `{captured: true}` — if `POSTHOG_KEY` is unset it
   silently returns `{captured: false}`.
 
-## 13. Required: privacy policy page
+## 13. Privacy policy page — implemented
 
-**Does not exist** — no `/privacy` route in `AppRouter.jsx`, no component in
-`client/src`.
-
-**This blocks the consent banner.** GDPR requires consent to be _informed_, which
-means the banner must link to an accessible policy. A banner linking nowhere is
-not valid consent.
+The public `/privacy` route is implemented and linked from both the footer and
+consent banner. Keep it current: GDPR requires consent to be _informed_, so any
+material change to analytics events, purposes, or processors also requires a
+`CONSENT_VERSION` bump.
 
 It is needed independently of analytics anyway: TSW already processes accounts,
 emails, player records, and uploaded media.
 
-### What it must cover
+### What it covers and must continue to cover
 
 - **What is collected** — separate account data (name, email, membership,
   uploaded media) from analytics data (pages viewed, actions, internal user ID)

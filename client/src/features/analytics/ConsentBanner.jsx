@@ -37,10 +37,19 @@ export function ConsentBanner() {
   // tab could revoke a decision the visitor just made in the first.
   useEffect(
     () =>
-      onConsentChange(() => {
-        if (readConsent() !== null) {
-          setIsOpen(false);
+      onConsentChange((decision, { external }) => {
+        // A storage event means another tab changed the choice. Storage mode is
+        // per PostHog instance, so every open tab must apply the transition —
+        // merely closing its banner would leave it in the old privacy state.
+        if (external) {
+          if (decision === CONSENT_ACCEPTED) {
+            acceptPostHogConsent();
+          } else {
+            declinePostHogConsent();
+          }
         }
+
+        setIsOpen(decision === null);
       }),
     []
   );

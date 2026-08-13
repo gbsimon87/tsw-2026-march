@@ -6,6 +6,9 @@ dotenv.config({ path: process.env.ENV_FILE || path.resolve(process.cwd(), '.env'
 
 const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // Deployment identity is separate from NODE_ENV: both Render services run
+  // production-mode Node, but analytics still needs to distinguish dev/prod.
+  APP_ENV: z.enum(['development', 'production']).optional(),
   PORT: z.coerce.number().default(4000),
   CLIENT_ORIGIN: z.string().min(1),
   MONGO_URI: z.string().min(1),
@@ -29,7 +32,7 @@ const baseEnvSchema = z.object({
   EMAIL_VERIFY_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   POSTHOG_KEY: z.string().optional(),
-  POSTHOG_HOST: z.string().url().default('https://app.posthog.com'),
+  POSTHOG_HOST: z.string().url().default('https://eu.i.posthog.com'),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_GAME_SUMMARY_MODEL: z.string().default('gpt-5.4-mini'),
   OPENAI_GAME_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),

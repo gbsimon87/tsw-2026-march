@@ -316,27 +316,43 @@ async function getSystemUserId() {
 }
 
 async function loginWithGoogle(googleProfile, metadata) {
-  const user = await findOrCreateGoogleUser({
+  const { user, isNew } = await findOrCreateGoogleUser({
     googleId: googleProfile.id,
     email: googleProfile.email,
     name: googleProfile.name,
   });
 
-  return issueAuthTokens(user, metadata);
+  if (isNew) {
+    captureEventDetached({
+      distinctId: String(user._id),
+      event: 'user_registered',
+      properties: { auth_provider: 'google' },
+    });
+  }
+
+  return issueAuthTokens(user, metadata, { isFirstLogin: isNew });
 }
 
 async function prepareGoogleExchange(googleProfile) {
-  const user = await findOrCreateGoogleUser({
+  const { user, isNew } = await findOrCreateGoogleUser({
     googleId: googleProfile.id,
     email: googleProfile.email,
     name: googleProfile.name,
   });
+
+  if (isNew) {
+    captureEventDetached({
+      distinctId: String(user._id),
+      event: 'user_registered',
+      properties: { auth_provider: 'google' },
+    });
+  }
 
   // Short-lived token so the client can exchange it for session cookies via a
   // credentialed fetch. Cookies set on a redirect (bounce) are blocked by Chrome
   // BTM and Safari ITP; a fetch-issued cookie is not.
   const exchangeToken = jwt.sign(
-    { sub: String(user._id), type: 'google_exchange' },
+    { sub: String(user._id), type: 'google_exchange', isFirstLogin: isNew },
     env.JWT_ACCESS_SECRET,
     { expiresIn: '60s' }
   );
@@ -393,7 +409,7 @@ async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
   // sign-in, and this is the one that completes it. After the session write for
   // the same reason as login().
   const tokens = await issueAuthTokens(user, metadata);
-  captureLogin(user);
+  captureLogin(user, { isFirstLogin: payload.isFirstLogin === true });
 
   return tokens;
 }

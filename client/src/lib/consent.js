@@ -77,8 +77,12 @@ export function readConsent(now = Date.now()) {
 // second tab needs to close when the choice is made in the first.
 export const CONSENT_CHANGED_EVENT = 'tsw:consent-changed';
 
-function announceConsentChange() {
-  window.dispatchEvent(new CustomEvent(CONSENT_CHANGED_EVENT));
+function announceConsentChange(decision) {
+  window.dispatchEvent(
+    new CustomEvent(CONSENT_CHANGED_EVENT, {
+      detail: { decision },
+    })
+  );
 }
 
 /**
@@ -86,18 +90,22 @@ function announceConsentChange() {
  * unsubscribe function.
  */
 export function onConsentChange(listener) {
+  function handleLocal(event) {
+    listener(event.detail?.decision ?? readConsent(), { external: false });
+  }
+
   function handleStorage(event) {
     // key is null when storage is cleared wholesale.
     if (event.key === null || event.key === STORAGE_KEY) {
-      listener();
+      listener(readConsent(), { external: true });
     }
   }
 
-  window.addEventListener(CONSENT_CHANGED_EVENT, listener);
+  window.addEventListener(CONSENT_CHANGED_EVENT, handleLocal);
   window.addEventListener('storage', handleStorage);
 
   return () => {
-    window.removeEventListener(CONSENT_CHANGED_EVENT, listener);
+    window.removeEventListener(CONSENT_CHANGED_EVENT, handleLocal);
     window.removeEventListener('storage', handleStorage);
   };
 }
@@ -117,7 +125,7 @@ export function writeConsent(decision, now = Date.now()) {
     // remembered; the banner will ask again next visit. Better than failing.
   }
 
-  announceConsentChange();
+  announceConsentChange(decision);
 }
 
 export function clearConsent() {
@@ -126,6 +134,8 @@ export function clearConsent() {
   } catch {
     // Nothing to do — see writeConsent.
   }
+
+  announceConsentChange(null);
 }
 
 export function hasAccepted(now = Date.now()) {

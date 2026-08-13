@@ -11,6 +11,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: production
       - key: PORT
         value: 10000
       - key: CLIENT_ORIGIN
@@ -123,6 +125,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: development
       - key: PORT
         value: 10000
       - key: CLIENT_ORIGIN
@@ -215,7 +219,7 @@ services:
       - key: VITE_API_BASE_URL
         sync: false
       - key: VITE_ENABLE_ANALYTICS
-        value: false
+        value: true
       - key: VITE_POSTHOG_KEY
         sync: false
       - key: VITE_POSTHOG_HOST

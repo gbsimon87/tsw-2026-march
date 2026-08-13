@@ -114,9 +114,15 @@ describe('consent change notifications', () => {
     const listener = vi.fn();
     const unsubscribe = onConsentChange(listener);
 
+    seed({
+      decision: CONSENT_ACCEPTED,
+      version: CONSENT_VERSION,
+      decidedAt: new Date().toISOString(),
+    });
+
     window.dispatchEvent(new StorageEvent('storage', { key: 'tsw_consent' }));
 
-    expect(listener).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith(CONSENT_ACCEPTED, { external: true });
     unsubscribe();
   });
 

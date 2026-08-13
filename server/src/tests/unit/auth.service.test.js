@@ -206,6 +206,76 @@ describe('auth service', () => {
       // capturing them would put unverified addresses into analytics.
       expect(analyticsService.captureEventDetached).not.toHaveBeenCalled();
     });
+
+    test('a new Google account captures registration and first login once', async () => {
+      const googleUser = {
+        _id: 'google-user-1',
+        email: 'google@example.com',
+        name: 'Google Player',
+        authProvider: 'google',
+        emailVerified: true,
+        roles: ['user'],
+        plan: 'starter',
+      };
+      repository.findOrCreateGoogleUser.mockResolvedValue({ user: googleUser, isNew: true });
+
+      const exchangeToken = await authService.prepareGoogleExchange({
+        id: 'google-profile-1',
+        email: 'google@example.com',
+        name: 'Google Player',
+      });
+
+      expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
+        distinctId: 'google-user-1',
+        event: 'user_registered',
+        properties: { auth_provider: 'google' },
+      });
+
+      repository.findUserById.mockResolvedValue(googleUser);
+      await authService.exchangeGoogleOAuthToken(exchangeToken, {
+        userAgent: 'jest',
+        ip: '127.0.0.1',
+      });
+
+      expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
+        distinctId: 'google-user-1',
+        event: 'user_logged_in',
+        properties: { auth_provider: 'google', is_first_login: true },
+      });
+    });
+
+    test('an existing Google account is captured only as a return login', async () => {
+      const googleUser = {
+        _id: 'google-user-1',
+        email: 'google@example.com',
+        name: 'Google Player',
+        authProvider: 'google',
+        emailVerified: true,
+        roles: ['user'],
+        plan: 'starter',
+      };
+      repository.findOrCreateGoogleUser.mockResolvedValue({ user: googleUser, isNew: false });
+
+      const exchangeToken = await authService.prepareGoogleExchange({
+        id: 'google-profile-1',
+        email: 'google@example.com',
+        name: 'Google Player',
+      });
+      repository.findUserById.mockResolvedValue(googleUser);
+      await authService.exchangeGoogleOAuthToken(exchangeToken, {
+        userAgent: 'jest',
+        ip: '127.0.0.1',
+      });
+
+      expect(analyticsService.captureEventDetached).not.toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'user_registered' })
+      );
+      expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
+        distinctId: 'google-user-1',
+        event: 'user_logged_in',
+        properties: { auth_provider: 'google', is_first_login: false },
+      });
+    });
   });
 
   test('requestEmailVerification returns a generic response when verification is not required', async () => {

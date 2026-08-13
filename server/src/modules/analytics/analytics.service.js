@@ -7,6 +7,8 @@ const posthogClient = env.POSTHOG_KEY
   ? new PostHog(env.POSTHOG_KEY, { host: env.POSTHOG_HOST })
   : null;
 
+const appEnv = env.APP_ENV || (env.NODE_ENV === 'production' ? 'production' : 'development');
+
 async function captureEvent(input) {
   if (!posthogClient) {
     return {
@@ -18,7 +20,12 @@ async function captureEvent(input) {
   await posthogClient.capture({
     distinctId: input.distinctId,
     event: input.event,
-    properties: input.properties || {},
+    properties: {
+      ...(input.properties || {}),
+      // Server events do not share browser super-properties. Attach the tag
+      // here so a valid key pointed at the wrong project is still detectable.
+      app_env: appEnv,
+    },
   });
 
   logger.debug({ event: input.event }, 'PostHog event captured');
