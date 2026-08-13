@@ -72,6 +72,36 @@ export function readConsent(now = Date.now()) {
   return null;
 }
 
+// Consent changes have to reach code that already rendered — the route tracker
+// needs to identify a signed-in user once they accept, and a banner open in a
+// second tab needs to close when the choice is made in the first.
+export const CONSENT_CHANGED_EVENT = 'tsw:consent-changed';
+
+function announceConsentChange() {
+  window.dispatchEvent(new CustomEvent(CONSENT_CHANGED_EVENT));
+}
+
+/**
+ * Subscribe to consent changes in this tab and in others. Returns an
+ * unsubscribe function.
+ */
+export function onConsentChange(listener) {
+  function handleStorage(event) {
+    // key is null when storage is cleared wholesale.
+    if (event.key === null || event.key === STORAGE_KEY) {
+      listener();
+    }
+  }
+
+  window.addEventListener(CONSENT_CHANGED_EVENT, listener);
+  window.addEventListener('storage', handleStorage);
+
+  return () => {
+    window.removeEventListener(CONSENT_CHANGED_EVENT, listener);
+    window.removeEventListener('storage', handleStorage);
+  };
+}
+
 export function writeConsent(decision, now = Date.now()) {
   try {
     window.localStorage.setItem(
@@ -86,6 +116,8 @@ export function writeConsent(decision, now = Date.now()) {
     // Storage unavailable. The decision holds for this page view but cannot be
     // remembered; the banner will ask again next visit. Better than failing.
   }
+
+  announceConsentChange();
 }
 
 export function clearConsent() {

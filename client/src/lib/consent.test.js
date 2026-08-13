@@ -5,6 +5,7 @@ import {
   CONSENT_VERSION,
   clearConsent,
   hasAccepted,
+  onConsentChange,
   readConsent,
   writeConsent,
 } from './consent';
@@ -93,6 +94,49 @@ describe('consent expiry and versioning', () => {
     });
 
     expect(readConsent(NOW)).toBeNull();
+  });
+});
+
+describe('consent change notifications', () => {
+  test('writing a decision notifies listeners in this tab', () => {
+    const listener = vi.fn();
+    const unsubscribe = onConsentChange(listener);
+
+    writeConsent(CONSENT_ACCEPTED, NOW);
+
+    // The route tracker needs this to identify a user who was already signed
+    // in when they accepted, without waiting for a page reload.
+    expect(listener).toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test('a decision made in another tab notifies listeners', () => {
+    const listener = vi.fn();
+    const unsubscribe = onConsentChange(listener);
+
+    window.dispatchEvent(new StorageEvent('storage', { key: 'tsw_consent' }));
+
+    expect(listener).toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test('ignores unrelated storage keys', () => {
+    const listener = vi.fn();
+    const unsubscribe = onConsentChange(listener);
+
+    window.dispatchEvent(new StorageEvent('storage', { key: 'something_else' }));
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  test('unsubscribing stops notifications', () => {
+    const listener = vi.fn();
+    onConsentChange(listener)();
+
+    writeConsent(CONSENT_ACCEPTED, NOW);
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

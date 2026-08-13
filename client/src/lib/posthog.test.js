@@ -95,16 +95,34 @@ describe('posthog lib', () => {
     });
   });
 
-  test('declining consent resets the client and returns to memory-only', async () => {
+  test('declining consent switches to memory before resetting', async () => {
     const { declinePostHogConsent, initPostHog } = await loadPostHogModule();
 
     initPostHog();
     declinePostHogConsent();
 
-    // reset() clears the stored identifier — opting out alone would leave it on
-    // the device, so withdrawal would be less effective than never consenting.
     expect(posthogMocks.reset).toHaveBeenCalled();
     expect(posthogMocks.set_config).toHaveBeenCalledWith({ persistence: 'memory' });
+
+    // Order matters: reset() writes a fresh anonymous id using whatever
+    // persistence is configured, so resetting first would put a new id on disk
+    // moments after the visitor asked us not to.
+    expect(posthogMocks.set_config.mock.invocationCallOrder[0]).toBeLessThan(
+      posthogMocks.reset.mock.invocationCallOrder[0]
+    );
+  });
+
+  test('identify reports whether it actually ran', async () => {
+    const { identifyPostHogUser, initPostHog } = await loadPostHogModule();
+
+    initPostHog();
+
+    // Callers need to distinguish "identified" from "skipped, retry after
+    // consent" — otherwise a signed-in user who accepts stays anonymous.
+    expect(identifyPostHogUser('user-1', {})).toBe(false);
+
+    consentMocks.hasAccepted.mockReturnValue(true);
+    expect(identifyPostHogUser('user-1', {})).toBe(true);
   });
 
   test('consent transitions are inert when analytics never initialized', async () => {

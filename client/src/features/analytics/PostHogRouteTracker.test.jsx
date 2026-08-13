@@ -7,7 +7,9 @@ const posthogLibMocks = vi.hoisted(() => ({
   initPostHog: vi.fn(),
   capturePostHogPageView: vi.fn(),
   capturePostHogPageLeave: vi.fn(),
-  identifyPostHogUser: vi.fn(),
+  // Returns true when it actually identified — false means it was skipped
+  // (no consent yet), and the tracker retries after the visitor accepts.
+  identifyPostHogUser: vi.fn(() => true),
   resetPostHogUser: vi.fn(),
 }));
 
@@ -150,5 +152,30 @@ describe('PostHogRouteTracker', () => {
     );
 
     expect(posthogLibMocks.resetPostHogUser).toHaveBeenCalledTimes(1);
+  });
+
+  test('identifies a signed-in user once they accept consent', async () => {
+    const { act } = await import('@testing-library/react');
+    const { CONSENT_CHANGED_EVENT } = await import('../../lib/consent');
+
+    // Before consent, identifyPostHogUser is a no-op and reports false.
+    posthogLibMocks.identifyPostHogUser.mockReturnValue(false);
+    authMocks.authState = {
+      isLoading: false,
+      user: { id: 'user-1', plan: 'starter', roles: ['user'], authProvider: 'local' },
+    };
+
+    renderTracker('/pulse');
+    expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledTimes(1);
+
+    // Accepting must identify without waiting for a page reload. The ref guard
+    // only records the id when identify actually ran, so this retry is not
+    // swallowed as already-done.
+    posthogLibMocks.identifyPostHogUser.mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new CustomEvent(CONSENT_CHANGED_EVENT));
+    });
+
+    expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledTimes(2);
   });
 });

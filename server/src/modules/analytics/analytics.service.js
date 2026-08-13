@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { PostHog } = require('posthog-node');
 const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
@@ -26,8 +27,6 @@ async function captureEvent(input) {
     captured: true,
   };
 }
-
-const crypto = require('crypto');
 
 /**
  * Capture without making the caller wait, and without letting a failure reach

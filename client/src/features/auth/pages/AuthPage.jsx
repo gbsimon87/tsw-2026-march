@@ -10,7 +10,13 @@ export function AuthPage() {
   const [searchParams] = useSearchParams();
 
   const isRegister = location.pathname === '/register';
-  const redirectTo = searchParams.get('redirectTo') || undefined;
+  // Same-origin only. `/register?redirectTo=…` is now the primary CTA from the
+  // nav, feed composer, follow button, and pricing, so an unguarded value would
+  // make every one of those an open-redirect vector. `//evil.com` is a
+  // protocol-relative URL, so a bare startsWith('/') is not enough.
+  const rawRedirectTo = searchParams.get('redirectTo') || '';
+  const redirectTo =
+    rawRedirectTo.startsWith('/') && !rawRedirectTo.startsWith('//') ? rawRedirectTo : undefined;
   const verifyEmail = searchParams.get('verifyEmail') === '1';
   const oauthError = searchParams.get('oauthError');
 

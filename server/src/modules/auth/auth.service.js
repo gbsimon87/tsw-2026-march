@@ -130,8 +130,10 @@ async function issuePasswordReset(user) {
 async function register(input, metadata) {
   const existing = await findUserByEmail(input.email);
   if (existing) {
-    // Distinguishes "chose not to" from "could not". A high email_in_use rate
-    // means returning users are landing on the register form by mistake.
+    // A high rate here means returning users are landing on the register form
+    // by mistake. Note this is the only reason currently captured: Zod rejects
+    // malformed input in the controller before the service runs, so validation
+    // failures never reach this point.
     captureEventDetached({
       distinctId: pseudonymousId(input.email),
       event: 'registration_failed',
@@ -174,9 +176,12 @@ async function login(input, metadata) {
     throw new ApiError(401, 'Invalid credentials');
   }
 
+  // After the session write, not before: a failed upsertSession returns a 500,
+  // and recording a login that never happened would overstate the funnel.
+  const tokens = await issueAuthTokens(user, metadata);
   captureLogin(user);
 
-  return issueAuthTokens(user, metadata);
+  return tokens;
 }
 
 async function refresh(refreshToken, metadata) {
@@ -385,10 +390,12 @@ async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
   }
 
   // Captured here rather than in loginWithGoogle: the two are steps of one
-  // sign-in, and this is the one that completes it.
+  // sign-in, and this is the one that completes it. After the session write for
+  // the same reason as login().
+  const tokens = await issueAuthTokens(user, metadata);
   captureLogin(user);
 
-  return issueAuthTokens(user, metadata);
+  return tokens;
 }
 
 module.exports = {

@@ -62,8 +62,12 @@ export function declinePostHogConsent() {
     return;
   }
 
-  posthog.reset();
+  // Order matters: reset() generates a fresh anonymous id and writes it using
+  // whatever persistence is configured. Switching to memory first means that
+  // write lands nowhere; the other way round it would put a new id on disk
+  // moments after the visitor asked us not to.
   posthog.set_config({ persistence: 'memory' });
+  posthog.reset();
 }
 
 export function capturePostHogPageView(properties) {
@@ -82,9 +86,13 @@ export function capturePostHogPageLeave(properties) {
   posthog.capture('$pageleave', properties);
 }
 
+/**
+ * Returns true when the user was actually identified, so callers can tell
+ * "identified" from "skipped, try again after consent".
+ */
 export function identifyPostHogUser(userId, properties) {
   if (!initialized || !isPostHogEnabled() || !userId) {
-    return;
+    return false;
   }
 
   // Never identify before consent. In memory-only mode there is no durable
@@ -92,10 +100,11 @@ export function identifyPostHogUser(userId, properties) {
   // history and no way to link later sessions — worse than not calling it,
   // because it looks like it worked.
   if (!hasAccepted()) {
-    return;
+    return false;
   }
 
   posthog.identify(userId, properties);
+  return true;
 }
 
 export function resetPostHogUser() {

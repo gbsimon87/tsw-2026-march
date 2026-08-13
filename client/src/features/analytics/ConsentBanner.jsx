@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CONSENT_ACCEPTED, CONSENT_DECLINED, readConsent, writeConsent } from '../../lib/consent';
+import {
+  CONSENT_ACCEPTED,
+  CONSENT_DECLINED,
+  onConsentChange,
+  readConsent,
+  writeConsent,
+} from '../../lib/consent';
 import { acceptPostHogConsent, declinePostHogConsent, isPostHogEnabled } from '../../lib/posthog';
 import { trackEvent } from './trackEvent';
 
@@ -25,6 +31,19 @@ export function ConsentBanner() {
     window.addEventListener(REOPEN_EVENT, reopen);
     return () => window.removeEventListener(REOPEN_EVENT, reopen);
   }, []);
+
+  // Close if the choice was made elsewhere — another tab, or the footer link on
+  // a page that mounted its own banner. Without this, a stale banner in a second
+  // tab could revoke a decision the visitor just made in the first.
+  useEffect(
+    () =>
+      onConsentChange(() => {
+        if (readConsent() !== null) {
+          setIsOpen(false);
+        }
+      }),
+    []
+  );
 
   const decide = useCallback((decision) => {
     writeConsent(decision);
