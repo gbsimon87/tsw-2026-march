@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { trackAuthPageViewed } from '../../analytics/signupEvents';
 import { LoginForm } from '../components/LoginForm';
 import { RegisterForm } from '../components/RegisterForm';
 
@@ -8,10 +10,22 @@ export function AuthPage() {
   const [searchParams] = useSearchParams();
 
   const isRegister = location.pathname === '/register';
-  const redirectTo = searchParams.get('redirectTo') || undefined;
+  // Same-origin only. `/register?redirectTo=…` is now the primary CTA from the
+  // nav, feed composer, follow button, and pricing, so an unguarded value would
+  // make every one of those an open-redirect vector. `//evil.com` is a
+  // protocol-relative URL, so a bare startsWith('/') is not enough.
+  const rawRedirectTo = searchParams.get('redirectTo') || '';
+  const redirectTo =
+    rawRedirectTo.startsWith('/') && !rawRedirectTo.startsWith('//') ? rawRedirectTo : undefined;
   const verifyEmail = searchParams.get('verifyEmail') === '1';
-  const registered = searchParams.get('registered') === '1';
   const oauthError = searchParams.get('oauthError');
+
+  // Keyed on mode so switching tabs counts as reaching that form, and on
+  // redirectTo so a gated entry (composer, follow) is distinguishable from a
+  // direct visit.
+  useEffect(() => {
+    trackAuthPageViewed({ mode: isRegister ? 'register' : 'login', redirectTo });
+  }, [isRegister, redirectTo]);
 
   function buildQuery(extra = {}) {
     const sp = new URLSearchParams();
@@ -30,7 +44,9 @@ export function AuthPage() {
   }
 
   function handleRegistered() {
-    goToLogin({ registered: '1' });
+    // Registration issues a session, so land on the destination rather than
+    // bouncing back to the login form.
+    navigate(redirectTo || '/pulse', { replace: true });
   }
 
   return (
@@ -50,11 +66,6 @@ export function AuthPage() {
       {verifyEmail ? (
         <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           Check your inbox and verify your email before signing in.
-        </p>
-      ) : null}
-      {registered ? (
-        <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          Account created — you can now log in.
         </p>
       ) : null}
       {oauthError === 'google_unavailable' ? (

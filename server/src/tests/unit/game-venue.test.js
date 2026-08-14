@@ -45,10 +45,17 @@ const { createGameSchema, updateGameSchema } = require('../../modules/games/game
 const LEAGUE_ID = '507f1f77bcf86cd799439011';
 const HOME_ID = '507f1f77bcf86cd799439031';
 const AWAY_ID = '507f1f77bcf86cd799439032';
+const GAME_FORMAT = {
+  regulationSegmentType: 'quarter',
+  regulationSegmentDurationSeconds: 600,
+  overtimeDurationSeconds: 300,
+};
 
 function leagueGamePayload(overrides = {}) {
   return {
     gameContext: 'league',
+    trackingMode: 'one_sided',
+    gameFormat: GAME_FORMAT,
     leagueId: LEAGUE_ID,
     homeLeagueTeamId: HOME_ID,
     awayLeagueTeamId: AWAY_ID,
@@ -68,6 +75,7 @@ describe('createGameSchema venue', () => {
     const parsed = createGameSchema.parse({
       gameContext: 'league',
       trackingMode: 'dual_team',
+      gameFormat: GAME_FORMAT,
       leagueId: LEAGUE_ID,
       homeLeagueTeamId: HOME_ID,
       awayLeagueTeamId: AWAY_ID,

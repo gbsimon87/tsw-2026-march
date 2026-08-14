@@ -12,7 +12,7 @@ const envSchema = z.object({
     .transform((value) => value === true || value === 'true')
     .default(false),
   VITE_POSTHOG_KEY: z.string().optional(),
-  VITE_POSTHOG_HOST: z.string().url().default('https://app.posthog.com'),
+  VITE_POSTHOG_HOST: z.string().url().default('https://eu.i.posthog.com'),
   VITE_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 });
 

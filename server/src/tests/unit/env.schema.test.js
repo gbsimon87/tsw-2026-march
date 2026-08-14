@@ -77,3 +77,25 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
     expect(result.data.STRIPE_PRICE_ID_PRO_MONTHLY).toBeUndefined();
   });
 });
+
+describe('env schema — analytics deployment identity', () => {
+  it('defaults PostHog ingestion to the EU project host', () => {
+    const result = envSchema.safeParse(baseEnv());
+
+    expect(result.success).toBe(true);
+    expect(result.data.POSTHOG_HOST).toBe('https://eu.i.posthog.com');
+  });
+
+  it('accepts an explicit app environment independently of NODE_ENV', () => {
+    const result = envSchema.safeParse(baseEnv({ NODE_ENV: 'production', APP_ENV: 'development' }));
+
+    expect(result.success).toBe(true);
+    expect(result.data.APP_ENV).toBe('development');
+  });
+
+  it('rejects an unknown app environment', () => {
+    const result = envSchema.safeParse(baseEnv({ APP_ENV: 'staging' }));
+
+    expect(result.success).toBe(false);
+  });
+});

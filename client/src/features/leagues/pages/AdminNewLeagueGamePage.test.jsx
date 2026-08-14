@@ -76,6 +76,11 @@ describe('AdminNewLeagueGamePage', () => {
         homeLeagueTeamId: 'home-team',
         awayLeagueTeamId: 'away-team',
         initialActiveSide: 'home',
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
       });
     });
     expect(mockNavigate).toHaveBeenCalledWith('/games/game-1/track');

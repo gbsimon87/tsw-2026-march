@@ -182,6 +182,31 @@ describe('PricingPage', () => {
     expect(window.location.assign).toHaveBeenCalledWith('https://billing.stripe.com/portal-test');
   });
 
+  test('new-league intent starts checkout even when an active league already exists', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-active',
+          name: 'Existing League',
+          billing: { plan: 'league', subscriptionStatus: 'active' },
+        },
+      ],
+    });
+    billingApiMocks.createLeagueCheckoutSession.mockResolvedValue({
+      devRedirectPath: '/admin/leagues/new',
+    });
+    renderPricing('/pricing?resourceType=league&action=create');
+
+    const trialButtons = await screen.findAllByRole('button', { name: /Start free trial/i });
+    fireEvent.click(trialButtons[trialButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(billingApiMocks.createLeagueCheckoutSession).toHaveBeenCalledWith('monthly');
+    });
+    expect(billingApiMocks.createCustomerPortalSession).not.toHaveBeenCalled();
+    expect(window.location.assign).toHaveBeenCalledWith('/admin/leagues/new');
+  });
+
   test('unauthenticated user sees register link for the paid plans', async () => {
     authMocks.useAuth.mockReturnValue({ user: null });
     renderPricing();

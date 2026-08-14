@@ -4,6 +4,8 @@ import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { GameFormatFields } from '../../games/components/GameFormatFields';
+import { DEFAULT_GAME_FORMAT } from '../../games/gameClock';
 
 export function AdminNewLeaguePage() {
   const navigate = useNavigate();
@@ -13,6 +15,7 @@ export function AdminNewLeaguePage() {
   const [logoFile, setLogoFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [defaultGameFormat, setDefaultGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
 
   async function onSubmit(event) {
     event.preventDefault();
@@ -20,7 +23,13 @@ export function AdminNewLeaguePage() {
     setIsSubmitting(true);
 
     try {
-      const response = await leaguesApi.create({ name, seasonLabel, description });
+      const response = await leaguesApi.create({
+        name,
+        seasonLabel,
+        description,
+        sport: 'basketball',
+        defaultGameFormat,
+      });
       if (logoFile && response.league?.id) {
         try {
           const formData = new FormData();
@@ -95,6 +104,11 @@ export function AdminNewLeaguePage() {
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
+        <GameFormatFields
+          value={defaultGameFormat}
+          onChange={setDefaultGameFormat}
+          legend="Default basketball game format"
+        />
         <div>
           <span className="mb-1 block text-sm text-slate-700">Logo (optional)</span>
           <div className="flex flex-wrap items-center gap-3">

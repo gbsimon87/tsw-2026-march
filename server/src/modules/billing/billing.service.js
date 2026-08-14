@@ -241,6 +241,23 @@ async function createTeamCheckoutSession(userId, teamId, interval = 'monthly') {
 }
 
 async function createLeagueCheckoutSession(userId, interval = 'monthly') {
+  // Development-only Stripe bypass. It mirrors the document that the Stripe
+  // checkout webhook provisions, but grants it as a local comp so developers
+  // can configure multiple leagues without Stripe credentials or webhooks.
+  if (env.NODE_ENV === 'development') {
+    const placeholderSlug = `league-dev-${String(userId).slice(-8)}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    await League.create({
+      ownerUserId: userId,
+      name: 'My League',
+      slug: placeholderSlug,
+      plan: 'league',
+      subscriptionStatus: 'active',
+      billingSource: 'comp',
+      billingInterval: interval,
+    });
+    return { devRedirectPath: '/admin/leagues/new' };
+  }
+
   const existingLeagues = await findLeaguesByOwner(userId);
   if (existingLeagues.some(isLeagueActive)) {
     throw new ApiError(400, 'You already have an active League subscription');

@@ -36,6 +36,16 @@ const {
   scheduleLeagueAggregateRecompute,
 } = require('../leagues/leagues.service');
 const { findLeagueTeamById, findLeagueById } = require('../leagues/leagues.repository');
+const {
+  SPORTS,
+  CLOCK_STATUSES,
+  SEGMENT_KINDS,
+  createReadyClock,
+  normalizeClock,
+  regulationSegmentCount,
+  segmentDurationMilliseconds,
+  validateSnapshot,
+} = require('../shared/gameClock');
 
 function sanitizeEvent(event) {
   return {
@@ -49,6 +59,9 @@ function sanitizeEvent(event) {
     x: event.x ?? null,
     y: event.y ?? null,
     videoTimestamp: typeof event.videoTimestamp === 'number' ? event.videoTimestamp : null,
+    segmentKind: event.segmentKind,
+    segmentNumber: event.segmentNumber,
+    clockMillisecondsRemaining: event.clockMillisecondsRemaining,
     occurredAt: event.occurredAt,
   };
 }
@@ -295,6 +308,9 @@ function sanitizeGame(game, options = {}) {
     teamId: game.teamId ? String(game.teamId) : null,
     gameContext: game.gameContext || 'standalone',
     trackingMode: game.trackingMode || 'one_sided',
+    sport: game.sport,
+    gameFormat: game.gameFormat?.toObject?.() || game.gameFormat,
+    clock: game.clock?.toObject?.() || game.clock,
     leagueId: game.leagueId ? String(game.leagueId) : null,
     seasonId: game.seasonId ? String(game.seasonId) : null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
@@ -379,8 +395,11 @@ function isOpponentEvent(statType) {
 
 function validateLineupPlayers(team, playerIds) {
   const uniquePlayerIds = [...new Set(playerIds.map(String))];
-  if (uniquePlayerIds.length !== 5) {
-    throw new ApiError(400, 'Starting lineup must include exactly 5 unique players');
+  if (uniquePlayerIds.length !== playerIds.length) {
+    throw new ApiError(400, 'Starting lineup must use unique players');
+  }
+  if (uniquePlayerIds.length === 0 || uniquePlayerIds.length > 5) {
+    throw new ApiError(400, 'Starting lineup must include between 1 and 5 unique players');
   }
 
   for (const playerId of uniquePlayerIds) {
@@ -1185,6 +1204,11 @@ async function resolveGameTeamContext(userId, game) {
   };
 }
 
+function clockAwareGameFields(format) {
+  const gameFormat = { ...format };
+  return { sport: SPORTS.BASKETBALL, gameFormat, clock: createReadyClock(gameFormat) };
+}
+
 async function createGameForUser(userId, payload) {
   if (payload.trackingMode === 'dual_team' && payload.homeTeamId && payload.awayTeamId) {
     const [homeTeam, awayTeam] = await Promise.all([
@@ -1203,6 +1227,7 @@ async function createGameForUser(userId, payload) {
       throw new ApiError(403, 'Forbidden');
     }
     const game = await createGame({
+      ...clockAwareGameFields(payload.gameFormat),
       ownerUserId: userId,
       gameContext: 'standalone',
       trackingMode: 'dual_team',
@@ -1240,6 +1265,7 @@ async function createGameForUser(userId, payload) {
     ]);
 
     const game = await createGame({
+      ...clockAwareGameFields(payload.gameFormat || context.league.defaultGameFormat),
       ownerUserId: userId,
       gameContext: 'league',
       trackingMode: 'dual_team',
@@ -1291,6 +1317,7 @@ async function createGameForUser(userId, payload) {
   if (payload.gameContext === 'league') {
     const context = await getLeagueContextForGame(userId, payload);
     const game = await createGame({
+      ...clockAwareGameFields(payload.gameFormat || context.league.defaultGameFormat),
       ownerUserId: userId,
       gameContext: 'league',
       trackingMode: 'one_sided',
@@ -1315,6 +1342,7 @@ async function createGameForUser(userId, payload) {
   // config-driven fast-follow (F-02).
   const team = await assertTeamOwnership(userId, payload.teamId);
   const game = await createGame({
+    ...clockAwareGameFields(payload.gameFormat),
     ownerUserId: userId,
     teamId: payload.teamId,
     trackingMode: 'one_sided',
@@ -1480,6 +1508,8 @@ function buildSlimGameEventDelta(userId, game, context) {
 
 async function getGameForUser(userId, gameId) {
   const game = await assertGameAccess(userId, gameId);
+  const responseTime = new Date();
+  if (game.clock) game.clock = normalizeClock(game.clock.toObject?.() || game.clock, responseTime);
   const { team, opponentTeam, teamDoc, participants, league } = await resolveGameTeamContext(
     userId,
     game
@@ -1542,6 +1572,7 @@ async function getGameForUser(userId, gameId) {
   const canManageRoster = await canManageGameRoster(userId, game);
 
   return {
+    serverTime: responseTime.toISOString(),
     game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
     team,
     opponentTeam,
@@ -1648,15 +1679,21 @@ function requireBothLineups(game) {
     return;
   }
   if (
-    (game.homeCurrentLineupPlayerIds || []).length !== 5 ||
-    (game.awayCurrentLineupPlayerIds || []).length !== 5
+    (game.homeCurrentLineupPlayerIds || []).length === 0 ||
+    (game.awayCurrentLineupPlayerIds || []).length === 0
   ) {
-    throw new ApiError(400, 'Set both starting fives before tracking');
+    throw new ApiError(400, 'Set a starting lineup for both teams before tracking');
   }
 }
 
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId);
+  const gameFormat = game.gameFormat;
+  const eventSnapshot = payload;
+
+  if (!validateSnapshot(gameFormat, eventSnapshot)) {
+    throw new ApiError(400, 'Event period and clock time are invalid for this game');
+  }
 
   // Tracking is free (T-12): no active-subscription gate on appending events.
 
@@ -1715,8 +1752,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     }
 
     if (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN) {
-      if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
-        throw new ApiError(400, 'Set starting five before making substitutions');
+      if (lineupIds.length === 0 && payload.statType === STAT_TYPES.SUB_OUT) {
+        throw new ApiError(400, 'Set a starting lineup before making substitutions');
       }
 
       if (payload.statType === STAT_TYPES.SUB_OUT) {
@@ -1751,6 +1788,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
         ...(typeof payload.videoTimestamp === 'number'
           ? { videoTimestamp: payload.videoTimestamp }
           : {}),
+        segmentKind: eventSnapshot.segmentKind,
+        segmentNumber: eventSnapshot.segmentNumber,
+        clockMillisecondsRemaining: eventSnapshot.clockMillisecondsRemaining,
         occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
       },
       insertBeforeEventId
@@ -1800,8 +1840,8 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 
   if (payload.statType === STAT_TYPES.SUB_OUT || payload.statType === STAT_TYPES.SUB_IN) {
     const lineupIds = (game.currentLineupPlayerIds || []).map(String);
-    if (lineupIds.length !== 5 && payload.statType === STAT_TYPES.SUB_OUT) {
-      throw new ApiError(400, 'Set starting five before making substitutions');
+    if (lineupIds.length === 0 && payload.statType === STAT_TYPES.SUB_OUT) {
+      throw new ApiError(400, 'Set a starting lineup before making substitutions');
     }
     if (payload.statType === STAT_TYPES.SUB_OUT) {
       if (!payload.playerId || !lineupIds.includes(String(payload.playerId))) {
@@ -1832,6 +1872,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
       ...(typeof payload.videoTimestamp === 'number'
         ? { videoTimestamp: payload.videoTimestamp }
         : {}),
+      segmentKind: eventSnapshot.segmentKind,
+      segmentNumber: eventSnapshot.segmentNumber,
+      clockMillisecondsRemaining: eventSnapshot.clockMillisecondsRemaining,
       occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
     },
     insertBeforeEventId
@@ -1859,7 +1902,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 
 async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
   const game = await assertGameAccess(userId, gameId);
-  if (game.status !== 'in_progress') {
+  if (!['scheduled', 'in_progress'].includes(game.status)) {
     throw new ApiError(
       400,
       game.status === 'scheduled'
@@ -1890,6 +1933,123 @@ async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
   game.currentLineupPlayerIds = validIds;
   await saveGame(game);
   return getGameForUser(userId, gameId);
+}
+
+function requireStartingLineups(game) {
+  if (game.trackingMode === 'dual_team') {
+    requireBothLineups(game);
+    return;
+  }
+  if ((game.currentLineupPlayerIds || []).length === 0) {
+    throw new ApiError(400, 'Set a starting lineup before starting the game');
+  }
+}
+
+async function updateClockForUser(userId, gameId, command, now = new Date()) {
+  const game = await assertGameAccess(userId, gameId);
+  if (game.status === 'completed') throw new ApiError(400, 'Cannot operate a completed game clock');
+
+  const normalized = normalizeClock(game.clock.toObject?.() || game.clock, now);
+  game.clock = normalized;
+
+  switch (command.action) {
+    case 'start':
+      requireStartingLineups(game);
+      if (![CLOCK_STATUSES.READY, CLOCK_STATUSES.PAUSED].includes(normalized.status)) {
+        throw new ApiError(400, 'Clock cannot be started in its current state');
+      }
+      if (game.status === 'scheduled') game.status = 'in_progress';
+      game.clock.status = CLOCK_STATUSES.RUNNING;
+      game.clock.runningSince = now;
+      break;
+    case 'pause':
+      if (normalized.status !== CLOCK_STATUSES.RUNNING) {
+        throw new ApiError(400, 'Clock is not running');
+      }
+      game.clock.status = CLOCK_STATUSES.PAUSED;
+      game.clock.runningSince = null;
+      break;
+    case 'finish_segment':
+      if (
+        ![CLOCK_STATUSES.RUNNING, CLOCK_STATUSES.PAUSED, CLOCK_STATUSES.SEGMENT_COMPLETE].includes(
+          normalized.status
+        )
+      ) {
+        throw new ApiError(400, 'Start the period before finishing it');
+      }
+      game.clock.status = CLOCK_STATUSES.SEGMENT_COMPLETE;
+      game.clock.remainingMilliseconds = 0;
+      game.clock.runningSince = null;
+      break;
+    case 'correct': {
+      const snapshot = {
+        segmentKind: command.segmentKind,
+        segmentNumber: command.segmentNumber,
+        clockMillisecondsRemaining: command.remainingMilliseconds,
+      };
+      if (!validateSnapshot(game.gameFormat, snapshot))
+        throw new ApiError(400, 'Invalid clock correction');
+      game.clock = {
+        status:
+          command.remainingMilliseconds === 0
+            ? CLOCK_STATUSES.SEGMENT_COMPLETE
+            : CLOCK_STATUSES.PAUSED,
+        segmentKind: command.segmentKind,
+        segmentNumber: command.segmentNumber,
+        remainingMilliseconds: command.remainingMilliseconds,
+        runningSince: null,
+      };
+      break;
+    }
+    case 'next_segment': {
+      if (
+        normalized.status !== CLOCK_STATUSES.SEGMENT_COMPLETE ||
+        normalized.segmentKind !== SEGMENT_KINDS.REGULATION
+      ) {
+        throw new ApiError(400, 'The current regulation segment is not complete');
+      }
+      if (normalized.segmentNumber >= regulationSegmentCount(game.gameFormat)) {
+        throw new ApiError(400, 'Regulation is complete');
+      }
+      game.clock = {
+        status: CLOCK_STATUSES.READY,
+        segmentKind: SEGMENT_KINDS.REGULATION,
+        segmentNumber: normalized.segmentNumber + 1,
+        remainingMilliseconds: segmentDurationMilliseconds(
+          game.gameFormat,
+          SEGMENT_KINDS.REGULATION
+        ),
+        runningSince: null,
+      };
+      break;
+    }
+    case 'start_overtime': {
+      const regulationComplete =
+        normalized.segmentKind === SEGMENT_KINDS.REGULATION &&
+        normalized.segmentNumber === regulationSegmentCount(game.gameFormat);
+      const overtimeComplete = normalized.segmentKind === SEGMENT_KINDS.OVERTIME;
+      if (
+        normalized.status !== CLOCK_STATUSES.SEGMENT_COMPLETE ||
+        (!regulationComplete && !overtimeComplete)
+      ) {
+        throw new ApiError(400, 'Regulation or the current overtime must be complete');
+      }
+      game.clock = {
+        status: CLOCK_STATUSES.READY,
+        segmentKind: SEGMENT_KINDS.OVERTIME,
+        segmentNumber: overtimeComplete ? normalized.segmentNumber + 1 : 1,
+        remainingMilliseconds: segmentDurationMilliseconds(game.gameFormat, SEGMENT_KINDS.OVERTIME),
+        runningSince: null,
+      };
+      break;
+    }
+    default:
+      throw new ApiError(400, 'Unsupported clock action');
+  }
+
+  await saveGameEventMutation(game);
+  const result = await getGameForUser(userId, gameId);
+  return { ...result, serverTime: now.toISOString() };
 }
 
 async function removeEventForUser(userId, gameId, eventId) {
@@ -1934,6 +2094,14 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (patch.x !== undefined) event.x = patch.x;
   if (patch.y !== undefined) event.y = patch.y;
   if (patch.videoTimestamp !== undefined) event.videoTimestamp = patch.videoTimestamp ?? undefined;
+  if (patch.segmentKind !== undefined) {
+    if (!validateSnapshot(game.gameFormat, patch)) {
+      throw new ApiError(400, 'Event period and clock time are invalid for this game');
+    }
+    event.segmentKind = patch.segmentKind;
+    event.segmentNumber = patch.segmentNumber;
+    event.clockMillisecondsRemaining = patch.clockMillisecondsRemaining;
+  }
   recalculateCurrentLineup(game);
   clearAiSummaryAfterCompletedLeagueEdit(game);
   syncGameDenormalizedAfterEventChange(game);
@@ -2008,6 +2176,12 @@ async function finishGameForUser(userId, gameId) {
 
   game.status = 'completed';
   game.completedAt = new Date();
+  if (game.clock)
+    game.clock = normalizeClock(game.clock.toObject?.() || game.clock, game.completedAt);
+  if (game.clock?.status === CLOCK_STATUSES.RUNNING) {
+    game.clock.status = CLOCK_STATUSES.PAUSED;
+    game.clock.runningSince = null;
+  }
   // OPT-008: freeze the final score + event count on completion.
   game.finalScore = finalScore;
   syncGameEventCount(game);
@@ -2022,7 +2196,7 @@ async function finishGameForUser(userId, gameId) {
   game.boxScore = boxScore;
   game.gameSummary = buildGameSummary(game);
 
-  await saveGame(game);
+  await saveGameEventMutation(game);
 
   // OPT-010/013/017: a newly completed game changes its league's standings,
   // its standalone team's season summary, and any shared feed card's score.
@@ -2070,5 +2244,6 @@ module.exports = {
   resolveRosterTargetForGame,
   addPlayerToGameRoster,
   canManageGameRoster,
+  updateClockForUser,
   HIGHLIGHT_STAT_TYPES,
 };

@@ -21,6 +21,7 @@ gamesRouter.post('/', asyncHandler(controller.create));
 gamesRouter.get('/', asyncHandler(controller.list));
 gamesRouter.patch('/:gameId', asyncHandler(controller.update));
 gamesRouter.post('/:gameId/lineup', asyncHandler(controller.setLineup));
+gamesRouter.patch('/:gameId/clock', asyncHandler(controller.updateClock));
 gamesRouter.post('/:gameId/roster', asyncHandler(controller.addRosterPlayer));
 gamesRouter.post('/:gameId/events', asyncHandler(controller.appendEvent));
 gamesRouter.post(

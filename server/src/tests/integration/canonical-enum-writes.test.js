@@ -23,6 +23,9 @@ jest.mock('../../modules/auth/auth.repository', () => {
       await doc.validate();
       return doc;
     }),
+    // register() issues a session on success; there is no DB here, so stub the
+    // write. The schema assertion below is unaffected.
+    upsertSession: jest.fn(),
   };
 });
 
@@ -38,6 +41,9 @@ jest.mock('../../config/env', () => ({
     STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
     JWT_ACCESS_SECRET: 'a'.repeat(32),
     JWT_REFRESH_SECRET: 'b'.repeat(32),
+    // Needed since register() signs tokens; jwt.sign rejects an undefined expiresIn.
+    ACCESS_TOKEN_TTL: '15m',
+    REFRESH_TOKEN_TTL: '7d',
     CLIENT_ORIGIN: 'http://localhost:5173',
   },
 }));
@@ -69,11 +75,14 @@ describe('canonical enum write paths (C1/C2 regression net)', () => {
   test('register() creates a user that passes the tightened User schema (C1)', async () => {
     findUserByEmail.mockResolvedValue(null);
 
-    const result = await authService.register({
-      email: 'new.user@example.com',
-      name: 'New User',
-      password: 'correct horse battery staple',
-    });
+    const result = await authService.register(
+      {
+        email: 'new.user@example.com',
+        name: 'New User',
+        password: 'correct horse battery staple',
+      },
+      { userAgent: 'jest', ip: '127.0.0.1' }
+    );
 
     expect(result.user.email).toBe('new.user@example.com');
     expect(['starter', 'team_pro']).toContain(result.user.plan);

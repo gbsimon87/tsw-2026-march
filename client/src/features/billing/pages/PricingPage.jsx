@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
+import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEvents';
 import { billingApi } from '../api/billingApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { leaguesApi } from '../../leagues/api/leaguesApi';
@@ -98,6 +99,8 @@ export function PricingPage() {
   const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
   const [isSubmittingLeague, setIsSubmittingLeague] = useState(false);
   const [error, setError] = useState('');
+  const isCreatingLeague =
+    searchParams.get('resourceType') === 'league' && searchParams.get('action') === 'create';
 
   // Public catalog — fetched for everyone (drives all pricing copy; no client drift).
   useEffect(() => {
@@ -183,10 +186,14 @@ export function PricingPage() {
     setIsSubmittingLeague(true);
     try {
       let response;
-      if (leagueIsActive && selectedLeagueId) {
+      if (leagueIsActive && selectedLeagueId && !isCreatingLeague) {
         response = await billingApi.createCustomerPortalSession({ leagueId: selectedLeagueId });
       } else {
         response = await billingApi.createLeagueCheckoutSession(interval);
+      }
+      if (response?.devRedirectPath) {
+        window.location.assign(response.devRedirectPath);
+        return;
       }
       if (!response?.url || !isSafeStripeUrl(response.url)) {
         throw new Error('Invalid or missing checkout URL');
@@ -207,7 +214,7 @@ export function PricingPage() {
         : 'Subscribe';
   const leagueCtaLabel = isSubmittingLeague
     ? 'Redirecting…'
-    : leagueIsActive
+    : leagueIsActive && !isCreatingLeague
       ? 'Manage League Billing'
       : trialLabel(leaguePlan, interval)
         ? 'Start free trial'
@@ -334,6 +341,7 @@ export function PricingPage() {
             <Link
               to="/register?redirectTo=/pricing"
               className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PRICING)}
             >
               Start free trial
             </Link>
@@ -397,6 +405,7 @@ export function PricingPage() {
             <Link
               to="/register?redirectTo=/pricing"
               className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
+              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PRICING)}
             >
               Start free trial
             </Link>

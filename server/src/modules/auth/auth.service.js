@@ -23,6 +23,7 @@ const {
   destroyImage,
   isCloudinaryConfigured,
 } = require('../feed/cloudinary.client');
+const { captureEventDetached, pseudonymousId } = require('../analytics/analytics.service');
 const { ApiError } = require('../../utils/apiError');
 const { env } = require('../../config/env');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
@@ -64,7 +65,7 @@ function buildClientUrl(pathname, token) {
   return `${getPrimaryClientOrigin()}${pathname}?token=${encodeURIComponent(token)}`;
 }
 
-async function issueAuthTokens(user, metadata) {
+async function issueAuthTokens(user, metadata, { isFirstLogin = false } = {}) {
   const payload = createSessionPayload(user._id);
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
@@ -79,11 +80,31 @@ async function issueAuthTokens(user, metadata) {
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   });
 
+  // NOT emitted here. issueAuthTokens is also called by refresh(), which
+  // rotates tokens every ~15 minutes for an active user — firing here would
+  // turn an engagement metric into a session-duration proxy. The two Google
+  // steps would double-count for the same reason. Callers that represent a
+  // real sign-in call captureLogin() instead.
+  if (isFirstLogin) {
+    captureLogin(user, { isFirstLogin: true });
+  }
+
   return {
     accessToken,
     refreshToken,
     user: sanitizeUser(user),
   };
+}
+
+function captureLogin(user, { isFirstLogin = false } = {}) {
+  captureEventDetached({
+    distinctId: String(user._id),
+    event: 'user_logged_in',
+    properties: {
+      auth_provider: user.authProvider || 'local',
+      is_first_login: isFirstLogin,
+    },
+  });
 }
 
 async function issuePasswordReset(user) {
@@ -106,9 +127,18 @@ async function issuePasswordReset(user) {
   });
 }
 
-async function register(input) {
+async function register(input, metadata) {
   const existing = await findUserByEmail(input.email);
   if (existing) {
+    // A high rate here means returning users are landing on the register form
+    // by mistake. Note this is the only reason currently captured: Zod rejects
+    // malformed input in the controller before the service runs, so validation
+    // failures never reach this point.
+    captureEventDetached({
+      distinctId: pseudonymousId(input.email),
+      event: 'registration_failed',
+      properties: { reason: 'email_in_use' },
+    });
     throw new ApiError(409, 'Email is already in use');
   }
 
@@ -124,11 +154,15 @@ async function register(input) {
     // the User enum is canonical-only since T-26 and rejects legacy 'free').
   });
 
-  return {
-    user: sanitizeUser(user),
-    message: 'Registration successful. You can now sign in.',
-    verificationUrl: null,
-  };
+  captureEventDetached({
+    distinctId: String(user._id),
+    event: 'user_registered',
+    properties: { auth_provider: 'local' },
+  });
+
+  // Sign the new user straight in rather than redirecting them to the login form
+  // to re-enter the credentials they just chose. Same token path as login().
+  return issueAuthTokens(user, metadata, { isFirstLogin: true });
 }
 
 async function login(input, metadata) {
@@ -142,7 +176,12 @@ async function login(input, metadata) {
     throw new ApiError(401, 'Invalid credentials');
   }
 
-  return issueAuthTokens(user, metadata);
+  // After the session write, not before: a failed upsertSession returns a 500,
+  // and recording a login that never happened would overstate the funnel.
+  const tokens = await issueAuthTokens(user, metadata);
+  captureLogin(user);
+
+  return tokens;
 }
 
 async function refresh(refreshToken, metadata) {
@@ -277,27 +316,43 @@ async function getSystemUserId() {
 }
 
 async function loginWithGoogle(googleProfile, metadata) {
-  const user = await findOrCreateGoogleUser({
+  const { user, isNew } = await findOrCreateGoogleUser({
     googleId: googleProfile.id,
     email: googleProfile.email,
     name: googleProfile.name,
   });
 
-  return issueAuthTokens(user, metadata);
+  if (isNew) {
+    captureEventDetached({
+      distinctId: String(user._id),
+      event: 'user_registered',
+      properties: { auth_provider: 'google' },
+    });
+  }
+
+  return issueAuthTokens(user, metadata, { isFirstLogin: isNew });
 }
 
 async function prepareGoogleExchange(googleProfile) {
-  const user = await findOrCreateGoogleUser({
+  const { user, isNew } = await findOrCreateGoogleUser({
     googleId: googleProfile.id,
     email: googleProfile.email,
     name: googleProfile.name,
   });
+
+  if (isNew) {
+    captureEventDetached({
+      distinctId: String(user._id),
+      event: 'user_registered',
+      properties: { auth_provider: 'google' },
+    });
+  }
 
   // Short-lived token so the client can exchange it for session cookies via a
   // credentialed fetch. Cookies set on a redirect (bounce) are blocked by Chrome
   // BTM and Safari ITP; a fetch-issued cookie is not.
   const exchangeToken = jwt.sign(
-    { sub: String(user._id), type: 'google_exchange' },
+    { sub: String(user._id), type: 'google_exchange', isFirstLogin: isNew },
     env.JWT_ACCESS_SECRET,
     { expiresIn: '60s' }
   );
@@ -350,7 +405,13 @@ async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
     throw new ApiError(401, 'User not found');
   }
 
-  return issueAuthTokens(user, metadata);
+  // Captured here rather than in loginWithGoogle: the two are steps of one
+  // sign-in, and this is the one that completes it. After the session write for
+  // the same reason as login().
+  const tokens = await issueAuthTokens(user, metadata);
+  captureLogin(user, { isFirstLogin: payload.isFirstLogin === true });
+
+  return tokens;
 }
 
 module.exports = {

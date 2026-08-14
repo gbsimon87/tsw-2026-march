@@ -90,7 +90,7 @@ async function findUsersByIds(ids) {
 async function findOrCreateGoogleUser({ googleId, email, name }) {
   let user = await User.findOne({ googleId });
   if (user) {
-    return user;
+    return { user, isNew: false };
   }
 
   user = await User.findOne({ email: email.toLowerCase() });
@@ -103,10 +103,10 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
       user.name = name;
     }
     await user.save();
-    return user;
+    return { user, isNew: false };
   }
 
-  return User.create({
+  user = await User.create({
     googleId,
     email: email.toLowerCase(),
     name,
@@ -115,6 +115,8 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     emailVerifiedAt: new Date(),
     roles: ['user'],
   });
+
+  return { user, isNew: true };
 }
 
 const SYSTEM_USER_EMAIL = 'system@tsw.internal';

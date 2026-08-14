@@ -8,6 +8,8 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { GameFormatFields } from '../../games/components/GameFormatFields';
+import { DEFAULT_GAME_FORMAT } from '../../games/gameClock';
 
 // ── Shared primitives ────────────────────────────────────────────────
 
@@ -242,6 +244,7 @@ export function AdminNewLeagueGamePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
 
   // Picker modal state
   const [pickerOpen, setPickerOpen] = useState(null); // 'home' | 'away' | 'managed' | 'opponent'
@@ -254,6 +257,7 @@ export function AdminNewLeagueGamePage() {
       .then(([leagueResponse, teamsResponse]) => {
         const nextLeague = leagueResponse.league;
         setLeague(nextLeague);
+        setGameFormat({ ...(nextLeague.defaultGameFormat || DEFAULT_GAME_FORMAT) });
         const nextTeams = teamsResponse.teams || [];
         setTeams(nextTeams);
 
@@ -301,6 +305,7 @@ export function AdminNewLeagueGamePage() {
         homeLeagueTeamId: effectiveHomeId,
         awayLeagueTeamId: effectiveAwayId,
         initialActiveSide: effectiveSide,
+        gameFormat,
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
         ...(venue.trim() ? { venue: venue.trim() } : {}),
@@ -557,6 +562,12 @@ export function AdminNewLeagueGamePage() {
             </label>
           </div>
         </div>
+
+        <GameFormatFields
+          value={gameFormat}
+          onChange={setGameFormat}
+          legend="Game clock override"
+        />
 
         <button
           type="submit"

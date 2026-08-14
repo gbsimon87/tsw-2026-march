@@ -59,6 +59,7 @@ POST   /games
 GET    /games                                       cursor-paginated
 GET    /games/:gameId                               public, optional auth
 PATCH  /games/:gameId
+PATCH  /games/:gameId/clock
 POST   /games/:gameId/lineup
 POST   /games/:gameId/roster
 POST   /games/:gameId/events
@@ -77,8 +78,19 @@ additions.
 Event types and court zones come from
 `server/src/modules/shared/stats.constants.js`. Shots require `playerId`,
 `zoneId`, `x`, and `y`; opponent events reject `playerId`. Coordinates use
-`0..100`. `teamSide`, `occurredAt`, and `videoTimestamp` are optional where
-allowed by `games.validation.js`.
+`0..100`. Every event requires an atomic game-clock snapshot:
+`segmentKind`, `segmentNumber`, and `clockMillisecondsRemaining`.
+`teamSide`, `occurredAt`, and `videoTimestamp` are optional where allowed by
+`games.validation.js`; video and game-clock timestamps are independent.
+
+Game creation requires a basketball `gameFormat` with `quarter` or `half`, a
+regulation-segment duration, and an overtime duration. Clock commands are
+`start`, `pause`, `finish_segment`, `correct`, `next_segment`, and
+`start_overtime`. `finish_segment` manually sets the current running or paused
+period to zero. `correct`
+sets the period and remaining milliseconds atomically and leaves the clock
+paused. The clock stops at zero; later regulation periods and every overtime
+are prepared manually and wait for a separate start command.
 
 ## Feed And Follows
 

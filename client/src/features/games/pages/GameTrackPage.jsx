@@ -2,11 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
+import { Modal } from '../../../components/ui/Modal';
 import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
 import { AddRosterPlayerDialog } from '../components/AddRosterPlayerDialog';
+import { GameTrackScoreHeader } from '../components/GameTrackScoreHeader';
+import { GameClockControls } from '../components/GameClockControls';
+import { clockSnapshot, formatClock, segmentLabel } from '../gameClock';
 import {
   buildFreeThrowPayload,
   buildShotStatType,
@@ -19,8 +23,19 @@ import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const { STAT_LABELS, ZONE_LABELS, TEAM_SIDES } = gameConstants;
 
-function formatEventMeta(event) {
+function formatEventMeta(event, gameFormat) {
   const parts = [];
+
+  if (
+    gameFormat &&
+    event.segmentKind &&
+    event.segmentNumber &&
+    typeof event.clockMillisecondsRemaining === 'number'
+  ) {
+    parts.push(
+      `${segmentLabel(gameFormat, event.segmentKind, event.segmentNumber)} ${formatClock(event.clockMillisecondsRemaining)}`
+    );
+  }
 
   if (event.zoneId) {
     parts.push(ZONE_LABELS[event.zoneId] || event.zoneId);
@@ -33,7 +48,7 @@ function formatEventMeta(event) {
   return parts.join(' ');
 }
 
-function parseEventParts(event, playersById) {
+function parseEventParts(event, playersById, gameFormat) {
   const player = event.playerId ? playersById.get(event.playerId) : null;
   const isSub = event.statType === 'SUB_IN' || event.statType === 'SUB_OUT';
 
@@ -49,24 +64,8 @@ function parseEventParts(event, playersById) {
   return {
     actor,
     statLabel: isSub ? null : STAT_LABELS[event.statType] || event.statType,
-    meta: isSub ? null : formatEventMeta(event) || null,
+    meta: formatEventMeta(event, gameFormat) || null,
   };
-}
-
-function formatThreePointPercentage(made, attempts) {
-  if (!attempts) {
-    return '--';
-  }
-
-  return `${((made / attempts) * 100).toFixed(1)}%`;
-}
-
-function formatPercentage(made, attempts) {
-  if (!attempts) {
-    return '--';
-  }
-
-  return `${((made / attempts) * 100).toFixed(1)}%`;
 }
 
 function isReasonLabel(value) {
@@ -132,7 +131,7 @@ function LineupPicker({
           <button
             type="button"
             onClick={onSave}
-            disabled={isSaving || lineupDraft.length !== 5}
+            disabled={isSaving || lineupDraft.length === 0 || lineupDraft.length > 5}
             className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
           >
             {isSaving ? 'Saving...' : 'Save Lineup'}
@@ -308,6 +307,7 @@ export function GameTrackPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [serverOffsetMilliseconds, setServerOffsetMilliseconds] = useState(0);
   const [rosterOverride, setRosterOverride] = useState(null);
   const [selectedShot, setSelectedShot] = useState(null);
   const [pendingFollowUpPrompt, setPendingFollowUpPrompt] = useState(null);
@@ -340,11 +340,19 @@ export function GameTrackPage() {
     readLocalStorageFlag('gameTrack.pauseVideoOnEntry', true)
   );
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
+  const [showClockRecovery, setShowClockRecovery] = useState(false);
+  const [showShortLineupWarning, setShowShortLineupWarning] = useState(false);
+  const [pendingExitDestination, setPendingExitDestination] = useState('');
+  const [isClockRecoveryCorrectionOpen, setIsClockRecoveryCorrectionOpen] = useState(false);
+  const [clockRecoveryTimeDraft, setClockRecoveryTimeDraft] = useState('10:00');
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
   const videoIframeRef = useRef(null);
   const videoCurrentTimeRef = useRef(null);
+  const entryClockSnapshotRef = useRef(null);
+  const entryClockWasRunningRef = useRef(false);
+  const clockOperatedThisMountRef = useRef(false);
   const rotateCourt = courtOrientation === 'horizontal';
 
   useEffect(() => {
@@ -393,6 +401,32 @@ export function GameTrackPage() {
       setIsMobileEntryMode(false);
     }
   }, [activePanel]);
+
+  useEffect(() => {
+    if (!gameId || data?.game?.clock?.status !== 'running') return;
+    // Recovery applies only when this page *loaded* an already-running clock.
+    // A local Start/resume command naturally transitions the response to
+    // `running`, but that is not an interrupted tracking session.
+    if (clockOperatedThisMountRef.current) {
+      sessionStorage.setItem(`gameClock:${gameId}`, 'active');
+      return;
+    }
+    const navigation = performance.getEntriesByType?.('navigation')?.[0];
+    const sameTabReload =
+      navigation?.type === 'reload' && sessionStorage.getItem(`gameClock:${gameId}`) === 'active';
+    sessionStorage.setItem(`gameClock:${gameId}`, 'active');
+    if (!sameTabReload) setShowClockRecovery(true);
+  }, [data?.game?.clock?.status, gameId]);
+
+  useEffect(() => {
+    if (data?.game?.clock?.status !== 'running') return undefined;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [data?.game?.clock?.status]);
 
   function togglePauseVideoOnEntry() {
     const next = !pauseVideoOnEntry;
@@ -445,6 +479,9 @@ export function GameTrackPage() {
         }
       }
 
+      if (response.serverTime) {
+        setServerOffsetMilliseconds(new Date(response.serverTime).getTime() - Date.now());
+      }
       setData(resolvedResponse);
 
       const nextState = {
@@ -564,8 +601,16 @@ export function GameTrackPage() {
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
   const isCompleted = game?.status === 'completed';
-  const homeLineupReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length === 5;
-  const awayLineupReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length === 5;
+  const homeLineupCount = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length;
+  const awayLineupCount = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length;
+  const homeLineupReady = homeLineupCount > 0;
+  const awayLineupReady = awayLineupCount > 0;
+  const allStartingLineupsReady = isDualTeam
+    ? homeLineupReady && awayLineupReady
+    : (game?.currentLineupPlayerIds || []).length > 0;
+  const hasShortStartingLineup = isDualTeam
+    ? homeLineupCount < 5 || awayLineupCount < 5
+    : (game?.currentLineupPlayerIds || []).length < 5;
   const lineupSetupStep =
     isLeagueGame && isDualTeam
       ? !homeLineupReady
@@ -599,6 +644,9 @@ export function GameTrackPage() {
   }
 
   function updateData(response, actionLabel = '') {
+    if (response.serverTime) {
+      setServerOffsetMilliseconds(new Date(response.serverTime).getTime() - Date.now());
+    }
     setData((current) => ({ ...current, ...response }));
     if (isDualTeam) {
       for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
@@ -633,18 +681,22 @@ export function GameTrackPage() {
   }
 
   function requireLineup() {
+    if (showClockRecovery) {
+      setError('Resolve the running clock recovery before tracking an event');
+      return false;
+    }
     if (isDualTeam) {
-      const homeReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length === 5;
-      const awayReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length === 5;
+      const homeReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length > 0;
+      const awayReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length > 0;
       if (!homeReady || !awayReady) {
-        setError('Set both starting fives before tracking');
+        setError('Set a starting lineup for both teams before tracking');
         return false;
       }
       return true;
     }
 
-    if (lineupIds.length !== 5) {
-      setError('Set starting five before tracking');
+    if (lineupIds.length === 0) {
+      setError('Set a starting lineup before tracking');
       return false;
     }
 
@@ -673,7 +725,21 @@ export function GameTrackPage() {
       typeof currentVideoTimestamp === 'number'
         ? { ...payload, videoTimestamp: currentVideoTimestamp }
         : payload;
-    return isDualTeam ? { ...withTimestamp, teamSide: activeSide } : withTimestamp;
+    const snapshot =
+      entryClockSnapshotRef.current ||
+      (data?.game?.clock ? clockSnapshot(data.game, Date.now() + serverOffsetMilliseconds) : {});
+    const withClock = { ...withTimestamp, ...snapshot };
+    const isOpponentAggregate = String(payload.statType || '').startsWith('OPP_');
+    if (!isDualTeam || isOpponentAggregate) return withClock;
+    return { teamSide: activeSide, ...withClock };
+  }
+
+  function submitEvent(payload, { insertBeforeId = '' } = {}) {
+    captureEntrySnapshot();
+    const eventPayload = buildEventPayload(payload);
+    return insertBeforeId
+      ? gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
+      : gamesApi.appendEvent(gameId, eventPayload);
   }
 
   function buildCourtFields(shot) {
@@ -683,6 +749,53 @@ export function GameTrackPage() {
       x: Number(shot.x.toFixed(2)),
       y: Number(shot.y.toFixed(2)),
     };
+  }
+
+  function captureVideoTimestamp() {
+    const timestamp =
+      typeof videoCurrentTimeRef.current === 'number'
+        ? Math.round(videoCurrentTimeRef.current)
+        : null;
+    setCurrentVideoTimestamp(timestamp);
+    return timestamp;
+  }
+
+  function captureEntrySnapshot() {
+    if (!entryClockSnapshotRef.current && data?.game?.clock) {
+      entryClockSnapshotRef.current = clockSnapshot(
+        data.game,
+        Date.now() + serverOffsetMilliseconds
+      );
+    }
+    return entryClockSnapshotRef.current;
+  }
+
+  async function pauseClockForEntry() {
+    if (
+      !pauseVideoOnEntry ||
+      data?.game?.clock?.status !== 'running' ||
+      entryClockWasRunningRef.current
+    )
+      return;
+    entryClockWasRunningRef.current = true;
+    try {
+      const response = await gamesApi.updateClock(gameId, { action: 'pause' });
+      updateData(response);
+    } catch (clockError) {
+      entryClockWasRunningRef.current = false;
+      setError(clockError.message || 'Failed to pause the game clock');
+    }
+  }
+
+  async function resumeClockAfterEntry() {
+    if (!entryClockWasRunningRef.current) return;
+    entryClockWasRunningRef.current = false;
+    try {
+      const response = await gamesApi.updateClock(gameId, { action: 'start' });
+      updateData(response);
+    } catch (clockError) {
+      setError(clockError.message || 'Stat saved, but the game clock remains paused');
+    }
   }
 
   function onCourtSelect(point) {
@@ -698,12 +811,10 @@ export function GameTrackPage() {
     ghostClickGuardRef.current = Date.now();
     if (pauseVideoOnEntry) {
       pauseVideo();
+      pauseClockForEntry();
     }
-    setCurrentVideoTimestamp(
-      typeof videoCurrentTimeRef.current === 'number'
-        ? Math.round(videoCurrentTimeRef.current)
-        : null
-    );
+    captureVideoTimestamp();
+    captureEntrySnapshot();
   }
 
   function openTrackingOverlay() {
@@ -742,6 +853,7 @@ export function GameTrackPage() {
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
     setCurrentVideoTimestamp(null);
+    entryClockSnapshotRef.current = null;
     if (isReasonLabel(reason)) {
       setLastActionLabel(reason);
     }
@@ -750,6 +862,7 @@ export function GameTrackPage() {
       if (pauseVideoOnEntry) {
         playVideo();
       }
+      resumeClockAfterEntry();
     }
   }
 
@@ -766,7 +879,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -799,11 +911,9 @@ export function GameTrackPage() {
       }
     }
 
-    inflightRef.current = (
-      isInsert
-        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : gamesApi.appendEvent(gameId, payload)
-    )
+    inflightRef.current = submitEvent(payload, {
+      insertBeforeId: isInsert ? insertBeforeEventId : '',
+    })
       .then((response) => {
         updateData(response, label);
         updateLastAction(label, reboundPlayerId);
@@ -894,8 +1004,7 @@ export function GameTrackPage() {
       }
 
       const followUpKind = pendingFollowUpPrompt.kind;
-      inflightRef.current = gamesApi
-        .appendEvent(gameId, payload)
+      inflightRef.current = submitEvent(payload)
         .then((response) => {
           updateData(response, label);
           clearEventPicker('', { resume: true });
@@ -929,17 +1038,11 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', {
-      game_id: gameId,
-      stat_type: buildShotStatType(selectedShot.shotFamily, outcome),
-    });
 
     const payload = buildEventPayload({
       playerId: currentSideState.selectedPlayerId,
       statType: buildShotStatType(selectedShot.shotFamily, outcome),
-      zoneId: selectedShot.zoneId,
-      x: Number(selectedShot.x.toFixed(2)),
-      y: Number(selectedShot.y.toFixed(2)),
+      ...buildCourtFields(selectedShot),
     });
     const shotLabel = STAT_LABELS[payload.statType] || payload.statType;
     const actorPlayerId = currentSideState.selectedPlayerId;
@@ -974,11 +1077,9 @@ export function GameTrackPage() {
       clearEventPicker('', { resume: true });
     }
 
-    inflightRef.current = (
-      isInsert
-        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : gamesApi.appendEvent(gameId, payload)
-    )
+    inflightRef.current = submitEvent(payload, {
+      insertBeforeId: isInsert ? insertBeforeEventId : '',
+    })
       .then((response) => {
         updateData(response, shotLabel);
         updateLastAction(shotLabel, actorPlayerId);
@@ -1002,10 +1103,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', {
-      game_id: gameId,
-      stat_type: outcome === 'made' ? 'FT_MADE' : 'FT_MISS',
-    });
 
     const inferred = buildFreeThrowPayload(
       selectedShot?.nearestHoop || lastTappedHoop,
@@ -1038,11 +1135,9 @@ export function GameTrackPage() {
       clearEventPicker('', { resume: true });
     }
 
-    inflightRef.current = (
-      isInsert
-        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : gamesApi.appendEvent(gameId, payload)
-    )
+    inflightRef.current = submitEvent(payload, {
+      insertBeforeId: isInsert ? insertBeforeEventId : '',
+    })
       .then((response) => {
         updateData(response, ftLabel);
         updateLastAction(ftLabel, actorPlayerId);
@@ -1083,7 +1178,6 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
-    trackEvent('game_stat_recorded', { game_id: gameId, stat_type: statType });
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(selectedShot);
@@ -1138,11 +1232,9 @@ export function GameTrackPage() {
       clearEventPicker('', { resume: true });
     }
 
-    inflightRef.current = (
-      isInsert
-        ? gamesApi.insertEventBefore(gameId, insertBeforeEventId, payload)
-        : gamesApi.appendEvent(gameId, payload)
-    )
+    inflightRef.current = submitEvent(payload, {
+      insertBeforeId: isInsert ? insertBeforeEventId : '',
+    })
       .then((response) => {
         updateData(response, quickLabel);
         updateLastAction(quickLabel, actorPlayerId);
@@ -1166,11 +1258,13 @@ export function GameTrackPage() {
 
     setError('');
     setIsSaving(true);
+    const videoTimestamp = captureVideoTimestamp();
 
     try {
-      const response = await gamesApi.appendEvent(gameId, {
+      const response = await submitEvent({
         statType,
         ...buildCourtFields(selectedShot),
+        ...(typeof videoTimestamp === 'number' ? { videoTimestamp } : {}),
       });
       updateData(response, STAT_LABELS[statType] || statType);
       clearEventPicker('', { resume: true });
@@ -1190,6 +1284,9 @@ export function GameTrackPage() {
       zoneId: event.zoneId || '',
       x: event.x ?? '',
       y: event.y ?? '',
+      segmentKind: event.segmentKind || 'regulation',
+      segmentNumber: event.segmentNumber || 1,
+      clockMillisecondsRemaining: event.clockMillisecondsRemaining ?? 0,
     });
   }
 
@@ -1204,6 +1301,9 @@ export function GameTrackPage() {
     if (editingEvent.zoneId) patch.zoneId = editingEvent.zoneId;
     if (editingEvent.x !== '') patch.x = Number(editingEvent.x);
     if (editingEvent.y !== '') patch.y = Number(editingEvent.y);
+    patch.segmentKind = editingEvent.segmentKind;
+    patch.segmentNumber = Number(editingEvent.segmentNumber);
+    patch.clockMillisecondsRemaining = Number(editingEvent.clockMillisecondsRemaining);
     try {
       const response = await gamesApi.updateEvent(gameId, editingEvent.id, patch);
       updateData(response, 'Event updated');
@@ -1247,8 +1347,8 @@ export function GameTrackPage() {
       return;
     }
 
-    if (currentSideState.lineupDraft.length !== 5) {
-      setError('Select exactly 5 players for the starting five');
+    if (currentSideState.lineupDraft.length === 0 || currentSideState.lineupDraft.length > 5) {
+      setError('Select between 1 and 5 players for the starting lineup');
       return;
     }
 
@@ -1298,13 +1398,13 @@ export function GameTrackPage() {
     setIsSaving(true);
     try {
       const commonPayload = isDualTeam ? { teamSide: activeSide, relatedTeamSide: activeSide } : {};
-      await gamesApi.appendEvent(gameId, {
+      await submitEvent({
         playerId: currentSideState.substitutionState.playerOutId,
         relatedPlayerId: currentSideState.substitutionState.playerInId,
         statType: 'SUB_OUT',
         ...commonPayload,
       });
-      const subInResponse = await gamesApi.appendEvent(gameId, {
+      const subInResponse = await submitEvent({
         playerId: currentSideState.substitutionState.playerInId,
         relatedPlayerId: currentSideState.substitutionState.playerOutId,
         statType: 'SUB_IN',
@@ -1318,11 +1418,31 @@ export function GameTrackPage() {
             : currentSideState.selectedPlayerId,
         substitutionState: { playerOutId: '', playerInId: '' },
       });
+      setCurrentVideoTimestamp(null);
     } catch (saveError) {
       setError(saveError.message || 'Failed to save substitution');
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function toggleSubstitutionPlayer(field, playerId) {
+    const currentId = currentSideState.substitutionState[field];
+    if (
+      !currentId &&
+      !currentSideState.substitutionState.playerOutId &&
+      !currentSideState.substitutionState.playerInId
+    ) {
+      captureVideoTimestamp();
+      captureEntrySnapshot();
+      pauseClockForEntry();
+    }
+    updateSideState(activeKey, {
+      substitutionState: {
+        ...currentSideState.substitutionState,
+        [field]: currentId === playerId ? '' : playerId,
+      },
+    });
   }
 
   async function saveVideoUrl() {
@@ -1354,6 +1474,93 @@ export function GameTrackPage() {
       setError(finishError.message || 'Failed to finish game');
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function executeClockCommand(command) {
+    if (isSaving) return false;
+    clockOperatedThisMountRef.current = true;
+    setError('');
+    setIsSaving(true);
+    try {
+      const response = await gamesApi.updateClock(gameId, command);
+      updateData(response);
+      return true;
+    } catch (clockError) {
+      if (clockError.status === 409) {
+        await loadGame();
+        setError('The game changed in another tracking session. The latest clock was loaded.');
+      } else {
+        setError(clockError.message || 'Failed to update game clock');
+      }
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function runClockCommand(command) {
+    const isStartingGame =
+      command.action === 'start' &&
+      game?.status === 'scheduled' &&
+      game?.clock?.segmentKind === 'regulation' &&
+      game?.clock?.segmentNumber === 1;
+
+    if (isStartingGame && hasShortStartingLineup) {
+      setIsTrackingFullscreen(false);
+      setShowShortLineupWarning(true);
+      return;
+    }
+
+    return executeClockCommand(command);
+  }
+
+  function returnToShortLineup() {
+    setShowShortLineupWarning(false);
+    setActivePanel('court');
+    if (isDualTeam) {
+      setActiveSide(homeLineupCount < 5 ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY);
+    }
+  }
+
+  function leaveTracker(destination) {
+    if (data?.game?.clock?.status === 'running') {
+      setPendingExitDestination(destination);
+      return;
+    }
+    navigate(destination);
+  }
+
+  async function pauseClockAndLeave() {
+    if (!pendingExitDestination || isSaving) return;
+    setIsSaving(true);
+    try {
+      await gamesApi.updateClock(gameId, { action: 'pause' });
+      navigate(pendingExitDestination);
+      setPendingExitDestination('');
+    } catch (clockError) {
+      setError(clockError.message || 'Could not pause the clock; tracking remains open');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function correctRecoveredClock() {
+    const match = clockRecoveryTimeDraft.trim().match(/^(\d+):([0-5]?\d(?:\.\d)?)$/);
+    if (!match) {
+      setError('Enter the clock time as minutes:seconds, for example 4:32.5');
+      return;
+    }
+    const remainingMilliseconds = (Number(match[1]) * 60 + Number(match[2])) * 1000;
+    const corrected = await executeClockCommand({
+      action: 'correct',
+      segmentKind: game.clock.segmentKind,
+      segmentNumber: game.clock.segmentNumber,
+      remainingMilliseconds,
+    });
+    if (corrected) {
+      setIsClockRecoveryCorrectionOpen(false);
+      setShowClockRecovery(false);
     }
   }
 
@@ -1838,135 +2045,24 @@ export function GameTrackPage() {
         </div>
       ) : null}
 
-      {isDualTeam ? (
-        <div className="flex border-b border-slate-200 bg-white shadow-sm">
-          {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
-            const isActive = activeSide === side;
-            const points =
-              side === TEAM_SIDES.HOME ? gameSummary.homePoints : gameSummary.awayPoints;
-            const sideLabel =
-              side === TEAM_SIDES.HOME
-                ? participantsBySide.home?.displayName || 'Home'
-                : participantsBySide.away?.displayName || 'Away';
-            return (
-              <button
-                key={side}
-                type="button"
-                onClick={() => changeActiveSide(side)}
-                aria-label={`Select ${sideLabel}`}
-                aria-pressed={isActive}
-                className={`flex flex-1 items-center gap-3 px-4 py-4 transition ${
-                  side === TEAM_SIDES.HOME
-                    ? 'justify-start border-r border-slate-200'
-                    : 'justify-end'
-                } ${isActive ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 hover:bg-slate-50'}`}
-              >
-                {side === TEAM_SIDES.HOME ? (
-                  <>
-                    <CloudinaryImage
-                      src={participantsBySide.home?.logo?.url || teamPlaceholder}
-                      alt={participantsBySide.home?.displayName || 'Home'}
-                      width={36}
-                      height={36}
-                      loading="lazy"
-                      decoding="async"
-                      srcSetWidths={[36, 72, 108]}
-                      sizes="36px"
-                      className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                    />
-                    <div className="text-left">
-                      <p
-                        className={`text-xs font-medium ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}
-                      >
-                        {participantsBySide.home?.displayName || 'Home'}
-                      </p>
-                      <p className="text-3xl font-bold tabular-nums">{points || 0}</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-right">
-                      <p
-                        className={`text-xs font-medium ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}
-                      >
-                        {participantsBySide.away?.displayName || 'Away'}
-                      </p>
-                      <p className="text-3xl font-bold tabular-nums">{points || 0}</p>
-                    </div>
-                    <CloudinaryImage
-                      src={participantsBySide.away?.logo?.url || teamPlaceholder}
-                      alt={participantsBySide.away?.displayName || 'Away'}
-                      width={36}
-                      height={36}
-                      loading="lazy"
-                      decoding="async"
-                      srcSetWidths={[36, 72, 108]}
-                      sizes="36px"
-                      className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                    />
-                  </>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
-          {!isDualTeam && (
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {game.title}
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
-            <div className="flex items-end gap-4">
-              <div className="flex items-center gap-2">
-                <CloudinaryImage
-                  src={team?.logo?.url || teamPlaceholder}
-                  alt={team?.name || 'Team'}
-                  width={32}
-                  height={32}
-                  loading="lazy"
-                  decoding="async"
-                  srcSetWidths={[32, 64, 96]}
-                  sizes="32px"
-                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                />
-                <div>
-                  <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
-                  <p className="text-3xl font-bold text-slate-900">{gameSummary.teamPoints || 0}</p>
-                </div>
-              </div>
-              <span className="mb-1 text-xl font-bold text-slate-300">—</span>
-              <div>
-                <p className="text-xs font-medium text-slate-500">Opponent</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {gameSummary.opponentPoints || 0}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-              <span>
-                REB <strong className="text-slate-700">{boxScore.teamTotals?.reb || 0}</strong>
-              </span>
-              <span>
-                AST <strong className="text-slate-700">{boxScore.teamTotals?.ast || 0}</strong>
-              </span>
-              <span>
-                FG2%{' '}
-                <strong className="text-slate-700">
-                  {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
-                </strong>
-              </span>
-              <span>
-                FG3%{' '}
-                <strong className="text-slate-700">
-                  {formatThreePointPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
-                </strong>
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+      <GameTrackScoreHeader
+        game={game}
+        gameSummary={gameSummary}
+        activeSide={activeSide}
+        onChangeActiveSide={changeActiveSide}
+        isDualTeam={isDualTeam}
+        participantsBySide={participantsBySide}
+        team={team}
+        boxScore={boxScore}
+        clockControls={
+          <GameClockControls
+            game={game}
+            onCommand={runClockCommand}
+            disabled={isSaving || !allStartingLineupsReady}
+            serverOffsetMilliseconds={serverOffsetMilliseconds}
+          />
+        }
+      />
 
       <div className={trackingShellClassName}>
         {game.videoUrl && isDesktopLayout ? (
@@ -2400,13 +2496,7 @@ export function GameTrackPage() {
                                         tone="out"
                                         isSelected={playerOutId === player.id}
                                         onToggle={() =>
-                                          updateSideState(activeKey, {
-                                            substitutionState: {
-                                              ...currentSideState.substitutionState,
-                                              playerOutId:
-                                                playerOutId === player.id ? '' : player.id,
-                                            },
-                                          })
+                                          toggleSubstitutionPlayer('playerOutId', player.id)
                                         }
                                       />
                                     ))}
@@ -2444,13 +2534,7 @@ export function GameTrackPage() {
                                           tone="in"
                                           isSelected={playerInId === player.id}
                                           onToggle={() =>
-                                            updateSideState(activeKey, {
-                                              substitutionState: {
-                                                ...currentSideState.substitutionState,
-                                                playerInId:
-                                                  playerInId === player.id ? '' : player.id,
-                                              },
-                                            })
+                                            toggleSubstitutionPlayer('playerInId', player.id)
                                           }
                                         />
                                       ))}
@@ -2572,7 +2656,11 @@ export function GameTrackPage() {
                             : event.playerId
                               ? team?.logo?.url || teamPlaceholder
                               : null;
-                          const { actor, statLabel, meta } = parseEventParts(event, playersById);
+                          const { actor, statLabel, meta } = parseEventParts(
+                            event,
+                            playersById,
+                            game.gameFormat
+                          );
                           return (
                             <div
                               key={event.id}
@@ -2623,6 +2711,12 @@ export function GameTrackPage() {
                                     aria-label="Insert stat before this event"
                                     onClick={() => {
                                       setInsertBeforeEventId(event.id);
+                                      entryClockSnapshotRef.current = {
+                                        segmentKind: event.segmentKind,
+                                        segmentNumber: event.segmentNumber,
+                                        clockMillisecondsRemaining:
+                                          event.clockMillisecondsRemaining,
+                                      };
                                       setActivePanel('court');
                                     }}
                                     className="rounded-md p-1.5 text-sky-600 transition hover:bg-sky-50"
@@ -2799,7 +2893,7 @@ export function GameTrackPage() {
 
                       <button
                         type="button"
-                        onClick={() => navigate('/admin')}
+                        onClick={() => leaveTracker('/admin')}
                         className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
                       >
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
@@ -2824,7 +2918,7 @@ export function GameTrackPage() {
                       {isCompleted ? (
                         <button
                           type="button"
-                          onClick={() => navigate(`/games/${gameId}`)}
+                          onClick={() => leaveTracker(`/games/${gameId}`)}
                           disabled={isSaving}
                           className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50 disabled:opacity-60"
                         >
@@ -3005,6 +3099,49 @@ export function GameTrackPage() {
 
                       <div>
                         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Period and game time
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <select
+                            aria-label="Period kind"
+                            value={editingEvent.segmentKind}
+                            onChange={(e) =>
+                              setEditingEvent((ev) => ({ ...ev, segmentKind: e.target.value }))
+                            }
+                            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                          >
+                            <option value="regulation">Regulation</option>
+                            <option value="overtime">Overtime</option>
+                          </select>
+                          <input
+                            aria-label="Period number"
+                            type="number"
+                            min="1"
+                            value={editingEvent.segmentNumber}
+                            onChange={(e) =>
+                              setEditingEvent((ev) => ({ ...ev, segmentNumber: e.target.value }))
+                            }
+                            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                          />
+                          <input
+                            aria-label="Milliseconds remaining"
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={editingEvent.clockMillisecondsRemaining}
+                            onChange={(e) =>
+                              setEditingEvent((ev) => ({
+                                ...ev,
+                                clockMillisecondsRemaining: e.target.value,
+                              }))
+                            }
+                            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
                           Zone
                         </p>
                         <select
@@ -3082,6 +3219,103 @@ export function GameTrackPage() {
             })()
           : null}
 
+        <Modal
+          open={showClockRecovery}
+          onClose={() => {}}
+          title="The game clock kept running"
+          panelClassName="max-w-md"
+          showCloseButton={false}
+        >
+          {isClockRecoveryCorrectionOpen ? (
+            <>
+              <label
+                htmlFor="recovery-clock-time"
+                className="block text-sm font-semibold text-slate-800"
+              >
+                Corrected time
+              </label>
+              <input
+                id="recovery-clock-time"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={clockRecoveryTimeDraft}
+                onChange={(event) => setClockRecoveryTimeDraft(event.target.value)}
+                placeholder="10:00"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-mono text-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+              />
+              <p className="mt-2 text-xs text-slate-500">Use minutes:seconds, such as 4:32.5.</p>
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setIsClockRecoveryCorrectionOpen(false)}
+                  className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={correctRecoveredClock}
+                  className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Apply corrected time
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">
+                Accept the elapsed time, or correct it before recording more stats.
+              </p>
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setShowClockRecovery(false)}
+                  className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+                >
+                  Accept elapsed time
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsClockRecoveryCorrectionOpen(true)}
+                  className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800"
+                >
+                  Correct time
+                </button>
+              </div>
+            </>
+          )}
+        </Modal>
+
+        <Modal
+          open={Boolean(pendingExitDestination)}
+          onClose={() => setPendingExitDestination('')}
+          title="Pause the clock and exit?"
+          panelClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-600">
+            The game clock is running. Pause it before leaving this tracking session.
+          </p>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setPendingExitDestination('')}
+              className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+            >
+              Keep tracking
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={pauseClockAndLeave}
+              className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {isSaving ? 'Pausing…' : 'Pause and exit'}
+            </button>
+          </div>
+        </Modal>
+
         {showFinishConfirm ? (
           // Escape handling only — the actual dismiss control is the invisible
           // backdrop <button> beneath this dialog.
@@ -3144,11 +3378,64 @@ export function GameTrackPage() {
           teamName={isDualTeam ? participantsBySide[activeSide]?.displayName : team?.name}
         />
 
+        <Modal
+          open={showShortLineupWarning}
+          onClose={returnToShortLineup}
+          title="Start with fewer than five players?"
+          panelClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-600">
+            {isDualTeam
+              ? `Selected players: ${participantsBySide[TEAM_SIDES.HOME]?.displayName || 'Home'} ${homeLineupCount}, ${participantsBySide[TEAM_SIDES.AWAY]?.displayName || 'Away'} ${awayLineupCount}.`
+              : `This starting lineup has ${(game?.currentLineupPlayerIds || []).length} player${(game?.currentLineupPlayerIds || []).length === 1 ? '' : 's'}.`}{' '}
+            Basketball teams normally begin with five players. You can still start and track this
+            game with the selected lineup.
+          </p>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={returnToShortLineup}
+              className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Go back to lineup
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => {
+                setShowShortLineupWarning(false);
+                executeClockCommand({ action: 'start' });
+              }}
+              className="flex-1 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+            >
+              Continue and start
+            </button>
+          </div>
+        </Modal>
+
         {isTrackingFullscreen ? (
           <div
             className="fixed z-50 flex flex-col bg-white"
             style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
           >
+            <GameTrackScoreHeader
+              game={game}
+              gameSummary={gameSummary}
+              activeSide={activeSide}
+              onChangeActiveSide={changeActiveSide}
+              isDualTeam={isDualTeam}
+              participantsBySide={participantsBySide}
+              team={team}
+              boxScore={boxScore}
+              clockControls={
+                <GameClockControls
+                  game={game}
+                  onCommand={runClockCommand}
+                  disabled={isSaving || !allStartingLineupsReady}
+                  serverOffsetMilliseconds={serverOffsetMilliseconds}
+                />
+              }
+            />
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 {isDualTeam ? (
