@@ -82,10 +82,11 @@ export function ConsentBanner() {
       aria-describedby="consent-description"
       // Sits *above* FeedTabBar (fixed bottom-0 z-40, mobile only) rather than
       // over it — bottom-16 clears its 4rem height, dropping to bottom-0 at md
-      // where the tab bar is hidden. z-30 keeps it under both the tab bar and
-      // the mobile menu (z-50), so the banner can never cover navigation or
-      // trap someone inside an open menu.
-      className="fixed inset-x-0 bottom-16 z-30 border-t border-slate-200 bg-white/95 p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur md:bottom-0 md:p-5"
+      // where the tab bar is hidden. z-[45] clears the FAB (z-40), which would
+      // otherwise float over the banner's buttons, while staying under the
+      // mobile menu (z-50) so the banner can never trap someone inside an open
+      // menu. The tab bar shares z-40 but never overlaps: bottom-16 clears it.
+      className="fixed inset-x-0 bottom-16 z-[45] border-t border-slate-200 bg-white/95 p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur md:bottom-0 md:p-5"
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
