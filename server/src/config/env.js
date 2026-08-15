@@ -71,6 +71,14 @@ const baseEnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === 'true'),
+  // Player Milestones (docs/player-milestones.md §5.5): gates ONLY the feed
+  // posts. Milestone records and profile surfaces are always live. Defaults
+  // off so the machinery can ship dark and real volume can be observed before
+  // anything reaches The Pulse.
+  AUTO_FEED_MILESTONES_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 // Fail fast on a half-configured billing setup: once STRIPE_SECRET_KEY is set, all

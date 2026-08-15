@@ -1,6 +1,6 @@
 # Player Milestones
 
-**Status: design approved, not implemented.** Scope for the first cut of
+**Status: implemented.** Scope for the first cut of
 "Milestones and awards" in [`ideas.md`](./ideas.md). This document covers
 **player milestones only** — derived automatically from game data. League and
 team awards, and any admin-selected award (MVP, All-League), are out of scope

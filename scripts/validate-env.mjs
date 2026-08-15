@@ -42,6 +42,7 @@ const expected = {
     'OPENAI_API_KEY',
     'OPENAI_GAME_SUMMARY_MODEL',
     'OPENAI_GAME_SUMMARY_TIMEOUT_MS',
+    'AUTO_FEED_MILESTONES_ENABLED',
   ],
   'env/server/.env.production': [
     'NODE_ENV',
@@ -65,6 +66,7 @@ const expected = {
     'OPENAI_API_KEY',
     'OPENAI_GAME_SUMMARY_MODEL',
     'OPENAI_GAME_SUMMARY_TIMEOUT_MS',
+    'AUTO_FEED_MILESTONES_ENABLED',
   ],
 };
 

@@ -97,6 +97,28 @@ const highlightClipSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Player Milestones (docs/player-milestones.md §5.4). cardSnapshot follows the
+// OPT-017 pattern so the feed read path never pays a live resolve.
+const milestoneCardSchema = new mongoose.Schema(
+  {
+    milestoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PlayerMilestone',
+      required: true,
+    },
+    leaguePlayerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeaguePlayer',
+      default: null,
+    },
+    leagueTeamId: { type: mongoose.Schema.Types.ObjectId, ref: 'LeagueTeam', default: null },
+    gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', default: null },
+    auto: { type: Boolean, default: false },
+    cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
 const videoSchema = new mongoose.Schema(
   {
     url: { type: String, default: null },
@@ -120,7 +142,15 @@ const postSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['image', 'video', 'game_card', 'player_card', 'team_card', 'highlight_clip'],
+      enum: [
+        'image',
+        'video',
+        'game_card',
+        'player_card',
+        'team_card',
+        'highlight_clip',
+        'milestone',
+      ],
       required: true,
       index: true,
     },
@@ -131,12 +161,16 @@ const postSchema = new mongoose.Schema(
     playerCard: { type: playerCardSchema, default: null },
     teamCard: { type: teamCardSchema, default: null },
     highlightClip: { type: highlightClipSchema, default: null },
+    milestoneCard: { type: milestoneCardSchema, default: null },
   },
   { timestamps: true }
 );
 
 // Prevent the same game event from being shared more than once, even under concurrent requests.
 postSchema.index({ 'highlightClip.eventId': 1 }, { unique: true, sparse: true });
+
+// One post per milestone, even under concurrent finalise/retry.
+postSchema.index({ 'milestoneCard.milestoneId': 1 }, { unique: true, sparse: true });
 
 // Auto Feed Generation: at most one auto-generated game_card per game, even
 // under concurrent/retried finalise requests. Manual game_card posts (auto:
@@ -197,6 +231,11 @@ async function deletePostsByGameId(gameId) {
   });
 }
 
+async function deletePostsByIds(ids) {
+  if (!ids || ids.length === 0) return { deletedCount: 0 };
+  return Post.deleteMany({ _id: { $in: ids } });
+}
+
 // Auto Feed Generation: reverse auto-generated posts for a set of games (used
 // when a league flips from public to private — B2 in
 // docs/auto-feed.md). Manually-shared posts (auto:
@@ -213,6 +252,11 @@ async function deleteAutoPostsForGameIds(gameIds, systemUserId) {
       {
         type: 'highlight_clip',
         'highlightClip.gameId': { $in: gameIds },
+        creatorUserId: systemUserId,
+      },
+      {
+        type: 'milestone',
+        'milestoneCard.gameId': { $in: gameIds },
         creatorUserId: systemUserId,
       },
     ],
@@ -250,6 +294,7 @@ module.exports = {
   findPostById,
   deletePostById,
   deletePostsByGameId,
+  deletePostsByIds,
   deleteAutoPostsForGameIds,
   findAutoGameCardPost,
   findPostByHighlightEventId,

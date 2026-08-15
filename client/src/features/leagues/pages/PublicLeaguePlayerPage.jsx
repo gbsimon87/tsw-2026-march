@@ -12,6 +12,7 @@ import { extractYouTubeVideoId } from '../../games/youtube';
 import { feedApi } from '../../feed/api/feedApi';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { FollowButton } from '../../follows/components/FollowButton';
+import { PlayerMilestones } from '../../players/components/PlayerMilestones';
 
 const HIGHLIGHT_LABELS = {
   FG2_MADE: '2PT Make',
@@ -466,6 +467,11 @@ export function PublicLeaguePlayerPage() {
           ))}
         </div>
       </section>
+
+      <PlayerMilestones
+        milestones={data.milestones?.recent ?? []}
+        total={data.milestones?.total ?? 0}
+      />
 
       {data.highlights?.length > 0 ? (
         <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">

@@ -1173,53 +1173,60 @@ async function assembleLeagueProfilesForUser(userId) {
     })
   );
 
-  return players.map((player) => {
-    const team = teamsById.get(String(player.leagueTeamId));
-    const league = leaguesById.get(String(player.leagueId));
-    const playerLabel =
-      typeof player.jerseyNumber === 'number'
-        ? `#${player.jerseyNumber} ${player.displayName}`
-        : player.displayName;
-    const memberRole = memberRoleByTeamId.get(String(player.leagueTeamId)) ?? null;
+  const { getMilestoneSummaryForLeaguePlayer } = require('../milestones/milestones.service');
 
-    const statRows = statsByLeagueId.get(String(player.leagueId)) ?? [];
-    const statRow = statRows.find(
-      (row) =>
-        String(row.leagueTeamId) === String(player.leagueTeamId) &&
-        String(row.leaguePlayerId) === String(player._id)
-    );
-    let summary = null;
-    if (league?.currentSeasonId) {
-      if (statRow) {
-        const scores = deriveLeaguePlayerScores(statRow);
-        summary = {
-          gamesCount: statRow.gamesCount,
-          pointsPerGame: scores.ppg,
-          reboundsPerGame: scores.rpg,
-          assistsPerGame: scores.apg,
-        };
-      } else {
-        summary = { gamesCount: 0, pointsPerGame: 0, reboundsPerGame: 0, assistsPerGame: 0 };
+  return Promise.all(
+    players.map(async (player) => {
+      const team = teamsById.get(String(player.leagueTeamId));
+      const league = leaguesById.get(String(player.leagueId));
+      const playerLabel =
+        typeof player.jerseyNumber === 'number'
+          ? `#${player.jerseyNumber} ${player.displayName}`
+          : player.displayName;
+      const memberRole = memberRoleByTeamId.get(String(player.leagueTeamId)) ?? null;
+
+      const statRows = statsByLeagueId.get(String(player.leagueId)) ?? [];
+      const statRow = statRows.find(
+        (row) =>
+          String(row.leagueTeamId) === String(player.leagueTeamId) &&
+          String(row.leaguePlayerId) === String(player._id)
+      );
+      let summary = null;
+      if (league?.currentSeasonId) {
+        if (statRow) {
+          const scores = deriveLeaguePlayerScores(statRow);
+          summary = {
+            gamesCount: statRow.gamesCount,
+            pointsPerGame: scores.ppg,
+            reboundsPerGame: scores.rpg,
+            assistsPerGame: scores.apg,
+          };
+        } else {
+          summary = { gamesCount: 0, pointsPerGame: 0, reboundsPerGame: 0, assistsPerGame: 0 };
+        }
       }
-    }
 
-    return {
-      id: String(player._id),
-      displayName: player.displayName,
-      playerLabel,
-      jerseyNumber: player.jerseyNumber ?? null,
-      position: normalizePosition(player.position),
-      memberRole,
-      memberRoleLabel: memberRole ? (MEMBER_ROLE_LABELS[memberRole] ?? memberRole) : null,
-      team: team ? sanitizeLeagueTeam(team) : null,
-      league: league ? sanitizeLeague(league) : null,
-      profileHref:
-        team && league
-          ? `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`
-          : null,
-      summary,
-    };
-  });
+      return {
+        id: String(player._id),
+        displayName: player.displayName,
+        playerLabel,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: normalizePosition(player.position),
+        memberRole,
+        memberRoleLabel: memberRole ? (MEMBER_ROLE_LABELS[memberRole] ?? memberRole) : null,
+        team: team ? sanitizeLeagueTeam(team) : null,
+        league: league ? sanitizeLeague(league) : null,
+        profileHref:
+          team && league
+            ? `/league/${league.slug}/teams/${team.slug}/players/${String(player._id)}`
+            : null,
+        summary,
+        milestones: league
+          ? await getMilestoneSummaryForLeaguePlayer(league._id, player)
+          : { recent: [], total: 0 },
+      };
+    })
+  );
 }
 
 async function getMyLeagueProfiles(userId) {
@@ -1293,6 +1300,7 @@ async function getPublicLeaguePlayerBySlug(
   if (!league.isPublic) {
     sanitizedPlayer.claimedUserId = null;
   }
+  const { getMilestoneSummaryForLeaguePlayer } = require('../milestones/milestones.service');
 
   return {
     league: sanitizeLeague(league),
@@ -1302,6 +1310,7 @@ async function getPublicLeaguePlayerBySlug(
     games: gameRows,
     highlights,
     sharedEventIds,
+    milestones: await getMilestoneSummaryForLeaguePlayer(league._id, player),
   };
 }
 
@@ -1359,11 +1368,13 @@ async function getPublicLeaguePlayerById(leaguePlayerId) {
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
+  const { getMilestoneSummaryForLeaguePlayer } = require('../milestones/milestones.service');
 
   return {
     team: sanitizeLeagueTeam(team),
     player: sanitizeLeaguePlayer(player),
     summary: buildLeaguePlayerSummary(gameRows),
+    milestones: await getMilestoneSummaryForLeaguePlayer(team.leagueId, player),
   };
 }
 
@@ -1758,6 +1769,12 @@ async function approveJoinRequest(userId, leagueId, leagueTeamId, requestId) {
 
     player.claimedByUserId = request.requesterUserId;
     await saveLeaguePlayer(player);
+    scheduleMilestoneRekey(
+      player._id,
+      `player:${String(player._id)}`,
+      `user:${String(request.requesterUserId)}`,
+      request.requesterUserId
+    );
 
     if (member) {
       member.role = 'player';
@@ -1836,9 +1853,16 @@ async function unclaimLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerI
     throw new ApiError(400, 'Player is not claimed');
   }
 
+  const previousUserId = player.claimedByUserId;
   const member = await findActiveLeagueTeamMember(leagueTeamId, player.claimedByUserId);
   player.claimedByUserId = null;
   await saveLeaguePlayer(player);
+  scheduleMilestoneRekey(
+    player._id,
+    `user:${String(previousUserId)}`,
+    `player:${String(player._id)}`,
+    null
+  );
 
   if (member && member.role === 'player') {
     member.status = 'removed';
@@ -2374,6 +2398,26 @@ function scheduleLeagueAggregateRecompute(leagueId, seasonId) {
       logger.error(
         { err: error, leagueId: String(leagueId) },
         'Post-response league aggregate recompute failed'
+      );
+    });
+  });
+}
+
+// Player Milestones (docs/player-milestones.md §3.1): claim and unclaim alter
+// the player's career identity, so the append-only milestone history follows
+// that identity change off the request path. A migration failure is logged but
+// never allowed to roll back a successful membership change.
+function scheduleMilestoneRekey(leaguePlayerId, fromCareerKey, toCareerKey, claimedByUserId) {
+  setImmediate(() => {
+    const { rekeyMilestonesForPlayer } = require('../milestones/milestones.service');
+    rekeyMilestonesForPlayer(leaguePlayerId, {
+      fromCareerKey,
+      toCareerKey,
+      claimedByUserId,
+    }).catch((error) => {
+      logger.error(
+        { err: error, leaguePlayerId: String(leaguePlayerId) },
+        'Milestone career key migration failed'
       );
     });
   });
