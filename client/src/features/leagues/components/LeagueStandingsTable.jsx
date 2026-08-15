@@ -1,13 +1,17 @@
 import { Link } from 'react-router-dom';
 import CloudinaryImage from '../../../features/media/CloudinaryImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { LeagueFormBadges } from './LeagueFormBadges';
 
 export function LeagueStandingsTable({
   standings = [],
   getTeamHref = null,
   getTeamLogo = null,
+  getTeamForm = null,
   className = '',
 }) {
+  const showForm = typeof getTeamForm === 'function';
+
   return (
     <div className={`overflow-x-auto rounded-2xl border border-slate-200 bg-white ${className}`}>
       <table className="w-full text-sm">
@@ -15,6 +19,7 @@ export function LeagueStandingsTable({
           <tr>
             <th className="py-2 pl-3 pr-2 text-center">Team</th>
             <th className="px-1 py-2 text-center text-xs">W-L</th>
+            {showForm ? <th className="px-1 py-2 text-center text-xs">Form</th> : null}
             <th className="px-1 py-2 text-center text-xs">PF</th>
             <th className="px-1 py-2 text-center text-xs">PA</th>
             <th className="py-2 pl-2 pr-3 text-center text-xs">+/-</th>
@@ -23,6 +28,7 @@ export function LeagueStandingsTable({
         <tbody>
           {standings.map((row) => {
             const teamHref = getTeamHref ? getTeamHref(row) : null;
+            const teamForm = getTeamForm ? getTeamForm(row) || [] : [];
 
             return (
               <tr key={row.teamId} className="border-t border-slate-200">
@@ -52,6 +58,11 @@ export function LeagueStandingsTable({
                 <td className="px-1 py-2 text-center tabular-nums">
                   {row.record || `${row.wins}-${row.losses}`}
                 </td>
+                {showForm ? (
+                  <td className="px-1 py-2">
+                    <LeagueFormBadges form={teamForm} className="min-w-[8.5rem] justify-center" />
+                  </td>
+                ) : null}
                 <td className="px-1 py-2 text-center tabular-nums">{row.pointsFor}</td>
                 <td className="px-1 py-2 text-center tabular-nums">{row.pointsAgainst}</td>
                 <td className="py-2 pl-2 pr-3 text-center tabular-nums">{row.pointDiff}</td>
