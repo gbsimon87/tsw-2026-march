@@ -239,26 +239,27 @@ and adds newly valid ledger records without retroactively publishing them.
 An edit to an earlier game can shift the true threshold-crossing game; the
 current targeted re-evaluation does not replay the whole career to reassign it.
 
-Production milestones start from new games onward. Games finalized before the
-feature shipped have no ledger records and are deliberately left that way: the
-backfill's prerequisite, `backfill-league-seasons.js`, deletes legacy
-season-less `LeagueStandings` and `LeaguePlayerStats` rows, which is not an
-acceptable risk against live league data. No backfill has been run in
-production and none is planned.
+`server/src/scripts/backfill-player-milestones.js` replays completed league
+games chronologically with publishing disabled. It is idempotent through the
+`dedupeKey` unique index and must run after the league-season backfill. It was
+run against production on 2026-08-15, replaying 22 games across the two live
+leagues and creating 114 ledger records; a verification re-run created none.
+Because it publishes nothing, those records have no Pulse posts and will not
+gain any.
 
-`server/src/scripts/backfill-player-milestones.js` therefore remains a
-development and seeding tool. It processes completed league games
-chronologically with publishing disabled, is idempotent through the `dedupeKey`
-unique index, and must run after the league-season backfill. Before considering
-any production run, note that `--dry-run` only counts the games it would
-replay: it exits before detection, so it reveals neither the milestones it
-would create nor the two failure modes that are otherwise silent. Games
+Two failure modes are silent and worth checking before any future run. Games
 finalized before the box score was frozen on completion (OPT-012) have
-`boxScore: null`, yield no milestones, and are still counted as processed;
-and because `autoIndex` is disabled in production, a missing `dedupeKey` index
-turns re-runs into duplicate inserts. Career-threshold totals also need
-verifying as reconstructed per historical game rather than read from
-present-day aggregates.
+`boxScore: null` and yield no milestones, yet are still counted as processed —
+12 of the 23 completed production games fall in this group and contributed
+nothing to the 114. And because `autoIndex` is disabled in production, the
+`dedupeKey` index does not create itself; it was added there explicitly through
+`syncIndexes` before the backfill, and without it re-runs insert duplicates
+rather than skipping. Note also that `--dry-run` exits before detection, so it
+reports only the games it would replay and reveals neither of these.
+
+`server/src/scripts/check-migration-state.js` is a read-only report covering
+both of those conditions plus league-season migration state. Run it before and
+after any production backfill.
 
 Deferred milestone work includes personal bests, standalone and team/league
 milestones, season awards, and minutes-based milestones.

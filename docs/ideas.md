@@ -5,13 +5,13 @@ turning this file into a release log.
 
 ## Highest Value
 
-| Idea                                | Primary user      | Implemented | Notes                                                                                                               |
-| ----------------------------------- | ----------------- | ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| Post-game coach report              | Coaches           | No          | Derive runs, droughts, foul trouble, and key performers from game events.                                           |
-| [Season trends](./season-trends.md) | Coaches, players  | Yes         | Last-five and season time series for shooting, turnovers, and rebounding.                                           |
-| Stat-correction workflow            | Players, managers | No          | Request, review, approve, and audit event corrections; use video timestamps.                                        |
-| Personalized Pulse                  | Fans, players     | No          | Filter feed posts through existing user, league, and league-team follows.                                           |
-| Milestones and awards               | Players, leagues  | Partial     | Player milestones shipped; see [project knowledge](./PROJECT-KNOWLEDGE.md#player-milestones). Season awards remain. |
+| Idea                                | Primary user      | Implemented | Notes                                                                                                                                         |
+| ----------------------------------- | ----------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Post-game coach report              | Coaches           | No          | Derive runs, droughts, foul trouble, and key performers from game events.                                                                     |
+| [Season trends](./season-trends.md) | Coaches, players  | Yes         | Last-five and season time series for shooting, turnovers, and rebounding.                                                                     |
+| Stat-correction workflow            | Players, managers | No          | Request, review, approve, and audit event corrections; use video timestamps.                                                                  |
+| Personalized Pulse                  | Fans, players     | No          | Filter feed posts through existing user, league, and league-team follows.                                                                     |
+| Milestones and awards               | Players, leagues  | Partial     | Player milestones live in production and backfilled; see [project knowledge](./PROJECT-KNOWLEDGE.md#player-milestones). Season awards remain. |
 
 ## League Administration
 
