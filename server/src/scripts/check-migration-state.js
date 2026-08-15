@@ -59,7 +59,7 @@ async function reportIndexState() {
     {
       model: LeaguePlayerStats,
       label: 'leagueplayerstats',
-      key: ['leagueId', 'seasonId', 'leaguePlayerId'],
+      key: ['leagueId', 'seasonId', 'leagueTeamId', 'leaguePlayerId'],
     },
   ];
 
