@@ -135,6 +135,9 @@ describe('detectForFinalizedGame', () => {
     await detectForFinalizedGame('g1', { publish: false });
 
     expect(leaguesService.recomputeLeagueAggregates).toHaveBeenCalledWith('L1', 'S1');
+    expect(leaguesService.recomputeLeagueAggregates.mock.invocationCallOrder[0]).toBeLessThan(
+      leaguesRepository.listLeaguePlayerStatsByPlayerIds.mock.invocationCallOrder[0]
+    );
   });
 
   test('writes a milestone when a career threshold is crossed', async () => {
