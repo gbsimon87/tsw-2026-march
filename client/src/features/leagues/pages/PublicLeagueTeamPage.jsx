@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { LeagueGameCard } from '../../../components/ui/LeagueGameCard';
@@ -13,6 +13,8 @@ import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { FollowButton } from '../../follows/components/FollowButton';
+import { LeagueFormBadges } from '../components/LeagueFormBadges';
+import { buildSeasonFormByTeam } from '../seasonTrends';
 
 const TABS = [
   {
@@ -149,6 +151,11 @@ export function PublicLeagueTeamPage() {
   const [requestStatusTone, setRequestStatusTone] = useState('success');
   const [activeTab, setActiveTab] = useState('stats');
   const pendingKey = `join_pending_${leagueSlug}_${teamSlug}`;
+  const recentForm = useMemo(() => {
+    const team = data?.team;
+    if (!team) return [];
+    return buildSeasonFormByTeam(team.games || []).get(String(team.id)) || [];
+  }, [data?.team]);
 
   useEffect(() => {
     leaguesApi
@@ -315,6 +322,12 @@ export function PublicLeagueTeamPage() {
                 {team.standingsPosition || 'N/A'}
               </span>
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">
+                Form
+              </span>
+              <LeagueFormBadges form={recentForm} />
+            </div>
           </div>
           {/* Follow is a public-surface-only feature (decision D8/DL7): only
               offer it when the parent league is public, even though a private

@@ -17,6 +17,7 @@ import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { FollowButton } from '../../follows/components/FollowButton';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { buildSeasonFormByTeam } from '../seasonTrends';
 
 function formatPercentage(value) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '--';
@@ -202,6 +203,10 @@ export function PublicLeaguePage() {
   const error = isLeagueError || isLeadersError ? 'Failed to load league' : '';
   const seasons = useMemo(() => league?.seasons || [], [league]);
   const selectedSeason = seasons.find((season) => season.id === activeSeasonId);
+  const seasonFormByTeam = useMemo(
+    () => buildSeasonFormByTeam(league?.games || []),
+    [league?.games]
+  );
 
   useDocumentMeta({
     title: league ? `${league.name} — League Standings & Games` : undefined,
@@ -291,6 +296,7 @@ export function PublicLeaguePage() {
             const team = (league.teams || []).find((t) => t.id === row.teamId);
             return team?.logo?.url ?? null;
           }}
+          getTeamForm={(row) => seasonFormByTeam.get(String(row.teamId)) || []}
           className="mt-4"
         />
       </section>

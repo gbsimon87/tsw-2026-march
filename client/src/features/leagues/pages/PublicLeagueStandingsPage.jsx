@@ -10,6 +10,7 @@ import { leaguesApi } from '../api/leaguesApi';
 import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { usePublicLeague } from '../hooks/usePublicLeague';
+import { buildSeasonFormByTeam } from '../seasonTrends';
 
 export function PublicLeagueStandingsPage() {
   const { leagueSlug } = useParams();
@@ -35,6 +36,10 @@ export function PublicLeagueStandingsPage() {
   const error = isLeagueError || isStandingsError ? 'Failed to load standings' : '';
   const seasons = useMemo(() => league?.seasons || [], [league]);
   const selectedSeason = seasons.find((season) => season.id === activeSeasonId);
+  const seasonFormByTeam = useMemo(
+    () => buildSeasonFormByTeam(league?.games || []),
+    [league?.games]
+  );
 
   if (isLoading) {
     return <SportsLoader label="Loading standings" fullPage />;
@@ -117,6 +122,7 @@ export function PublicLeagueStandingsPage() {
             const team = (league.teams || []).find((t) => t.id === row.teamId);
             return team?.logo?.url ?? null;
           }}
+          getTeamForm={(row) => seasonFormByTeam.get(String(row.teamId)) || []}
           className="mt-4"
         />
       </section>
