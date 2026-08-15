@@ -94,10 +94,8 @@ resolves at the player's next game.
 
 Rules live in a single declarative file, `milestones.catalog.js`. Each rule is:
 
-```js
-{
-  (key, family, tier, rarityRank, statKey, label(ctx), test(before, after, gameLine));
-}
+```text
+key, family, tier, rarityRank, statKey, label(ctx), test(before, after, gameLine)
 ```
 
 `test` is a **pure function** of the three inputs, so the whole catalog is
@@ -138,22 +136,6 @@ Pure functions of the game's box-score line. Repeatable — once per game.
 Double-double and triple-double count across points, rebounds, assists, steals,
 and blocks.
 
-### 4.4 Rarity ranking
-
-When more than `AUTO_MILESTONE_CAP` feed-tier milestones land in one game, they
-are ranked by `rarityRank` ascending — rarest first — and the rest are recorded
-without posting. The v1 order:
-
-1. `triple_double`
-2. career threshold, points 5000 / 2000
-3. `fg3m_10`
-4. `pts_40`
-5. career threshold, points 1000 / rebounds 1000 / assists 1000
-6. `blk_5`, `stl_6`
-7. every remaining feed-tier career threshold
-
-Ties break on the higher `value`.
-
 **Ladder suppression:** within a ladder, only the highest satisfied rung is
 recorded. A 41-point game records `pts_40`, not `pts_40` _and_ `pts_30`. A
 triple-double does not also record a double-double.
@@ -171,6 +153,22 @@ league-wide, so none of them post.
 
 `first_career_game` is deliberately defined on recorded events, not on
 `gamesCount`, because `gamesCount` counts bench appearances (§2).
+
+### 4.4 Rarity ranking
+
+When more than `AUTO_MILESTONE_CAP` feed-tier milestones land in one game, they
+are ranked by `rarityRank` ascending — rarest first — and the rest are recorded
+without posting. The v1 order:
+
+1. `triple_double`
+2. career threshold, points 5000 / 2000
+3. `fg3m_10`
+4. `pts_40`
+5. career threshold, points 1000 / rebounds 1000 / assists 1000
+6. `blk_5`, `stl_6`
+7. every remaining feed-tier career threshold
+
+Ties break on the higher `value`.
 
 ## 5. Detection and publishing
 
