@@ -3,6 +3,10 @@ const {
   listLeaguePlayersByClaimedUser,
   listLeaguePlayerStatsByPlayerIds,
 } = require('../leagues/leagues.repository');
+const { logger } = require('../../config/logger');
+const { findGameById } = require('../games/games.repository');
+const { evaluateCatalog } = require('./milestones.catalog');
+const { buildDedupeKey, insertMilestones } = require('./milestones.repository');
 
 // Mirrors the full LeaguePlayerStats line. This MUST include the attempt and
 // foul counters (fg2a/fg3a/fta/tov/foul) even though no threshold ladder uses
@@ -84,10 +88,118 @@ function subtractGameLine(totals, gameLine) {
   return before;
 }
 
+// Flatten a finalised game's frozen box score into one entry per league player.
+// dual_team games carry two sides; one_sided games carry a single players[].
+// Rows without a leaguePlayerId are standalone-roster rows and are skipped —
+// milestones are league-scoped (spec §1).
+function extractBoxScoreLines(game) {
+  const sides =
+    game.trackingMode === 'dual_team'
+      ? [
+          { leagueTeamId: game.homeLeagueTeamId, players: game.boxScore?.home?.players },
+          { leagueTeamId: game.awayLeagueTeamId, players: game.boxScore?.away?.players },
+        ]
+      : [
+          {
+            leagueTeamId:
+              game.trackedLeagueTeamId || game.homeLeagueTeamId || game.awayLeagueTeamId,
+            players: game.boxScore?.players,
+          },
+        ];
+
+  const lines = [];
+  for (const side of sides) {
+    for (const row of side.players || []) {
+      if (!row.leaguePlayerId) continue;
+      lines.push({
+        leaguePlayerId: String(row.leaguePlayerId),
+        leagueTeamId: side.leagueTeamId ? String(side.leagueTeamId) : null,
+        line: row,
+      });
+    }
+  }
+  return lines;
+}
+
+// docs/player-milestones.md §5. Detection is deliberately independent of the
+// public-league gate: records are written for EVERY league so private-league
+// players still get profile milestones. Only publishing is gated, and that
+// gate lives in feed.service.js.
+async function detectForFinalizedGame(gameId, { publish = true } = {}) {
+  const game = await findGameById(gameId);
+  if (!game || game.status !== 'completed' || game.gameContext !== 'league') {
+    return { created: [], skipped: 0 };
+  }
+
+  // Career totals are read from LeaguePlayerStats, so they must reflect THIS
+  // game before we subtract it back out. recomputeLeagueAggregates coalesces
+  // with the pass already in flight (recomputeInFlight), so this waits for
+  // fresh data instead of duplicating the work. Required lazily to avoid a
+  // require cycle — leagues.service.js pulls in games.service.js.
+  const { recomputeLeagueAggregates } = require('../leagues/leagues.service');
+  await recomputeLeagueAggregates(game.leagueId, game.seasonId);
+
+  const docs = [];
+
+  for (const entry of extractBoxScoreLines(game)) {
+    const leaguePlayer = await findLeaguePlayerById(entry.leaguePlayerId);
+    if (!leaguePlayer) continue;
+
+    const { careerKey, totals } = await resolveCareerTotals(game.leagueId, leaguePlayer);
+    const before = subtractGameLine(totals, entry.line);
+    const earned = evaluateCatalog(before, totals, entry.line);
+
+    for (const milestone of earned) {
+      docs.push({
+        leagueId: game.leagueId,
+        seasonId: game.seasonId ?? null,
+        careerKey,
+        leaguePlayerId: leaguePlayer._id,
+        leagueTeamId: entry.leagueTeamId || leaguePlayer.leagueTeamId,
+        claimedByUserId: leaguePlayer.claimedByUserId ?? null,
+        milestoneKey: milestone.key,
+        family: milestone.family,
+        tier: milestone.tier,
+        statKey: milestone.statKey,
+        value: milestone.value,
+        label: milestone.label,
+        rarityRank: milestone.rarityRank,
+        sourceGameId: game._id,
+        achievedAt: game.completedAt ?? new Date(),
+        dedupeKey: buildDedupeKey({
+          careerKey,
+          milestoneKey: milestone.key,
+          family: milestone.family,
+          sourceGameId: game._id,
+        }),
+      });
+    }
+  }
+
+  // Duplicates are expected on any re-run and are absorbed by the dedupeKey
+  // unique index, so `created` holds only genuinely new milestones.
+  const created = await insertMilestones(docs);
+  const skipped = docs.length - created.length;
+
+  logger.info(
+    { gameId: String(gameId), leagueId: String(game.leagueId), created: created.length, skipped },
+    'Milestones: detection complete'
+  );
+
+  if (publish && created.length > 0) {
+    const { autoPublishMilestonePosts } = require('../feed/feed.service');
+    await autoPublishMilestonePosts(game, created);
+  }
+
+  return { created, skipped };
+}
+
 module.exports = {
   TRACKED_STATS,
   buildCareerKey,
   resolveCareerTotals,
   subtractGameLine,
   findLeaguePlayerById,
+  extractBoxScoreLines,
+  detectForFinalizedGame,
 };
