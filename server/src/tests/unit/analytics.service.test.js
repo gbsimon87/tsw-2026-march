@@ -1,7 +1,12 @@
 const mockCapture = jest.fn();
+const mockShutdown = jest.fn().mockResolvedValue(undefined);
+const mockPostHogConstructor = jest.fn().mockImplementation(() => ({
+  capture: mockCapture,
+  shutdown: mockShutdown,
+}));
 
 jest.mock('posthog-node', () => ({
-  PostHog: jest.fn().mockImplementation(() => ({ capture: mockCapture })),
+  PostHog: mockPostHogConstructor,
 }));
 
 jest.mock('../../config/env', () => ({
@@ -56,6 +61,41 @@ describe('analytics service', () => {
 
       await flush();
 
+      expect(mockLoggerWarn).toHaveBeenCalled();
+    });
+  });
+
+  describe('client configuration', () => {
+    test('flushes every event immediately outside production', () => {
+      // posthog-node batches by default, so on a dev server a handful of manual
+      // test events never reach the batch threshold and nothing appears in
+      // PostHog — the instrumentation looks broken when it is only queued.
+      //
+      // Re-resolve the module in isolation: in a full-suite run the constructor
+      // already ran before this file's mock was attached, so mock.calls is empty.
+      jest.isolateModules(() => {
+        mockPostHogConstructor.mockClear();
+        require('../../modules/analytics/analytics.service');
+      });
+
+      const [key, options] = mockPostHogConstructor.mock.calls[0];
+
+      expect(key).toBe('phc_test_key');
+      expect(options).toMatchObject({ flushAt: 1, flushInterval: 0 });
+    });
+  });
+
+  describe('shutdownAnalytics', () => {
+    test('flushes queued events on shutdown', async () => {
+      await analyticsService.shutdownAnalytics();
+
+      expect(mockShutdown).toHaveBeenCalled();
+    });
+
+    test('swallows a shutdown failure rather than blocking process exit', async () => {
+      mockShutdown.mockRejectedValueOnce(new Error('network down'));
+
+      await expect(analyticsService.shutdownAnalytics()).resolves.toBeUndefined();
       expect(mockLoggerWarn).toHaveBeenCalled();
     });
   });

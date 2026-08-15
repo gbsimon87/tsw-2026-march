@@ -3,11 +3,35 @@ const { PostHog } = require('posthog-node');
 const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
 
+const appEnv = env.APP_ENV || (env.NODE_ENV === 'production' ? 'production' : 'development');
+
+// posthog-node batches: by default it holds events until the batch fills or a
+// timer elapses. On a long-running server that is what you want, but in
+// development a handful of manual test events never reach the threshold, so
+// nothing appears in PostHog and the instrumentation looks broken. Flush every
+// event immediately outside production.
 const posthogClient = env.POSTHOG_KEY
-  ? new PostHog(env.POSTHOG_KEY, { host: env.POSTHOG_HOST })
+  ? new PostHog(env.POSTHOG_KEY, {
+      host: env.POSTHOG_HOST,
+      ...(appEnv === 'production' ? {} : { flushAt: 1, flushInterval: 0 }),
+    })
   : null;
 
-const appEnv = env.APP_ENV || (env.NODE_ENV === 'production' ? 'production' : 'development');
+/**
+ * Flush anything queued and close the client. Without this a restart or deploy
+ * silently discards whatever is still batched.
+ */
+async function shutdownAnalytics() {
+  if (!posthogClient) {
+    return;
+  }
+
+  try {
+    await posthogClient.shutdown();
+  } catch (error) {
+    logger.warn({ err: error }, 'PostHog shutdown failed');
+  }
+}
 
 async function captureEvent(input) {
   if (!posthogClient) {
@@ -66,4 +90,5 @@ module.exports = {
   captureEvent,
   captureEventDetached,
   pseudonymousId,
+  shutdownAnalytics,
 };
