@@ -41,6 +41,7 @@ backups/
 # Claude
 .claude/settings.json
 .superpowers/
+.worktrees/
 
 # Playwright MCP scratch (page snapshots / console logs from browser sessions)
 .playwright-mcp/
