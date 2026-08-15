@@ -254,6 +254,87 @@ async function reevaluateMilestonesForGame(gameId) {
   return { removed: stale.length, created: created.length };
 }
 
+// docs/player-milestones.md §3.1. A claim or unclaim changes the career key
+// used to find this roster row's history. Move its records to the new key and
+// resolve collisions by retaining whichever achievement happened first.
+async function rekeyMilestonesForPlayer(
+  leaguePlayerId,
+  { fromCareerKey, toCareerKey, claimedByUserId }
+) {
+  const {
+    listMilestonesByCareerKeys,
+    deleteMilestonesByIds,
+    updateMilestoneCareerKey,
+  } = require('./milestones.repository');
+
+  if (fromCareerKey === toCareerKey) return { moved: 0, dropped: 0 };
+
+  const all = await listMilestonesByCareerKeys([fromCareerKey, toCareerKey]);
+  const incoming = all.filter(
+    (record) =>
+      record.careerKey === fromCareerKey && String(record.leaguePlayerId) === String(leaguePlayerId)
+  );
+  const existing = all.filter((record) => record.careerKey === toCareerKey);
+  const existingByDedupe = new Map(
+    existing.map((record) => [
+      buildDedupeKey({
+        careerKey: toCareerKey,
+        milestoneKey: record.milestoneKey,
+        family: record.family,
+        sourceGameId: record.sourceGameId,
+      }),
+      record,
+    ])
+  );
+
+  const toDelete = [];
+  const toMove = [];
+
+  for (const record of incoming) {
+    const dedupeKey = buildDedupeKey({
+      careerKey: toCareerKey,
+      milestoneKey: record.milestoneKey,
+      family: record.family,
+      sourceGameId: record.sourceGameId,
+    });
+    const collision = existingByDedupe.get(dedupeKey);
+
+    if (!collision) {
+      toMove.push({ record, dedupeKey });
+    } else if (new Date(record.achievedAt) < new Date(collision.achievedAt)) {
+      toDelete.push(collision._id);
+      toMove.push({ record, dedupeKey });
+    } else {
+      toDelete.push(record._id);
+    }
+  }
+
+  // Delete target-side collisions before updating incoming records so the
+  // unique dedupeKey index never sees both documents at once.
+  if (toDelete.length > 0) {
+    await deleteMilestonesByIds(toDelete);
+  }
+  for (const { record, dedupeKey } of toMove) {
+    await updateMilestoneCareerKey(record._id, toCareerKey, dedupeKey);
+  }
+
+  const moved = toMove.length;
+  const dropped = toDelete.length;
+  logger.info(
+    {
+      leaguePlayerId: String(leaguePlayerId),
+      fromCareerKey,
+      toCareerKey,
+      claimedByUserId: claimedByUserId ? String(claimedByUserId) : null,
+      moved,
+      dropped,
+    },
+    'Milestones: career key migration complete'
+  );
+
+  return { moved, dropped };
+}
+
 module.exports = {
   TRACKED_STATS,
   buildCareerKey,
@@ -263,4 +344,5 @@ module.exports = {
   extractBoxScoreLines,
   detectForFinalizedGame,
   reevaluateMilestonesForGame,
+  rekeyMilestonesForPlayer,
 };

@@ -1758,6 +1758,12 @@ async function approveJoinRequest(userId, leagueId, leagueTeamId, requestId) {
 
     player.claimedByUserId = request.requesterUserId;
     await saveLeaguePlayer(player);
+    scheduleMilestoneRekey(
+      player._id,
+      `player:${String(player._id)}`,
+      `user:${String(request.requesterUserId)}`,
+      request.requesterUserId
+    );
 
     if (member) {
       member.role = 'player';
@@ -1836,9 +1842,16 @@ async function unclaimLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerI
     throw new ApiError(400, 'Player is not claimed');
   }
 
+  const previousUserId = player.claimedByUserId;
   const member = await findActiveLeagueTeamMember(leagueTeamId, player.claimedByUserId);
   player.claimedByUserId = null;
   await saveLeaguePlayer(player);
+  scheduleMilestoneRekey(
+    player._id,
+    `user:${String(previousUserId)}`,
+    `player:${String(player._id)}`,
+    null
+  );
 
   if (member && member.role === 'player') {
     member.status = 'removed';
@@ -2374,6 +2387,26 @@ function scheduleLeagueAggregateRecompute(leagueId, seasonId) {
       logger.error(
         { err: error, leagueId: String(leagueId) },
         'Post-response league aggregate recompute failed'
+      );
+    });
+  });
+}
+
+// Player Milestones (docs/player-milestones.md §3.1): claim and unclaim alter
+// the player's career identity, so the append-only milestone history follows
+// that identity change off the request path. A migration failure is logged but
+// never allowed to roll back a successful membership change.
+function scheduleMilestoneRekey(leaguePlayerId, fromCareerKey, toCareerKey, claimedByUserId) {
+  setImmediate(() => {
+    const { rekeyMilestonesForPlayer } = require('../milestones/milestones.service');
+    rekeyMilestonesForPlayer(leaguePlayerId, {
+      fromCareerKey,
+      toCareerKey,
+      claimedByUserId,
+    }).catch((error) => {
+      logger.error(
+        { err: error, leaguePlayerId: String(leaguePlayerId) },
+        'Milestone career key migration failed'
       );
     });
   });
