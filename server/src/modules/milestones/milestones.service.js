@@ -40,7 +40,7 @@ function emptyTotals() {
   return TRACKED_STATS.reduce((totals, key) => ({ ...totals, [key]: 0 }), { gamesCount: 0 });
 }
 
-// docs/player-milestones.md §3. LeaguePlayer.leagueTeamId is immutable and
+// docs/PROJECT-KNOWLEDGE.md#player-milestones. LeaguePlayer.leagueTeamId is immutable and
 // there is no transfer feature, so a claimed user id is the only thing that
 // links a player's roster rows across teams within a league.
 function buildCareerKey(leaguePlayer) {
@@ -76,7 +76,7 @@ async function resolveCareerTotals(leagueId, leaguePlayer) {
   return { careerKey, totals, leaguePlayerIds };
 }
 
-// docs/player-milestones.md §5.2. `before` is derived by subtraction rather
+// docs/PROJECT-KNOWLEDGE.md#player-milestones. `before` is derived by subtraction rather
 // than stored, so the inputs are always the frozen box score plus the freshly
 // recomputed aggregate — never an incrementally-mutated counter that could
 // double-count on a retry.
@@ -121,7 +121,7 @@ function extractBoxScoreLines(game) {
   return lines;
 }
 
-// docs/player-milestones.md §5. Detection is deliberately independent of the
+// docs/PROJECT-KNOWLEDGE.md#player-milestones. Detection is deliberately independent of the
 // public-league gate: records are written for EVERY league so private-league
 // players still get profile milestones. Only publishing is gated, and that
 // gate lives in feed.service.js.
@@ -214,7 +214,7 @@ async function computeCurrentMilestoneKeys(gameId) {
   return results;
 }
 
-// docs/player-milestones.md §7. Re-derive an edited completed game's
+// docs/PROJECT-KNOWLEDGE.md#player-milestones. Re-derive an edited completed game's
 // achievements, delete records and posts that are no longer true, and record
 // newly qualifying milestones without publishing them into an older feed.
 //
@@ -254,7 +254,7 @@ async function reevaluateMilestonesForGame(gameId) {
   return { removed: stale.length, created: created.length };
 }
 
-// docs/player-milestones.md §3.1. A claim or unclaim changes the career key
+// docs/PROJECT-KNOWLEDGE.md#player-milestones. A claim or unclaim changes the career key
 // used to find this roster row's history. Move its records to the new key and
 // resolve collisions by retaining whichever achievement happened first.
 async function rekeyMilestonesForPlayer(

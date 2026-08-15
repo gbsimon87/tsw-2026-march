@@ -2403,7 +2403,7 @@ function scheduleLeagueAggregateRecompute(leagueId, seasonId) {
   });
 }
 
-// Player Milestones (docs/player-milestones.md §3.1): claim and unclaim alter
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): claim and unclaim alter
 // the player's career identity, so the append-only milestone history follows
 // that identity change off the request path. A migration failure is logged but
 // never allowed to roll back a successful membership change.

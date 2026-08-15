@@ -516,7 +516,7 @@ function listLeaguePlayerStats(leagueId, seasonId) {
   return LeaguePlayerStats.find({ leagueId, seasonId }).lean();
 }
 
-// Player Milestones (docs/player-milestones.md §5.2): career-in-league totals
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): career-in-league totals
 // are the sum of a player's rows across EVERY season and team, so this
 // deliberately omits the seasonId filter that listLeaguePlayerStats applies.
 function listLeaguePlayerStatsByPlayerIds(leagueId, leaguePlayerIds) {

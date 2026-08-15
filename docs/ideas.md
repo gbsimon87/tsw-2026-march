@@ -5,13 +5,13 @@ turning this file into a release log.
 
 ## Highest Value
 
-| Idea                                | Primary user      | Notes                                                                                 |
-| ----------------------------------- | ----------------- | ------------------------------------------------------------------------------------- |
-| Post-game coach report              | Coaches           | Derive runs, droughts, foul trouble, and key performers from game events.             |
-| [Season trends](./season-trends.md) | Coaches, players  | Last-five and season time series for shooting, turnovers, and rebounding.             |
-| Stat-correction workflow            | Players, managers | Request, review, approve, and audit event corrections; use video timestamps.          |
-| Personalized Pulse                  | Fans, players     | Filter feed posts through existing user, league, and league-team follows.             |
-| Milestones and awards               | Players, leagues  | Player milestones shipped (see docs/player-milestones.md); season awards outstanding. |
+| Idea                                | Primary user      | Notes                                                                                                               |
+| ----------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Post-game coach report              | Coaches           | Derive runs, droughts, foul trouble, and key performers from game events.                                           |
+| [Season trends](./season-trends.md) | Coaches, players  | Last-five and season time series for shooting, turnovers, and rebounding.                                           |
+| Stat-correction workflow            | Players, managers | Request, review, approve, and audit event corrections; use video timestamps.                                        |
+| Personalized Pulse                  | Fans, players     | Filter feed posts through existing user, league, and league-team follows.                                           |
+| Milestones and awards               | Players, leagues  | Player milestones shipped; see [project knowledge](./PROJECT-KNOWLEDGE.md#player-milestones). Season awards remain. |
 
 ## League Administration
 

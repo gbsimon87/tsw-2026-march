@@ -251,7 +251,7 @@ function scheduleAutoFeedForGame(gameId) {
   });
 }
 
-// Player Milestones (docs/player-milestones.md §5.1): detection runs after a
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): detection runs after a
 // league game finishes. It is deliberately independent of league visibility;
 // feed.service owns the public-league publishing gate.
 function scheduleMilestoneDetectionForGame(game) {
@@ -267,7 +267,7 @@ function scheduleMilestoneDetectionForGame(game) {
   });
 }
 
-// Player Milestones (docs/player-milestones.md §7): editing a completed game
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): editing a completed game
 // can invalidate an achievement produced by its previous frozen box score.
 function scheduleMilestoneReevaluationForGame(game) {
   if (!game || game.gameContext !== 'league' || game.status !== 'completed') return;

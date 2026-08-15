@@ -195,6 +195,59 @@ but their profile links are withheld until the league is visible again.
 League-player and unified player profiles include recent milestone history;
 the full public list is cursor-paginated.
 
+## Player Milestones
+
+Player milestones are derived automatically from finalized league games and
+are public wherever the league is public. Standalone games and players are out
+of scope. Private leagues retain milestone records, but anonymous reads return 404. A league-player profile exposes the five most recent milestones and a
+total; the complete list is available from the cursor-paginated public
+milestones endpoint. Unified player profiles combine claimed player records
+from public leagues.
+
+Milestone identity is career-in-league: claimed players use
+`user:<claimedByUserId>` and unclaimed players use
+`player:<leaguePlayerId>`. Claim and unclaim operations re-key the ledger;
+dedupe collisions preserve the earliest achievement. The durable
+`PlayerMilestone` ledger records the league and season, career and player
+identity, milestone key/family/tier, value and display metadata, source game,
+achievement time, optional feed post, and dedupe key.
+
+Rules live in `server/src/modules/milestones/milestones.catalog.js` as pure
+`(before, after, gameLine)` evaluations. The catalog contains:
+
+- Career ladders for points (100/250/500/1000/2000/5000), rebounds and assists
+  (100/250/500/1000), threes (25/50/100/250), steals (50/100/250), and blocks
+  (25/50/100). If one game crosses several rungs, only the highest is awarded.
+- Single-game double-doubles, triple-doubles, 30/40 points, 7/10 threes,
+  6 steals, and 5 blocks. Only the highest applicable variant is awarded.
+- First recorded game, first points, and first three. A debut requires a
+  recorded stat line; being present on a roster is not enough.
+
+Career thresholds and firsts dedupe by career plus milestone key. Repeatable
+single-game feats also include the source game in their dedupe key. Detection
+runs after league aggregates are recomputed, derives the pre-game total by
+subtracting the frozen box-score line, and persists milestones independently
+of feed publication.
+
+Only feed-tier milestones can create Pulse cards. Publishing requires a public
+league plus both `AUTO_FEED_ENABLED=true` and
+`AUTO_FEED_MILESTONES_ENABLED=true`; at most `AUTO_MILESTONE_CAP` (default 2)
+of the rarest eligible achievements are posted per game by the system user.
+Making a league private removes automatic milestone posts but retains the
+ledger. Editing a completed game removes invalid milestones and linked posts
+and adds newly valid ledger records without retroactively publishing them.
+An edit to an earlier game can shift the true threshold-crossing game; the
+current targeted re-evaluation does not replay the whole career to reassign it.
+
+Use `server/src/scripts/backfill-player-milestones.js --dry-run` before a real
+backfill. It processes completed league games chronologically with publishing
+disabled, is idempotent, and must run after the league-season backfill. Before
+production backfills, verify that career-threshold totals are reconstructed as
+of each historical game rather than read from present-day aggregates.
+
+Deferred milestone work includes personal bests, standalone and team/league
+milestones, season awards, and minutes-based milestones.
+
 ## Billing
 
 Billing is attached to a `Team` or `League`. Plans are `starter`, `team_pro`,

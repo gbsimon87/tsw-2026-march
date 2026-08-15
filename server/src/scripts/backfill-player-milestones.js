@@ -1,4 +1,4 @@
-// Player Milestones backfill (docs/player-milestones.md §9). Replays completed
+// Player Milestones backfill (docs/PROJECT-KNOWLEDGE.md#player-milestones). Replays completed
 // league games in chronological order through the same detection function used
 // at finalize, with publishing disabled. The dedupeKey unique index makes every
 // run idempotent.

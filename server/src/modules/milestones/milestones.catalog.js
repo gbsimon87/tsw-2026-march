@@ -1,4 +1,4 @@
-// Player Milestones (docs/player-milestones.md §4). Every rule here is a pure
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones). Every rule here is a pure
 // function of (before, after, gameLine) — no database, no I/O — so the whole
 // catalog is unit-testable and rarity can be re-tuned by editing this file
 // alone, with no recompute pass. Same principle as the OPT-011 note on

@@ -97,7 +97,7 @@ async function destroyCloudinaryAsset(kind, publicId) {
   }
 }
 
-// Player Milestones (docs/player-milestones.md §7): remove feed cards whose
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): remove feed cards whose
 // achievement was invalidated by a post-completion game edit.
 async function deletePostsByIds(ids) {
   return deletePostsByIdsRepo(ids);
@@ -248,7 +248,7 @@ function buildTeamCardSnapshot(payload) {
   };
 }
 
-// Player Milestones (docs/player-milestones.md §5.4): keep milestone cards
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): keep milestone cards
 // fully denormalised, just like the other feed card types. Milestone records
 // are append-only, but names, avatars and team branding may later change; the
 // feed intentionally preserves how the achievement looked when published.
@@ -1247,7 +1247,7 @@ async function autoCreateHighlightClipPosts(systemUserId, game) {
   return { created, skipped, capped };
 }
 
-// Player Milestones (docs/player-milestones.md §5.3): publish only the rarest
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones): publish only the rarest
 // feed-tier achievements from a completed public-league game. The feature has
 // a separate kill switch from the rest of auto-feed so milestone detection and
 // profile history can remain live while Pulse volume is tuned independently.

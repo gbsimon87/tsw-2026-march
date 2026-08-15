@@ -97,7 +97,7 @@ const highlightClipSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Player Milestones (docs/player-milestones.md §5.4). cardSnapshot follows the
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones). cardSnapshot follows the
 // OPT-017 pattern so the feed read path never pays a live resolve.
 const milestoneCardSchema = new mongoose.Schema(
   {

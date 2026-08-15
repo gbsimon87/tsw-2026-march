@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { MILESTONE_FAMILIES, MILESTONE_TIERS } = require('./milestones.catalog');
 
-// Player Milestones (docs/player-milestones.md §6). Append-only ledger of
+// Player Milestones (docs/PROJECT-KNOWLEDGE.md#player-milestones). Append-only ledger of
 // milestones a player has earned. Idempotency is a property of the dedupeKey
 // unique index, NOT of application logic — re-running detection for a game is
 // always safe, which is what lets finalize retries, post-completion edits and
