@@ -2,6 +2,7 @@ const { createApp } = require('./app');
 const { connectDb, disconnectDb } = require('./config/db');
 const { env } = require('./config/env');
 const { logger } = require('./config/logger');
+const { shutdownAnalytics } = require('./modules/analytics/analytics.service');
 
 async function bootstrap() {
   await connectDb();
@@ -36,6 +37,9 @@ function registerGracefulShutdown(server) {
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      // Flush batched analytics before the process goes away, otherwise a
+      // restart or deploy silently discards whatever is still queued.
+      await shutdownAnalytics();
       await disconnectDb();
       clearTimeout(forceExit);
       logger.info('Shutdown complete');
