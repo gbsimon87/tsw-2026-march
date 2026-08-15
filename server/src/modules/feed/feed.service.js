@@ -5,6 +5,7 @@ const {
   listPosts,
   findPostById,
   deletePostById,
+  deletePostsByIds: deletePostsByIdsRepo,
   deleteAutoPostsForGameIds,
   findAutoGameCardPost,
   findPostByHighlightEventId,
@@ -94,6 +95,12 @@ async function destroyCloudinaryAsset(kind, publicId) {
     logger.error({ err: error, kind, publicId }, 'Cloudinary destroy failed');
     return false;
   }
+}
+
+// Player Milestones (docs/player-milestones.md §7): remove feed cards whose
+// achievement was invalidated by a post-completion game edit.
+async function deletePostsByIds(ids) {
+  return deletePostsByIdsRepo(ids);
 }
 
 function sanitizeCaption(value) {
@@ -1367,6 +1374,7 @@ module.exports = {
   createTeamCardPostForUser,
   createHighlightClipPostForUser,
   deletePostForUser,
+  deletePostsByIds,
   listShareableGames,
   listShareablePlayers,
   listShareableTeams,

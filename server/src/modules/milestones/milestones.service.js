@@ -194,6 +194,66 @@ async function detectForFinalizedGame(gameId, { publish = true } = {}) {
   return { created, skipped };
 }
 
+// The set of (careerKey, milestoneKey) pairs this game earns given its current
+// frozen box score. Re-evaluation uses this independently of insertion so it
+// can identify existing records that no longer hold after an edit.
+async function computeCurrentMilestoneKeys(gameId) {
+  const game = await findGameById(gameId);
+  if (!game || game.status !== 'completed' || game.gameContext !== 'league') return [];
+
+  const results = [];
+  for (const entry of extractBoxScoreLines(game)) {
+    const leaguePlayer = await findLeaguePlayerById(entry.leaguePlayerId);
+    if (!leaguePlayer) continue;
+    const { careerKey, totals } = await resolveCareerTotals(game.leagueId, leaguePlayer);
+    const before = subtractGameLine(totals, entry.line);
+    for (const milestone of evaluateCatalog(before, totals, entry.line)) {
+      results.push({ careerKey, key: milestone.key });
+    }
+  }
+  return results;
+}
+
+// docs/player-milestones.md §7. Re-derive an edited completed game's
+// achievements, delete records and posts that are no longer true, and record
+// newly qualifying milestones without publishing them into an older feed.
+//
+// Accepted imprecision: editing an earlier game may shift which game crossed a
+// career threshold. Reassigning that source would require replaying the league;
+// the original crossing record is retained unless this game's achievement is
+// itself no longer valid.
+async function reevaluateMilestonesForGame(gameId) {
+  const {
+    listMilestonesBySourceGameId,
+    deleteMilestonesByIds,
+  } = require('./milestones.repository');
+
+  const existing = await listMilestonesBySourceGameId(gameId);
+  const { created } = await detectForFinalizedGame(gameId, { publish: false });
+  const stillValid = new Set(
+    (await computeCurrentMilestoneKeys(gameId)).map((entry) => `${entry.careerKey}|${entry.key}`)
+  );
+  const stale = existing.filter(
+    (record) => !stillValid.has(`${record.careerKey}|${record.milestoneKey}`)
+  );
+
+  if (stale.length > 0) {
+    await deleteMilestonesByIds(stale.map((record) => record._id));
+    const postIds = stale.map((record) => record.postId).filter(Boolean);
+    if (postIds.length > 0) {
+      const { deletePostsByIds } = require('../feed/feed.service');
+      await deletePostsByIds(postIds);
+    }
+  }
+
+  logger.info(
+    { gameId: String(gameId), removed: stale.length, created: created.length },
+    'Milestones: re-evaluation after game edit complete'
+  );
+
+  return { removed: stale.length, created: created.length };
+}
+
 module.exports = {
   TRACKED_STATS,
   buildCareerKey,
@@ -202,4 +262,5 @@ module.exports = {
   findLeaguePlayerById,
   extractBoxScoreLines,
   detectForFinalizedGame,
+  reevaluateMilestonesForGame,
 };

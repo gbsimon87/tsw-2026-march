@@ -251,6 +251,37 @@ function scheduleAutoFeedForGame(gameId) {
   });
 }
 
+// Player Milestones (docs/player-milestones.md §5.1): detection runs after a
+// league game finishes. It is deliberately independent of league visibility;
+// feed.service owns the public-league publishing gate.
+function scheduleMilestoneDetectionForGame(game) {
+  if (!game || game.gameContext !== 'league') return;
+  setImmediate(() => {
+    const { detectForFinalizedGame } = require('../milestones/milestones.service');
+    detectForFinalizedGame(game._id).catch((error) => {
+      logger.error(
+        { err: error, gameId: String(game._id) },
+        'Post-response milestone detection failed'
+      );
+    });
+  });
+}
+
+// Player Milestones (docs/player-milestones.md §7): editing a completed game
+// can invalidate an achievement produced by its previous frozen box score.
+function scheduleMilestoneReevaluationForGame(game) {
+  if (!game || game.gameContext !== 'league' || game.status !== 'completed') return;
+  setImmediate(() => {
+    const { reevaluateMilestonesForGame } = require('../milestones/milestones.service');
+    reevaluateMilestonesForGame(game._id).catch((error) => {
+      logger.error(
+        { err: error, gameId: String(game._id) },
+        'Post-response milestone re-evaluation failed'
+      );
+    });
+  });
+}
+
 // OPT-020: generate the league AI summary AFTER the finish response is sent.
 // OpenAI can take several seconds, so blocking the finish request on it made
 // finishing a game feel slow. The claim is atomic (with a stale-lock TTL) so
@@ -549,6 +580,7 @@ async function refreezeGameBoxScoreIfCompleted(userId, game) {
       : computeBoxScore(game, teamDoc);
   game.gameSummary = buildGameSummary(game);
   await saveGame(game);
+  scheduleMilestoneReevaluationForGame(game);
 }
 
 function buildBoxScoreForSide(game, team, side) {
@@ -2206,6 +2238,7 @@ async function finishGameForUser(userId, gameId) {
   scheduleTeamSummaryRecomputeForGame(game);
   scheduleFeedCardRefreshForGame(game._id);
   scheduleAutoFeedForGame(game._id);
+  scheduleMilestoneDetectionForGame(game);
 
   if (game.gameContext === 'league' && !game.aiSummary?.text) {
     // OPT-020: generate the summary off the request path (see

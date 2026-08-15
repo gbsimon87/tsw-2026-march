@@ -231,6 +231,11 @@ async function deletePostsByGameId(gameId) {
   });
 }
 
+async function deletePostsByIds(ids) {
+  if (!ids || ids.length === 0) return { deletedCount: 0 };
+  return Post.deleteMany({ _id: { $in: ids } });
+}
+
 // Auto Feed Generation: reverse auto-generated posts for a set of games (used
 // when a league flips from public to private — B2 in
 // docs/auto-feed.md). Manually-shared posts (auto:
@@ -289,6 +294,7 @@ module.exports = {
   findPostById,
   deletePostById,
   deletePostsByGameId,
+  deletePostsByIds,
   deleteAutoPostsForGameIds,
   findAutoGameCardPost,
   findPostByHighlightEventId,
