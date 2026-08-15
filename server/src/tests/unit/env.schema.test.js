@@ -99,3 +99,19 @@ describe('env schema — analytics deployment identity', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('AUTO_FEED_MILESTONES_ENABLED', () => {
+  test('defaults to false when unset', () => {
+    expect(envSchema.parse(baseEnv()).AUTO_FEED_MILESTONES_ENABLED).toBe(false);
+  });
+
+  test('is true only for the exact string "true"', () => {
+    expect(
+      envSchema.parse(baseEnv({ AUTO_FEED_MILESTONES_ENABLED: 'true' }))
+        .AUTO_FEED_MILESTONES_ENABLED
+    ).toBe(true);
+    expect(
+      envSchema.parse(baseEnv({ AUTO_FEED_MILESTONES_ENABLED: '1' })).AUTO_FEED_MILESTONES_ENABLED
+    ).toBe(false);
+  });
+});
