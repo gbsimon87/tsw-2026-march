@@ -239,11 +239,26 @@ and adds newly valid ledger records without retroactively publishing them.
 An edit to an earlier game can shift the true threshold-crossing game; the
 current targeted re-evaluation does not replay the whole career to reassign it.
 
-Use `server/src/scripts/backfill-player-milestones.js --dry-run` before a real
-backfill. It processes completed league games chronologically with publishing
-disabled, is idempotent, and must run after the league-season backfill. Before
-production backfills, verify that career-threshold totals are reconstructed as
-of each historical game rather than read from present-day aggregates.
+Production milestones start from new games onward. Games finalized before the
+feature shipped have no ledger records and are deliberately left that way: the
+backfill's prerequisite, `backfill-league-seasons.js`, deletes legacy
+season-less `LeagueStandings` and `LeaguePlayerStats` rows, which is not an
+acceptable risk against live league data. No backfill has been run in
+production and none is planned.
+
+`server/src/scripts/backfill-player-milestones.js` therefore remains a
+development and seeding tool. It processes completed league games
+chronologically with publishing disabled, is idempotent through the `dedupeKey`
+unique index, and must run after the league-season backfill. Before considering
+any production run, note that `--dry-run` only counts the games it would
+replay: it exits before detection, so it reveals neither the milestones it
+would create nor the two failure modes that are otherwise silent. Games
+finalized before the box score was frozen on completion (OPT-012) have
+`boxScore: null`, yield no milestones, and are still counted as processed;
+and because `autoIndex` is disabled in production, a missing `dedupeKey` index
+turns re-runs into duplicate inserts. Career-threshold totals also need
+verifying as reconstructed per historical game rather than read from
+present-day aggregates.
 
 Deferred milestone work includes personal bests, standalone and team/league
 milestones, season awards, and minutes-based milestones.

@@ -85,6 +85,8 @@ services:
         sync: false
       - key: AUTO_FEED_ENABLED
         sync: true
+      - key: AUTO_FEED_MILESTONES_ENABLED
+        value: false
 
   - type: web
     name: tsw-2026-march-client-prod
@@ -199,6 +201,8 @@ services:
         sync: false
       - key: AUTO_FEED_ENABLED
         value: true
+      - key: AUTO_FEED_MILESTONES_ENABLED
+        sync: true
 
   - type: web
     name: tsw-2026-march-client-dev
