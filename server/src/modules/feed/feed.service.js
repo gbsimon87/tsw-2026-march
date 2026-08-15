@@ -51,6 +51,7 @@ const {
 } = require('../leagues/leagues.service');
 const { listTeams } = require('../teams/teams.repository');
 const { getPublicPlayer, getPublicTeam } = require('../teams/teams.service');
+const { AUTO_MILESTONE_CAP, MILESTONE_TIERS } = require('../milestones/milestones.catalog');
 
 function cloudinaryThumbnailUrl(publicId, resourceType) {
   if (!publicId || resourceType !== 'video') return null;
@@ -240,6 +241,31 @@ function buildTeamCardSnapshot(payload) {
   };
 }
 
+// Player Milestones (docs/player-milestones.md §5.4): keep milestone cards
+// fully denormalised, just like the other feed card types. Milestone records
+// are append-only, but names, avatars and team branding may later change; the
+// feed intentionally preserves how the achievement looked when published.
+function buildMilestoneCardSnapshot({ milestone, player, team, game }) {
+  return {
+    milestoneId: String(milestone._id),
+    milestoneKey: milestone.milestoneKey,
+    family: milestone.family,
+    label: milestone.label ?? null,
+    value: milestone.value ?? null,
+    statKey: milestone.statKey ?? null,
+    achievedAt: milestone.achievedAt ?? null,
+    playerName: player?.displayName ?? null,
+    jerseyNumber: player?.jerseyNumber ?? null,
+    playerAvatarUrl: transformCloudinaryUrl(player?.avatar?.url ?? null),
+    teamName: team?.name ?? null,
+    teamLogo: transformCloudinaryUrl(team?.logo?.url ?? null),
+    teamColors: team?.colors ?? [],
+    gameId: String(game._id),
+    gameTitle: game.title ?? null,
+    gameUrl: `/games/${String(game._id)}`,
+  };
+}
+
 // OPT-017: resolve a card's display snapshot, preferring the denormalised
 // `cardSnapshot` (indexed doc field, no extra queries). On a miss (older posts
 // created before this field existed) falls back to the live pipeline and
@@ -376,6 +402,18 @@ function resolveHighlightClipPayload(post) {
   };
 }
 
+function resolveMilestoneCardPayload(post) {
+  return {
+    image: null,
+    video: null,
+    gameCard: null,
+    playerCard: null,
+    teamCard: null,
+    highlightClip: null,
+    milestoneCard: post.milestoneCard.cardSnapshot ?? null,
+  };
+}
+
 async function resolvePostPayload(post) {
   if (post.type === 'image') {
     return resolveImagePayload(post);
@@ -399,6 +437,10 @@ async function resolvePostPayload(post) {
 
   if (post.type === 'highlight_clip') {
     return resolveHighlightClipPayload(post);
+  }
+
+  if (post.type === 'milestone') {
+    return resolveMilestoneCardPayload(post);
   }
 
   throw new ApiError(400, 'Unsupported post type');
@@ -1198,6 +1240,79 @@ async function autoCreateHighlightClipPosts(systemUserId, game) {
   return { created, skipped, capped };
 }
 
+// Player Milestones (docs/player-milestones.md §5.3): publish only the rarest
+// feed-tier achievements from a completed public-league game. The feature has
+// a separate kill switch from the rest of auto-feed so milestone detection and
+// profile history can remain live while Pulse volume is tuned independently.
+async function autoPublishMilestonePosts(game, milestones) {
+  if (!env.AUTO_FEED_ENABLED || !env.AUTO_FEED_MILESTONES_ENABLED) {
+    return { created: 0, capped: false };
+  }
+
+  if (game.gameContext !== 'league' || !(await isLeaguePublic(game.leagueId))) {
+    return { created: 0, capped: false };
+  }
+
+  const ranked = (milestones || [])
+    .filter((item) => item.tier === MILESTONE_TIERS.FEED)
+    .sort((a, b) => {
+      const rarityDifference = (a.rarityRank ?? 99) - (b.rarityRank ?? 99);
+      if (rarityDifference !== 0) return rarityDifference;
+      return (b.value ?? 0) - (a.value ?? 0);
+    });
+  const capped = ranked.length > AUTO_MILESTONE_CAP;
+  const toPublish = ranked.slice(0, AUTO_MILESTONE_CAP);
+
+  if (toPublish.length === 0) {
+    return { created: 0, capped };
+  }
+
+  if (capped) {
+    logger.info(
+      { gameId: String(game._id), eligible: ranked.length, cap: AUTO_MILESTONE_CAP },
+      'Auto feed: milestone generation capped for this game'
+    );
+  }
+
+  const systemUserId = await getSystemUserId();
+  // Lazy import avoids coupling the milestone detector to feed-service module
+  // initialisation while still linking each ledger entry to its Pulse post.
+  const { setMilestonePostId } = require('../milestones/milestones.repository');
+  let created = 0;
+
+  for (const milestone of toPublish) {
+    const [player, team] = await Promise.all([
+      findLeaguePlayerById(milestone.leaguePlayerId),
+      findLeagueTeamById(milestone.leagueTeamId),
+    ]);
+
+    try {
+      const post = await createPost({
+        creatorUserId: systemUserId,
+        type: 'milestone',
+        caption: null,
+        milestoneCard: {
+          milestoneId: milestone._id,
+          leaguePlayerId: milestone.leaguePlayerId,
+          leagueTeamId: milestone.leagueTeamId,
+          gameId: game._id,
+          auto: true,
+          cardSnapshot: buildMilestoneCardSnapshot({ milestone, player, team, game }),
+        },
+      });
+      await setMilestonePostId(milestone._id, post._id);
+      created += 1;
+    } catch (error) {
+      // The unique milestoneCard.milestoneId index makes concurrent finalize,
+      // retry and backfill runs idempotent.
+      if (error?.code === 11000) continue;
+      throw error;
+    }
+  }
+
+  return { created, capped };
+}
+
 // Auto Feed Generation entry point (docs/auto-feed.md):
 // invoked post-response from games.service.js#scheduleAutoFeedForGame after a
 // game finishes. This is the SINGLE enforcement point for the public-league
@@ -1262,9 +1377,11 @@ module.exports = {
   buildGameCardSnapshot,
   buildPlayerCardSnapshot,
   buildTeamCardSnapshot,
+  buildMilestoneCardSnapshot,
   // Auto Feed Generation (docs/auto-feed.md).
   autoPublishForFinalizedGame,
   autoCreateGameCardPost,
   autoCreateHighlightClipPosts,
+  autoPublishMilestonePosts,
   reverseAutoPostsForLeague,
 };
