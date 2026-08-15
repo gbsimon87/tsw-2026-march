@@ -1359,11 +1359,13 @@ async function getPublicLeaguePlayerById(leaguePlayerId) {
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
+  const { getMilestoneSummaryForLeaguePlayer } = require('../milestones/milestones.service');
 
   return {
     team: sanitizeLeagueTeam(team),
     player: sanitizeLeaguePlayer(player),
     summary: buildLeaguePlayerSummary(gameRows),
+    milestones: await getMilestoneSummaryForLeaguePlayer(team.leagueId, player),
   };
 }
 

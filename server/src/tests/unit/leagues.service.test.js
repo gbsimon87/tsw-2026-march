@@ -34,6 +34,7 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeagueStandings: jest.fn(),
   upsertLeagueStandings: jest.fn(),
   listLeaguePlayerStats: jest.fn(),
+  listLeaguePlayerStatsByPlayerIds: jest.fn(() => Promise.resolve([])),
   replaceLeaguePlayerStats: jest.fn(),
   findActiveLeagueManager: jest.fn(),
   listLeaguesByManager: jest.fn(() => Promise.resolve([])),
@@ -65,6 +66,15 @@ jest.mock('../../modules/feed/cloudinary.client', () => ({
 jest.mock('../../modules/feed/feed.service', () => ({
   reverseAutoPostsForLeague: jest.fn(() => Promise.resolve({ deletedCount: 0 })),
 }));
+
+jest.mock('../../modules/milestones/milestones.repository', () => {
+  const actual = jest.requireActual('../../modules/milestones/milestones.repository');
+  return {
+    ...actual,
+    listMilestonesByLeaguePlayerIds: jest.fn(() => Promise.resolve([])),
+    countMilestonesByLeaguePlayerIds: jest.fn(() => Promise.resolve(0)),
+  };
+});
 
 const {
   findLeagueById,
@@ -899,6 +909,7 @@ describe('TSW-005 — league feed-sharing support', () => {
     expect(result.team.name).toBe('Alpha');
     expect(result.summary.gamesCount).toBe(1);
     expect(result.summary.pointsPerGame).toBe(3);
+    expect(result.milestones).toEqual({ recent: [], total: 0 });
   });
 });
 

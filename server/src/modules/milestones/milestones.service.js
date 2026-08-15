@@ -335,6 +335,65 @@ async function rekeyMilestonesForPlayer(
   return { moved, dropped };
 }
 
+function sanitizeMilestone(doc) {
+  return {
+    id: String(doc._id),
+    milestoneKey: doc.milestoneKey,
+    family: doc.family,
+    tier: doc.tier,
+    label: doc.label,
+    statKey: doc.statKey ?? null,
+    value: doc.value ?? null,
+    achievedAt: doc.achievedAt,
+    gameId: doc.sourceGameId ? String(doc.sourceGameId) : null,
+    gameUrl: doc.sourceGameId ? `/games/${String(doc.sourceGameId)}` : null,
+    leaguePlayerId: String(doc.leaguePlayerId),
+  };
+}
+
+async function listMilestonesForLeaguePlayer(leaguePlayerId, { limit = 20, cursor = null } = {}) {
+  const { listMilestonesByCareerKey } = require('./milestones.repository');
+  const { ApiError } = require('../../utils/apiError');
+
+  const leaguePlayer = await findLeaguePlayerById(leaguePlayerId);
+  if (!leaguePlayer) {
+    throw new ApiError(404, 'League player not found');
+  }
+
+  // Match every other public league surface: private-league milestone records
+  // exist, but must not be exposed through an anonymous endpoint.
+  const { isLeaguePublic } = require('../leagues/leagues.service');
+  if (!(await isLeaguePublic(leaguePlayer.leagueId))) {
+    throw new ApiError(404, 'League player not found');
+  }
+
+  const careerKey = buildCareerKey(leaguePlayer);
+  const rows = await listMilestonesByCareerKey(careerKey, { limit: limit + 1, cursor });
+  const page = rows.slice(0, limit);
+
+  return {
+    milestones: page.map(sanitizeMilestone),
+    nextCursor: rows.length > limit ? String(page[page.length - 1]._id) : null,
+  };
+}
+
+// Fold the five most recent achievements into the existing public player
+// payload so the initial profile view needs no second request.
+async function getMilestoneSummaryForLeaguePlayer(leagueId, leaguePlayer) {
+  const {
+    listMilestonesByLeaguePlayerIds,
+    countMilestonesByLeaguePlayerIds,
+  } = require('./milestones.repository');
+
+  const { leaguePlayerIds } = await resolveCareerTotals(leagueId, leaguePlayer);
+  const [recent, total] = await Promise.all([
+    listMilestonesByLeaguePlayerIds(leaguePlayerIds, { limit: 5 }),
+    countMilestonesByLeaguePlayerIds(leaguePlayerIds),
+  ]);
+
+  return { recent: recent.map(sanitizeMilestone), total };
+}
+
 module.exports = {
   TRACKED_STATS,
   buildCareerKey,
@@ -345,4 +404,7 @@ module.exports = {
   detectForFinalizedGame,
   reevaluateMilestonesForGame,
   rekeyMilestonesForPlayer,
+  sanitizeMilestone,
+  listMilestonesForLeaguePlayer,
+  getMilestoneSummaryForLeaguePlayer,
 };
