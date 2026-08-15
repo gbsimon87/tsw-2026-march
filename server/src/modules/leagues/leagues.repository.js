@@ -516,6 +516,13 @@ function listLeaguePlayerStats(leagueId, seasonId) {
   return LeaguePlayerStats.find({ leagueId, seasonId }).lean();
 }
 
+// Player Milestones (docs/player-milestones.md §5.2): career-in-league totals
+// are the sum of a player's rows across EVERY season and team, so this
+// deliberately omits the seasonId filter that listLeaguePlayerStats applies.
+function listLeaguePlayerStatsByPlayerIds(leagueId, leaguePlayerIds) {
+  return LeaguePlayerStats.find({ leagueId, leaguePlayerId: { $in: leaguePlayerIds } }).lean();
+}
+
 // Full replace: delete every row for the league+season, then insert the fresh
 // set. Simpler and just as correct as diffing, and this only ever runs on the
 // post-response recompute path (never blocks a request).
@@ -563,6 +570,7 @@ module.exports = {
   deleteLeagueStandings,
   LeaguePlayerStats,
   listLeaguePlayerStats,
+  listLeaguePlayerStatsByPlayerIds,
   replaceLeaguePlayerStats,
   deleteLeaguePlayerStats,
   createLeague,
