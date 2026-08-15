@@ -652,6 +652,7 @@ describe('unified profile assembly (public player profiles)', () => {
       reboundsPerGame: 5,
       assistsPerGame: 2,
     });
+    expect(result.profiles[0].milestones).toEqual({ recent: [], total: 0 });
   });
 
   test('summary is zeroed when the player has no materialised games', async () => {
@@ -797,6 +798,7 @@ describe('getPublicLeaguePlayerBySlug — claimedUserId is public-league-only (F
 
     expect(result.player.isClaimed).toBe(true);
     expect(result.player.claimedUserId).toBe('claimer-1');
+    expect(result.milestones).toEqual({ recent: [], total: 0 });
   });
 
   test('nulls out claimedUserId when the league is private, even for an authorized viewer', async () => {

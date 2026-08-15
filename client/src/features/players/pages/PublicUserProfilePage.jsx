@@ -8,6 +8,7 @@ import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { FollowButton } from '../../follows/components/FollowButton';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
+import { PlayerMilestones } from '../components/PlayerMilestones';
 
 export function PublicUserProfilePage() {
   const { userId } = useParams();
@@ -88,8 +89,12 @@ export function PublicUserProfilePage() {
 
       <ul className="grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-3">
         {profiles.map((profile) => (
-          <li key={profile.id}>
+          <li key={profile.id} className="space-y-3">
             <ProfileCard profile={profile} avatarUrl={user.avatarUrl} />
+            <PlayerMilestones
+              milestones={profile.milestones?.recent ?? []}
+              total={profile.milestones?.total ?? 0}
+            />
           </li>
         ))}
       </ul>

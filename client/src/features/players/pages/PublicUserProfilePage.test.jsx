@@ -50,6 +50,17 @@ describe('PublicUserProfilePage', () => {
           league: { name: 'City League', seasonLabel: 'Spring 2026' },
           profileHref: '/league/city-league/teams/hawks/players/lp-1',
           summary: { gamesCount: 4, pointsPerGame: 10, reboundsPerGame: 5, assistsPerGame: 2 },
+          milestones: {
+            recent: [
+              {
+                id: 'm1',
+                label: '1,000 career points',
+                achievedAt: '2026-07-04T20:00:00.000Z',
+                gameUrl: '/games/g1',
+              },
+            ],
+            total: 1,
+          },
         },
       ],
     });
@@ -59,6 +70,7 @@ describe('PublicUserProfilePage', () => {
     await waitFor(() => expect(screen.getAllByText('Jamie Rivera').length).toBeGreaterThan(0));
     expect(screen.getByText('Hawks')).toBeInTheDocument();
     expect(screen.getByText('4 GP')).toBeInTheDocument();
+    expect(screen.getByText('1,000 career points')).toBeInTheDocument();
   });
 
   test('renders a not-found message on 404', async () => {
