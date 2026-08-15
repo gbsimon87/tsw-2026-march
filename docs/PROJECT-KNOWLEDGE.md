@@ -111,14 +111,15 @@ Reuse the assertions in `leagues.service.js`; league ownership is separate from
 
 Schemas are defined in repository files. Main models:
 
-| Domain  | Models                                                                                                                                                                         |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Auth    | `User`, `Session`, `AuthToken`                                                                                                                                                 |
-| Teams   | `Team`, `TeamSeasonSummary`                                                                                                                                                    |
-| Games   | `Game` with embedded events and roster snapshots                                                                                                                               |
-| Feed    | `Post`                                                                                                                                                                         |
-| Follows | `Follow`                                                                                                                                                                       |
-| Leagues | `League`, `Season`, `LeagueTeam`, `LeaguePlayer`, `LeagueTeamMember`, `LeagueJoinRequest`, `LeagueManager`, `LeagueStandings`, `LeaguePlayerStats`, `LeagueDataIssueDismissal` |
+| Domain     | Models                                                                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Auth       | `User`, `Session`, `AuthToken`                                                                                                                                                 |
+| Teams      | `Team`, `TeamSeasonSummary`                                                                                                                                                    |
+| Games      | `Game` with embedded events and roster snapshots                                                                                                                               |
+| Feed       | `Post`                                                                                                                                                                         |
+| Follows    | `Follow`                                                                                                                                                                       |
+| Milestones | `PlayerMilestone`                                                                                                                                                              |
+| Leagues    | `League`, `Season`, `LeagueTeam`, `LeaguePlayer`, `LeagueTeamMember`, `LeagueJoinRequest`, `LeagueManager`, `LeagueStandings`, `LeaguePlayerStats`, `LeagueDataIssueDismissal` |
 
 Important constraints:
 
@@ -146,9 +147,10 @@ all dual-team games use roster snapshots. Mid-game roster additions therefore
 update the durable roster and, when applicable, the game snapshot. New players
 start on the bench. Completed games cannot accept roster additions.
 
-Finishing a game freezes scores and summaries, updates league aggregates, and
-may publish an automatic feed post when `AUTO_FEED_ENABLED=true` and the league
-is public.
+Finishing a game freezes scores and summaries, updates league aggregates,
+derives player milestones for league games, and may publish automatic feed
+posts when `AUTO_FEED_ENABLED=true` and the league is public. Milestone posts
+also require `AUTO_FEED_MILESTONES_ENABLED=true`.
 
 Games are currently basketball-only and have an immutable format snapshot:
 four quarters or two halves, a per-segment duration, and an overtime duration.
@@ -180,16 +182,18 @@ missing public-page data. See [`api.md`](./api.md) for endpoints and
 
 ## Feed And Public Profiles
 
-`Post` supports image, video, game-card, player-card, team-card, and highlight
-posts. Manual post creation is entitlement-gated. Automatic posts use a
-non-login system account and are restricted to finalized public-league games.
-Making a league private removes its system-generated posts, not users' manual
-posts.
+`Post` supports image, video, game-card, player-card, team-card, highlight, and
+milestone posts. Manual post creation is entitlement-gated. Automatic posts
+use a non-login system account and are restricted to finalized public-league
+games. Making a league private removes its system-generated posts, not users'
+manual posts.
 
 Unified `/players/:userId` pages include only claimed player records from
 public leagues. Standalone players cannot currently be claimed or included in
 unified profiles. Follows to leagues that later become private remain stored,
 but their profile links are withheld until the league is visible again.
+League-player and unified player profiles include recent milestone history;
+the full public list is cursor-paginated.
 
 ## Billing
 

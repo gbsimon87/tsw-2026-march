@@ -186,7 +186,14 @@ GET    /public/leagues/:leagueSlug/seasons          public
 GET    /public/leagues/:leagueSlug/teams/:teamSlug  public
 GET    /public/leagues/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId
 GET    /public/players/:userId                      public
+GET    /public/milestones/players/:leaguePlayerId   public, cursor-paginated
 ```
+
+Public league-player and unified user-profile payloads include
+`milestones: { recent, total }`. The standalone milestone endpoint accepts
+optional `cursor` and `limit` parameters (`limit` defaults to 20 and is capped
+at 50) and returns `{ milestones, nextCursor }`. Private-league milestone
+records are retained but are not exposed by the anonymous endpoint.
 
 ## Exports
 
