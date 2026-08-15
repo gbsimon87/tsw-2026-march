@@ -8,6 +8,7 @@ import { FullScreenImagePost } from './posts/FullScreenImagePost';
 import { FullScreenPlayerCard } from './posts/FullScreenPlayerCard';
 import { FullScreenTeamCard } from './posts/FullScreenTeamCard';
 import { FullScreenVideoPost } from './posts/FullScreenVideoPost';
+import { MilestonePost } from './posts/MilestonePost';
 import { FeedPostCard } from './FeedPostCard';
 
 function FullScreenSlide({ post, onDelete, observeSlide }) {
@@ -25,6 +26,14 @@ function FullScreenSlide({ post, onDelete, observeSlide }) {
     content = <FullScreenTeamCard teamCard={post.teamCard} />;
   } else if (post.type === 'highlight_clip') {
     content = <FullScreenHighlightClipPost highlightClip={post.highlightClip} />;
+  } else if (post.type === 'milestone') {
+    content = (
+      <div className="flex h-full items-center justify-center bg-slate-950 px-4 pb-24">
+        <div className="w-full max-w-lg">
+          <MilestonePost post={post} />
+        </div>
+      </div>
+    );
   }
 
   return (
