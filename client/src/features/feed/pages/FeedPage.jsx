@@ -113,7 +113,7 @@ export function FeedPage() {
       ) : null}
 
       {!user ? (
-        <div className="fixed left-1/2 top-4 z-30 -translate-x-1/2 md:static md:mb-4 md:translate-x-0">
+        <div className="fixed left-1/2 top-16 z-30 -translate-x-1/2 md:hidden">
           <Link
             to="/register"
             onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PULSE)}
