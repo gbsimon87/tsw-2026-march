@@ -542,8 +542,16 @@ Two implementation notes worth keeping:
 
 ## 12. Verification
 
+**Start here: does the consent banner appear on a fresh visit?** It is the
+fastest signal that the client is wired up at all. `isPostHogEnabled()` requires
+**both** `VITE_ENABLE_ANALYTICS=true` **and** `VITE_POSTHOG_KEY`, so a missing
+key means no banner, no cookie, and no events — with nothing logged anywhere.
+On Render the key is `sync: false`, supplied from the dashboard, and Vite
+inlines it at **build** time: setting it takes effect only after a redeploy.
+
 After any analytics config change, check **per environment**:
 
+- the consent banner appears for an undecided visitor;
 - route changes produce `$pageview` / `$pageleave` in Live Events;
 - events land in the **correct project** — confirm via `app_env`, not just the
   dashboard you happen to have open;
@@ -556,6 +564,24 @@ After any analytics config change, check **per environment**:
   returns every open tab to memory-only capture and clears its PostHog id;
 - server capture returns `{captured: true}` — if `POSTHOG_KEY` is unset it
   silently returns `{captured: false}`.
+
+### Two silent failure modes to know about
+
+Both produce no error, no log, and a `{captured: true}` return — they simply
+result in nothing arriving:
+
+1. **`posthog-node` batches.** It holds events until the batch fills or a timer
+   elapses, so on a long-running server a handful of manual test events never
+   arrive. Outside production the client uses `flushAt: 1, flushInterval: 0`;
+   graceful shutdown flushes what remains. Production keeps batching, which is
+   correct under real traffic.
+2. **A US host with an EU key is accepted and ingests nothing.** Both env
+   validators default to `https://eu.i.posthog.com`, but an explicitly wrong
+   value fails quietly.
+
+If events are missing, check the browser Network tab filtered on `posthog`
+before assuming the code is at fault: ad blockers and privacy extensions block
+the domain outright, and they run in incognito unless explicitly disabled.
 
 ## 13. Privacy policy page — implemented
 
