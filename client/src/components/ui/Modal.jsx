@@ -7,6 +7,7 @@ export function Modal({
   children,
   panelClassName = '',
   showCloseButton = true,
+  mobileEdgeToEdge = false,
 }) {
   const titleId = useId();
   const closeButtonRef = useRef(null);
@@ -50,12 +51,20 @@ export function Modal({
         className="fixed inset-0 h-full w-full cursor-default"
         onClick={onClose}
       />
-      <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+      <div
+        className={`flex min-h-full justify-center ${
+          mobileEdgeToEdge ? 'items-start p-0 sm:items-center sm:p-6' : 'items-center p-4 sm:p-6'
+        }`}
+      >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby={title ? titleId : undefined}
-          className={`relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl ${panelClassName}`}
+          className={`relative w-full overflow-hidden bg-white shadow-2xl ${
+            mobileEdgeToEdge
+              ? 'max-h-[100dvh] max-w-none rounded-none sm:max-h-[90vh] sm:max-w-2xl sm:rounded-3xl'
+              : 'max-h-[90vh] max-w-2xl rounded-3xl'
+          } ${panelClassName}`}
         >
           {showCloseButton ? (
             <button
@@ -78,9 +87,21 @@ export function Modal({
             </button>
           ) : null}
 
-          <div className="max-h-[90vh] overflow-y-auto p-5 sm:p-6">
+          <div
+            className={`overflow-y-auto ${
+              mobileEdgeToEdge
+                ? 'max-h-[100dvh] p-0 sm:max-h-[90vh] sm:p-6'
+                : 'max-h-[90vh] p-5 sm:p-6'
+            }`}
+          >
             {title ? (
-              <div className="mb-7 pr-12">
+              <div
+                className={
+                  mobileEdgeToEdge
+                    ? 'mb-4 px-4 pt-[max(1rem,env(safe-area-inset-top))] pr-16 sm:mb-7 sm:px-0 sm:pt-0 sm:pr-12'
+                    : 'mb-7 pr-12'
+                }
+              >
                 <h2 id={titleId} className="text-xl font-semibold text-slate-900">
                   {title}
                 </h2>

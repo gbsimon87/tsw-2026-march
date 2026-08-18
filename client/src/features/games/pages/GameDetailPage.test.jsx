@@ -1011,6 +1011,101 @@ describe('GameDetailPage', () => {
     expect(screen.queryByText('Game Summary')).not.toBeInTheDocument();
   });
 
+  test('opens a shared virtual reel link and shares its canonical game URL', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-reel',
+        title: 'TSW Team vs Wildcats',
+        opponent: 'Wildcats',
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        status: 'completed',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'TSW Team',
+        players: [],
+        entitlements: { canViewReplay: true, canViewShotMaps: true },
+      },
+      teamEntitlements: { canViewReplay: true, canViewShotMaps: true },
+      recap: {
+        statusLabel: 'Final',
+        team: { id: 'team-1', name: 'TSW Team', points: 5 },
+        opponent: { name: 'Wildcats' },
+        topPerformers: [],
+        teamStats: {},
+        keyMoments: [],
+      },
+      boxScore: {
+        players: [],
+        teamTotals: { points: 5 },
+        opponentTotals: { points: 2 },
+      },
+      highlights: [
+        {
+          eventId: 'three',
+          statType: 'FG3_MADE',
+          videoTimestamp: 30,
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          playerName: 'Alex',
+        },
+        {
+          eventId: 'block',
+          statType: 'BLK',
+          videoTimestamp: 70,
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          playerName: 'Jordan',
+        },
+      ],
+      sharedEventIds: [],
+      canShareHighlights: false,
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/games/game-reel?reel=1']}>
+        <Routes>
+          <Route
+            path="/games/:gameId"
+            element={
+              <>
+                <GameDetailPage />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const sharedReelDialog = await screen.findByRole('dialog');
+    expect(within(sharedReelDialog).getByText('Highlight 1 of 2')).toBeInTheDocument();
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('?reel=1');
+
+    fireEvent.click(within(sharedReelDialog).getByRole('button', { name: 'Close dialog' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('location-probe')).not.toHaveTextContent('?reel=1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play 2-clip reel' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('?reel=1');
+
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close dialog' })
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Share reel' }));
+
+    await waitFor(() =>
+      expect(navigator.share).toHaveBeenCalledWith({
+        title: 'TSW Team vs Wildcats highlight reel',
+        text: 'Watch the game highlights on The Sporty Way.',
+        url: 'http://localhost:3000/games/game-reel?reel=1',
+      })
+    );
+    expect(screen.getByRole('button', { name: 'Shared' })).toBeInTheDocument();
+  });
+
   test('renders a simplified print mode layout', async () => {
     apiMocks.getById.mockResolvedValue({
       game: {

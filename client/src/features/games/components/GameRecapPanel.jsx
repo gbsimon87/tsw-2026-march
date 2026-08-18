@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { Modal } from '../../../components/ui/Modal';
+import { buildHighlightReelSegments, selectFeaturedHighlights } from '../highlightReel';
 import { extractYouTubeVideoId } from '../youtube.js';
 import { GameVideoEmbed } from './GameVideoEmbed';
 import { GameStatsCharts } from './GameStatsCharts';
+import { YouTubeHighlightReel } from './YouTubeHighlightReel';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 
 const HIGHLIGHT_LABELS = {
@@ -17,16 +20,6 @@ const HIGHLIGHT_LABELS = {
   STL: 'Steal',
   BLK: 'Block',
 };
-
-const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
-const MAX_HIGHLIGHTS = 5;
-
-function selectHighlights(highlights) {
-  return [...(highlights || [])]
-    .filter(Boolean)
-    .sort((a, b) => (HIGHLIGHT_PRIORITY[a?.statType] ?? 2) - (HIGHLIGHT_PRIORITY[b?.statType] ?? 2))
-    .slice(0, MAX_HIGHLIGHTS);
-}
 
 function getParticipantName(participants, side) {
   return participants?.[side]?.displayName || side;
@@ -112,7 +105,15 @@ export function GameRecapPanel({
   canShareHighlights = false,
   clipShareState = {},
   onShareHighlightClip = null,
+  highlightReelOpen = false,
+  onOpenHighlightReel = null,
+  onCloseHighlightReel = null,
+  onShareHighlightReel = null,
+  highlightReelShareState = '',
 }) {
+  const featuredHighlights = selectFeaturedHighlights(highlights);
+  const highlightReelClipCount = buildHighlightReelSegments(highlights).length;
+
   return (
     <div className="space-y-5">
       {aiSummary?.text ? (
@@ -126,11 +127,43 @@ export function GameRecapPanel({
 
       {videoUrl ? <GameVideoEmbed videoUrl={videoUrl} title={videoTitle} /> : null}
 
-      {highlights.length > 0 ? (
+      {featuredHighlights.length > 0 ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-3 text-xl font-semibold text-slate-900">Highlights</h3>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">Highlights</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Watch the best moments back-to-back from YouTube.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onOpenHighlightReel}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              >
+                Play {highlightReelClipCount}-clip reel
+              </button>
+              {onShareHighlightReel ? (
+                <button
+                  type="button"
+                  onClick={onShareHighlightReel}
+                  disabled={highlightReelShareState === 'sharing'}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {highlightReelShareState === 'sharing'
+                    ? 'Sharing…'
+                    : highlightReelShareState === 'shared'
+                      ? 'Shared'
+                      : highlightReelShareState === 'copied'
+                        ? 'Link copied'
+                        : 'Share reel'}
+                </button>
+              ) : null}
+            </div>
+          </div>
           <HorizontalScrollRow>
-            {selectHighlights(highlights).map((h) => {
+            {featuredHighlights.map((h) => {
               const clipState =
                 clipShareState[h.eventId] ||
                 (sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
@@ -175,10 +208,20 @@ export function GameRecapPanel({
               );
             })}
           </HorizontalScrollRow>
+
+          <Modal
+            open={highlightReelOpen}
+            onClose={onCloseHighlightReel}
+            title={`${videoTitle || 'Game'} highlight reel`}
+            panelClassName="!max-w-3xl"
+            mobileEdgeToEdge
+          >
+            <YouTubeHighlightReel highlights={highlights} title={videoTitle || 'Game highlights'} />
+          </Modal>
         </section>
       ) : null}
 
-      {highlights.length === 0 ? (
+      {featuredHighlights.length === 0 ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold text-slate-900">Key Moments</h3>

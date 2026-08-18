@@ -298,9 +298,11 @@ export function GameDetailPage() {
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [feedPostState, setFeedPostState] = useState('');
   const [clipShareState, setClipShareState] = useState({});
+  const [highlightReelShareState, setHighlightReelShareState] = useState('');
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
+  const isHighlightReelOpen = searchParams.get('reel') === '1';
 
   const {
     data,
@@ -662,6 +664,48 @@ export function GameDetailPage() {
     }
   }
 
+  function openHighlightReel() {
+    updateSearchParam('reel', '1');
+    trackEvent('game_highlight_reel_opened', { game_id: gameId });
+  }
+
+  function closeHighlightReel() {
+    updateSearchParam('reel', null);
+  }
+
+  async function shareHighlightReel() {
+    const reelUrl = `${window.location.origin}/games/${gameId}?reel=1`;
+    const sharePayload = {
+      title: `${game.title || 'Game'} highlight reel`,
+      text: 'Watch the game highlights on The Sporty Way.',
+      url: reelUrl,
+    };
+
+    setHighlightReelShareState('sharing');
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(sharePayload);
+        setHighlightReelShareState('shared');
+        trackEvent('game_highlight_reel_shared', { game_id: gameId, method: 'native' });
+        return;
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') {
+          setHighlightReelShareState('');
+          return;
+        }
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(reelUrl);
+      setHighlightReelShareState('copied');
+      trackEvent('game_highlight_reel_shared', { game_id: gameId, method: 'clipboard' });
+    } catch {
+      setHighlightReelShareState('');
+      setError('Could not share the highlight reel link');
+    }
+  }
+
   function onFeedPostCreated() {
     closeFeedComposer();
     trackEvent('game_detail_feed_post_created', { game_id: gameId });
@@ -850,6 +894,11 @@ export function GameDetailPage() {
                   canShareHighlights={canShareHighlights}
                   clipShareState={clipShareState}
                   onShareHighlightClip={shareHighlightClip}
+                  highlightReelOpen={isHighlightReelOpen}
+                  onOpenHighlightReel={openHighlightReel}
+                  onCloseHighlightReel={closeHighlightReel}
+                  onShareHighlightReel={shareHighlightReel}
+                  highlightReelShareState={highlightReelShareState}
                 />
               ),
             },

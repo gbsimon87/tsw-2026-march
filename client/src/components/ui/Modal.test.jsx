@@ -35,4 +35,19 @@ describe('Modal', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Close dialog' })[0]);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  test('supports an edge-to-edge mobile presentation', () => {
+    render(
+      <Modal open onClose={vi.fn()} title="Highlights" mobileEdgeToEdge>
+        <p>Reel</p>
+      </Modal>
+    );
+
+    expect(screen.getByRole('dialog')).toHaveClass(
+      'max-h-[100dvh]',
+      'max-w-none',
+      'rounded-none',
+      'sm:rounded-3xl'
+    );
+  });
 });

@@ -164,6 +164,13 @@ confirmation in the tracker. Finishing a game early is allowed.
 Every stat event stores an independent
 period/clock snapshot in addition to its optional video timestamp.
 
+Completed games with entitled YouTube highlights expose a storage-free virtual
+highlight reel on the game recap. The client selects up to five playable events,
+deduplicates nearby timestamps from the same play, restores chronological order,
+and advances between timestamp-bounded YouTube embeds. Sharing uses the canonical
+`/games/:gameId?reel=1` page URL; TSW does not download, generate, or host a new
+video asset.
+
 ## Leagues
 
 Every league game, standing, player-stat record, export, schedule, and
