@@ -14,9 +14,15 @@ import {
   EXPORT_HEIGHT,
   EXPORT_WIDTH,
   HAIRLINE,
+  IDENTITY_GAP,
+  IDENTITY_MEASURE,
+  INNER_WIDTH,
+  MONO_ADVANCE,
   MONO_FONT,
+  PLATE_SIZE,
   RULE,
-  nameFontSize,
+  fitDisplaySize,
+  fitLineSize,
   readableAccent,
 } from './shareExportTheme';
 
@@ -39,7 +45,10 @@ const EXPORT_STYLE = {
   pointerEvents: 'none',
 };
 
-const PLATE_SIZE = 256;
+// The identity block is a fixed height so a long name can never push the
+// ledger and footer off the board — the name sizes down to fit it instead.
+const INLAY_BLOCK = 56; // inlay rule plus the margins around it
+const SUB_BLOCK = 32;
 
 function GiltBead() {
   return (
@@ -106,21 +115,38 @@ function Plate({ src, alt, initials, accent }) {
 }
 
 function Identity({ accent, imageSrc, imageAlt, initials, headline, sub }) {
+  const nameBox = PLATE_SIZE - INLAY_BLOCK - (sub ? SUB_BLOCK : 0);
+  const name = fitDisplaySize(headline, {
+    measure: IDENTITY_MEASURE,
+    maxLines: 3,
+    maxHeight: nameBox,
+  });
+  const subSize = fitLineSize(sub, { measure: IDENTITY_MEASURE, max: 25, min: 16, tracking: 0.2 });
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '44px', marginTop: '54px' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: `${IDENTITY_GAP}px`,
+        marginTop: '54px',
+        height: `${PLATE_SIZE}px`,
+        flexShrink: 0,
+      }}
+    >
       <Plate src={imageSrc} alt={imageAlt} initials={initials} accent={accent} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div
           style={{
             fontFamily: DISPLAY_FONT,
-            fontSize: `${nameFontSize(headline)}px`,
+            fontSize: `${name.fontSize}px`,
             lineHeight: 0.86,
             letterSpacing: '-0.02em',
             textTransform: 'uppercase',
             color: COLORS.paper,
             overflowWrap: 'break-word',
             display: '-webkit-box',
-            WebkitLineClamp: 3,
+            WebkitLineClamp: name.lines,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
           }}
@@ -140,10 +166,13 @@ function Identity({ accent, imageSrc, imageAlt, initials, headline, sub }) {
             style={{
               fontFamily: MONO_FONT,
               fontWeight: 500,
-              fontSize: '25px',
+              fontSize: `${subSize}px`,
               letterSpacing: '0.2em',
               textTransform: 'uppercase',
               color: COLORS.tan,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
             {sub}
@@ -154,12 +183,25 @@ function Identity({ accent, imageSrc, imageAlt, initials, headline, sub }) {
   );
 }
 
+// A team name shares its row with the score, so it gets whatever width the
+// figure leaves and sizes down to fit two lines of it.
+function nameRowFit(row, rowHeight, valueSize) {
+  const valueWidth = valueSize * (MONO_ADVANCE - 0.04) * String(row.value).length;
+  return fitDisplaySize(row.label, {
+    measure: INNER_WIDTH - 32 - valueWidth - 24,
+    maxLines: 2,
+    maxHeight: rowHeight - 60,
+    lineHeight: 1,
+    max: 52,
+  });
+}
+
 // Rows are a fixed height per card type rather than flex-distributed: a
 // two-row score would otherwise stretch into two enormous voids, while the
 // four-row team summary sat right. Sizes are tuned so each type fills the frame.
 function Ledger({ rows, rowHeight, valueSize }) {
   return (
-    <div>
+    <div style={{ flexShrink: 0 }}>
       <GiltBead />
       {rows.map((row, index) => (
         <div
@@ -177,11 +219,16 @@ function Ledger({ rows, rowHeight, valueSize }) {
             <div
               style={{
                 fontFamily: DISPLAY_FONT,
-                fontSize: '52px',
+                fontSize: `${nameRowFit(row, rowHeight, valueSize).fontSize}px`,
                 lineHeight: 1,
                 letterSpacing: '-0.01em',
                 textTransform: 'uppercase',
                 color: row.muted ? COLORS.tan : COLORS.paper,
+                overflowWrap: 'break-word',
+                display: '-webkit-box',
+                WebkitLineClamp: nameRowFit(row, rowHeight, valueSize).lines,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
               }}
             >
               {row.label}
@@ -294,7 +341,15 @@ function Board({ kicker, serial, children }) {
 
           {children}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginTop: '56px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '18px',
+              marginTop: '56px',
+              flexShrink: 0,
+            }}
+          >
             <div style={{ width: '16px', height: '16px', backgroundColor: COLORS.gold }} />
             <div
               style={{
@@ -327,6 +382,7 @@ function MetaRow({ label, value }) {
         justifyContent: 'space-between',
         gap: '24px',
         marginTop: '30px',
+        flexShrink: 0,
       }}
     >
       <div

@@ -88,14 +88,75 @@ export function readableAccent(teamColors = []) {
   return hslToHex(hue, Math.max(saturation, 52), Math.min(Math.max(lightness, 60), 74));
 }
 
-// Names run from "Amy Ng" to "Christopher Adebayo-Whitfield". Step the display
-// size down so long names still fill the measure instead of overflowing it.
-export function nameFontSize(name) {
-  const text = String(name || '');
-  const longestWord = text
+// Width of the board's content column, and of the text beside the plate.
+export const INNER_WIDTH = 876; // 1080 - 2*36 stage - 2*66 inner padding
+export const PLATE_SIZE = 256;
+export const IDENTITY_GAP = 44;
+export const IDENTITY_MEASURE = INNER_WIDTH - PLATE_SIZE - IDENTITY_GAP;
+
+// Advance per character as a fraction of font size, measured in-browser from
+// the real faces rather than guessed. Archivo Black is proportional and ranges
+// 0.60-0.69 across realistic club names, so the conservative end is used to
+// keep long names inside the measure. IBM Plex Mono is a true monospace at
+// 0.602, and letter-spacing adds to that exactly.
+export const DISPLAY_ADVANCE = 0.7;
+export const MONO_ADVANCE = 0.602;
+
+const DISPLAY_LADDER = [100, 92, 84, 76, 68, 60, 54, 48, 42, 38];
+
+function tokensOf(text) {
+  return String(text || '')
     .split(/\s+/)
-    .reduce((longest, word) => Math.max(longest, word.length), 0);
-  if (longestWord > 11 || text.length > 22) return 68;
-  if (longestWord > 8 || text.length > 15) return 84;
-  return 100;
+    .filter(Boolean);
+}
+
+// Greedy line-break simulation: words do not split, so packing them is a much
+// better estimate of the wrapped line count than dividing total length by the
+// characters that fit on one line.
+function estimateLines(text, fontSize, measure, advance) {
+  const perLine = Math.max(1, Math.floor(measure / (fontSize * advance)));
+  let lines = 1;
+  let used = 0;
+
+  for (const word of tokensOf(text)) {
+    const needed = used ? word.length + 1 : word.length;
+    if (used && used + needed > perLine) {
+      lines += 1;
+      used = word.length;
+    } else {
+      used += needed;
+    }
+  }
+
+  return lines;
+}
+
+// Pick the largest size at which the whole name still fits the box.
+//
+// This replaces a three-step guess that clipped instead of fitting: a real club
+// name ("Northside Community Warriors Basketball Club") overflowed the 3-line
+// clamp, so the export silently rendered a *different, shorter* name. The full
+// text stayed in the DOM, which is why every getByText assertion still passed.
+export function fitDisplaySize(
+  text,
+  { measure, maxLines, maxHeight, lineHeight = 0.86, advance = DISPLAY_ADVANCE, max = Infinity }
+) {
+  for (const fontSize of DISPLAY_LADDER.filter((size) => size <= max)) {
+    const lines = estimateLines(text, fontSize, measure, advance);
+    if (lines <= maxLines && lines * fontSize * lineHeight <= maxHeight) {
+      return { fontSize, lines };
+    }
+  }
+
+  const fontSize = DISPLAY_LADDER[DISPLAY_LADDER.length - 1];
+  return { fontSize, lines: maxLines };
+}
+
+// Single-line labels (the team name under a player's name) shrink to fit rather
+// than wrapping, which would push the ledger down the board.
+export function fitLineSize(text, { measure, max, min, tracking = 0 }) {
+  const length = tokensOf(text).join(' ').length;
+  if (!length) return max;
+  const perChar = MONO_ADVANCE + tracking;
+  return Math.max(min, Math.min(max, Math.floor(measure / (length * perChar))));
 }
