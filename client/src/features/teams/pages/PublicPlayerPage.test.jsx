@@ -147,14 +147,16 @@ describe('PublicPlayerPage', () => {
     });
 
     expect(teamsApi.getPublicPlayerById).toHaveBeenCalledWith('team-1', 'p1');
-    // ShareImageButton renders an off-screen ShareableCardExport duplicate of
-    // PlayerCardPost for html2canvas capture, so this alt text now appears
-    // twice: once in the visible card, once in the hidden export.
-    const cardAvatarImages = screen.getAllByAltText('#12 Alex Carter card avatar');
-    expect(cardAvatarImages).toHaveLength(2);
-    for (const image of cardAvatarImages) {
-      expect(image).toHaveAttribute('src', 'https://example.com/logo.png');
-    }
+    // The off-screen ShareableCardExport labels its portrait "share card
+    // portrait", so this alt text belongs to the visible card alone.
+    expect(screen.getByAltText('#12 Alex Carter card avatar')).toHaveAttribute(
+      'src',
+      'https://example.com/logo.png'
+    );
+    expect(screen.getByAltText('#12 Alex Carter share card portrait')).toHaveAttribute(
+      'src',
+      'https://example.com/logo.png'
+    );
     expect(screen.queryByText('Shareable Player Card')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
     expect(screen.getByText('PG')).toBeInTheDocument();
