@@ -115,3 +115,50 @@ describe('AUTO_FEED_MILESTONES_ENABLED', () => {
     ).toBe(false);
   });
 });
+
+describe('env schema — Instagram publishing', () => {
+  test('defaults to disabled without Instagram credentials', () => {
+    const result = envSchema.parse(baseEnv());
+
+    expect(result.INSTAGRAM_PUBLISHING_ENABLED).toBe(false);
+    expect(result.INSTAGRAM_GRAPH_API_BASE_URL).toBe('https://graph.instagram.com');
+    expect(result.INSTAGRAM_REQUEST_TIMEOUT_MS).toBe(10000);
+  });
+
+  test('accepts a complete enabled configuration', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        INSTAGRAM_PUBLISHING_ENABLED: 'true',
+        INSTAGRAM_GRAPH_API_VERSION: 'v23.0',
+        INSTAGRAM_USER_ID: '17841400000000000',
+        INSTAGRAM_ACCESS_TOKEN: 'test-access-token',
+      })
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  test('rejects an enabled integration with missing credentials', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        INSTAGRAM_PUBLISHING_ENABLED: 'true',
+        INSTAGRAM_GRAPH_API_VERSION: 'v23.0',
+      })
+    );
+
+    expect(result.success).toBe(false);
+    const messages = result.error.issues.map((issue) => issue.message).join(' ');
+    expect(messages).toContain('INSTAGRAM_USER_ID');
+    expect(messages).toContain('INSTAGRAM_ACCESS_TOKEN');
+  });
+
+  test('rejects an unversioned Graph API value', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        INSTAGRAM_GRAPH_API_VERSION: 'latest',
+      })
+    );
+
+    expect(result.success).toBe(false);
+  });
+});

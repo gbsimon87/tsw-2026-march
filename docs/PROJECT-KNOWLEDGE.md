@@ -202,6 +202,17 @@ but their profile links are withheld until the league is visible again.
 League-player and unified player profiles include recent milestone history;
 the full public list is cursor-paginated.
 
+## External Social Publishing
+
+Instagram publishing is being built as a disabled-by-default outbound adapter. The foundation can
+verify one configured professional account and perform the Graph API container/publish sequence
+for a single image or Reel, but it is deliberately not exposed through an HTTP route. Production
+use still requires OAuth-backed encrypted token storage, a platform-operator permission, a durable
+approval/job record, stable public social assets, and end-to-end testing against a non-production
+account. AI is optional and is not part of the delivery path. See
+[`instagram-integration/`](./instagram-integration/) for status, architecture, platform knowledge,
+and the runbook.
+
 ## Player Milestones
 
 Player milestones are derived automatically from finalized league games and

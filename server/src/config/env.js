@@ -36,6 +36,21 @@ const baseEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_GAME_SUMMARY_MODEL: z.string().default('gpt-5.4-mini'),
   OPENAI_GAME_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  // Instagram publishing (docs/instagram-integration/): single-account
+  // bootstrap configuration. Disabled by default; OAuth-backed connection
+  // storage will replace the raw token once the approval UI exists.
+  INSTAGRAM_PUBLISHING_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  INSTAGRAM_GRAPH_API_BASE_URL: z.string().url().default('https://graph.instagram.com'),
+  INSTAGRAM_GRAPH_API_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/)
+    .optional(),
+  INSTAGRAM_USER_ID: z.string().regex(/^\d+$/).optional(),
+  INSTAGRAM_ACCESS_TOKEN: z.string().min(1).optional(),
+  INSTAGRAM_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID_TEAM_MONTHLY: z.string().optional(),
@@ -99,15 +114,34 @@ const REQUIRED_STRIPE_CONFIG = [
   'STRIPE_CANCEL_URL',
 ];
 
+const REQUIRED_INSTAGRAM_CONFIG = [
+  'INSTAGRAM_GRAPH_API_VERSION',
+  'INSTAGRAM_USER_ID',
+  'INSTAGRAM_ACCESS_TOKEN',
+];
+
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
-  if (!data.STRIPE_SECRET_KEY) return;
-  for (const key of REQUIRED_STRIPE_CONFIG) {
-    if (!data[key]) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [key],
-        message: `${key} is required when STRIPE_SECRET_KEY is set`,
-      });
+  if (data.STRIPE_SECRET_KEY) {
+    for (const key of REQUIRED_STRIPE_CONFIG) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when STRIPE_SECRET_KEY is set`,
+        });
+      }
+    }
+  }
+
+  if (data.INSTAGRAM_PUBLISHING_ENABLED) {
+    for (const key of REQUIRED_INSTAGRAM_CONFIG) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when INSTAGRAM_PUBLISHING_ENABLED is true`,
+        });
+      }
     }
   }
 });
