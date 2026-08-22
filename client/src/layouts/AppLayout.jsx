@@ -22,7 +22,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 p-4">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 p-4">
           <Link to="/pulse" className="text-lg font-semibold">
             {import.meta.env.VITE_APP_NAME || 'TSW'}
           </Link>
@@ -216,11 +216,11 @@ export function AppLayout() {
         </nav>
       </div>
 
-      <main className="mx-auto max-w-5xl p-4 pb-20 md:pb-4">
+      <main className="mx-auto max-w-7xl p-4 pb-20 md:pb-4">
         <Outlet />
       </main>
 
-      <footer className="mx-auto max-w-5xl px-4 pb-24 pt-2 text-sm text-slate-500 md:pb-8">
+      <footer className="mx-auto max-w-7xl px-4 pb-24 pt-2 text-sm text-slate-500 md:pb-8">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4">
           <Link to="/privacy" className="hover:text-slate-700">
             Privacy
