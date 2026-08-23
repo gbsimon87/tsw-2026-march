@@ -479,6 +479,39 @@ describe('games service create game', () => {
       })
     );
   });
+
+  // A league game is a fixture until someone starts the clock. Creating it
+  // 'in_progress' marked it live before a single event existed, which put it in
+  // the same state as a game genuinely being played. `scheduled` is the honest
+  // starting state; appendEvent/clock-start promote it (games.service.js).
+  test('creates dual league games as scheduled, not in progress', async () => {
+    createGame.mockImplementation(async (input) => ({ _id: 'game-1', ...input, events: [] }));
+
+    await createGameForUser('user-1', {
+      gameContext: 'league',
+      trackingMode: 'dual_team',
+      leagueId: 'league-1',
+      homeLeagueTeamId: 'home-team',
+      awayLeagueTeamId: 'away-team',
+    });
+
+    expect(createGame).toHaveBeenCalledWith(expect.objectContaining({ status: 'scheduled' }));
+  });
+
+  test('creates one-sided league games as scheduled, not in progress', async () => {
+    createGame.mockImplementation(async (input) => ({ _id: 'game-1', ...input, events: [] }));
+
+    await createGameForUser('user-1', {
+      gameContext: 'league',
+      trackingMode: 'one_sided',
+      leagueId: 'league-1',
+      homeLeagueTeamId: 'home-team',
+      awayLeagueTeamId: 'away-team',
+      trackedLeagueTeamId: 'home-team',
+    });
+
+    expect(createGame).toHaveBeenCalledWith(expect.objectContaining({ status: 'scheduled' }));
+  });
 });
 
 describe('games service roster snapshot repair', () => {

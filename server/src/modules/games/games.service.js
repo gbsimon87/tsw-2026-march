@@ -1340,7 +1340,12 @@ async function createGameForUser(userId, payload) {
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
-      status: 'in_progress',
+      // A league game starts life as a fixture, not a live game: nothing is in
+      // progress until someone starts the clock, which promotes 'scheduled' →
+      // 'in_progress' (runClockCommand / appendEventForUser below). Creating it
+      // 'in_progress' marked it live with zero events, so it was
+      // indistinguishable from a game actually being played.
+      status: 'scheduled',
     });
 
     return sanitizeGame(game);
@@ -1362,7 +1367,12 @@ async function createGameForUser(userId, payload) {
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
-      status: 'in_progress',
+      // A league game starts life as a fixture, not a live game: nothing is in
+      // progress until someone starts the clock, which promotes 'scheduled' →
+      // 'in_progress' (runClockCommand / appendEventForUser below). Creating it
+      // 'in_progress' marked it live with zero events, so it was
+      // indistinguishable from a game actually being played.
+      status: 'scheduled',
       rosterSnapshot: context.rosterSnapshot,
     });
 

@@ -833,7 +833,12 @@ export function GameDetailPage() {
           isDualTeam={isDualTeam}
           recap={recap}
           gameSummary={gameSummary}
-          canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
+          // A scheduled fixture is trackable — starting the clock is what makes
+          // it in_progress — so it needs a route into the tracker from here, not
+          // only from the league admin page's Track button.
+          canContinueTracking={Boolean(
+            (game.status === 'in_progress' || game.status === 'scheduled') && game.ownerUserId
+          )}
           actions={
             <>
               <button

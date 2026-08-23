@@ -92,3 +92,41 @@ describe('GameDetailHeader View Team link', () => {
     expect(screen.queryByRole('link', { name: 'View Team' })).not.toBeInTheDocument();
   });
 });
+
+describe('GameDetailHeader tracking button', () => {
+  // A scheduled fixture has not started, so "Continue Tracking" misdescribes it.
+  // The status only becomes in_progress when the clock starts (games.service.js),
+  // so the label has to distinguish starting from resuming.
+  test('reads Start Tracking for a scheduled game', () => {
+    renderHeader({
+      game: { id: 'game-1', gameContext: 'league', trackingMode: 'dual_team', status: 'scheduled' },
+      team: leagueTeam,
+      league,
+      isDualTeam: false,
+      canContinueTracking: true,
+    });
+
+    expect(screen.getByRole('link', { name: 'Start Tracking' })).toHaveAttribute(
+      'href',
+      '/games/game-1/track'
+    );
+    expect(screen.queryByRole('link', { name: 'Continue Tracking' })).not.toBeInTheDocument();
+  });
+
+  test('reads Continue Tracking for a game already in progress', () => {
+    renderHeader({
+      game: {
+        id: 'game-1',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        status: 'in_progress',
+      },
+      team: leagueTeam,
+      league,
+      isDualTeam: false,
+      canContinueTracking: true,
+    });
+
+    expect(screen.getByRole('link', { name: 'Continue Tracking' })).toBeInTheDocument();
+  });
+});

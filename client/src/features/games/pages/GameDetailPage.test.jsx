@@ -1216,4 +1216,55 @@ describe('GameDetailPage', () => {
     expect(screen.getByText('Alexandria Montgomery-Santiago the Third')).toBeInTheDocument();
     expect(screen.getByText('Team Total')).toBeInTheDocument();
   });
+
+  // The tracking button used to require status 'in_progress', which left a
+  // scheduled fixture with no route into the tracker from this page — the only
+  // way in was the league admin page's Track button.
+  test('offers a tracking link for a scheduled fixture', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-1',
+        title: 'Bournemouth Bears at BG Suns 1',
+        status: 'scheduled',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        ownerUserId: 'user-1',
+        scheduledAt: '2026-09-14T19:15:00.000Z',
+        createdAt: '2026-08-23T00:00:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'lt-1',
+        slug: 'bournemouth-bears',
+        name: 'Bournemouth Bears',
+        players: [],
+        entitlements: {},
+      },
+      league: {
+        id: 'l-1',
+        slug: 'dorset-basketball-association',
+        name: 'Dorset Basketball Association',
+      },
+      participants: {
+        home: { displayName: 'BG Suns 1', slug: 'bg-suns-1' },
+        away: { displayName: 'Bournemouth Bears', slug: 'bournemouth-bears' },
+      },
+      boxScore: null,
+      recap: null,
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/games/game-1']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('link', { name: 'Start Tracking' })).toHaveAttribute(
+      'href',
+      '/games/game-1/track'
+    );
+  });
 });

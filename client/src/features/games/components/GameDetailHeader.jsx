@@ -175,7 +175,9 @@ export function GameDetailHeader({
             className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
             to={`/games/${gameId}/track`}
           >
-            Continue Tracking
+            {/* A scheduled fixture has not started, so "Continue" misdescribes
+                it. The clock start is what promotes it to in_progress. */}
+            {game?.status === 'scheduled' ? 'Start Tracking' : 'Continue Tracking'}
           </Link>
         </div>
       ) : null}
