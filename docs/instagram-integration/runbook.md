@@ -11,9 +11,47 @@
 - The connection check is read-only. Do not use a production account for an actual publish test
   until the approval and durable job workflow exists.
 
-## Bootstrap Configuration
+## OAuth Connection Configuration
 
-The current foundation temporarily accepts one server-side connection from environment variables:
+The operator UI and database-backed connection use a separate feature flag from publishing:
+
+```dotenv
+INSTAGRAM_OAUTH_ENABLED=true
+INSTAGRAM_GRAPH_API_BASE_URL=https://graph.instagram.com
+INSTAGRAM_GRAPH_API_VERSION=vN.N
+INSTAGRAM_APP_ID=replace-with-instagram-app-id
+INSTAGRAM_APP_SECRET=replace-in-secret-manager
+INSTAGRAM_OAUTH_REDIRECT_URL=http://localhost:4000/api/v1/social/instagram/oauth/callback
+INSTAGRAM_TOKEN_ENCRYPTION_KEY=replace-with-64-hex-character-key
+INSTAGRAM_TOKEN_KEY_VERSION=v1
+INSTAGRAM_REQUEST_TIMEOUT_MS=10000
+INSTAGRAM_PUBLISHING_ENABLED=false
+```
+
+Generate the encryption key with `openssl rand -hex 32` and store it alongside the app secret.
+The redirect URL must exactly match the URL registered with Meta. Choose and pin a supported API
+version during Meta app setup; never use `latest`.
+
+Grant the designated TSW user the separate operator permission:
+
+```bash
+pnpm --filter server instagram:ensure-indexes
+pnpm --filter server instagram:operator -- operator@example.com
+```
+
+The index command is additive and is required once per deployed database because production
+disables Mongoose automatic index creation.
+
+After signing in again, open `/admin/social/instagram`. The page can connect, show safe account
+metadata, re-verify the credential, reconnect, and disconnect. It cannot publish.
+
+See [`manual-actions.md`](./manual-actions.md) for the complete ordered setup and test checklist.
+
+## Legacy Bootstrap Configuration
+
+The API client foundation also temporarily accepts one server-side connection from environment
+variables. It is used only by the command-line verification script and future internal client
+calls; it is separate from the OAuth connection UI:
 
 ```dotenv
 INSTAGRAM_PUBLISHING_ENABLED=false
@@ -24,9 +62,8 @@ INSTAGRAM_ACCESS_TOKEN=replace-in-secret-manager
 INSTAGRAM_REQUEST_TIMEOUT_MS=10000
 ```
 
-Choose and pin a supported API version during Meta app setup. Never use `latest`. Production
-values belong in the deployment provider's secret store, not the repository. OAuth-backed,
-encrypted database storage should replace this bootstrap token before production operation.
+Production values belong in the deployment provider's secret store, not the repository. Do not
+enable this bootstrap publishing flag for the OAuth connection milestone.
 
 ## Meta App Setup Checklist
 
@@ -39,7 +76,7 @@ encrypted database storage should replace this bootstrap token before production
 - [ ] Store the app secret and tokens only in the approved secret manager.
 - [ ] Complete the permission-review and business-verification requirements before production.
 
-## Verify a Connection
+## Verify the Legacy Bootstrap Connection
 
 From the repository root, after setting the variables in the selected server environment:
 
@@ -52,11 +89,17 @@ type. It never prints the token. A non-zero exit with `INSTAGRAM_CONFIGURATION_E
 feature is disabled or incomplete; `INSTAGRAM_API_ERROR` means Meta responded and its message
 should guide the next check.
 
+To verify the OAuth-backed connection, use **Verify connection** on
+`/admin/social/instagram`. That reads and decrypts the database credential only on the server and
+returns account metadata, never the token.
+
 ## Local Automated Checks
 
 ```bash
-pnpm --filter server test -- instagram.client.test.js env.schema.test.js
+pnpm --filter server test -- instagram.client.test.js instagram.oauth.service.test.js platform-operator.middleware.test.js crypto.test.js env.schema.test.js
+pnpm --filter client test -- InstagramConnectionPage.test.jsx
 pnpm --filter server lint
+pnpm --filter client lint
 ```
 
 The unit tests use a mocked network boundary and do not publish or require credentials.
@@ -86,8 +129,11 @@ The unit tests use a mocked network boundary and do not publish or require crede
 ## Token Rotation or Revocation
 
 1. Disable publishing in the affected environment.
-2. Revoke or rotate the credential in Meta and the secret manager.
-3. Verify logs and error stores contain no token material.
-4. Configure the replacement credential and run the read-only connection check.
-5. Re-enable only after the intended account identity is confirmed.
-6. Reconcile any post left in an ambiguous processing/publishing state before retrying it.
+2. Use the operator UI to disconnect; this erases the locally stored credential.
+3. Revoke TSW access in Meta/Instagram as well. Local disconnect does not call Meta revocation.
+4. Verify logs and error stores contain no token material.
+5. Reconnect through OAuth and confirm the intended account identity.
+6. If rotating the encryption key, retain the old key until every stored token has been
+   re-encrypted. The automated rotation operation is not implemented yet.
+7. Re-enable publishing only after the future approval workflow is ready and reconcile any post
+   left in an ambiguous delivery state.

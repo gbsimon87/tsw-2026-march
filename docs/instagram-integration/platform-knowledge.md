@@ -1,6 +1,6 @@
 # Instagram Platform Knowledge
 
-Last checked against Meta's official Instagram API workspace on **19 August 2026**.
+Last checked against Meta's official Instagram API workspace on **23 August 2026**.
 
 ## Chosen API Path
 
@@ -19,6 +19,27 @@ Initial permissions:
 
 Do not request messaging or comment-management permissions until a product feature requires
 them. Each additional scope increases review and security obligations.
+
+## OAuth Connection Flow
+
+The operator flow uses Business Login for Instagram:
+
+1. Redirect the operator to `https://www.instagram.com/oauth/authorize` with the Instagram App ID,
+   exact callback URL, `response_type=code`, the two scopes above, and a one-time `state`.
+2. Exchange the callback code with a form-encoded `POST` to
+   `https://api.instagram.com/oauth/access_token`.
+3. Exchange the short-lived credential for a long-lived credential through
+   `https://graph.instagram.com/access_token` with `grant_type=ig_exchange_token`.
+4. Verify the returned Instagram professional account using the versioned Graph API before saving
+   the connection.
+
+Meta's short-token response can represent `user_id` as an unquoted JSON number even though an
+Instagram ID can exceed JavaScript's safe-integer range. The server preserves the exact digit
+sequence from the raw response body before constructing Graph paths.
+
+The long-lived-token exchange requires the short-lived token in its query string. This is a
+platform-contract exception to TSW's normal bearer-header rule; the exchange URL is never logged,
+returned, or attached to an error. Normal Graph calls continue to use `Authorization: Bearer`.
 
 ## Publishing Flow
 

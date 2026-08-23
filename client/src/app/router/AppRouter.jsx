@@ -18,6 +18,11 @@ const PricingPage = lazy(() =>
 const AdminPage = lazy(() =>
   import('../../features/dashboard/AdminPage').then((m) => ({ default: m.AdminPage }))
 );
+const InstagramConnectionPage = lazy(() =>
+  import('../../features/social/pages/InstagramConnectionPage').then((m) => ({
+    default: m.InstagramConnectionPage,
+  }))
+);
 const AuthPage = lazy(() =>
   import('../../features/auth/pages/AuthPage').then((m) => ({ default: m.AuthPage }))
 );
@@ -173,6 +178,15 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
+  return children;
+}
+
+function PlatformOperatorRoute({ children }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <SportsLoader label="Loading session" fullPage />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.roles?.includes('platform_operator')) return <Navigate to="/admin" replace />;
   return children;
 }
 
@@ -360,6 +374,14 @@ export function AppRouter() {
               <ProtectedRoute>
                 <AdminPage />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/social/instagram"
+            element={
+              <PlatformOperatorRoute>
+                <InstagramConnectionPage />
+              </PlatformOperatorRoute>
             }
           />
           <Route

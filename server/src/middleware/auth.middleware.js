@@ -1,5 +1,6 @@
 const { verifyAccessToken } = require('../services/token.service');
 const { ApiError } = require('../utils/apiError');
+const { findUserById } = require('../modules/auth/auth.repository');
 
 function authMiddleware(req, _res, next) {
   const authorization = req.headers.authorization || '';
@@ -43,7 +44,27 @@ function optionalAuthMiddleware(req, _res, next) {
   next();
 }
 
+async function platformOperatorMiddleware(req, _res, next) {
+  if (!req.auth?.userId) {
+    next(new ApiError(401, 'Unauthorized'));
+    return;
+  }
+
+  try {
+    const user = await findUserById(req.auth.userId);
+    if (!user || !user.roles?.includes('platform_operator')) {
+      next(new ApiError(403, 'Platform operator access required'));
+      return;
+    }
+    req.platformOperator = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   authMiddleware,
   optionalAuthMiddleware,
+  platformOperatorMiddleware,
 };

@@ -51,6 +51,29 @@ const baseEnvSchema = z.object({
   INSTAGRAM_USER_ID: z.string().regex(/^\d+$/).optional(),
   INSTAGRAM_ACCESS_TOKEN: z.string().min(1).optional(),
   INSTAGRAM_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  // Operator-only OAuth connection flow. This is independent from the legacy
+  // bootstrap publishing flag above so environments can test account
+  // connection without enabling any publishing endpoint.
+  INSTAGRAM_OAUTH_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  INSTAGRAM_APP_ID: z.string().regex(/^\d+$/).optional(),
+  INSTAGRAM_APP_SECRET: z.string().min(1).optional(),
+  INSTAGRAM_OAUTH_REDIRECT_URL: z.string().url().optional(),
+  INSTAGRAM_OAUTH_AUTHORIZE_URL: z
+    .string()
+    .url()
+    .default('https://www.instagram.com/oauth/authorize'),
+  INSTAGRAM_OAUTH_TOKEN_URL: z
+    .string()
+    .url()
+    .default('https://api.instagram.com/oauth/access_token'),
+  INSTAGRAM_TOKEN_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .optional(),
+  INSTAGRAM_TOKEN_KEY_VERSION: z.string().min(1).default('v1'),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID_TEAM_MONTHLY: z.string().optional(),
@@ -120,6 +143,14 @@ const REQUIRED_INSTAGRAM_CONFIG = [
   'INSTAGRAM_ACCESS_TOKEN',
 ];
 
+const REQUIRED_INSTAGRAM_OAUTH_CONFIG = [
+  'INSTAGRAM_GRAPH_API_VERSION',
+  'INSTAGRAM_APP_ID',
+  'INSTAGRAM_APP_SECRET',
+  'INSTAGRAM_OAUTH_REDIRECT_URL',
+  'INSTAGRAM_TOKEN_ENCRYPTION_KEY',
+];
+
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
   if (data.STRIPE_SECRET_KEY) {
     for (const key of REQUIRED_STRIPE_CONFIG) {
@@ -140,6 +171,18 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
           code: z.ZodIssueCode.custom,
           path: [key],
           message: `${key} is required when INSTAGRAM_PUBLISHING_ENABLED is true`,
+        });
+      }
+    }
+  }
+
+  if (data.INSTAGRAM_OAUTH_ENABLED) {
+    for (const key of REQUIRED_INSTAGRAM_OAUTH_CONFIG) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when INSTAGRAM_OAUTH_ENABLED is true`,
         });
       }
     }

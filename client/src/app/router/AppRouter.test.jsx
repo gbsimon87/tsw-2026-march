@@ -182,6 +182,24 @@ describe('AppRouter', () => {
     });
   });
 
+  test('redirects an ordinary user away from platform Instagram operations', async () => {
+    authMocks.useAuth.mockReturnValue({
+      user: { id: 'user-1', name: 'Alex', roles: ['user'] },
+      isLoading: false,
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/admin/social/instagram']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/admin');
+    });
+  });
+
   test('logged-out pulse fab routes to register with compose redirect', async () => {
     authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
 

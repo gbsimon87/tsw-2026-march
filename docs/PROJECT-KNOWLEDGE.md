@@ -204,12 +204,14 @@ the full public list is cursor-paginated.
 
 ## External Social Publishing
 
-Instagram publishing is being built as a disabled-by-default outbound adapter. The foundation can
-verify one configured professional account and perform the Graph API container/publish sequence
-for a single image or Reel, but it is deliberately not exposed through an HTTP route. Production
-use still requires OAuth-backed encrypted token storage, a platform-operator permission, a durable
-approval/job record, stable public social assets, and end-to-end testing against a non-production
-account. AI is optional and is not part of the delivery path. See
+Instagram publishing is being built as a disabled-by-default outbound adapter. A global
+`platform_operator` can use `/admin/social/instagram` to connect one official professional account
+through Instagram Login, store its long-lived credential encrypted, verify safe account metadata,
+or disconnect it. Ordinary users and league/team admins cannot access the API or screen. The
+foundation can also perform the Graph API container/publish sequence for a single image or Reel,
+but no HTTP publishing action exists. Production use still requires a durable approval/job record,
+stable public social assets, token renewal/rotation operations, and end-to-end testing against a
+non-production account. AI is optional and is not part of the delivery path. See
 [`instagram-integration/`](./instagram-integration/) for status, architecture, platform knowledge,
 and the runbook.
 

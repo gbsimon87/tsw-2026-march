@@ -162,3 +162,44 @@ describe('env schema — Instagram publishing', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('env schema — Instagram OAuth', () => {
+  const fullOAuth = {
+    INSTAGRAM_OAUTH_ENABLED: 'true',
+    INSTAGRAM_GRAPH_API_VERSION: 'v23.0',
+    INSTAGRAM_APP_ID: '1234567890',
+    INSTAGRAM_APP_SECRET: 'app-secret',
+    INSTAGRAM_OAUTH_REDIRECT_URL: 'http://localhost:4000/api/v1/social/instagram/oauth/callback',
+    INSTAGRAM_TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
+  };
+
+  test('defaults to disabled independently of publishing', () => {
+    expect(envSchema.parse(baseEnv()).INSTAGRAM_OAUTH_ENABLED).toBe(false);
+  });
+
+  test('accepts complete OAuth configuration', () => {
+    expect(envSchema.safeParse(baseEnv(fullOAuth)).success).toBe(true);
+  });
+
+  test('rejects enabled OAuth with missing app or encryption configuration', () => {
+    for (const key of [
+      'INSTAGRAM_APP_ID',
+      'INSTAGRAM_APP_SECRET',
+      'INSTAGRAM_OAUTH_REDIRECT_URL',
+      'INSTAGRAM_TOKEN_ENCRYPTION_KEY',
+    ]) {
+      const partial = { ...fullOAuth };
+      delete partial[key];
+      const result = envSchema.safeParse(baseEnv(partial));
+      expect(result.success).toBe(false);
+      expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain(key);
+    }
+  });
+
+  test('requires a 32-byte hexadecimal encryption key', () => {
+    const result = envSchema.safeParse(
+      baseEnv({ INSTAGRAM_TOKEN_ENCRYPTION_KEY: 'not-a-valid-key' })
+    );
+    expect(result.success).toBe(false);
+  });
+});

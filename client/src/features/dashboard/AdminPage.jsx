@@ -92,6 +92,24 @@ export function AdminPage() {
         </p>
       ) : null}
 
+      {user?.roles?.includes('platform_operator') ? (
+        <Link
+          to="/admin/social/instagram"
+          className="flex items-center justify-between rounded-2xl border border-[#F4A300]/40 bg-white p-5 transition hover:border-[#F4A300]"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#A66E00]">
+              Platform operations
+            </p>
+            <h2 className="mt-1 font-semibold text-slate-900">Instagram publishing</h2>
+            <p className="mt-1 text-sm text-slate-600">Connect and verify the official account.</p>
+          </div>
+          <span aria-hidden="true" className="text-xl text-slate-400">
+            →
+          </span>
+        </Link>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-3">
         <article className="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <p className="text-xs text-slate-500">Leagues</p>

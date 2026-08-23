@@ -3,7 +3,7 @@
 This folder is the living record for TSW's Instagram publishing integration. Update it whenever
 the implementation, Meta configuration, operational process, or delivery status changes.
 
-**Status:** foundation in progress, disabled by default  
+**Status:** operator connection flow implemented; awaiting Meta setup and live account test
 **Started:** 19 August 2026  
 **Branch:** `feat/instagram-publishing`, based on `dev`
 
@@ -16,18 +16,22 @@ in the approval or delivery path.
 
 ## Current Scope
 
-The first implementation slice provides:
+The implementation currently provides:
 
 - a disabled-by-default Instagram Graph API configuration;
 - a server-side client for account verification, image and Reel containers, container polling,
   and publication;
 - structured errors that do not expose the access token;
-- a read-only connection verification command; and
-- unit coverage for request construction, polling, errors, and configuration validation.
+- a read-only bootstrap connection verification command;
+- unit coverage for request construction, polling, errors, and configuration validation;
+- a separate `platform_operator` permission and grant/revoke command;
+- operator-only OAuth start, callback, status, verification, and disconnect endpoints;
+- one-time OAuth state bound to the initiating user and session;
+- encrypted database storage for one official Instagram connection; and
+- an operator screen at `/admin/social/instagram`.
 
-There is intentionally no HTTP publishing endpoint yet. The application currently has no
-platform-operator role or social approval workflow, so exposing one would create an unsafe
-authorisation boundary.
+There is intentionally no HTTP publishing endpoint yet. Account connection is now available, but
+post approval, durable delivery state, and a safe test-publish workflow are not.
 
 ## Delivery Tracker
 
@@ -46,9 +50,15 @@ authorisation boundary.
 ### Next implementation slice
 
 - [ ] Create the Meta developer app and configure Instagram Login redirect URLs.
-- [ ] Implement OAuth connection and callback endpoints with CSRF/state validation.
-- [ ] Store access tokens encrypted at rest; record expiry and account metadata.
-- [ ] Add a platform-operator permission separate from league and team roles.
+- [x] Implement OAuth connection and callback endpoints with one-time state validation.
+- [x] Store access tokens encrypted at rest; record expiry and account metadata.
+- [x] Add a platform-operator permission separate from league and team roles.
+- [x] Add an authenticated operator UI for connection status, verification, and disconnect.
+- [ ] Configure a Meta test app/account and complete the first real OAuth connection.
+- [ ] Add token refresh/expiry monitoring and encryption-key rotation operations.
+
+### Publishing and approval slice
+
 - [ ] Add a social-post record with approval, scheduling, attempts, and platform result state.
 - [ ] Connect approved share exports to durable, publicly accessible HTTPS asset URLs.
 - [ ] Add an authenticated operator UI for preview, consent checks, caption editing, and approval.
@@ -75,6 +85,8 @@ rate limits, restarts, and ambiguous delivery outcomes.
 - [`architecture.md`](./architecture.md) — boundaries, lifecycle, and target design.
 - [`platform-knowledge.md`](./platform-knowledge.md) — Meta API facts and decisions.
 - [`runbook.md`](./runbook.md) — setup, verification, security, and incident checks.
+- [`manual-actions.md`](./manual-actions.md) — the exact Meta, environment, and operator setup still
+  required outside the repository.
 - [`decisions.md`](./decisions.md) — concise architecture decision records.
 
 The broader content strategy remains in [`../marketing-social.md`](../marketing-social.md), and
@@ -84,3 +96,7 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
 
 - **19 August 2026:** created the feature branch, API client foundation, tests, verification
   command, and documentation set. No production credentials or public endpoints were added.
+- **23 August 2026:** added the operator-only OAuth connection milestone: role enforcement,
+  one-time state, long-lived token exchange, encrypted database storage, status/verify/disconnect
+  endpoints, admin UI, operator utility, tests, and deployment placeholders. No publish endpoint
+  was added.

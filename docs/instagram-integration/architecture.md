@@ -19,27 +19,36 @@ TSW source data
   -> published media ID/permalink or actionable failure
 ```
 
-The first slice implements only the Instagram client portion of this flow. It is not connected to
-an HTTP route, application model, or scheduler.
+The connection slice now implements the operator and `SocialConnection` portions of this flow. It
+is not connected to a social-post model, approval workflow, publishing route, or scheduler.
 
 ## Implemented Components
 
-| Component                                                 | Responsibility                                                                                                |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `server/src/config/env.js`                                | Feature flag, API location/version, bootstrap account, token, and timeout validation.                         |
-| `server/src/modules/social/instagram/instagram.client.js` | Account verification, image/Reel container creation, readiness polling, publication, and error normalisation. |
-| `server/src/scripts/verify-instagram-connection.js`       | Read-only check of the configured account; prints no credential.                                              |
-| `server/src/tests/unit/instagram.client.test.js`          | Contract-level unit tests using a mocked network boundary.                                                    |
+| Component                                                        | Responsibility                                                                                                |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `server/src/config/env.js`                                       | Feature flag, API location/version, bootstrap account, token, and timeout validation.                         |
+| `server/src/modules/social/instagram/instagram.client.js`        | Account verification, image/Reel container creation, readiness polling, publication, and error normalisation. |
+| `server/src/scripts/verify-instagram-connection.js`              | Read-only check of the configured account; prints no credential.                                              |
+| `server/src/tests/unit/instagram.client.test.js`                 | Contract-level unit tests using a mocked network boundary.                                                    |
+| `server/src/modules/social/instagram/instagram.oauth.service.js` | One-time OAuth state, code/token exchange, account verification, encryption, and safe connection projection.  |
+| `server/src/modules/social/instagram/instagram.repository.js`    | Single Instagram connection and expiring one-time OAuth state persistence.                                    |
+| `server/src/modules/social/instagram/instagram.routes.js`        | Operator-only status, connect, callback, verify, and disconnect API.                                          |
+| `client/src/features/social/pages/InstagramConnectionPage.jsx`   | Operator connection and verification screen; it exposes no credential or publish action.                      |
+| `server/src/scripts/ensure-instagram-indexes.js`                 | Additive production setup for single-account uniqueness and OAuth-state uniqueness/expiry indexes.            |
 
 ## Target Domain Model
 
-A future `SocialConnection` should hold one platform connection per publishing account:
+The current `InstagramConnection` holds the single official publishing account:
 
 - platform and external account ID;
 - display username and professional account type;
 - encrypted access token and key version;
 - token expiry, granted scopes, connection status, and last verification time; and
 - created/updated/revoked audit metadata.
+
+The access token is encrypted with AES-256-GCM. The configured key version is authenticated as
+associated data, which detects ciphertext or key-version tampering. The API never serialises the
+encrypted value to the browser. Key rotation remains an operational follow-up before production.
 
 A future `SocialPost` should be the durable source of truth for every delivery attempt:
 
@@ -70,6 +79,8 @@ stored container/media state; it must not blindly create and publish a second co
 - Store production tokens encrypted at rest with a managed key and support rotation.
 - Validate OAuth `state`, use exact redirect URLs, and attach the callback to the initiating
   operator session.
+- Store only a SHA-256 hash of each random OAuth state, consume it atomically once, and expire it
+  after ten minutes.
 - Introduce a platform-operator permission. League owner, manager, and scorekeeper permissions do
   not imply authority to publish from TSW's company account.
 - Require an explicit human approval after the exact asset and caption are available.

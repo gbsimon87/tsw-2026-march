@@ -51,3 +51,29 @@ or ranked assets, but an operator must approve the output and the system must wo
 Meta fetches media from the URL supplied during container creation. The social asset pipeline must
 therefore produce a stable public HTTPS resource with an adequate lifetime. Browser blobs,
 localhost, and session-authenticated asset routes are rejected before calling Meta.
+
+## ADR-007: One company connection, restricted to platform operators
+
+**Status:** accepted on 23 August 2026.
+
+The connection API and UI require the global `platform_operator` user role. League ownership,
+league management, team management, and ordinary authentication do not imply this permission.
+The database maintains one Instagram connection for the official TSW account. Multi-tenant user
+connections remain a separate future product decision.
+
+## ADR-008: Encrypt OAuth tokens with a versioned application key
+
+**Status:** accepted on 23 August 2026.
+
+OAuth access tokens are encrypted with AES-256-GCM before persistence. A 32-byte key comes from the
+deployment secret store, and its version is authenticated with the ciphertext. Neither plaintext
+nor ciphertext is returned through the status API. Managed-KMS envelope encryption and an online
+key-rotation process should replace the single application key before broader production scale.
+
+## ADR-009: Connecting does not enable publishing
+
+**Status:** accepted on 23 August 2026.
+
+OAuth configuration uses its own disabled-by-default flag. A successful connection only stores and
+verifies account access; there is still no HTTP publish action. The existing bootstrap publishing
+configuration remains isolated until durable post approval and delivery state are implemented.

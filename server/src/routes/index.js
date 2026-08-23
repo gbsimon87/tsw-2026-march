@@ -21,6 +21,7 @@ const {
   publicPlayersRouter,
 } = require('../modules/leagues/leagues.routes');
 const { publicMilestonesRouter } = require('../modules/milestones/milestones.routes');
+const { instagramRouter } = require('../modules/social/instagram/instagram.routes');
 
 const apiRouter = Router();
 
@@ -44,6 +45,7 @@ apiRouter.use('/leagues', leaguesRouter);
 apiRouter.use('/teams', teamsRouter);
 apiRouter.use('/games', gamesRouter);
 apiRouter.use('/export', exportRouter);
+apiRouter.use('/social/instagram', instagramRouter);
 
 module.exports = {
   apiRouter,
