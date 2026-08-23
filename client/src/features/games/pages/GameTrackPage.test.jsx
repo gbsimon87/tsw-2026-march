@@ -1642,3 +1642,191 @@ describe('GameTrackPage', () => {
     }
   });
 });
+
+describe('GameTrackPage empty league roster', () => {
+  // Reproduces a schedule-built fixture: league, dual-team, scheduled, both
+  // rosters empty, viewer allowed to manage the roster. The lineup step should
+  // offer a way to add a player without leaving the tracker.
+  function emptyLeagueResponse(overrides = {}) {
+    return {
+      game: {
+        id: 'game-1',
+        title: 'Dorset Storm Men I at Bournemouth Bears',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        status: 'scheduled',
+        events: [],
+        homeLeagueTeamId: 'lt-home',
+        awayLeagueTeamId: 'lt-away',
+        startingLineupPlayerIds: [],
+        currentLineupPlayerIds: [],
+        homeCurrentLineupPlayerIds: [],
+        awayCurrentLineupPlayerIds: [],
+      },
+      team: { id: 'lt-home', name: 'Bournemouth Bears', players: [] },
+      participants: {
+        home: { displayName: 'Bournemouth Bears', slug: 'bournemouth-bears', players: [] },
+        away: { displayName: 'Dorset Storm Men I', slug: 'dorset-storm-men-i', players: [] },
+      },
+      lineups: {
+        home: { startingPlayerIds: [], currentPlayerIds: [] },
+        away: { startingPlayerIds: [], currentPlayerIds: [] },
+      },
+      league: {
+        id: 'l-1',
+        slug: 'dorset-basketball-association',
+        name: 'Dorset Basketball Association',
+      },
+      canManageRoster: true,
+      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+      ...overrides,
+    };
+  }
+
+  test('offers Add player when the roster is empty and the viewer can manage it', async () => {
+    apiMocks.getById.mockResolvedValue(emptyLeagueResponse());
+
+    renderPage();
+
+    expect(await screen.findByText('No players found on this roster.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Add player' })).toBeInTheDocument();
+  });
+
+  // Reaching this page for a league game already requires league owner, active
+  // league manager, or manager of one of the two teams — the same set
+  // canManageGameRoster allows. So the roster flag can only ever produce a false
+  // negative here, stranding someone who is allowed to add players. Never send
+  // them off to another page to do it.
+  test('still offers Add player on a league game when the roster flag is false', async () => {
+    apiMocks.getById.mockResolvedValue(emptyLeagueResponse({ canManageRoster: false }));
+
+    renderPage();
+
+    expect(await screen.findByText('No players found on this roster.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Add player' })).toBeInTheDocument();
+    // No detour to a public league page or an admin page.
+    expect(screen.queryByRole('link', { name: /add players/i })).not.toBeInTheDocument();
+  });
+
+  test('a standalone game with no permission gets prose, not a button', async () => {
+    apiMocks.getById.mockResolvedValue(
+      emptyLeagueResponse({
+        canManageRoster: false,
+        game: {
+          id: 'game-1',
+          title: 'Scrimmage',
+          gameContext: 'standalone',
+          trackingMode: 'one_sided',
+          status: 'scheduled',
+          events: [],
+          teamId: 'team-1',
+          startingLineupPlayerIds: [],
+          currentLineupPlayerIds: [],
+        },
+        participants: null,
+        lineups: null,
+      })
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('No players found on this roster.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Add player' })).not.toBeInTheDocument();
+  });
+});
+
+describe('GameTrackPage short lineup return path', () => {
+  function shortLineupResponse() {
+    return {
+      game: {
+        id: 'game-1',
+        title: 'Dorset Storm Men I at Bournemouth Bears',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        status: 'scheduled',
+        events: [],
+        homeLeagueTeamId: 'lt-home',
+        awayLeagueTeamId: 'lt-away',
+        startingLineupPlayerIds: [],
+        currentLineupPlayerIds: [],
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+      team: { id: 'lt-home', name: 'Bournemouth Bears', players: [] },
+      participants: {
+        home: {
+          displayName: 'Bournemouth Bears',
+          slug: 'bournemouth-bears',
+          players: [{ id: 'h1', displayName: 'Marc', isActive: true }],
+        },
+        away: {
+          displayName: 'Dorset Storm Men I',
+          slug: 'dorset-storm-men-i',
+          players: [{ id: 'a1', displayName: 'Sam', isActive: true }],
+        },
+      },
+      lineups: {
+        home: { startingPlayerIds: ['h1'], currentPlayerIds: ['h1'] },
+        away: { startingPlayerIds: ['a1'], currentPlayerIds: ['a1'] },
+      },
+      league: { id: 'l-1', slug: 'dorset-basketball-association', name: 'Dorset BA' },
+      canManageRoster: true,
+      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+    };
+  }
+
+  // The modal offers "Go back to lineup"; it used to just switch to the court
+  // tab, where the only way to add another player sits below the court image.
+  // It must reopen the lineup step, where adding players is the point.
+  test('Go back to lineup reopens the lineup step, not the court tab', async () => {
+    apiMocks.getById.mockResolvedValue(shortLineupResponse());
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
+    expect(await screen.findByText('Start with fewer than five players?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go back to lineup' }));
+
+    // The lineup step replaces the tracking shell, so the court is not rendered.
+    await waitFor(() => {
+      expect(screen.queryByTestId('interactive-court-image')).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: '+ Add player' })).toBeInTheDocument();
+    // Clock never started.
+    expect(apiMocks.updateClock).not.toHaveBeenCalled();
+  });
+
+  // The reopened step has only Save Lineup and Add player, so without an exit a
+  // user who changed their mind is stuck in it until they save something.
+  test('the reopened lineup step can be left without saving', async () => {
+    apiMocks.getById.mockResolvedValue(shortLineupResponse());
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Go back to lineup' }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('interactive-court-image')).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to game' }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('interactive-court-image').length).toBeGreaterThan(0);
+    });
+    expect(apiMocks.setLineup).not.toHaveBeenCalled();
+  });
+});

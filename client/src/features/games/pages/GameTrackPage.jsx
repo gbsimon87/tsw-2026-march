@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
@@ -105,11 +105,11 @@ function LineupPicker({
   onToggle,
   onSave,
   isSaving,
-  teamId,
   variant = 'inline',
   stepLabel,
   canManageRoster,
   onAddPlayer,
+  onExit = null,
 }) {
   const content = (
     <div
@@ -128,6 +128,24 @@ function LineupPicker({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onExit ? (
+            <button
+              type="button"
+              onClick={onExit}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Back to game
+            </button>
+          ) : null}
+          {canManageRoster ? (
+            <button
+              type="button"
+              onClick={onAddPlayer}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              + Add player
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onSave}
@@ -142,19 +160,9 @@ function LineupPicker({
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p className="font-semibold">No players found on this roster.</p>
           {canManageRoster ? (
-            <button
-              type="button"
-              onClick={onAddPlayer}
-              className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
-            >
-              + Add player
-            </button>
-          ) : teamId ? (
-            <Link to={`/teams/${teamId}/edit`} className="mt-1 inline-block underline">
-              Add players to this team
-            </Link>
+            <p className="mt-1">Use “+ Add player” above to build this roster.</p>
           ) : (
-            <p className="mt-1">Go to Teams to add players before tracking.</p>
+            <p className="mt-1">Ask a league or team manager to add players before tracking.</p>
           )}
         </div>
       ) : (
@@ -326,6 +334,10 @@ export function GameTrackPage() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
   const [activePanel, setActivePanel] = useState('court');
+  // Set when the short-lineup warning sends the user back to build a lineup.
+  // The derived step below exits as soon as a side has ONE player, so without
+  // this there is no way to reopen it — see returnToShortLineup.
+  const [lineupRevisitSide, setLineupRevisitSide] = useState(null);
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
     [TEAM_SIDES.AWAY]: createEmptySideState(),
@@ -534,11 +546,17 @@ export function GameTrackPage() {
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
   const isLeagueGame = data?.game?.gameContext === 'league';
   const canManageRoster = Boolean(data?.canManageRoster);
+  // Reaching this page for a league game already requires being the league
+  // owner, an active league manager, or a manager of one of the two teams —
+  // assertGameAccess -> canManageLeagueGame. canManageGameRoster allows exactly
+  // that same set, so for a league game the roster flag can only ever produce a
+  // false negative: someone who is allowed to add players but sees no way to.
+  // The server stays authoritative on the write either way.
+  const canAddRosterPlayer = canManageRoster || isLeagueGame;
   const participantsBySide = useMemo(() => data?.participants || {}, [data?.participants]);
   const activeKey = isDualTeam ? activeSide : 'oneSided';
   const currentSideState = sideState[activeKey] || createEmptySideState();
   const team = data?.team || null;
-  const teamId = data?.game?.teamId || null;
   // OPT-016: memoised — `|| []` was a fresh array every render whenever the
   // lineup was empty, which alone defeated the onCourtPlayers/benchPlayers
   // memoisation below (their deps never looked equal).
@@ -611,7 +629,7 @@ export function GameTrackPage() {
   const hasShortStartingLineup = isDualTeam
     ? homeLineupCount < 5 || awayLineupCount < 5
     : (game?.currentLineupPlayerIds || []).length < 5;
-  const lineupSetupStep =
+  const derivedLineupSetupStep =
     isLeagueGame && isDualTeam
       ? !homeLineupReady
         ? 'home'
@@ -619,6 +637,10 @@ export function GameTrackPage() {
           ? 'away'
           : null
       : null;
+  // A side counts as "ready" at one player, so both sides can be ready while
+  // still being short of five. lineupRevisitSide reopens the step in that case.
+  const lineupSetupStep =
+    derivedLineupSetupStep || (isLeagueGame && isDualTeam ? lineupRevisitSide : null);
   const prevLineupStepRef = useRef(lineupSetupStep);
 
   useEffect(() => {
@@ -1370,6 +1392,9 @@ export function GameTrackPage() {
       updateSideState(activeKey, {
         selectedPlayerId: currentSideState.lineupDraft[0] || '',
       });
+      // Leaving the reopened step on save keeps the exit predictable: press
+      // Start again and the warning re-targets whichever side is now emptier.
+      setLineupRevisitSide(null);
     } catch (saveError) {
       setError(saveError.message || 'Failed to save lineup');
     } finally {
@@ -1517,6 +1542,18 @@ export function GameTrackPage() {
 
   function returnToShortLineup() {
     setShowShortLineupWarning(false);
+
+    // Reopen the lineup step instead of dropping the user on the court tab,
+    // where the only way to add another player sits below the court image.
+    // Target the emptier side so repeated trips through the warning can reach
+    // both teams rather than always landing on home.
+    if (isLeagueGame && isDualTeam) {
+      const side = homeLineupCount <= awayLineupCount ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY;
+      setLineupRevisitSide(side);
+      setActiveSide(side);
+      return;
+    }
+
     setActivePanel('court');
     if (isDualTeam) {
       setActiveSide(homeLineupCount < 5 ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY);
@@ -2086,14 +2123,21 @@ export function GameTrackPage() {
             <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
               <LineupPicker
                 variant="fullscreen"
-                stepLabel={lineupSetupStep === 'home' ? 'Step 1 of 2' : 'Step 2 of 2'}
+                stepLabel={
+                  lineupRevisitSide
+                    ? 'Add players'
+                    : lineupSetupStep === 'home'
+                      ? 'Step 1 of 2'
+                      : 'Step 2 of 2'
+                }
                 isDualTeam
                 teamDisplayName={
                   participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
                 }
                 players={participantsBySide[lineupSetupStep]?.players || []}
-                canManageRoster={canManageRoster}
+                canManageRoster={canAddRosterPlayer}
                 onAddPlayer={() => setIsAddPlayerOpen(true)}
+                onExit={lineupRevisitSide ? () => setLineupRevisitSide(null) : null}
                 lineupDraft={sideState[lineupSetupStep]?.lineupDraft || []}
                 onToggle={(playerId, checked) => {
                   const draft = sideState[lineupSetupStep]?.lineupDraft || [];
@@ -2104,7 +2148,6 @@ export function GameTrackPage() {
                 }}
                 onSave={saveLineup}
                 isSaving={isSaving}
-                teamId={teamId}
               />
             </div>
           ) : (
@@ -2418,7 +2461,7 @@ export function GameTrackPage() {
                             participantsBySide[activeSide]?.displayName || activeSide
                           }
                           players={players}
-                          canManageRoster={canManageRoster}
+                          canManageRoster={canAddRosterPlayer}
                           onAddPlayer={() => setIsAddPlayerOpen(true)}
                           lineupDraft={currentSideState.lineupDraft}
                           onToggle={(playerId, checked) => {
@@ -2429,7 +2472,6 @@ export function GameTrackPage() {
                           }}
                           onSave={saveLineup}
                           isSaving={isSaving}
-                          teamId={teamId}
                         />
                       ) : null}
                     </div>
@@ -2509,7 +2551,7 @@ export function GameTrackPage() {
                                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                                     On Bench — tap to sub in
                                   </p>
-                                  {canManageRoster ? (
+                                  {canAddRosterPlayer ? (
                                     <button
                                       type="button"
                                       onClick={() => setIsAddPlayerOpen(true)}
