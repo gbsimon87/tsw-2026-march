@@ -83,6 +83,20 @@ export function GameDetailHeader({
   const homePoints = isDualTeam ? gameSummary?.homePoints || 0 : gameSummary?.teamPoints || 0;
   const awayPoints = isDualTeam ? gameSummary?.awayPoints || 0 : gameSummary?.opponentPoints || 0;
   const matchupTitle = getMatchupTitle({ game, team, participants, isDualTeam, recap });
+  // For a league game `team.id` is a LeagueTeam _id (games.service.js returns
+  // `String(trackedTeam._id)` from its league branch), and /teams/:teamId only
+  // ever resolves docs in the standalone `teams` collection — so linking there
+  // renders "Team not found". League games point at the league team page
+  // instead, and get no link at all when the slugs it needs are missing
+  // (participants predating slug storage; see OPT-022).
+  const viewTeamHref =
+    game?.gameContext === 'league'
+      ? league?.slug && team?.slug
+        ? `/league/${league.slug}/teams/${team.slug}`
+        : null
+      : team?.id
+        ? `/teams/${team.id}`
+        : null;
 
   return (
     <section className={`rounded-2xl border border-slate-200 bg-white p-5 md:p-6 ${className}`}>
@@ -145,9 +159,9 @@ export function GameDetailHeader({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {team?.id && !isDualTeam ? (
+        {viewTeamHref && !isDualTeam ? (
           <Link
-            to={`/teams/${team.id}`}
+            to={viewTeamHref}
             className="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           >
             View Team
