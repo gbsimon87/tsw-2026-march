@@ -549,6 +549,37 @@ describe('games service roster snapshot repair', () => {
     expect(saveGame).toHaveBeenCalledWith(game);
   });
 
+  // A scheduled fixture has not been played, so its roster must not be frozen:
+  // players added through the admin pages or through a DIFFERENT fixture belong
+  // to the league team and have to appear here too. Reading the stale snapshot is
+  // what made a player who already existed look absent, so adding them again
+  // collided on the duplicate-name rule.
+  test('shows the live league roster for a scheduled fixture and freezes nothing', async () => {
+    const game = buildDualLeagueGame({
+      status: 'scheduled',
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('added-here', 'Added Here')],
+      awayRosterSnapshot: [],
+    });
+    const homeLive = [
+      buildLeagueSnapshotPlayer('live-1', 'GB Simon'),
+      buildLeagueSnapshotPlayer('live-2', 'Maren Welch'),
+    ];
+
+    findGameById.mockResolvedValue(game);
+    getLeagueRosterSnapshotForTeam.mockImplementation((leagueTeamId) =>
+      Promise.resolve(leagueTeamId === 'home-team' ? homeLive : [])
+    );
+
+    const result = await getGameForUser('user-1', 'game-1');
+
+    expect(result.participants.home.players.map((player) => player.displayName)).toEqual([
+      'GB Simon',
+      'Maren Welch',
+    ]);
+    // Nothing is persisted — the freeze happens when the clock starts.
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
   test('does not overwrite non-empty roster snapshots', async () => {
     const game = buildDualLeagueGame({
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('existing-home-snap', 'Existing Home')],
@@ -1262,6 +1293,87 @@ describe('games service clock commands', () => {
     expect(game.clock.status).toBe('running');
     expect(game.clock.runningSince).toBeInstanceOf(Date);
     expect(Math.abs(game.clock.runningSince.getTime() - now.getTime())).toBeLessThan(50);
+  });
+
+  // Tip-off is the moment the roster becomes history. Until then reads are live,
+  // so the frozen snapshot can be empty or partial (only players added through
+  // this fixture ever land in it). repairGameRosterSnapshots fills only an EMPTY
+  // snapshot, so a partial one would stay wrong for the whole game unless the
+  // start overwrites it outright.
+  test('freezes the live league roster when a scheduled game starts', async () => {
+    const players = ['p1', 'p2', 'p3', 'p4', 'p5'];
+    const game = buildDualLeagueGame({
+      status: 'scheduled',
+      homeCurrentLineupPlayerIds: players,
+      awayCurrentLineupPlayerIds: players.map((id) => `away-${id}`),
+      // Partial: one player was added through this fixture, two exist on the team.
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('added-here', 'Added Here')],
+      awayRosterSnapshot: [],
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    });
+    const homeLive = [
+      buildLeagueSnapshotPlayer('live-1', 'GB Simon'),
+      buildLeagueSnapshotPlayer('live-2', 'Maren Welch'),
+    ];
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    getLeagueRosterSnapshotForTeam.mockImplementation((leagueTeamId) =>
+      Promise.resolve(leagueTeamId === 'home-team' ? homeLive : [])
+    );
+
+    await updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date());
+
+    expect(game.status).toBe('in_progress');
+    expect(game.homeRosterSnapshot.map((player) => player.displayName)).toEqual([
+      'GB Simon',
+      'Maren Welch',
+    ]);
+  });
+
+  // rosterSnapshotPlayerSchema is declared { _id: true }, so Mongoose mints a
+  // fresh _id for every entry each time the array is replaced — and
+  // sanitizePlayer exposes _id as the player's id, falling back to
+  // leaguePlayerId only when _id is absent. A live read (scheduled) therefore
+  // exposes leaguePlayerId while a frozen snapshot exposes the minted _id. Left
+  // alone, every player's id would change at tip-off and orphan a starting
+  // lineup saved beforehand. Stamping _id keeps the two identical.
+  test('freezes with stable ids so a lineup saved before tip-off still matches', async () => {
+    const players = ['p1', 'p2', 'p3', 'p4', 'p5'];
+    const game = buildDualLeagueGame({
+      status: 'scheduled',
+      homeCurrentLineupPlayerIds: players,
+      awayCurrentLineupPlayerIds: players.map((id) => `away-${id}`),
+      homeRosterSnapshot: [],
+      awayRosterSnapshot: [],
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    getLeagueRosterSnapshotForTeam.mockImplementation((leagueTeamId) =>
+      Promise.resolve(
+        leagueTeamId === 'home-team'
+          ? [buildLeagueSnapshotPlayer('live-1', 'GB Simon')]
+          : [buildLeagueSnapshotPlayer('live-2', 'Away One')]
+      )
+    );
+
+    await updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date());
+
+    for (const entry of [...game.homeRosterSnapshot, ...game.awayRosterSnapshot]) {
+      expect(String(entry._id)).toBe(String(entry.leaguePlayerId));
+    }
   });
 
   test('starts a scheduled game when both teams have short lineups', async () => {

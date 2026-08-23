@@ -1121,9 +1121,13 @@ function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
   };
 }
 
-async function resolveDualGameParticipants(game) {
+async function resolveDualGameParticipants(game, rosters = {}) {
   const home = sanitizeParticipant(game.homeParticipant);
   const away = sanitizeParticipant(game.awayParticipant);
+  // A scheduled fixture passes live rosters here (see resolveGameTeamContext).
+  // Defaulting to the frozen snapshots keeps every other caller unchanged.
+  const homeRoster = rosters.home ?? game.homeRosterSnapshot;
+  const awayRoster = rosters.away ?? game.awayRosterSnapshot;
 
   // Backfill slug for league games whose participants predate slug storage
   if (!home.slug && home.leagueTeamId) {
@@ -1138,22 +1142,91 @@ async function resolveDualGameParticipants(game) {
   return {
     home: {
       ...home,
-      teamDoc: buildTeamDocFromSnapshot(home, game.homeRosterSnapshot),
-      players: (game.homeRosterSnapshot || []).map(sanitizePlayer),
+      teamDoc: buildTeamDocFromSnapshot(home, homeRoster),
+      players: (homeRoster || []).map(sanitizePlayer),
     },
     away: {
       ...away,
-      teamDoc: buildTeamDocFromSnapshot(away, game.awayRosterSnapshot),
-      players: (game.awayRosterSnapshot || []).map(sanitizePlayer),
+      teamDoc: buildTeamDocFromSnapshot(away, awayRoster),
+      players: (awayRoster || []).map(sanitizePlayer),
     },
   };
+}
+
+// rosterSnapshotPlayerSchema is declared { _id: true }, so Mongoose mints a fresh
+// _id for every entry each time the array is replaced — and sanitizePlayer exposes
+// _id as the player's id, falling back to leaguePlayerId only when _id is absent.
+// A live read therefore exposes leaguePlayerId while a frozen snapshot exposes the
+// minted _id, so without this a player's id would change at tip-off and orphan a
+// starting lineup saved beforehand. Pinning _id to the LeaguePlayer id keeps one
+// player's id identical across the whole fixture lifecycle.
+function withStableSnapshotIds(entries) {
+  return (entries || []).map((entry) =>
+    entry?.leaguePlayerId ? { ...entry, _id: entry.leaguePlayerId } : entry
+  );
+}
+
+// A scheduled fixture has not been played, so its roster is not history yet: the
+// players shown must be the league team's CURRENT ones. Players added through the
+// admin pages, or through a DIFFERENT fixture, live on the LeagueTeam and never
+// reach this game's snapshot — reading the snapshot made them invisible here,
+// which in turn made re-adding one collide on the duplicate-name rule.
+//
+// Returned rather than written onto the game. resolveGameTeamContext is also
+// reached from write paths that call saveGame, so mutating the document here
+// would freeze the roster weeks before tip-off — the very thing the Schedule
+// Builder leaves empty snapshots to avoid. The freeze happens once, when the
+// clock starts (updateClockForUser).
+async function resolveLiveRostersForScheduledGame(game) {
+  if (!game || game.status !== 'scheduled' || game.gameContext !== 'league') {
+    return {};
+  }
+
+  if (game.trackingMode !== 'dual_team') {
+    return {};
+  }
+
+  const [home, away] = await Promise.all([
+    game.homeLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.homeLeagueTeamId) : [],
+    game.awayLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.awayLeagueTeamId) : [],
+  ]);
+
+  return { home: withStableSnapshotIds(home), away: withStableSnapshotIds(away) };
+}
+
+// Tip-off is where a league fixture's roster stops being live and becomes the
+// record of who played, so later league-roster edits must not rewrite it.
+// Overwrites outright rather than filling only when empty: mid-game adds and
+// pre-match adds leave a PARTIAL snapshot, and repairGameRosterSnapshots skips
+// anything non-empty, so a fill-if-empty freeze would lock in the partial list.
+async function freezeLeagueRosterSnapshots(game) {
+  if (!game || game.gameContext !== 'league') return;
+
+  if (game.trackingMode === 'dual_team') {
+    const [home, away] = await Promise.all([
+      game.homeLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.homeLeagueTeamId) : [],
+      game.awayLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.awayLeagueTeamId) : [],
+    ]);
+    game.homeRosterSnapshot = withStableSnapshotIds(home);
+    game.awayRosterSnapshot = withStableSnapshotIds(away);
+    return;
+  }
+
+  if (game.trackedLeagueTeamId) {
+    game.rosterSnapshot = withStableSnapshotIds(
+      await getLeagueRosterSnapshotForTeam(game.trackedLeagueTeamId)
+    );
+  }
 }
 
 async function resolveGameTeamContext(userId, game) {
   await repairGameRosterSnapshots(game);
 
   if (game.trackingMode === 'dual_team') {
-    const participants = await resolveDualGameParticipants(game);
+    const participants = await resolveDualGameParticipants(
+      game,
+      await resolveLiveRostersForScheduledGame(game)
+    );
     const viewerSide =
       game.gameContext === 'standalone' && userId
         ? (await findTeamByIdAndOwner(game.homeTeamId, userId))
@@ -2000,7 +2073,12 @@ async function updateClockForUser(userId, gameId, command, now = new Date()) {
       if (![CLOCK_STATUSES.READY, CLOCK_STATUSES.PAUSED].includes(normalized.status)) {
         throw new ApiError(400, 'Clock cannot be started in its current state');
       }
-      if (game.status === 'scheduled') game.status = 'in_progress';
+      if (game.status === 'scheduled') {
+        game.status = 'in_progress';
+        // Reads were live up to this point; capture the roster now that the game
+        // is being played. Saved by the saveGame below, with the clock change.
+        await freezeLeagueRosterSnapshots(game);
+      }
       game.clock.status = CLOCK_STATUSES.RUNNING;
       game.clock.runningSince = now;
       break;
