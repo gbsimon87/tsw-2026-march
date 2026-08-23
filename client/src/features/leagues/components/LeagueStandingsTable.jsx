@@ -18,7 +18,7 @@ export function LeagueStandingsTable({
         <thead className="bg-slate-50 text-slate-600">
           <tr>
             <th className="py-2 pl-3 pr-2 text-center">Team</th>
-            <th className="px-1 py-2 text-center text-xs">W-L</th>
+            <th className="whitespace-nowrap px-1 py-2 text-center text-xs">W-L</th>
             {showForm ? <th className="px-1 py-2 text-center text-xs">Form</th> : null}
             <th className="px-1 py-2 text-center text-xs">PF</th>
             <th className="px-1 py-2 text-center text-xs">PA</th>
@@ -32,8 +32,8 @@ export function LeagueStandingsTable({
 
             return (
               <tr key={row.teamId} className="border-t border-slate-200">
-                <td className="py-2 pl-3 pr-2 font-medium text-slate-900">
-                  <div className="flex items-center gap-2">
+                <td className="max-w-[10rem] py-2 pl-3 pr-2 font-medium text-slate-900 sm:max-w-none">
+                  <div className="flex min-w-0 items-center gap-2">
                     <CloudinaryImage
                       src={getTeamLogo ? (getTeamLogo(row) ?? teamPlaceholder) : teamPlaceholder}
                       alt=""
@@ -46,16 +46,16 @@ export function LeagueStandingsTable({
                     {teamHref ? (
                       <Link
                         to={teamHref}
-                        className="font-semibold text-[#1B4332] underline decoration-[#F4A300]/60 underline-offset-2 transition hover:text-[#123328] hover:decoration-[#F4A300]"
+                        className="min-w-0 break-words font-semibold leading-tight text-[#1B4332] underline decoration-[#F4A300]/60 underline-offset-2 transition hover:text-[#123328] hover:decoration-[#F4A300]"
                       >
                         {row.teamName}
                       </Link>
                     ) : (
-                      row.teamName
+                      <span className="min-w-0 break-words leading-tight">{row.teamName}</span>
                     )}
                   </div>
                 </td>
-                <td className="px-1 py-2 text-center tabular-nums">
+                <td className="whitespace-nowrap px-1 py-2 text-center tabular-nums">
                   {row.record || `${row.wins}-${row.losses}`}
                 </td>
                 {showForm ? (
