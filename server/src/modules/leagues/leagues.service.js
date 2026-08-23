@@ -123,6 +123,27 @@ function sanitizeLogo(logo) {
   };
 }
 
+// Freeze one side of a dual-team fixture's participant identity. Mirrors the
+// participant sub-document built by the single-game dual-team league path
+// (games.service.js createGameForUser) so a fixture created by the Schedule
+// Builder and a game created one-at-a-time are the same shape. The billing and
+// entitlement snapshots are per-league, so callers resolve them once and pass
+// them in rather than recomputing per row.
+function buildLeagueTeamParticipant(side, team, { billingSnapshot, entitlementsSnapshot }) {
+  return {
+    side,
+    participantType: 'league_team',
+    teamId: null,
+    leagueTeamId: team._id,
+    slug: team.slug || null,
+    displayName: team.name,
+    logo: sanitizeLogo(team.logo),
+    colors: Array.isArray(team.colors) ? team.colors : [],
+    billingSnapshot,
+    entitlementsSnapshot,
+  };
+}
+
 const VALID_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'canceled']);
 
 function normalizeLeagueBilling(league) {
@@ -2466,6 +2487,15 @@ async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
   const teams = await listLeagueTeams(leagueId);
   const teamsById = new Map(teams.map((team) => [String(team._id), team]));
 
+  // Lazy requires: billing/entitlements reach back into leagues.repository, so
+  // importing them at module load would close a cycle.
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  const { getLeagueBillingSummary } = require('../billing/billing.service');
+  const snapshots = {
+    billingSnapshot: getLeagueBillingSummary(league),
+    entitlementsSnapshot: resolveForLeague(league).entitlements,
+  };
+
   const docs = payload.games.map((row) => {
     const homeTeam = teamsById.get(String(row.homeLeagueTeamId));
     const awayTeam = teamsById.get(String(row.awayLeagueTeamId));
@@ -2482,7 +2512,12 @@ async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
       clock: createReadyClock(league.defaultGameFormat),
       ownerUserId: userId,
       gameContext: 'league',
-      trackingMode: 'one_sided',
+      // Dual-team so BOTH sides can be tracked: every event is attributed to a
+      // named player on either roster, and the game yields two box scores. The
+      // previous 'one_sided' reduced the opposition to anonymous opp_* totals,
+      // and trackingMode is absent from updateGameSchema, so a fixture created
+      // one-sided could never be corrected through the API.
+      trackingMode: 'dual_team',
       leagueId,
       seasonId: league.currentSeasonId,
       homeLeagueTeamId: homeTeam._id,
@@ -2490,6 +2525,16 @@ async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
       // A fixture has no tracked side yet; default to home, matching the
       // single-game create form's default. Editable once the game starts.
       trackedLeagueTeamId: homeTeam._id,
+      initialActiveSide: TEAM_SIDES.HOME,
+      homeParticipant: buildLeagueTeamParticipant(TEAM_SIDES.HOME, homeTeam, snapshots),
+      awayParticipant: buildLeagueTeamParticipant(TEAM_SIDES.AWAY, awayTeam, snapshots),
+      // Deliberately empty. A fixture can be scheduled months ahead, so freezing
+      // today's roster would capture the wrong players; repairGameRosterSnapshots
+      // (games.service.js) fills an empty snapshot from the live league roster the
+      // first time the game is read as 'in_progress', which is what starting the
+      // clock on a scheduled game makes it.
+      homeRosterSnapshot: [],
+      awayRosterSnapshot: [],
       title: `${awayTeam.name} at ${homeTeam.name}`,
       scheduledAt: new Date(row.scheduledAt),
       venue: row.venue?.trim() ? row.venue.trim() : undefined,

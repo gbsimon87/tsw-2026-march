@@ -83,7 +83,7 @@ describe('bulkCreateLeagueGamesForUser', () => {
     expect(docs[0]).toMatchObject({
       ownerUserId: OWNER_ID,
       gameContext: 'league',
-      trackingMode: 'one_sided',
+      trackingMode: 'dual_team',
       leagueId: LEAGUE_ID,
       seasonId: SEASON_ID,
       homeLeagueTeamId: HOME_ID,
@@ -233,5 +233,74 @@ describe('bulkCreateLeagueGamesForUser', () => {
     await expect(
       service.bulkCreateLeagueGamesForUser(OWNER_ID, 'not-an-id', payload())
     ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  // The Schedule Builder used to hardcode trackingMode 'one_sided', which meant a
+  // fixture list could only ever record one team's players — the opposition was
+  // reduced to anonymous opp_* totals — and trackingMode is absent from
+  // updateGameSchema, so it could not be corrected afterwards. Fixtures now match
+  // the dual-team shape the single-game league create path produces.
+  it('creates dual-team fixtures so both teams can be tracked', async () => {
+    await service.bulkCreateLeagueGamesForUser(OWNER_ID, LEAGUE_ID, payload());
+
+    const [docs] = gamesRepository.insertManyGames.mock.calls[0];
+    expect(docs[0]).toMatchObject({
+      trackingMode: 'dual_team',
+      initialActiveSide: 'home',
+      trackedLeagueTeamId: HOME_ID,
+      status: 'scheduled',
+    });
+  });
+
+  it('snapshots both teams as participants, carrying identity and logo', async () => {
+    leaguesRepository.listLeagueTeams.mockResolvedValue([
+      {
+        _id: HOME_ID,
+        name: 'Hawks',
+        slug: 'hawks',
+        colors: ['#123456'],
+        logo: {
+          url: 'https://res.cloudinary.com/x/image/upload/v1/hawks.webp',
+          width: 200,
+          height: 100,
+        },
+      },
+      { _id: AWAY_ID, name: 'Bisons', slug: 'bisons' },
+    ]);
+
+    await service.bulkCreateLeagueGamesForUser(OWNER_ID, LEAGUE_ID, payload());
+
+    const [docs] = gamesRepository.insertManyGames.mock.calls[0];
+    expect(docs[0].homeParticipant).toMatchObject({
+      side: 'home',
+      participantType: 'league_team',
+      leagueTeamId: HOME_ID,
+      slug: 'hawks',
+      displayName: 'Hawks',
+      colors: ['#123456'],
+    });
+    expect(docs[0].homeParticipant.logo).toMatchObject({ width: 200, height: 100 });
+    expect(docs[0].awayParticipant).toMatchObject({
+      side: 'away',
+      participantType: 'league_team',
+      leagueTeamId: AWAY_ID,
+      slug: 'bisons',
+      displayName: 'Bisons',
+    });
+    // A team with no uploaded logo must serialise to null, not undefined or {}.
+    expect(docs[0].awayParticipant.logo).toBeNull();
+  });
+
+  // A fixture can be scheduled months before it is played, so freezing today's
+  // roster into it would capture the wrong players. Left empty,
+  // repairGameRosterSnapshots (games.service.js) fills both sides from the live
+  // league rosters the first time the game is read as 'in_progress' — which is
+  // what starting the clock on a scheduled game makes it.
+  it('leaves both roster snapshots empty so they fill when tracking starts', async () => {
+    await service.bulkCreateLeagueGamesForUser(OWNER_ID, LEAGUE_ID, payload());
+
+    const [docs] = gamesRepository.insertManyGames.mock.calls[0];
+    expect(docs[0].homeRosterSnapshot).toEqual([]);
+    expect(docs[0].awayRosterSnapshot).toEqual([]);
   });
 });
