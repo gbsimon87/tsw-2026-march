@@ -38,6 +38,7 @@ const {
   buildLeagueRosterSnapshot,
   buildLeagueGameEvents,
   attachTeamSide,
+  stampClockSnapshots,
 } = require('./seed.js');
 const { computeGameFinalScore, HIGHLIGHT_STAT_TYPES } = require('../modules/games/games.service');
 
@@ -445,8 +446,10 @@ function buildDemoLeagueGames(ownerUserId, league, seasonId, leagueTeamsWithPlay
       attachTeamSide(buildLeagueGameEvents(awayRosterSnapshot, scheduledAt), TEAM_SIDES.AWAY)
     );
 
-    const events = [...homeEvents, ...awayEvents].sort(
-      (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+    const events = stampClockSnapshots(
+      [...homeEvents, ...awayEvents].sort(
+        (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+      )
     );
 
     const finalScore = breakTieIfNeeded(

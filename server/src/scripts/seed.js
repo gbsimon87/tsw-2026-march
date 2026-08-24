@@ -2,6 +2,11 @@ const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { connectDb } = require('../config/db');
 const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../modules/shared/stats.constants');
+const {
+  DEFAULT_GAME_FORMAT,
+  SEGMENT_KINDS,
+  regulationSegmentCount,
+} = require('../modules/shared/gameClock');
 
 require('../modules/auth/auth.repository');
 require('../modules/teams/teams.repository');
@@ -385,6 +390,34 @@ function createOpponentEvent(statType, occurredAt) {
   };
 }
 
+// The event subschema requires a clock snapshot per event (segmentKind,
+// segmentNumber, clockMillisecondsRemaining) since the configurable game clock
+// landed. Seeded events carry no real clock, so spread them evenly across
+// regulation: event i of n sits at the matching point of segment
+// floor(i/n * segments), counting the segment clock down as it goes. Call this
+// on the FINAL sorted event list — for dual-team games the two sides are merged
+// first, so stamping per side would leave the merged clock non-monotonic.
+function stampClockSnapshots(events, format = DEFAULT_GAME_FORMAT) {
+  const total = events.length;
+  if (total === 0) return events;
+
+  const segments = regulationSegmentCount(format);
+  const segmentMs = format.regulationSegmentDurationSeconds * 1000;
+
+  return events.map((event, index) => {
+    const position = (index / total) * segments;
+    const segmentIndex = Math.min(segments - 1, Math.floor(position));
+    const elapsedFraction = position - segmentIndex;
+
+    return {
+      ...event,
+      segmentKind: SEGMENT_KINDS.REGULATION,
+      segmentNumber: segmentIndex + 1,
+      clockMillisecondsRemaining: Math.round(segmentMs * (1 - elapsedFraction)),
+    };
+  });
+}
+
 function buildPlayerBlueprints(teamIndex, options = {}) {
   const rosterSize = options.playersPerTeam || seedConfig.playersPerTeam;
   const names = [];
@@ -603,7 +636,7 @@ function buildGameDocs(userId, team) {
       status: 'completed',
       scheduledAt,
       completedAt,
-      events: buildGameEvents(players, scheduledAt),
+      events: stampClockSnapshots(buildGameEvents(players, scheduledAt)),
     };
   });
 }
@@ -720,8 +753,10 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
       homeCurrentLineupPlayerIds: homeRosterSnapshot.slice(0, 5).map((player) => player._id),
       awayStartingLineupPlayerIds: awayRosterSnapshot.slice(0, 5).map((player) => player._id),
       awayCurrentLineupPlayerIds: awayRosterSnapshot.slice(0, 5).map((player) => player._id),
-      events: [...homeEvents, ...awayEvents].sort(
-        (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+      events: stampClockSnapshots(
+        [...homeEvents, ...awayEvents].sort(
+          (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+        )
       ),
     };
   });
@@ -1201,4 +1236,5 @@ module.exports = {
   buildLeagueRosterSnapshot,
   buildLeagueGameEvents,
   attachTeamSide,
+  stampClockSnapshots,
 };
