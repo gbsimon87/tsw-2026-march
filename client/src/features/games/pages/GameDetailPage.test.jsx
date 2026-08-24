@@ -534,7 +534,7 @@ describe('GameDetailPage', () => {
     );
   });
 
-  test('locks replay for non-pro teams', async () => {
+  test('shows replay to free teams', async () => {
     apiMocks.getById.mockResolvedValue({
       game: {
         id: 'game-2',
@@ -613,8 +613,8 @@ describe('GameDetailPage', () => {
 
     expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
-    expect(screen.getByText(/Upgrade to the Team Pro plan to unlock this/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to .* to unlock this/i)).not.toBeInTheDocument();
+    expect(screen.getByText('No coordinate-based events recorded for replay.')).toBeInTheDocument();
   });
 
   test('replays dual-team games with side filters and side-specific box scores', async () => {
@@ -754,7 +754,7 @@ describe('GameDetailPage', () => {
     expect(screen.queryByTestId('replay-box-score-home')).not.toBeInTheDocument();
   });
 
-  test('keeps replay locked for a pro user viewing a free team game', async () => {
+  test('shows replay for a legacy pro user viewing a free team game', async () => {
     authMocks.useAuth.mockReturnValue({
       user: {
         id: 'user-1',
@@ -841,8 +841,8 @@ describe('GameDetailPage', () => {
 
     expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
-    expect(screen.getByText(/Upgrade to the Team Pro plan to unlock this/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to .* to unlock this/i)).not.toBeInTheDocument();
+    expect(screen.getByText('No coordinate-based events recorded for replay.')).toBeInTheDocument();
   });
 
   test('renders a saved AI summary in the recap panel while keeping the game video visible', async () => {

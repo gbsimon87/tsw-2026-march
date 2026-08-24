@@ -307,35 +307,22 @@ function buildFallbackPlayerName(index) {
 function createSeedUsers() {
   return Array.from({ length: seedConfig.userCount }, (_, index) => {
     const number = index + 1;
-    // Canonical plan ids (Phase 6): 'team_pro' / 'starter'.
-    const plan = index % 2 === 0 ? 'team_pro' : 'starter';
     const identity = seedIdentityBlueprints[index];
 
     return {
       email: `user${number}@user${number}.com`,
       name: identity?.userName || buildFallbackUserName(index - seedIdentityBlueprints.length),
       teamName: identity?.teamName || buildFallbackTeamName(index - seedIdentityBlueprints.length),
-      plan,
+      plan: 'starter',
     };
   });
 }
 
-function buildSeedBillingProfile(seedUser, index) {
-  if (seedUser.plan === 'team_pro') {
-    return {
-      plan: 'team_pro',
-      subscriptionStatus: 'active',
-      stripeCustomerId: `cus_seed_${index + 1}`,
-      stripeSubscriptionId: `sub_seed_${index + 1}`,
-      stripePriceId: process.env.STRIPE_PRICE_ID_TEAM_MONTHLY || 'price_seed_team_pro_monthly',
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      cancelAtPeriodEnd: false,
-      billingEmail: seedUser.email,
-    };
-  }
-
+function buildSeedBillingProfile(seedUser) {
   return {
     plan: 'starter',
+    capacityType: 'free',
+    billingSource: 'comp',
     subscriptionStatus: 'inactive',
     stripeCustomerId: null,
     stripeSubscriptionId: null,
@@ -933,9 +920,7 @@ async function seedLeagueForUser(userEntry) {
     isPublic: true,
     plan: 'league',
     subscriptionStatus: 'active',
-    stripeCustomerId: 'cus_seed_league_1',
-    stripeSubscriptionId: 'sub_seed_league_1',
-    stripePriceId: process.env.STRIPE_PRICE_ID_LEAGUE_MONTHLY || 'price_seed_league_monthly',
+    billingSource: 'comp',
     currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     cancelAtPeriodEnd: false,
   });
@@ -1196,10 +1181,7 @@ async function main() {
     console.log(
       `Seeded League Owner: ${seededLeagueBlueprint.ownerEmail} (league premium, ${seedConfig.leaguePlayersPerTeam} players per league team)`
     );
-    console.log(`Starter Teams: ${seededUsers.filter((entry) => entry.plan === 'starter').length}`);
-    console.log(
-      `Team Pro Teams: ${seededUsers.filter((entry) => entry.plan === 'team_pro').length}`
-    );
+    console.log(`Free Teams: ${seededUsers.length}`);
     console.log(`Players: ${playerCount}`);
     console.log(`Games: ${gameCount}`);
     console.log(`Events: ${eventCount}`);

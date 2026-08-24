@@ -6,82 +6,62 @@ import { PricingPage } from './PricingPage';
 const authMocks = vi.hoisted(() => ({
   useAuth: vi.fn(() => ({ user: { id: 'user-1' } })),
 }));
-
 const billingApiMocks = vi.hoisted(() => ({
   getCatalog: vi.fn(),
   createTeamCheckoutSession: vi.fn(),
   createLeagueCheckoutSession: vi.fn(),
   createCustomerPortalSession: vi.fn(),
+  changeLeaguePlan: vi.fn(),
+  chooseFreeTeam: vi.fn(),
 }));
+const teamsApiMocks = vi.hoisted(() => ({ list: vi.fn() }));
+const leaguesApiMocks = vi.hoisted(() => ({ list: vi.fn() }));
 
-const teamsApiMocks = vi.hoisted(() => ({
-  list: vi.fn(),
-}));
+vi.mock('../../../app/store/AuthContext', () => ({ useAuth: authMocks.useAuth }));
+vi.mock('../api/billingApi', () => ({ billingApi: billingApiMocks }));
+vi.mock('../../teams/api/teamsApi', () => ({ teamsApi: teamsApiMocks }));
+vi.mock('../../leagues/api/leaguesApi', () => ({ leaguesApi: leaguesApiMocks }));
 
-const leaguesApiMocks = vi.hoisted(() => ({
-  list: vi.fn(),
-}));
-
-vi.mock('../../../app/store/AuthContext', () => ({
-  useAuth: authMocks.useAuth,
-}));
-
-vi.mock('../api/billingApi', () => ({
-  billingApi: billingApiMocks,
-}));
-
-vi.mock('../../teams/api/teamsApi', () => ({
-  teamsApi: teamsApiMocks,
-}));
-
-vi.mock('../../leagues/api/leaguesApi', () => ({
-  leaguesApi: leaguesApiMocks,
-}));
-
-// Mirrors GET /billing/catalog (getDisplayCatalog) — no price IDs, display copy only.
 const CATALOG = {
   plans: [
     {
       id: 'starter',
-      scope: 'team',
-      name: 'Starter',
+      name: 'Your First Team',
       tagline: 'Track one team, free forever.',
       price: 'Free',
-      features: ['Live stat tracking & box scores', 'Public team & player pages'],
+      features: ['Every available team feature'],
       intervals: {},
     },
     {
-      id: 'team_pro',
-      scope: 'team',
-      name: 'Team Pro',
-      tagline: 'Depth for serious teams.',
-      features: ['Everything in Starter', 'Replay & public shot maps'],
-      intervals: {
-        monthly: { display: '$9/mo', trialDays: 14 },
-        season: { display: '$79/yr', trialDays: 14 },
-      },
+      id: 'team_extra',
+      name: 'Additional Team',
+      tagline: 'For every standalone team after your first.',
+      features: ['All team features included'],
+      intervals: { monthly: { display: '$5/mo per additional team', trialDays: 0 } },
     },
     {
       id: 'league',
-      scope: 'league',
       name: 'League',
-      tagline: 'Run your whole league.',
-      features: ['Team Pro included for every team', 'Standings, rosters & join requests'],
-      intervals: {
-        monthly: { display: '$29/mo', trialDays: 14 },
-        season: { display: '$199/season', trialDays: 14 },
-      },
+      tagline: 'For up to 10 teams.',
+      features: ['All team features included'],
+      intervals: { monthly: { display: '$29/mo', trialDays: 14 } },
+    },
+    {
+      id: 'league_plus',
+      name: 'League Plus',
+      tagline: 'For 11–24 teams.',
+      features: ['Everything in League'],
+      intervals: { monthly: { display: '$49/mo', trialDays: 14 } },
     },
   ],
 };
 
-function renderPricing(initialEntry = '/pricing') {
+function renderPricing(entry = '/pricing') {
   render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/register" element={<div>Register page</div>} />
-        <Route path="/login" element={<div>Login page</div>} />
+        <Route path="/register" element={<div>Signup</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -99,24 +79,24 @@ describe('PricingPage', () => {
         {
           id: 'team-free',
           name: 'Free Team',
-          billing: { plan: 'starter', subscriptionStatus: 'inactive' },
+          billing: { capacityType: 'free', plan: 'starter', subscriptionStatus: 'inactive' },
         },
         {
-          id: 'team-active',
-          name: 'Active Team',
-          billing: { plan: 'team_pro', subscriptionStatus: 'active' },
+          id: 'team-paid',
+          name: 'Second Team',
+          billing: { capacityType: 'paid', plan: 'starter', subscriptionStatus: 'inactive' },
         },
       ],
     });
     leaguesApiMocks.list.mockResolvedValue({ leagues: [] });
     billingApiMocks.createTeamCheckoutSession.mockResolvedValue({
-      url: 'https://checkout.stripe.com/test',
+      url: 'https://checkout.stripe.com/team',
     });
     billingApiMocks.createLeagueCheckoutSession.mockResolvedValue({
-      url: 'https://checkout.stripe.com/league-test',
+      url: 'https://checkout.stripe.com/league',
     });
     billingApiMocks.createCustomerPortalSession.mockResolvedValue({
-      url: 'https://billing.stripe.com/portal-test',
+      url: 'https://billing.stripe.com/portal',
     });
     delete window.location;
     window.location = { ...originalLocation, assign: vi.fn() };
@@ -127,62 +107,90 @@ describe('PricingPage', () => {
     window.location = originalLocation;
   });
 
-  test('renders the three catalog plans', async () => {
+  test('renders all four plans and the agreed monthly prices', async () => {
     renderPricing();
-    expect(await screen.findByText(/^Starter$/)).toBeInTheDocument();
-    expect(screen.getByText(/^Team Pro$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Your First Team$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Additional Team$/)).toBeInTheDocument();
     expect(screen.getByText(/^League$/)).toBeInTheDocument();
+    expect(screen.getByText(/^League Plus$/)).toBeInTheDocument();
+    expect(screen.getByText('$5/mo per additional team')).toBeInTheDocument();
+    expect(screen.getByText('$29/mo')).toBeInTheDocument();
+    expect(screen.getByText('$49/mo')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /season/i })).not.toBeInTheDocument();
   });
 
-  test('renders catalog prices and toggles interval', async () => {
+  test('starts monthly checkout for the selected additional team', async () => {
     renderPricing();
-    await waitFor(() => expect(screen.getByText(/\$9\/mo/)).toBeInTheDocument());
-    expect(screen.getByText(/\$29\/mo/)).toBeInTheDocument();
+    const button = await screen.findByRole('button', { name: /subscribe for this team/i });
+    fireEvent.click(button);
 
-    fireEvent.click(screen.getByRole('button', { name: /Season/i }));
-
-    expect(screen.getByText(/\$79\/yr/)).toBeInTheDocument();
-    expect(screen.getByText(/\$199\/season/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$9\/mo/)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(billingApiMocks.createTeamCheckoutSession).toHaveBeenCalledWith('team-paid')
+    );
+    expect(window.location.assign).toHaveBeenCalledWith('https://checkout.stripe.com/team');
   });
 
-  test('starts team checkout for a free team', async () => {
+  test('does not offer a paid checkout for the already-free team', async () => {
+    teamsApiMocks.list.mockResolvedValue({
+      teams: [
+        {
+          id: 'team-free',
+          name: 'Free Team',
+          billing: { capacityType: 'free', plan: 'starter', subscriptionStatus: 'inactive' },
+        },
+      ],
+    });
     renderPricing();
 
-    await waitFor(() => {
-      expect(screen.getByText(/free team/i)).toBeInTheDocument();
-    });
-
-    // Team Pro + League cards both show "Start free trial"; click the first (Team).
-    fireEvent.click(screen.getAllByRole('button', { name: /Start free trial/i })[0]);
-
-    await waitFor(() => {
-      expect(billingApiMocks.createTeamCheckoutSession).toHaveBeenCalledWith(
-        'team-free',
-        'monthly'
-      );
-    });
-    expect(window.location.assign).toHaveBeenCalledWith('https://checkout.stripe.com/test');
+    const button = await screen.findByRole('button', { name: /already included/i });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(billingApiMocks.createTeamCheckoutSession).not.toHaveBeenCalled();
   });
 
-  test('opens the billing portal for an active (canonical team_pro) team', async () => {
-    renderPricing('/pricing?teamId=team-active');
+  test('can make an inactive paid team the free team', async () => {
+    billingApiMocks.chooseFreeTeam.mockResolvedValue({ team: { capacityType: 'free' } });
+    renderPricing();
+    fireEvent.click(await screen.findByRole('button', { name: /make this my free team/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/active team/i)).toBeInTheDocument();
+    await waitFor(() => expect(billingApiMocks.chooseFreeTeam).toHaveBeenCalledWith('team-paid'));
+    expect(screen.getByText(/previous free team is read-only/i)).toBeInTheDocument();
+  });
+
+  test('opens the portal for an active additional-team subscription', async () => {
+    teamsApiMocks.list.mockResolvedValue({
+      teams: [
+        {
+          id: 'team-paid',
+          name: 'Second Team',
+          billing: { capacityType: 'paid', plan: 'team_extra', subscriptionStatus: 'active' },
+        },
+      ],
     });
+    renderPricing();
+    fireEvent.click(await screen.findByRole('button', { name: /manage team billing/i }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Manage Team Billing/i }));
-
-    await waitFor(() => {
+    await waitFor(() =>
       expect(billingApiMocks.createCustomerPortalSession).toHaveBeenCalledWith({
-        teamId: 'team-active',
-      });
-    });
-    expect(window.location.assign).toHaveBeenCalledWith('https://billing.stripe.com/portal-test');
+        teamId: 'team-paid',
+      })
+    );
   });
 
-  test('new-league intent starts checkout even when an active league already exists', async () => {
+  test('starts League Plus checkout with the correct plan ID', async () => {
+    renderPricing();
+    const buttons = await screen.findAllByRole('button', { name: /start 14-day trial/i });
+    fireEvent.click(buttons[1]);
+
+    await waitFor(() =>
+      expect(billingApiMocks.createLeagueCheckoutSession).toHaveBeenCalledWith(
+        'league_plus',
+        undefined
+      )
+    );
+  });
+
+  test('new-League intent starts a new checkout even when another League exists', async () => {
     leaguesApiMocks.list.mockResolvedValue({
       leagues: [
         {
@@ -196,23 +204,72 @@ describe('PricingPage', () => {
       devRedirectPath: '/admin/leagues/new',
     });
     renderPricing('/pricing?resourceType=league&action=create');
+    fireEvent.click((await screen.findAllByRole('button', { name: /start 14-day trial/i }))[0]);
 
-    const trialButtons = await screen.findAllByRole('button', { name: /Start free trial/i });
-    fireEvent.click(trialButtons[trialButtons.length - 1]);
-
-    await waitFor(() => {
-      expect(billingApiMocks.createLeagueCheckoutSession).toHaveBeenCalledWith('monthly');
-    });
+    await waitFor(() =>
+      expect(billingApiMocks.createLeagueCheckoutSession).toHaveBeenCalledWith('league', undefined)
+    );
     expect(billingApiMocks.createCustomerPortalSession).not.toHaveBeenCalled();
     expect(window.location.assign).toHaveBeenCalledWith('/admin/leagues/new');
   });
 
-  test('unauthenticated user sees register link for the paid plans', async () => {
-    authMocks.useAuth.mockReturnValue({ user: null });
+  test('does not send a grandfathered complimentary League to Stripe', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-grandfathered',
+          name: 'Existing League',
+          billing: {
+            plan: 'league_plus',
+            subscriptionStatus: 'active',
+            managedByStripe: false,
+          },
+        },
+      ],
+    });
     renderPricing();
 
-    const registerLinks = await screen.findAllByRole('link', { name: /Start free trial/i });
-    expect(registerLinks.length).toBeGreaterThan(0);
-    expect(registerLinks[0]).toHaveAttribute('href', expect.stringContaining('/register'));
+    const buttons = await screen.findAllByRole('button', { name: 'Complimentary League' });
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+    fireEvent.click(buttons[0]);
+    expect(billingApiMocks.createCustomerPortalSession).not.toHaveBeenCalled();
+    expect(billingApiMocks.changeLeaguePlan).not.toHaveBeenCalled();
+  });
+
+  test('lets a League Plus owner cancel a scheduled downgrade', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-plus',
+          name: 'Big League',
+          billing: {
+            plan: 'league_plus',
+            subscriptionStatus: 'active',
+            managedByStripe: true,
+            scheduledPlan: 'league',
+          },
+        },
+      ],
+    });
+    billingApiMocks.changeLeaguePlan.mockResolvedValue({
+      change: 'downgrade_canceled',
+      scheduled: false,
+    });
+    renderPricing();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep League Plus' }));
+    await waitFor(() =>
+      expect(billingApiMocks.changeLeaguePlan).toHaveBeenCalledWith('league-plus', 'league_plus')
+    );
+    expect(screen.getByText(/scheduled downgrade was canceled/i)).toBeInTheDocument();
+  });
+
+  test('signed-out visitors see signup links', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null });
+    renderPricing();
+    const links = await screen.findAllByRole('link', { name: /start 14-day trial/i });
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute('href', '/register');
   });
 });

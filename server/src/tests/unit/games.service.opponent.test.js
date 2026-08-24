@@ -23,6 +23,7 @@ jest.mock('../../modules/billing/billing.service', () => ({
     canViewShotMaps: false,
   })),
   isTeamActive: jest.fn(() => true),
+  assertTeamManagementAllowed: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/leagues.service', () => ({
@@ -30,6 +31,7 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
+  canFinalizeLeagueGame: jest.fn(() => false),
   scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 

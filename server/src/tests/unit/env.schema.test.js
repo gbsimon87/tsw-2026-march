@@ -5,10 +5,9 @@
 const { envSchema } = require('../../config/env');
 
 const PRICE_IDS = {
-  STRIPE_PRICE_ID_TEAM_MONTHLY: 'price_team_monthly',
-  STRIPE_PRICE_ID_TEAM_SEASON: 'price_team_season',
-  STRIPE_PRICE_ID_LEAGUE_MONTHLY: 'price_league_monthly',
-  STRIPE_PRICE_ID_LEAGUE_SEASON: 'price_league_season',
+  STRIPE_PRICE_ID_ADDITIONAL_TEAM: 'price_additional_team',
+  STRIPE_PRICE_ID_LEAGUE: 'price_league',
+  STRIPE_PRICE_ID_LEAGUE_PLUS: 'price_league_plus',
 };
 
 // Audit M2: full required Stripe config once the secret key is set — price IDs
@@ -16,6 +15,7 @@ const PRICE_IDS = {
 const FULL_STRIPE = {
   ...PRICE_IDS,
   STRIPE_WEBHOOK_SECRET: 'whsec_123',
+  STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_tsw_locked_down',
   STRIPE_SUCCESS_URL: 'http://localhost:5173/billing/success',
   STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
 };
@@ -46,15 +46,20 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
 
   it('rejects billing enabled when a price ID is missing', () => {
     const partial = { ...FULL_STRIPE };
-    delete partial.STRIPE_PRICE_ID_TEAM_SEASON;
+    delete partial.STRIPE_PRICE_ID_LEAGUE_PLUS;
     const result = envSchema.safeParse(baseEnv({ STRIPE_SECRET_KEY: 'sk_test_123', ...partial }));
     expect(result.success).toBe(false);
     const messages = result.error.issues.map((i) => i.message).join(' ');
-    expect(messages).toContain('STRIPE_PRICE_ID_TEAM_SEASON');
+    expect(messages).toContain('STRIPE_PRICE_ID_LEAGUE_PLUS');
   });
 
   it('rejects billing enabled when the webhook secret or redirect URLs are missing (audit M2)', () => {
-    for (const key of ['STRIPE_WEBHOOK_SECRET', 'STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL']) {
+    for (const key of [
+      'STRIPE_WEBHOOK_SECRET',
+      'STRIPE_PORTAL_CONFIGURATION_ID',
+      'STRIPE_SUCCESS_URL',
+      'STRIPE_CANCEL_URL',
+    ]) {
       const partial = { ...FULL_STRIPE };
       delete partial[key];
       const result = envSchema.safeParse(baseEnv({ STRIPE_SECRET_KEY: 'sk_test_123', ...partial }));
@@ -67,6 +72,74 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
   it('allows billing disabled (no secret key) with no price IDs', () => {
     const result = envSchema.safeParse(baseEnv());
     expect(result.success).toBe(true);
+  });
+
+  it('allows local development to start while the new Stripe catalog is incomplete', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'development',
+        APP_ENV: 'development',
+        STRIPE_SECRET_KEY: 'sk_test_legacy_local',
+        STRIPE_WEBHOOK_SECRET: 'whsec_legacy_local',
+        STRIPE_SUCCESS_URL: 'http://localhost:5173/billing/success',
+        STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
+      })
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it('keeps deployed development strict even though APP_ENV is development', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        APP_ENV: 'development',
+        STRIPE_SECRET_KEY: 'rk_test_deployed_dev',
+      })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain(
+      'STRIPE_PRICE_ID_ADDITIONAL_TEAM'
+    );
+  });
+
+  it('rejects duplicate price IDs', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        STRIPE_SECRET_KEY: 'sk_test_123',
+        ...FULL_STRIPE,
+        STRIPE_PRICE_ID_LEAGUE: PRICE_IDS.STRIPE_PRICE_ID_ADDITIONAL_TEAM,
+      })
+    );
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain(
+      'different price ID'
+    );
+  });
+
+  it('rejects live keys in development and test keys in production', () => {
+    expect(
+      envSchema.safeParse(
+        baseEnv({ APP_ENV: 'development', STRIPE_SECRET_KEY: 'sk_live_123', ...FULL_STRIPE })
+      ).success
+    ).toBe(false);
+    expect(
+      envSchema.safeParse(
+        baseEnv({ APP_ENV: 'production', STRIPE_SECRET_KEY: 'sk_test_123', ...FULL_STRIPE })
+      ).success
+    ).toBe(false);
+  });
+
+  it('rejects redirect URLs on a different origin', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        STRIPE_SECRET_KEY: 'sk_test_123',
+        ...FULL_STRIPE,
+        STRIPE_SUCCESS_URL: 'https://evil.example/billing/success',
+      })
+    );
+    expect(result.success).toBe(false);
   });
 
   it('no longer carries the retired STRIPE_PRICE_ID_PRO_MONTHLY', () => {

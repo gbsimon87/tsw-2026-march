@@ -7,7 +7,6 @@ afterEach(() => {
 });
 
 vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:4000/api/v1');
-vi.stubEnv('VITE_STRIPE_PUBLISHABLE_KEY', 'pk_test_tsw');
 
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = (query) => ({

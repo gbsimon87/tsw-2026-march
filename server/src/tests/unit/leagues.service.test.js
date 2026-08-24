@@ -927,6 +927,9 @@ describe('auto feed reversal on league going private (B2)', () => {
       ownerUserId: 'user-1',
       status: 'active',
       isPublic: true,
+      plan: 'league',
+      billingSource: 'comp',
+      subscriptionStatus: 'active',
       ...overrides,
     };
   }

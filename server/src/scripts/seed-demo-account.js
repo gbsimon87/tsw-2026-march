@@ -209,7 +209,7 @@ async function upsertUser({ email, name, password, plan, forceCredentials }) {
     user.authProvider = 'local';
     user.emailVerified = true;
     user.emailVerifiedAt = user.emailVerifiedAt || new Date();
-    user.plan = plan || 'team_pro';
+    user.plan = plan || 'starter';
     await user.save();
     log(`  user ${email}: existing account found, credentials/plan updated to match demo spec`);
     return { user, created: false };
@@ -229,7 +229,7 @@ async function upsertUser({ email, name, password, plan, forceCredentials }) {
     emailVerified: true,
     emailVerifiedAt: new Date(),
     roles: ['user'],
-    plan: plan || 'team_pro',
+    plan: plan || 'starter',
   });
   log(`  user ${email}: created`);
   return { user, created: true };
@@ -258,6 +258,7 @@ async function upsertLeague(blueprint, ownerUserId) {
     isPublic: true,
     plan: 'league',
     subscriptionStatus: 'active',
+    billingSource: 'comp',
     currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
     cancelAtPeriodEnd: false,
   });
@@ -543,7 +544,7 @@ async function seedLeague(blueprint, demoUser) {
       email: blueprint.commissionerEmail,
       name: blueprint.commissionerName,
       password: 'password1!2@3#',
-      plan: 'team_pro',
+      plan: 'starter',
     });
     ownerUserId = commissioner?._id;
   }
@@ -835,7 +836,7 @@ async function main() {
       email: DEMO_USER.email,
       name: DEMO_USER.name,
       password: DEMO_USER.password,
-      plan: 'team_pro',
+      plan: 'starter',
       forceCredentials: true,
     });
 

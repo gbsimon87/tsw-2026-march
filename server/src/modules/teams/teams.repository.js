@@ -47,13 +47,28 @@ const teamSchema = new mongoose.Schema(
     // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro'/'team' were rewritten by
     // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
     // legacy values at read time; this enum only constrains writes.
-    plan: { type: String, enum: ['starter', 'team_pro'], default: 'starter' },
+    plan: { type: String, enum: ['starter', 'team_extra', 'team_pro'], default: 'starter' },
+    // One owned standalone team is free. Every other owned standalone team needs
+    // its own $5/month subscription. Existing rows are assigned deliberately by
+    // migrate-capacity-pricing.js; defaulting new rows to paid avoids accidentally
+    // granting a second free slot if creation code is bypassed.
+    capacityType: { type: String, enum: ['free', 'paid'], default: 'paid', index: true },
     // How this team's plan is granted. 'stripe' = billed via Stripe (webhooks own it);
     // 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
     billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
     subscriptionStatus: {
       type: String,
-      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
+      enum: [
+        'inactive',
+        'trialing',
+        'active',
+        'past_due',
+        'canceled',
+        'incomplete',
+        'incomplete_expired',
+        'unpaid',
+        'paused',
+      ],
       default: 'inactive',
     },
     stripeCustomerId: { type: String, default: null },
@@ -74,6 +89,10 @@ const teamSchema = new mongoose.Schema(
 );
 
 teamSchema.index({ ownerUserId: 1, name: 1 });
+teamSchema.index(
+  { ownerUserId: 1, capacityType: 1 },
+  { unique: true, partialFilterExpression: { capacityType: 'free' } }
+);
 
 // OPT-013: materialised standalone-team season summary. One doc per team;
 // `summary` is the pre-computed object `buildPublicTeamSummary` returns
@@ -129,6 +148,18 @@ async function saveTeam(team) {
   return team.save();
 }
 
+async function makeOwnedTeamFree(ownerUserId, teamId) {
+  await Team.updateMany(
+    { ownerUserId, capacityType: 'free', _id: { $ne: teamId } },
+    { $set: { capacityType: 'paid' } }
+  );
+  return Team.findOneAndUpdate(
+    { _id: teamId, ownerUserId },
+    { $set: { capacityType: 'free' } },
+    { new: true }
+  );
+}
+
 // OPT-020: atomically claim a Stripe webhook event for a team. Returns the
 // (updated) team if this caller won the claim, or null if the event was
 // already processed / the team wasn't found. Callers apply their effect only
@@ -168,6 +199,7 @@ module.exports = {
   findTeamById,
   listTeams,
   saveTeam,
+  makeOwnedTeamFree,
   claimTeamWebhookEvent,
   releaseTeamWebhookEvent,
   TeamSeasonSummary,

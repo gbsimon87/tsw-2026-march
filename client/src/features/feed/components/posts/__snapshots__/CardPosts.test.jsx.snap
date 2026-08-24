@@ -6,6 +6,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
 >
   <a
     class="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    data-discover="true"
     href="/games/g1"
   >
     <div
@@ -169,6 +170,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
   </a>
   <a
     class="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    data-discover="true"
     href="/teams/t1/players/p1"
   >
     <div
@@ -307,6 +309,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
   </a>
   <a
     class="block transition duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+    data-discover="true"
     href="/teams/t1"
   >
     <div

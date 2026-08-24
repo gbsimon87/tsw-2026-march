@@ -3,10 +3,19 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { leaguesApi } from '../../leagues/api/leaguesApi';
+import { billingApi } from '../api/billingApi';
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 const MAX_POLL_ATTEMPTS = 5;
 const POLL_DELAY_MS = 1500;
+const ATTENTION_STATUSES = new Set([
+  'past_due',
+  'canceled',
+  'incomplete',
+  'incomplete_expired',
+  'unpaid',
+  'paused',
+]);
 
 function isActivePlan(billing, planValues) {
   return planValues.includes(billing?.plan) && ACTIVE_STATUSES.has(billing?.subscriptionStatus);
@@ -19,10 +28,12 @@ export function BillingSuccessPage() {
   const [resourceName, setResourceName] = useState('');
   const [attemptCount, setAttemptCount] = useState(0);
   const [trialEnd, setTrialEnd] = useState(null);
+  const [needsLeagueSetup, setNeedsLeagueSetup] = useState(false);
 
   const resourceType = searchParams.get('resourceType') || 'team';
   const teamId = searchParams.get('teamId') || '';
   const leagueSetup = searchParams.get('leagueSetup') === '1';
+  const sessionId = searchParams.get('session_id') || '';
 
   const isLeague = resourceType === 'league';
   const targetLabel = resourceName || (isLeague ? 'your league' : 'your team');
@@ -30,6 +41,45 @@ export function BillingSuccessPage() {
   useEffect(() => {
     let isActive = true;
     let timeoutId;
+
+    async function pollCheckout(nextAttempt = 1) {
+      try {
+        const response = await billingApi.getCheckoutStatus(sessionId);
+        if (!isActive) return;
+        const resource = response.resource;
+        setAttemptCount(nextAttempt);
+        setResourceName(resource?.name && resource.name !== 'My League' ? resource.name : '');
+        setNeedsLeagueSetup(isLeague && resource?.name === 'My League');
+
+        if (
+          resource &&
+          isActivePlan(
+            resource.billing,
+            isLeague ? ['league', 'league_plus', 'pro'] : ['team_extra', 'team_pro', 'team', 'pro']
+          )
+        ) {
+          setTrialEnd(resource.billing?.trialEnd ?? null);
+          setStatus('active');
+          return;
+        }
+        if (
+          response.checkoutStatus === 'expired' ||
+          ATTENTION_STATUSES.has(resource?.billing?.subscriptionStatus)
+        ) {
+          setStatus('attention');
+          return;
+        }
+        if (nextAttempt >= MAX_POLL_ATTEMPTS) {
+          setStatus('pending');
+          return;
+        }
+        timeoutId = window.setTimeout(() => pollCheckout(nextAttempt + 1), POLL_DELAY_MS);
+      } catch (err) {
+        if (!isActive) return;
+        setError(err.message || 'Failed to refresh billing status');
+        setStatus('error');
+      }
+    }
 
     async function pollTeam(nextAttempt = 1) {
       try {
@@ -45,14 +95,14 @@ export function BillingSuccessPage() {
         setResourceName(team.name);
         setAttemptCount(nextAttempt);
 
-        if (isActivePlan(team.billing, ['team_pro', 'team', 'pro'])) {
+        if (isActivePlan(team.billing, ['team_extra', 'team_pro', 'team', 'pro'])) {
           setTrialEnd(team.billing?.trialEnd ?? null);
           setStatus('active');
           return;
         }
 
         const sub = team.billing?.subscriptionStatus || 'inactive';
-        if (sub === 'past_due' || sub === 'canceled') {
+        if (ATTENTION_STATUSES.has(sub)) {
           setStatus('attention');
           return;
         }
@@ -76,12 +126,15 @@ export function BillingSuccessPage() {
         if (!isActive) return;
 
         const leagues = response.leagues || response || [];
-        const active = leagues.find((l) => isActivePlan(l.billing, ['league', 'pro']));
+        const active = leagues.find((l) =>
+          isActivePlan(l.billing, ['league', 'league_plus', 'pro'])
+        );
 
         setAttemptCount(nextAttempt);
 
         if (active) {
           setResourceName(active.name && active.name !== 'My League' ? active.name : '');
+          setNeedsLeagueSetup(active.name === 'My League');
           setTrialEnd(active.billing?.trialEnd ?? null);
           setStatus('active');
           return;
@@ -100,7 +153,9 @@ export function BillingSuccessPage() {
       }
     }
 
-    if (isLeague) {
+    if (sessionId) {
+      pollCheckout();
+    } else if (isLeague) {
       pollLeague();
     } else if (teamId) {
       pollTeam();
@@ -112,7 +167,7 @@ export function BillingSuccessPage() {
       isActive = false;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [teamId, isLeague]);
+  }, [teamId, isLeague, sessionId]);
 
   const trialEndLabel = useMemo(() => {
     if (!trialEnd) return null;
@@ -128,14 +183,14 @@ export function BillingSuccessPage() {
   }, [trialEnd]);
 
   const body = useMemo(() => {
-    const planLabel = isLeague ? 'League plan' : 'Team Pro plan';
+    const planLabel = isLeague ? 'League plan' : 'additional-team plan';
 
     if (status === 'active') {
       const trialNote = trialEndLabel
-        ? `14-day trial started. You won't be charged until ${trialEndLabel}.`
+        ? `Your trial has started. You won't be charged until ${trialEndLabel}.`
         : null;
 
-      if (isLeague && leagueSetup) {
+      if (isLeague && (leagueSetup || needsLeagueSetup)) {
         return {
           eyebrow: 'Billing Active',
           title: "Your league plan is active. Let's set up your league.",
@@ -174,7 +229,7 @@ export function BillingSuccessPage() {
       title: `${planLabel} is still being finalized`,
       description: 'Stripe checkout completed. The app is checking whether billing is active.',
     };
-  }, [status, isLeague, leagueSetup, targetLabel, trialEndLabel, error]);
+  }, [status, isLeague, leagueSetup, needsLeagueSetup, targetLabel, trialEndLabel, error]);
 
   const pricingHref = teamId ? `/pricing?teamId=${encodeURIComponent(teamId)}` : '/pricing';
 

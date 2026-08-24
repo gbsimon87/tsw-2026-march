@@ -19,7 +19,6 @@ import { GameRecapPanel } from '../components/GameRecapPanel';
 import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { ShareImageButton } from '../../feed/components/ShareImageButton';
-import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
@@ -145,28 +144,6 @@ function ReplayTabIcon() {
       <path d="M4 4.5v7l6-3.5-6-3.5Z" strokeLinejoin="round" />
       <path d="M12.5 4v8" strokeLinecap="round" />
     </svg>
-  );
-}
-
-function canAccessReplay(team, entitlements) {
-  if (entitlements?.canViewReplay === true) {
-    return true;
-  }
-
-  if (entitlements?.canViewReplay === false) {
-    return false;
-  }
-
-  if (team?.entitlements?.canViewReplay === true) {
-    return true;
-  }
-
-  const plan = team?.billing?.plan;
-  const status = team?.billing?.subscriptionStatus;
-  // Canonical 'team_pro'; legacy 'team'/'pro' tolerated during migration.
-  return (
-    (plan === 'team_pro' || plan === 'team' || plan === 'pro') &&
-    (status === 'active' || status === 'trialing')
   );
 }
 
@@ -368,8 +345,6 @@ export function GameDetailPage() {
     opponentPoints: boxScore?.opponentTotals?.points || 0,
     hasOpponentScore: (boxScore?.opponentTotals?.points || 0) > 0,
   };
-  const entitlements = data.teamEntitlements || team.entitlements || {};
-  const canViewReplay = canAccessReplay(team, entitlements);
   const canShareHighlights = Boolean(data.canShareHighlights);
   const sortedEvents = [...game.events].sort((a, b) => {
     const aTime = new Date(a.occurredAt || 0).getTime();
@@ -595,7 +570,7 @@ export function GameDetailPage() {
     </div>
   );
 
-  const replayContent = canViewReplay ? (
+  const replayContent = (
     <GameReplayPanel
       events={replayEvents}
       players={team.players || []}
@@ -603,15 +578,6 @@ export function GameDetailPage() {
       participants={participants}
       replayFilters={data.replayFilters || ['all']}
     />
-  ) : (
-    <LockedFeatureCard planName="Team Pro" pricingHref="/pricing">
-      <div className="rounded-xl bg-slate-100 p-8 text-center text-slate-400">
-        <p className="text-lg" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
-          Replay
-        </p>
-        <p className="mt-1 text-sm">Event-by-event possession replay</p>
-      </div>
-    </LockedFeatureCard>
   );
 
   function updateSearchParam(name, value) {

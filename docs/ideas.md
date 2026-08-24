@@ -130,10 +130,10 @@ These apply to every new asset, not just the first three items.
 
 These are not content formats, but they affect whether attention can convert.
 
-| Idea                        | Size | Implemented | Notes                                                                                                                                                                                                                 |
-| --------------------------- | ---- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GBP pricing for UK market   | S    | No          | Display copy is USD (`$9/mo`, `$79/yr`, `$29/mo`, `$199/season`). Verify the authoritative Stripe price currency before changing copy.                                                                                |
-| Public launch of `/pricing` | M    | No          | Production currently redirects away. Until the launch decision is made, social CTAs should ask organisers to view the demo or enquire, not “buy now”. See [`pricing-manual-actions.md`](./pricing-manual-actions.md). |
+| Idea                        | Size | Implemented | Notes                                                                                                                                                                                 |
+| --------------------------- | ---- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GBP pricing for UK market   | S    | No          | Current pricing is USD: first Team free, additional Teams $5/month, League $29/month, and League Plus $49/month. Verify the authoritative Stripe currency before changing copy.       |
+| Public launch of `/pricing` | M    | No          | Production currently redirects away. Until the launch decision is made, social CTAs should ask organisers to view the demo or enquire, not “buy now”. See [`stripe.md`](./stripe.md). |
 
 ## Constraints
 

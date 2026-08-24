@@ -483,7 +483,8 @@ it does not belong in PostHog.
 
 From [`PROJECT-KNOWLEDGE.md`](./PROJECT-KNOWLEDGE.md):
 
-- **Two customer types**: standalone teams (`team_pro`) and leagues (`league`).
+- **Two customer types**: standalone Team owners (one free, then `team_extra`)
+  and League owners (`league` or `league_plus`).
 - **Multi-actor leagues**: owner → managers → team managers → helpers → players.
   Adoption depends on invited people showing up — a separate funnel from the
   owner's own actions.

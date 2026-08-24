@@ -20,7 +20,11 @@ const {
 const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 const { logger } = require('../../config/logger');
-const { getBillingSummary, assertTeamCreationAllowed } = require('../billing/billing.service');
+const {
+  getBillingSummary,
+  assertTeamCreationAllowed,
+  assertTeamManagementAllowed,
+} = require('../billing/billing.service');
 const { resolveForTeam } = require('../billing/entitlements.service');
 const {
   uploadImageBuffer,
@@ -516,7 +520,7 @@ function buildPublicPlayerSummary(gameRows) {
 }
 
 async function createTeamForUser(userId, payload) {
-  await assertTeamCreationAllowed(userId);
+  const { capacityType } = await assertTeamCreationAllowed(userId);
 
   const players = (payload.players || []).map((player) => ({
     displayName: player.displayName.trim(),
@@ -529,6 +533,7 @@ async function createTeamForUser(userId, payload) {
 
   const team = await createTeam({
     ownerUserId: userId,
+    capacityType,
     name: payload.name.trim(),
     colors: (payload.colors || []).map(normalizeHexColor).filter(Boolean),
     homeVenue: normalizeVenue(payload.homeVenue),
@@ -629,8 +634,8 @@ async function getPublicPlayer(teamId, playerId) {
   const teamLookup = buildTeamLookup(teams);
   const gameRows = buildPublicPlayerGameRows(games, team, player, teamLookup);
   const entitlements = resolveForTeam(team).entitlements;
-  // Audit H6: highlight clips are a Team Pro feature — gate them on the resolver.
-  // A free/lapsed team exposes no clips on its public profile.
+  // All current Team features are included. Keeping the resolver check here
+  // makes future entitlement changes centralized without plan-name branches.
   const highlights = entitlements.canViewHighlightClips
     ? buildPlayerHighlights(games, String(player._id))
     : [];
@@ -790,6 +795,7 @@ async function updateTeamForUser(userId, teamId, payload) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
+  assertTeamManagementAllowed(team);
 
   if (payload.name) {
     team.name = payload.name.trim();
@@ -820,6 +826,7 @@ async function uploadLogoForTeam(userId, teamId, file) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
+  assertTeamManagementAllowed(team);
 
   if (!file) {
     throw new ApiError(400, 'Logo file is required');
@@ -871,6 +878,7 @@ async function removeLogoFromTeam(userId, teamId) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
+  assertTeamManagementAllowed(team);
 
   const previousLogoPublicId = team.logo?.publicId || null;
   team.logo = null;
@@ -884,6 +892,7 @@ async function addPlayerToTeam(userId, teamId, payload) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
+  assertTeamManagementAllowed(team);
 
   const targetName = normalizeName(payload.displayName);
   const duplicate = team.players.some(
@@ -913,6 +922,7 @@ async function updatePlayerOnTeam(userId, teamId, playerId, payload) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
+  assertTeamManagementAllowed(team);
 
   const player = team.players.id(playerId);
   if (!player) {
@@ -958,6 +968,7 @@ async function deactivatePlayerOnTeam(userId, teamId, playerId) {
   if (!team) {
     throw new ApiError(404, 'Team not found');
   }
+  assertTeamManagementAllowed(team);
 
   const player = team.players.id(playerId);
   if (!player) {

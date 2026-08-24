@@ -41,6 +41,7 @@ describe('Game.status enum', () => {
 describe('setGameLineup status handling', () => {
   const gameId = new mongoose.Types.ObjectId().toString();
   const userId = new mongoose.Types.ObjectId().toString();
+  const teamId = new mongoose.Types.ObjectId().toString();
 
   function loadServiceWithGameStatus(status) {
     jest.resetModules();
@@ -49,8 +50,19 @@ describe('setGameLineup status handling', () => {
       findGameById: jest.fn().mockResolvedValue({
         _id: gameId,
         ownerUserId: userId,
+        teamId,
         gameContext: 'standalone',
         status,
+      }),
+    }));
+    jest.doMock('../../modules/teams/teams.repository', () => ({
+      ...jest.requireActual('../../modules/teams/teams.repository'),
+      findTeamByIdAndOwner: jest.fn().mockResolvedValue({
+        _id: teamId,
+        ownerUserId: userId,
+        capacityType: 'free',
+        plan: 'starter',
+        subscriptionStatus: 'inactive',
       }),
     }));
     return require('../../modules/games/games.service');

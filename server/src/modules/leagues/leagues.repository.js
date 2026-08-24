@@ -52,14 +52,24 @@ const leagueSchema = new mongoose.Schema(
     // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro' were rewritten by
     // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
     // legacy values at read time; this enum only constrains writes.
-    plan: { type: String, enum: ['starter', 'league'], default: 'starter' },
+    plan: { type: String, enum: ['starter', 'league', 'league_plus'], default: 'starter' },
     // How this league's plan is granted. 'stripe' = billed via Stripe (webhooks own
     // it); 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
     // We-ball Saturday becomes a real billingSource:'comp' doc (Phase 6 migration).
     billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
     subscriptionStatus: {
       type: String,
-      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
+      enum: [
+        'inactive',
+        'trialing',
+        'active',
+        'past_due',
+        'canceled',
+        'incomplete',
+        'incomplete_expired',
+        'unpaid',
+        'paused',
+      ],
       default: 'inactive',
     },
     stripeCustomerId: { type: String, default: null },
@@ -70,6 +80,12 @@ const leagueSchema = new mongoose.Schema(
     // League's billingInterval can be 'season' while it has any number of
     // Season documents — orthogonal concepts that share a word. Do not conflate.
     billingInterval: { type: String, enum: ['monthly', 'season', null], default: null },
+    scheduledPlan: {
+      type: String,
+      enum: ['league', 'league_plus', null],
+      default: null,
+    },
+    scheduledPlanAt: { type: Date, default: null },
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     trialEnd: { type: Date, default: null },

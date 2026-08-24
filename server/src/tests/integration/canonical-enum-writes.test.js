@@ -1,4 +1,4 @@
-// Audit fix H9 (docs/pricing.md) — regression net for
+// Audit fix H9 (docs/stripe.md) — regression net for
 // the canonical-enum write paths that shipped broken through a green suite (C1/C2).
 //
 // The existing tests mock the repositories, so a service writing a legacy plan
@@ -7,7 +7,7 @@
 // this file runs the REAL Mongoose schemas' full document validation (which
 // needs no DB connection) against the exact payloads the services write:
 //   - auth.service register()            → User.create   (C1)
-//   - billing createLeagueFromCheckout   → League.create (C2)
+//   - billing createLeagueFromCheckout   → League.findOneAndUpdate upsert (C2)
 // A service writing an out-of-enum value fails here exactly as it would in prod.
 
 jest.mock('../../modules/auth/auth.repository', () => {
@@ -33,10 +33,10 @@ jest.mock('../../config/env', () => ({
   env: {
     STRIPE_SECRET_KEY: 'sk_test_123',
     STRIPE_WEBHOOK_SECRET: 'whsec_123',
-    STRIPE_PRICE_ID_TEAM_MONTHLY: 'price_team_monthly',
-    STRIPE_PRICE_ID_TEAM_SEASON: 'price_team_season',
-    STRIPE_PRICE_ID_LEAGUE_MONTHLY: 'price_league_monthly',
-    STRIPE_PRICE_ID_LEAGUE_SEASON: 'price_league_season',
+    STRIPE_PRICE_ID_ADDITIONAL_TEAM: 'price_additional_team',
+    STRIPE_PRICE_ID_LEAGUE: 'price_league',
+    STRIPE_PRICE_ID_LEAGUE_PLUS: 'price_league_plus',
+    STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_tsw_locked_down',
     STRIPE_SUCCESS_URL: 'http://localhost:5173/billing/success',
     STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
     JWT_ACCESS_SECRET: 'a'.repeat(32),
@@ -85,17 +85,21 @@ describe('canonical enum write paths (C1/C2 regression net)', () => {
     );
 
     expect(result.user.email).toBe('new.user@example.com');
-    expect(['starter', 'team_pro']).toContain(result.user.plan);
+    expect(result.user.plan).toBe('starter');
   });
 
   test('league checkout.session.completed provisions a League that passes the tightened schema (C2)', async () => {
-    jest.spyOn(League, 'findOne').mockResolvedValue(null);
     const created = [];
-    jest.spyOn(League, 'create').mockImplementation(async (payload) => {
-      const doc = new League(payload);
-      await doc.validate(); // real-schema full validation, as League.create runs
-      created.push(doc);
-      return doc;
+    jest.spyOn(League, 'findOneAndUpdate').mockImplementation(async (_filter, update) => {
+      if (update.$setOnInsert) {
+        const doc = new League(update.$setOnInsert);
+        await doc.validate();
+        created.push(doc);
+      }
+      return created[0] || null;
+    });
+    jest.spyOn(League.prototype, 'save').mockImplementation(async function save() {
+      return this;
     });
 
     mockConstructEvent.mockReturnValue({

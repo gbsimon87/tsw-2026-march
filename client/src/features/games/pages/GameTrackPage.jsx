@@ -1605,8 +1605,7 @@ export function GameTrackPage() {
     return <SportsLoader label="Loading tracking session" fullPage />;
   }
 
-  // Tracking is free (T-12): no hard subscription block here. Premium features
-  // (replay/shot maps) are surfaced/gated on the game detail page, not the tracker.
+  // Every current Team feature is included; resource capacity is enforced by the API.
 
   const gameSummary = data.gameSummary || {
     teamPoints: boxScore.teamTotals?.points || 0,

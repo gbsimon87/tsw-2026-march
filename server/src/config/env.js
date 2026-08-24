@@ -38,10 +38,10 @@ const baseEnvSchema = z.object({
   OPENAI_GAME_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  STRIPE_PRICE_ID_TEAM_MONTHLY: z.string().optional(),
-  STRIPE_PRICE_ID_TEAM_SEASON: z.string().optional(),
-  STRIPE_PRICE_ID_LEAGUE_MONTHLY: z.string().optional(),
-  STRIPE_PRICE_ID_LEAGUE_SEASON: z.string().optional(),
+  STRIPE_PRICE_ID_ADDITIONAL_TEAM: z.string().optional(),
+  STRIPE_PRICE_ID_LEAGUE: z.string().optional(),
+  STRIPE_PRICE_ID_LEAGUE_PLUS: z.string().optional(),
+  STRIPE_PORTAL_CONFIGURATION_ID: z.string().optional(),
   STRIPE_SUCCESS_URL: z.string().url().optional(),
   STRIPE_CANCEL_URL: z.string().url().optional(),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -81,19 +81,23 @@ const baseEnvSchema = z.object({
     .transform((v) => v === 'true'),
 });
 
-// Fail fast on a half-configured billing setup: once STRIPE_SECRET_KEY is set, all
-// four subscription price IDs must be present. Otherwise a missing ID resolves to
-// `undefined` at checkout and Stripe 503s silently in prod (see docs/pricing-
-// overhaul/06-stripe-architecture.md). This is all-or-nothing, not per-field.
+// Fail fast on a half-configured deployed billing setup: once STRIPE_SECRET_KEY
+// is set, all three subscription price IDs must be present. Otherwise a missing
+// ID resolves to `undefined` at checkout and Stripe 503s silently in production
+// (see docs/stripe.md). Local NODE_ENV=development is deliberately exempt so an
+// old or in-progress sandbox setup cannot prevent the app from starting; its paid
+// Checkout routes still return "Billing is not configured" until the new Price
+// IDs are supplied. Render uses NODE_ENV=production in both environments, so
+// deployed development and production remain strict.
 // Audit M2: the webhook secret and success/cancel URLs are as load-bearing as the
 // price IDs. Without STRIPE_WEBHOOK_SECRET, boot succeeds and checkout works, but
 // every webhook fails signature verification — customers are charged and never
 // provisioned. The success/cancel URLs are required by every checkout session.
 const REQUIRED_STRIPE_CONFIG = [
-  'STRIPE_PRICE_ID_TEAM_MONTHLY',
-  'STRIPE_PRICE_ID_TEAM_SEASON',
-  'STRIPE_PRICE_ID_LEAGUE_MONTHLY',
-  'STRIPE_PRICE_ID_LEAGUE_SEASON',
+  'STRIPE_PRICE_ID_ADDITIONAL_TEAM',
+  'STRIPE_PRICE_ID_LEAGUE',
+  'STRIPE_PRICE_ID_LEAGUE_PLUS',
+  'STRIPE_PORTAL_CONFIGURATION_ID',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_SUCCESS_URL',
   'STRIPE_CANCEL_URL',
@@ -101,13 +105,81 @@ const REQUIRED_STRIPE_CONFIG = [
 
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
   if (!data.STRIPE_SECRET_KEY) return;
-  for (const key of REQUIRED_STRIPE_CONFIG) {
-    if (!data[key]) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [key],
-        message: `${key} is required when STRIPE_SECRET_KEY is set`,
-      });
+
+  if (data.NODE_ENV !== 'development') {
+    for (const key of REQUIRED_STRIPE_CONFIG) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when STRIPE_SECRET_KEY is set outside local development`,
+        });
+      }
+    }
+  }
+
+  const formatChecks = [
+    [
+      'STRIPE_SECRET_KEY',
+      /^(sk|rk)_(test|live)_/,
+      'must be a Stripe test or live secret/restricted key',
+    ],
+    ['STRIPE_WEBHOOK_SECRET', /^whsec_/, 'must start with whsec_'],
+    ['STRIPE_PRICE_ID_ADDITIONAL_TEAM', /^price_/, 'must start with price_'],
+    ['STRIPE_PRICE_ID_LEAGUE', /^price_/, 'must start with price_'],
+    ['STRIPE_PRICE_ID_LEAGUE_PLUS', /^price_/, 'must start with price_'],
+    ['STRIPE_PORTAL_CONFIGURATION_ID', /^bpc_/, 'must start with bpc_'],
+  ];
+  for (const [key, pattern, message] of formatChecks) {
+    if (data[key] && !pattern.test(data[key])) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} ${message}` });
+    }
+  }
+
+  const priceIds = REQUIRED_STRIPE_CONFIG.filter((key) => key.startsWith('STRIPE_PRICE_ID_')).map(
+    (key) => data[key]
+  );
+  if (priceIds.every(Boolean) && new Set(priceIds).size !== priceIds.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['STRIPE_PRICE_ID_ADDITIONAL_TEAM'],
+      message: 'Every Stripe price environment variable must use a different price ID',
+    });
+  }
+
+  const keyMode = data.STRIPE_SECRET_KEY.match(/^(?:sk|rk)_(test|live)_/)?.[1];
+  if (data.APP_ENV === 'development' && keyMode === 'live') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['STRIPE_SECRET_KEY'],
+      message: 'Development must use a Stripe test key',
+    });
+  }
+  if (data.APP_ENV === 'production' && keyMode === 'test') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['STRIPE_SECRET_KEY'],
+      message: 'Production must use a Stripe live key',
+    });
+  }
+
+  for (const key of ['STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL']) {
+    if (data[key]) {
+      try {
+        if (new URL(data[key]).origin !== new URL(data.CLIENT_ORIGIN).origin) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `${key} must use the same origin as CLIENT_ORIGIN`,
+          });
+        }
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['CLIENT_ORIGIN'],
+          message: 'CLIENT_ORIGIN must be a valid URL when Stripe is enabled',
+        });
+      }
     }
   }
 });
@@ -120,6 +192,15 @@ if (!parsed.success) {
 }
 
 const env = parsed.data;
+
+if (env.NODE_ENV === 'development' && env.STRIPE_SECRET_KEY) {
+  const missingStripeConfig = REQUIRED_STRIPE_CONFIG.filter((key) => !env[key]);
+  if (missingStripeConfig.length > 0) {
+    console.warn(
+      `Stripe billing is incomplete in local development. The app will start, but paid Checkout is unavailable until these variables are set: ${missingStripeConfig.join(', ')}`
+    );
+  }
+}
 
 if (env.NODE_ENV === 'production') {
   const requiredSmtpKeys = [

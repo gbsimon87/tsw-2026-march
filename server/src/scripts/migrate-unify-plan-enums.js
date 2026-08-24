@@ -1,18 +1,18 @@
 // Phase 6 / T-24 — unify Team.plan / League.plan / User.plan to canonical ids
-// (starter | team_pro | league) and set billingSource.
+// (starter | team_extra | league | league_plus) and set billingSource.
 //
-// - Value map: free→starter; team pro|team→team_pro; league pro|league→league;
-//   user pro→team_pro. Stripe-backed docs re-derive plan from planForPriceId
+// - Value map: free→starter; team pro|team→team_extra; league pro|league→league;
+//   user plans→starter. Stripe-backed docs re-derive plan from planForPriceId
 //   (self-healing). We-ball Saturday (matched by slug/name) → plan:'league',
 //   subscriptionStatus:'active', billingSource:'comp'.
 // - Idempotent: deterministic map; re-running once canonical is a no-op.
-// - Reversible: --rollback applies a best-effort inverse map (lossy — team_pro
+// - Reversible: --rollback applies a best-effort inverse map (lossy — team_extra
 //   could have been 'pro' or 'team'). Rollback requires the pre-tightening (loose)
 //   enum to be deployed first (schema tightening is a code revert).
 // - --dry-run: prints per-doc before→after + counts; no writes.
 //
 // RUN ORDER: always --dry-run first, on a snapshot. Tighten the schema enums only
-// AFTER this reports zero non-canonical values. See docs/pricing.md.
+// AFTER this reports zero non-canonical values. See docs/stripe.md.
 //
 // Usage:
 //   node src/scripts/migrate-unify-plan-enums.js --dry-run

@@ -5,10 +5,8 @@
 // = edit this file." Features must never branch on `plan === 'x'`; they read
 // entitlements resolved from this catalog (see entitlements.service.js).
 //
-// Design + rationale: docs/pricing.md. Interval keys are 'monthly' | 'season' to match the
-// checkout validation enum and the STRIPE_PRICE_ID_*_{MONTHLY,SEASON} env vars;
-// display strings ('$79/yr') are copy only — Stripe price amounts are the
-// authoritative charge.
+// Setup and lifecycle guide: docs/stripe.md. Every paid plan is monthly. Display
+// strings are copy only — Stripe Price amounts are the authoritative charge.
 
 const { env } = require('../../config/env');
 
@@ -33,17 +31,16 @@ const ALL_FEATURE_KEYS = Object.freeze(Object.values(FEATURES));
 
 const F = FEATURES;
 
-const STARTER_ENTITLEMENTS = [F.CAN_TRACK_STATS, F.CAN_VIEW_BOX_SCORE];
-
-const TEAM_PRO_ENTITLEMENTS = [
-  ...STARTER_ENTITLEMENTS,
+// Every currently-built team feature is free. Billing controls how many
+// standalone teams an owner may actively manage, not which features they see.
+const TEAM_ENTITLEMENTS = [
+  F.CAN_TRACK_STATS,
+  F.CAN_VIEW_BOX_SCORE,
   F.CAN_VIEW_REPLAY,
   F.CAN_VIEW_SHOT_MAPS,
   F.CAN_VIEW_HIGHLIGHT_CLIPS,
   F.CAN_VIEW_FULL_HISTORY,
   F.CAN_EXPORT_CSV,
-  F.CAN_RICH_PLAYER_PROFILES,
-  F.CAN_VIEW_COACH_REPORTS,
 ];
 
 const PLANS = Object.freeze({
@@ -52,49 +49,40 @@ const PLANS = Object.freeze({
     scope: 'team',
     stripe: null,
     display: {
-      name: 'Starter',
+      name: 'Your First Team',
       tagline: 'Track one team, free forever.',
       price: 'Free',
       features: [
-        'Live stat tracking & box scores',
-        'Public team & player pages',
-        'Follow any public team or league',
-        'Shareable cards on The Pulse',
+        'Every available team feature',
+        'Live tracking, box scores & full history',
+        'Replay, shot maps & highlights',
+        'CSV exports and public pages',
       ],
     },
-    entitlements: STARTER_ENTITLEMENTS,
-    // Not enforced yet (fast-follow F-02) — declared so the limit is a config edit.
-    limits: { maxTeams: 1, historyWindow: 'recent-season' },
+    entitlements: TEAM_ENTITLEMENTS,
+    limits: { maxStandaloneTeams: 1 },
   },
-  team_pro: {
-    id: 'team_pro',
+  team_extra: {
+    id: 'team_extra',
     scope: 'team',
     display: {
-      name: 'Team Pro',
-      tagline: 'Depth for serious teams.',
+      name: 'Additional Team',
+      tagline: 'Add another independent team to your account.',
       features: [
-        'Everything in Starter',
-        'Replay & public shot maps',
-        'Highlight clips',
-        'Full historical stats + CSV export',
-        'Rich player profiles',
+        'All team features included',
+        'The team can belong to any real-life league',
+        'Cancel any time; your data stays safe',
       ],
     },
     intervals: {
       monthly: {
-        priceIdEnv: 'STRIPE_PRICE_ID_TEAM_MONTHLY',
-        display: '$9/mo',
-        trialDays: 14,
-      },
-      season: {
-        priceIdEnv: 'STRIPE_PRICE_ID_TEAM_SEASON',
-        display: '$79/yr',
-        trialDays: 14,
+        priceIdEnv: 'STRIPE_PRICE_ID_ADDITIONAL_TEAM',
+        display: '$5/mo per additional team',
+        trialDays: 0,
       },
     },
-    entitlements: TEAM_PRO_ENTITLEMENTS,
-    // Fast-follow (F-01): a Team Pro team's players get rich profiles for free.
-    cascade: { toPlayers: [F.CAN_RICH_PLAYER_PROFILES] },
+    entitlements: TEAM_ENTITLEMENTS,
+    limits: { paidStandaloneTeamSlots: 1 },
   },
   league: {
     id: 'league',
@@ -106,25 +94,45 @@ const PLANS = Object.freeze({
         'Standings, rosters & join requests',
         'Scheduling & dual-team tracking',
         'Public league homepage',
-        'Team Pro included for every team',
+        'Up to 10 teams',
+        'All team features included',
         'Priority support',
       ],
     },
     intervals: {
       monthly: {
-        priceIdEnv: 'STRIPE_PRICE_ID_LEAGUE_MONTHLY',
+        priceIdEnv: 'STRIPE_PRICE_ID_LEAGUE',
         display: '$29/mo',
         trialDays: 14,
       },
-      season: {
-        priceIdEnv: 'STRIPE_PRICE_ID_LEAGUE_SEASON',
-        display: '$199/season',
+    },
+    entitlements: [F.CAN_MANAGE_LEAGUE, F.CAN_EXPORT_CSV],
+    bundles: ['starter'],
+    limits: { maxLeagueTeams: 10 },
+  },
+  league_plus: {
+    id: 'league_plus',
+    scope: 'league',
+    display: {
+      name: 'League Plus',
+      tagline: 'For larger competitions.',
+      features: [
+        'Everything in League',
+        '11 to 24 teams',
+        'All team features included',
+        'Priority support',
+      ],
+    },
+    intervals: {
+      monthly: {
+        priceIdEnv: 'STRIPE_PRICE_ID_LEAGUE_PLUS',
+        display: '$49/mo',
         trialDays: 14,
       },
     },
-    entitlements: [F.CAN_MANAGE_LEAGUE],
-    // League grants every member team Team Pro's entitlement set.
-    bundles: ['team_pro'],
+    entitlements: [F.CAN_MANAGE_LEAGUE, F.CAN_EXPORT_CSV],
+    bundles: ['starter'],
+    limits: { maxLeagueTeams: 24 },
   },
 });
 
@@ -162,10 +170,13 @@ function normalizePlanId(scope, rawPlan) {
   if (value === 'starter' || value === 'free') return 'starter';
 
   if (scope === 'team') {
-    if (value === 'team_pro' || value === 'team' || value === 'pro') return 'team_pro';
+    if (value === 'team_extra' || value === 'team_pro' || value === 'team' || value === 'pro') {
+      return 'team_extra';
+    }
     return 'starter';
   }
   if (scope === 'league') {
+    if (value === 'league_plus') return 'league_plus';
     if (value === 'league' || value === 'pro') return 'league';
     return 'starter';
   }

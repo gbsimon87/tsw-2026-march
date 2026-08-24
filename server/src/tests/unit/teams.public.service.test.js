@@ -662,7 +662,7 @@ describe('teams public service', () => {
     });
   });
 
-  // Audit H6: highlight clips are a Team Pro feature — gate them on the resolver.
+  // Highlight clips are available to every Team through the resolver.
   function seedPlayerWithClip(teamOverrides = {}) {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
@@ -685,16 +685,16 @@ describe('teams public service', () => {
     ]);
   }
 
-  test('H6: hides highlight clips for a free/lapsed team on the public profile', async () => {
+  test('H6: exposes highlight clips for a free/lapsed team on the public profile', async () => {
     seedPlayerWithClip({ plan: 'starter', subscriptionStatus: 'inactive' });
 
     const result = await getPublicPlayer('team-1', 'p1');
 
-    expect(result.team.entitlements.canViewHighlightClips).toBe(false);
-    expect(result.highlights).toEqual([]);
+    expect(result.team.entitlements.canViewHighlightClips).toBe(true);
+    expect(result.highlights).toHaveLength(1);
   });
 
-  test('H6: exposes highlight clips for an active Team Pro team', async () => {
+  test('H6: still tolerates a legacy active Team Pro record', async () => {
     seedPlayerWithClip({ plan: 'team_pro', subscriptionStatus: 'active' });
 
     const result = await getPublicPlayer('team-1', 'p1');

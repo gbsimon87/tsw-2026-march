@@ -3,23 +3,12 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
 import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEvents';
-import { billingApi } from '../api/billingApi';
-import { teamsApi } from '../../teams/api/teamsApi';
 import { leaguesApi } from '../../leagues/api/leaguesApi';
+import { teamsApi } from '../../teams/api/teamsApi';
+import { billingApi } from '../api/billingApi';
 
-const ACTIVE_STATUSES = new Set(['active', 'trialing']);
+const PORTAL_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
 
-// Canonical plan ids are 'team_pro'/'league'; legacy 'team'/'pro' tolerated during
-// the migration window (a doc may still carry an un-migrated value).
-const TEAM_PLAN_VALUES = ['team_pro', 'team', 'pro'];
-const LEAGUE_PLAN_VALUES = ['league', 'pro'];
-
-function isActivePlan(billing, planValues) {
-  return planValues.includes(billing?.plan) && ACTIVE_STATUSES.has(billing?.subscriptionStatus);
-}
-
-// Defense-in-depth: the server also validates the returned URL (T-09), but keep the
-// client guard so a bad URL never reaches window.location.
 function isSafeStripeUrl(url) {
   try {
     const parsed = new URL(url);
@@ -32,81 +21,89 @@ function isSafeStripeUrl(url) {
   }
 }
 
-function CheckIcon() {
-  return (
-    <span aria-hidden="true" className="text-emerald-600">
-      ✓
-    </span>
-  );
-}
-
 function FeatureList({ features }) {
   return (
     <ul className="mt-5 space-y-2 text-sm text-slate-700">
-      {(features || []).map((f) => (
-        <li key={f} className="flex gap-2">
-          <CheckIcon />
-          <span>{f}</span>
+      {(features || []).map((feature) => (
+        <li key={feature} className="flex gap-2">
+          <span aria-hidden="true" className="text-emerald-600">
+            ✓
+          </span>
+          <span>{feature}</span>
         </li>
       ))}
     </ul>
   );
 }
 
-function PlanCard({ title, price, trial, description, features, accent = 'slate', children }) {
-  const border =
-    accent === 'amber'
-      ? 'border-amber-300 bg-gradient-to-b from-amber-50 via-white to-white'
-      : accent === 'violet'
-        ? 'border-violet-300 bg-gradient-to-b from-violet-50 via-white to-white'
-        : 'border-slate-200 bg-white';
-
+function PlanCard({ title, price, description, trial, features, accent = false, children }) {
   return (
-    <article className={`rounded-3xl border p-6 shadow-sm ${border}`}>
+    <article
+      className={`rounded-3xl border p-6 shadow-sm ${
+        accent ? 'border-violet-300 bg-violet-50/40' : 'border-slate-200 bg-white'
+      }`}
+    >
       <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-3 text-3xl font-bold text-slate-900">{price}</p>
-      {trial && <p className="mt-1 text-xs font-medium text-emerald-700">{trial}</p>}
-      {description && <p className="mt-3 text-sm text-slate-600">{description}</p>}
+      {trial ? <p className="mt-1 text-xs font-medium text-emerald-700">{trial}</p> : null}
+      <p className="mt-3 text-sm text-slate-600">{description}</p>
       <FeatureList features={features} />
       <div className="mt-6 space-y-3">{children}</div>
     </article>
   );
 }
 
-// Display price for a plan at the selected interval, from the served catalog.
-function planPrice(plan, interval) {
-  if (!plan) return '';
-  if (plan.price) return plan.price; // e.g. Starter → 'Free'
-  return plan.intervals?.[interval]?.display || '';
+function ResourceSelect({ label, value, onChange, resources, emptyLabel }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+      >
+        {!resources.length ? <option value="">{emptyLabel}</option> : null}
+        {resources.map((resource) => (
+          <option key={resource.id} value={resource.id}>
+            {resource.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
-function trialLabel(plan, interval) {
-  const days = plan?.intervals?.[interval]?.trialDays;
-  return days ? `${days}-day free trial · card required upfront` : null;
+function SignupLink({ children, source }) {
+  return (
+    <Link
+      to="/register"
+      onClick={() => trackSignupCtaClicked(source)}
+      className="block w-full rounded-xl bg-slate-900 px-4 py-2.5 text-center text-sm font-semibold text-white"
+    >
+      {children}
+    </Link>
+  );
 }
 
 export function PricingPage() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-
-  const [interval, setInterval] = useState('monthly');
   const [catalog, setCatalog] = useState([]);
   const [teams, setTeams] = useState([]);
   const [leagues, setLeagues] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [selectedLeagueId, setSelectedLeagueId] = useState('');
   const [isLoadingData, setIsLoadingData] = useState(false);
-  const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
-  const [isSubmittingLeague, setIsSubmittingLeague] = useState(false);
+  const [pendingAction, setPendingAction] = useState('');
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const isCreatingLeague =
     searchParams.get('resourceType') === 'league' && searchParams.get('action') === 'create';
 
-  // Public catalog — fetched for everyone (drives all pricing copy; no client drift).
   useEffect(() => {
     billingApi
       .getCatalog()
-      .then((res) => setCatalog(res.plans || []))
+      .then((response) => setCatalog(response.plans || []))
       .catch((err) => setError(err.message || 'Failed to load pricing'));
   }, []);
 
@@ -114,118 +111,141 @@ export function PricingPage() {
     if (!user) {
       setTeams([]);
       setLeagues([]);
-      setSelectedTeamId('');
-      setSelectedLeagueId('');
       return;
     }
 
     setIsLoadingData(true);
     Promise.all([teamsApi.list(), leaguesApi.list()])
-      .then(([teamsRes, leaguesRes]) => {
-        const nextTeams = teamsRes.teams || [];
-        const nextLeagues = leaguesRes.leagues || leaguesRes || [];
-
+      .then(([teamsResponse, leaguesResponse]) => {
+        const nextTeams = teamsResponse.teams || [];
+        const nextLeagues = leaguesResponse.leagues || leaguesResponse || [];
         const requestedTeamId = searchParams.get('teamId');
+        const requestedLeagueId = searchParams.get('leagueId');
+
         setTeams(nextTeams);
         setLeagues(nextLeagues);
-
-        setSelectedTeamId(() => {
-          if (requestedTeamId && nextTeams.some((t) => t.id === requestedTeamId)) {
-            return requestedTeamId;
-          }
-          return nextTeams[0]?.id || '';
-        });
-
-        setSelectedLeagueId(nextLeagues[0]?.id || '');
+        setSelectedTeamId(
+          requestedTeamId && nextTeams.some((team) => team.id === requestedTeamId)
+            ? requestedTeamId
+            : nextTeams.find((team) => team.billing?.capacityType === 'paid')?.id ||
+                nextTeams[0]?.id ||
+                ''
+        );
+        setSelectedLeagueId(
+          requestedLeagueId && nextLeagues.some((league) => league.id === requestedLeagueId)
+            ? requestedLeagueId
+            : nextLeagues[0]?.id || ''
+        );
       })
       .catch((err) => setError(err.message || 'Failed to load billing data'))
       .finally(() => setIsLoadingData(false));
   }, [searchParams, user]);
 
-  const starterPlan = useMemo(() => catalog.find((p) => p.id === 'starter'), [catalog]);
-  const teamPlan = useMemo(() => catalog.find((p) => p.id === 'team_pro'), [catalog]);
-  const leaguePlan = useMemo(() => catalog.find((p) => p.id === 'league'), [catalog]);
-
-  const selectedTeam = useMemo(
-    () => teams.find((t) => t.id === selectedTeamId) ?? null,
-    [teams, selectedTeamId]
+  const plans = useMemo(
+    () => Object.fromEntries(catalog.map((plan) => [plan.id, plan])),
+    [catalog]
   );
-  const selectedLeague = useMemo(
-    () => leagues.find((l) => l.id === selectedLeagueId) ?? null,
-    [leagues, selectedLeagueId]
-  );
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) || null;
+  const selectedLeague = leagues.find((league) => league.id === selectedLeagueId) || null;
+  const selectedTeamUsesPortal =
+    PORTAL_STATUSES.has(selectedTeam?.billing?.subscriptionStatus) &&
+    selectedTeam?.billing?.managedByStripe !== false;
+  const selectedTeamIsFree = selectedTeam?.billing?.capacityType === 'free';
+  const selectedLeagueUsesPortal =
+    PORTAL_STATUSES.has(selectedLeague?.billing?.subscriptionStatus) &&
+    selectedLeague?.billing?.managedByStripe !== false;
+  const selectedLeagueIsComplimentary = selectedLeague?.billing?.managedByStripe === false;
 
-  const teamIsActive = isActivePlan(selectedTeam?.billing, TEAM_PLAN_VALUES);
-  const leagueIsActive = isActivePlan(selectedLeague?.billing, LEAGUE_PLAN_VALUES);
+  async function followStripeResponse(response) {
+    if (response?.devRedirectPath) {
+      window.location.assign(response.devRedirectPath);
+      return;
+    }
+    if (!response?.url || !isSafeStripeUrl(response.url)) {
+      throw new Error('Stripe did not return a safe checkout page.');
+    }
+    window.location.assign(response.url);
+  }
 
-  async function handleTeamCheckout() {
+  async function runAction(name, action) {
     setError('');
-    setIsSubmittingTeam(true);
+    setNotice('');
+    setPendingAction(name);
     try {
+      await action();
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setPendingAction('');
+    }
+  }
+
+  function handleAdditionalTeam() {
+    return runAction('team-checkout', async () => {
+      const response = selectedTeamUsesPortal
+        ? await billingApi.createCustomerPortalSession({ teamId: selectedTeamId })
+        : await billingApi.createTeamCheckoutSession(selectedTeamId);
+      await followStripeResponse(response);
+    });
+  }
+
+  function handleChooseFreeTeam() {
+    return runAction('free-team', async () => {
+      await billingApi.chooseFreeTeam(selectedTeamId);
+      setTeams((current) =>
+        current.map((team) => ({
+          ...team,
+          billing: {
+            ...team.billing,
+            capacityType: team.id === selectedTeamId ? 'free' : 'paid',
+          },
+        }))
+      );
+      setNotice('This is now your one free team. Your previous free team is read-only.');
+    });
+  }
+
+  function handleLeaguePlan(planId) {
+    return runAction(`league-${planId}`, async () => {
       let response;
-      if (teamIsActive) {
-        response = await billingApi.createCustomerPortalSession({ teamId: selectedTeamId });
+      if (selectedLeagueUsesPortal && !isCreatingLeague) {
+        if (selectedLeague?.billing?.plan === planId && !selectedLeague?.billing?.scheduledPlan) {
+          response = await billingApi.createCustomerPortalSession({
+            leagueId: selectedLeagueId,
+          });
+        } else {
+          response = await billingApi.changeLeaguePlan(selectedLeagueId, planId);
+        }
       } else {
-        response = await billingApi.createTeamCheckoutSession(
-          selectedTeamId || undefined,
-          interval
+        response = await billingApi.createLeagueCheckoutSession(
+          planId,
+          isCreatingLeague ? undefined : selectedLeagueId || undefined
         );
       }
-      if (!response?.url || !isSafeStripeUrl(response.url)) {
-        throw new Error('Invalid or missing checkout URL');
-      }
-      window.location.assign(response.url);
-    } catch (err) {
-      setError(err.message || 'Failed to start team checkout');
-      setIsSubmittingTeam(false);
-    }
-  }
 
-  async function handleLeagueCheckout() {
-    setError('');
-    setIsSubmittingLeague(true);
-    try {
-      let response;
-      if (leagueIsActive && selectedLeagueId && !isCreatingLeague) {
-        response = await billingApi.createCustomerPortalSession({ leagueId: selectedLeagueId });
-      } else {
-        response = await billingApi.createLeagueCheckoutSession(interval);
-      }
-      if (response?.devRedirectPath) {
-        window.location.assign(response.devRedirectPath);
+      if (response?.scheduled) {
+        setNotice(
+          `Your change to League is scheduled for ${new Date(response.effectiveAt).toLocaleDateString()}.`
+        );
         return;
       }
-      if (!response?.url || !isSafeStripeUrl(response.url)) {
-        throw new Error('Invalid or missing checkout URL');
+      if (response?.change === 'downgrade_canceled') {
+        setNotice('Your scheduled downgrade was canceled. League Plus will continue.');
+        return;
       }
-      window.location.assign(response.url);
-    } catch (err) {
-      setError(err.message || 'Failed to start league checkout');
-      setIsSubmittingLeague(false);
-    }
+      await followStripeResponse(response);
+    });
   }
 
-  const teamCtaLabel = isSubmittingTeam
-    ? 'Redirecting…'
-    : teamIsActive
-      ? 'Manage Team Billing'
-      : trialLabel(teamPlan, interval)
-        ? 'Start free trial'
-        : 'Subscribe';
-  const leagueCtaLabel = isSubmittingLeague
-    ? 'Redirecting…'
-    : leagueIsActive && !isCreatingLeague
-      ? 'Manage League Billing'
-      : trialLabel(leaguePlan, interval)
-        ? 'Start free trial'
-        : 'Subscribe';
+  const buttonClass =
+    'w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50';
 
   return (
     <main className="space-y-10">
       <PageHeader
         eyebrow="Pricing"
-        title="Track for free. Upgrade for the extras."
-        description="Live stat tracking and box scores are free, forever. Team Pro and League unlock replay, shot maps, highlights, full history, CSV export, and league management."
+        title="Teams track for free. Leagues pay to run the competition."
+        description="Every team gets every tracking feature. Your first standalone team is free. Pay only when you manage another standalone team or organise a whole league."
       />
 
       {error ? (
@@ -233,188 +253,142 @@ export function PricingPage() {
           {error}
         </p>
       ) : null}
+      {notice ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {notice}
+        </p>
+      ) : null}
 
-      {/* Interval toggle */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-slate-700">Billing:</span>
-        <div className="flex overflow-hidden rounded-lg border border-slate-200">
-          {['monthly', 'season'].map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setInterval(opt)}
-              aria-label={opt === 'monthly' ? 'Monthly' : 'Season'}
-              className={`px-4 py-1.5 text-sm font-medium transition ${
-                interval === opt
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {opt === 'monthly' ? 'Monthly' : 'Season'}
-            </button>
-          ))}
-        </div>
-        {interval === 'season' && (
-          <span className="text-xs font-medium text-emerald-700">Best value</span>
-        )}
-      </div>
-
-      <section className="grid gap-6 lg:grid-cols-3">
-        {/* Starter (Free) */}
+      <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4" aria-label="Plans">
         <PlanCard
-          title={starterPlan?.name || 'Starter'}
-          price={planPrice(starterPlan, interval) || 'Free'}
-          description={starterPlan?.tagline}
-          features={starterPlan?.features}
-        >
-          <Link
-            to="/pulse"
-            className="block w-full rounded-lg border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-          >
-            View The Pulse
-          </Link>
-        </PlanCard>
-
-        {/* Team Pro */}
-        <PlanCard
-          title={teamPlan?.name || 'Team Pro'}
-          price={planPrice(teamPlan, interval)}
-          trial={trialLabel(teamPlan, interval)}
-          description={teamPlan?.tagline}
-          features={teamPlan?.features}
-          accent="amber"
+          title={plans.starter?.name || 'Your first team'}
+          price={plans.starter?.price || 'Free'}
+          description={plans.starter?.tagline || 'Manage one standalone team for free.'}
+          features={plans.starter?.features}
         >
           {user ? (
-            <>
-              {teams.length > 0 ? (
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    Team to subscribe
-                  </span>
-                  <select
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                    value={selectedTeamId}
-                    onChange={(e) => setSelectedTeamId(e.target.value)}
-                    disabled={isLoadingData || isSubmittingTeam}
-                  >
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {isActivePlan(t.billing, TEAM_PLAN_VALUES) ? ' ✓ Active' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedTeam && (
-                    <span className="mt-1 block text-xs text-slate-500">
-                      {selectedTeam.billing?.plan || 'starter'}
-                      {selectedTeam.billing?.subscriptionStatus
-                        ? ` · ${selectedTeam.billing.subscriptionStatus}`
-                        : ''}
-                    </span>
-                  )}
-                </label>
-              ) : (
-                <p className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-4 py-3 text-sm text-slate-600">
-                  Create a team first, then come back to subscribe.
-                </p>
-              )}
-              {teams.length === 0 ? (
-                <Link
-                  to="/teams/new?redirectTo=/pricing"
-                  className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
-                >
-                  Create a Team
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleTeamCheckout}
-                  disabled={isSubmittingTeam || isLoadingData}
-                  aria-label={teamCtaLabel}
-                  className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
-                >
-                  {teamCtaLabel}
-                </button>
-              )}
-            </>
-          ) : (
-            <Link
-              to="/register?redirectTo=/pricing"
-              className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
-              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PRICING)}
-            >
-              Start free trial
+            <Link to="/teams/new" className={buttonClass}>
+              Create your free team
             </Link>
+          ) : (
+            <SignupLink source={SIGNUP_SOURCE.PRICING}>Create your free team</SignupLink>
           )}
         </PlanCard>
 
-        {/* League */}
         <PlanCard
-          title={leaguePlan?.name || 'League'}
-          price={planPrice(leaguePlan, interval)}
-          trial={trialLabel(leaguePlan, interval)}
-          description={leaguePlan?.tagline}
-          features={leaguePlan?.features}
-          accent="violet"
+          title={plans.team_extra?.name || 'Additional team'}
+          price={plans.team_extra?.intervals?.monthly?.display || '$5/month'}
+          description={plans.team_extra?.tagline || 'For each standalone team after your first.'}
+          features={plans.team_extra?.features}
         >
           {user ? (
             <>
-              {leagues.length > 0 ? (
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    League to subscribe
-                  </span>
-                  <select
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                    value={selectedLeagueId}
-                    onChange={(e) => setSelectedLeagueId(e.target.value)}
-                    disabled={isLoadingData || isSubmittingLeague}
-                  >
-                    {leagues.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                        {isActivePlan(l.billing, LEAGUE_PLAN_VALUES) ? ' ✓ Active' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedLeague && (
-                    <span className="mt-1 block text-xs text-slate-500">
-                      {selectedLeague.billing?.plan || 'starter'}
-                      {selectedLeague.billing?.subscriptionStatus
-                        ? ` · ${selectedLeague.billing.subscriptionStatus}`
-                        : ''}
-                    </span>
-                  )}
-                </label>
-              ) : (
-                <p className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-4 py-3 text-sm text-slate-600">
-                  You&apos;ll set up your league after checkout.
-                </p>
-              )}
+              <ResourceSelect
+                label="Choose a team"
+                value={selectedTeamId}
+                onChange={setSelectedTeamId}
+                resources={teams}
+                emptyLabel="Create a team first"
+              />
               <button
                 type="button"
-                onClick={handleLeagueCheckout}
-                disabled={isSubmittingLeague || isLoadingData}
-                aria-label={leagueCtaLabel}
-                className="w-full rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                className={buttonClass}
+                disabled={
+                  !selectedTeamId || selectedTeamIsFree || isLoadingData || pendingAction !== ''
+                }
+                onClick={handleAdditionalTeam}
               >
-                {leagueCtaLabel}
+                {pendingAction === 'team-checkout'
+                  ? 'Redirecting…'
+                  : selectedTeamIsFree
+                    ? 'This team is already included'
+                    : selectedTeamUsesPortal
+                      ? 'Manage team billing'
+                      : 'Subscribe for this team'}
               </button>
+              {selectedTeam?.billing?.capacityType === 'paid' && !selectedTeamUsesPortal ? (
+                <button
+                  type="button"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                  disabled={pendingAction !== ''}
+                  onClick={handleChooseFreeTeam}
+                >
+                  {pendingAction === 'free-team' ? 'Saving…' : 'Make this my free team'}
+                </button>
+              ) : null}
             </>
           ) : (
-            <Link
-              to="/register?redirectTo=/pricing"
-              className="block w-full rounded-lg bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-700"
-              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.PRICING)}
-            >
-              Start free trial
-            </Link>
+            <SignupLink source={SIGNUP_SOURCE.PRICING}>Get started</SignupLink>
           )}
         </PlanCard>
+
+        {['league', 'league_plus'].map((planId) => {
+          const plan = plans[planId];
+          const isCurrentPlan = selectedLeague?.billing?.plan === planId;
+          const cancelsScheduledChange =
+            isCurrentPlan && Boolean(selectedLeague?.billing?.scheduledPlan);
+          return (
+            <PlanCard
+              key={planId}
+              title={plan?.name || (planId === 'league' ? 'League' : 'League Plus')}
+              price={
+                plan?.intervals?.monthly?.display ||
+                (planId === 'league' ? '$29/month' : '$49/month')
+              }
+              trial="14-day free trial · card required"
+              description={
+                plan?.tagline || (planId === 'league' ? 'For up to 10 teams.' : 'For 11–24 teams.')
+              }
+              features={plan?.features}
+              accent={planId === 'league'}
+            >
+              {user ? (
+                <>
+                  <ResourceSelect
+                    label="Choose a league"
+                    value={selectedLeagueId}
+                    onChange={setSelectedLeagueId}
+                    resources={leagues}
+                    emptyLabel="Create a league after checkout"
+                  />
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={
+                      isLoadingData ||
+                      pendingAction !== '' ||
+                      (selectedLeagueIsComplimentary && !isCreatingLeague)
+                    }
+                    onClick={() => handleLeaguePlan(planId)}
+                  >
+                    {selectedLeagueIsComplimentary && !isCreatingLeague
+                      ? 'Complimentary League'
+                      : pendingAction === `league-${planId}`
+                        ? 'Redirecting…'
+                        : cancelsScheduledChange
+                          ? `Keep ${planId === 'league' ? 'League' : 'League Plus'}`
+                          : isCurrentPlan && selectedLeagueUsesPortal && !isCreatingLeague
+                            ? 'Manage billing'
+                            : selectedLeagueUsesPortal && !isCreatingLeague
+                              ? `Change to ${planId === 'league' ? 'League' : 'League Plus'}`
+                              : 'Start 14-day trial'}
+                  </button>
+                </>
+              ) : (
+                <SignupLink source={SIGNUP_SOURCE.PRICING}>Start 14-day trial</SignupLink>
+              )}
+            </PlanCard>
+          );
+        })}
       </section>
 
-      <p className="text-center text-xs text-slate-500">
-        Subscriptions managed through Stripe. Cancel any time from the billing portal.
+      <p className="text-sm text-slate-600">
+        Need more than 24 teams in one league?{' '}
+        <Link to="/contact" className="font-semibold text-violet-700">
+          Contact us
+        </Link>
+        . Cancelling keeps your data; paid team or league management becomes read-only when the paid
+        period ends.
       </p>
     </main>
   );

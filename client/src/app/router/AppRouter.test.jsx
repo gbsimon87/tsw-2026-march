@@ -129,7 +129,9 @@ describe('AppRouter', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Track for free\. Upgrade for the extras\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Teams track for free\. Leagues pay to run the competition\./i)
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByTestId('location')).toHaveTextContent('/pricing');

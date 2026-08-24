@@ -19,7 +19,8 @@ jest.mock('../../modules/games/games.service', () => ({
 jest.mock('../../modules/billing/billing.service', () => ({
   getBillingSummary: jest.fn(() => ({ plan: 'free' })),
   getTeamEntitlements: jest.fn(() => ({ canUseReplay: false })),
-  assertTeamCreationAllowed: jest.fn(() => Promise.resolve()),
+  assertTeamCreationAllowed: jest.fn(() => Promise.resolve({ capacityType: 'free' })),
+  assertTeamManagementAllowed: jest.fn(),
 }));
 
 jest.mock('../../modules/feed/cloudinary.client', () => ({
@@ -42,6 +43,7 @@ function buildTeam(overrides = {}) {
     homeVenue: null,
     players: [],
     plan: 'free',
+    capacityType: 'free',
     createdAt: '2026-03-11T00:00:00.000Z',
     updatedAt: '2026-03-11T00:00:00.000Z',
     ...overrides,

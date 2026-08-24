@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema(
     emailVerifiedAt: { type: Date },
     authProvider: { type: String, enum: ['local', 'google', 'system'], default: 'local' },
     // Resolver-derived cache of the owner's aggregate plan (T-17), canonical-only
-    // (Phase 6 / T-26). syncOwnerPlan writes 'starter'/'team_pro'; the resolver still
+    // (Phase 6 / T-26). syncOwnerPlan now writes 'starter'; the resolver still
     // tolerates legacy values at read time.
     plan: { type: String, enum: ['starter', 'team_pro'], default: 'starter' },
     // The seven dead User.league* mirror fields were removed (Phase 6 / T-25) — league

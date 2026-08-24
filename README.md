@@ -107,7 +107,7 @@ the demo seed in a shared environment.
 | Current architecture and product behavior | [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md) |
 | API endpoints                             | [`docs/api.md`](docs/api.md)                             |
 | League and team permissions               | [`docs/permissions.md`](docs/permissions.md)             |
-| Pricing and entitlements                  | [`docs/pricing.md`](docs/pricing.md)                     |
+| Stripe, pricing, and entitlements         | [`docs/stripe.md`](docs/stripe.md)                       |
 | Render deployment                         | [`docs/deployment-render.md`](docs/deployment-render.md) |
 | Security controls                         | [`docs/security.md`](docs/security.md)                   |
 | Product backlog                           | [`docs/ideas.md`](docs/ideas.md)                         |
