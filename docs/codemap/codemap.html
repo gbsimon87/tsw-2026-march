@@ -1,0 +1,4336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TSW Code Map</title>
+<style>
+:root{
+  --bg:#f7f6f3; --panel:#fffefb; --ink:#1c1a17; --muted:#6b655c; --line:#ddd8cf;
+  --server:#1f6f6b; --client:#8a5a1f; --infra:#4a4f7a; --ext:#7a3b5c; --db:#2f5d3a;
+  --accent:#b3421f; --shadow:0 1px 2px rgba(30,26,20,.06),0 8px 24px rgba(30,26,20,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#14140f; --panel:#1c1c17; --ink:#ecebe4; --muted:#9a948a; --line:#33322b;
+  --server:#57bdb4; --client:#d69a4e; --infra:#96a0d8; --ext:#d68fb0; --db:#7cc08d;
+  --accent:#f0855c; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);
+  font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+.wrap{max-width:1600px;margin:0 auto;padding:22px clamp(14px,3vw,32px) 64px}
+header.top{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px}
+h1{margin:0;font-size:clamp(20px,3vw,27px);letter-spacing:-.02em;font-weight:650}
+.sub{color:var(--muted);font-size:13.5px;margin-top:5px}
+.meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;
+  padding:3px 10px;font-size:11.5px;color:var(--muted)}
+.chip b{color:var(--ink);font-weight:600}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+@media (max-width:1080px){.layout{grid-template-columns:1fr}}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.card-h{padding:11px 15px;border-bottom:1px solid var(--line);display:flex;
+  justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.card-h h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:650}
+
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+button.t{font:inherit;font-size:12px;padding:4px 10px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line);background:transparent;color:var(--muted)}
+button.t:hover{color:var(--ink);border-color:var(--muted)}
+button.t[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+input.search{font:inherit;font-size:12.5px;padding:5px 10px;border-radius:7px;
+  border:1px solid var(--line);background:var(--bg);color:var(--ink);width:150px}
+
+/* ── graph ── */
+.graphbox{padding:6px 8px 12px;overflow-x:auto}
+svg#graph{display:block;width:100%;height:auto;min-width:820px}
+.nd{cursor:pointer}
+.nd rect{transition:fill .12s,stroke-width .12s}
+.nd text{pointer-events:none;font-size:12.5px;font-weight:600;fill:var(--ink)}
+.nd .cnt{font-size:10px;font-weight:500;fill:var(--muted)}
+.nd:hover rect{stroke-width:2.4}
+.nd.sel rect{stroke-width:3}
+.nd.dim{opacity:.2}
+.ed{fill:none;stroke:var(--muted);stroke-opacity:.17}
+.ed.hi{stroke:var(--accent);stroke-opacity:1;stroke-width:2.1}
+.ed.dim{stroke-opacity:.07}
+.lane{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  fill:var(--muted);font-weight:650}
+.lanebg{fill:currentColor;opacity:.028}
+
+/* ── detail ── */
+.detail{position:sticky;top:16px;max-height:calc(100vh - 34px);overflow-y:auto}
+.dbody{padding:15px}
+.kindtag{display:inline-block;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  font-weight:650;padding:2px 8px;border-radius:5px;margin-bottom:9px}
+.dbody h3{margin:0 0 3px;font-size:19px;letter-spacing:-.01em}
+.ppath{font-size:11.5px;color:var(--muted);word-break:break-all;margin-bottom:11px}
+.role{font-size:13.5px;line-height:1.6;margin:0 0 15px}
+.sec{margin-top:15px;padding-top:13px;border-top:1px solid var(--line)}
+.sec:first-of-type{border-top:0;padding-top:0}
+.sec h4{margin:0 0 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--muted);font-weight:650;display:flex;justify-content:space-between}
+.rel{display:flex;flex-direction:column;gap:5px}
+.rel a{display:flex;gap:7px;align-items:baseline;text-decoration:none;color:var(--ink);
+  font-size:12.5px;padding:4px 7px;border-radius:6px;border:1px solid transparent}
+.rel a:hover{background:var(--bg);border-color:var(--line)}
+.rel .vb{font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;flex-shrink:0}
+.rel .lbl{color:var(--muted);font-size:10.5px}
+ul.files{list-style:none;margin:0;padding:0;font-size:11.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  max-height:190px;overflow-y:auto;color:var(--muted)}
+ul.files li{padding:1.5px 0;word-break:break-all}
+ul.files li b{color:var(--ink);font-weight:600}
+.empty{color:var(--muted);font-size:12.5px;font-style:italic}
+.mods{display:flex;flex-wrap:wrap;gap:4px}
+.mods span{font-size:10.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);
+  border-radius:5px;padding:1.5px 6px;color:var(--muted)}
+
+/* ── flows ── */
+.flowwrap{margin-top:20px}
+.ftabs{display:flex;gap:5px;flex-wrap:wrap;padding:11px 15px 0}
+button.ft{font:inherit;font-size:12px;padding:5px 11px;border-radius:7px 7px 0 0;cursor:pointer;
+  border:1px solid transparent;border-bottom:none;background:transparent;color:var(--muted)}
+button.ft:hover{color:var(--ink)}
+button.ft[aria-selected=true]{background:var(--bg);border-color:var(--line);color:var(--ink);font-weight:600}
+.fpane{padding:15px;border-top:1px solid var(--line)}
+.fwhy{font-size:13px;color:var(--muted);margin:0 0 15px;max-width:75ch;line-height:1.6}
+ol.steps{list-style:none;counter-reset:s;margin:0;padding:0}
+ol.steps li{counter-increment:s;position:relative;padding:0 0 14px 38px;border-left:2px solid var(--line);margin-left:11px}
+ol.steps li:last-child{border-left-color:transparent;padding-bottom:0}
+ol.steps li::before{content:counter(s);position:absolute;left:-12px;top:-2px;width:22px;height:22px;
+  border-radius:50%;background:var(--panel);border:1.5px solid var(--line);color:var(--muted);
+  font-size:10.5px;font-weight:700;display:grid;place-items:center}
+.stitle{font-size:13px;font-weight:600;margin-bottom:2px}
+.snode{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:650;
+  cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
+.sfile{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;word-break:break-all;margin-top:2px}
+.sfile b{color:var(--ink);font-weight:600}
+footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:11.5px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <h1>TSW — Code Map</h1>
+  <div class="sub" id="subtitle"></div>
+  <div class="meta" id="meta"></div>
+</header>
+
+<div class="layout">
+  <div>
+    <section class="card">
+      <div class="card-h">
+        <h2>Architecture</h2>
+        <div class="toolbar">
+          <input class="search" id="q" type="search" placeholder="Filter nodes…" aria-label="Filter nodes">
+          <button class="t" id="gc" aria-pressed="false" data-g="g-client">Expand client</button>
+          <button class="t" id="ge" aria-pressed="false" data-g="g-external">Expand external</button>
+          <button class="t" id="tgl" aria-pressed="false">Show minor modules</button>
+          <button class="t" id="rst">Reset</button>
+        </div>
+      </div>
+      <div class="graphbox"><svg id="graph" role="img" aria-label="Architecture map of the TSW monorepo: client features call server domain modules over HTTP; server modules persist to MongoDB and call external services."></svg></div>
+    </section>
+
+    <section class="card flowwrap">
+      <div class="card-h"><h2>Key end-to-end flows</h2></div>
+      <div class="ftabs" id="ftabs" role="tablist"></div>
+      <div class="fpane" id="fpane"></div>
+    </section>
+  </div>
+
+  <aside class="card detail"><div class="dbody" id="detail"></div></aside>
+</div>
+
+<footer id="foot"></footer>
+</div>
+
+<script id="data" type="application/json">{
+  "meta": {
+    "project": "TSW — The Sporty Way",
+    "subtitle": "Basketball stat-tracking + league-management platform (pnpm monorepo)",
+    "generatedFrom": {
+      "commit": "93e71853a46388cfe2a1c1b8dd9b26e6afaeaf53",
+      "branch": "dev"
+    },
+    "stack": {
+      "client": "React 18 + Vite + TanStack Query + Tailwind",
+      "server": "Express 4 + Mongoose 8",
+      "db": "MongoDB",
+      "tests": "Jest+Supertest (server) / Vitest+RTL (client)"
+    },
+    "counts": {
+      "serverModules": 12,
+      "clientFeatures": 8,
+      "serverTestFiles": 78,
+      "clientTestFiles": 67,
+      "mongooseModels": 19,
+      "primaryNodes": 33
+    }
+  },
+  "nodes": [
+    {
+      "id": "auth",
+      "label": "auth",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/auth",
+      "role": "Cookie-based JWT auth with rotating refresh sessions, CSRF double-submit, Google OAuth, email verification and password reset. Owns the User, Session and AuthToken models.",
+      "models": [
+        "User",
+        "Session",
+        "AuthToken"
+      ],
+      "mount": "/api/v1/auth",
+      "loc": 1004,
+      "files": [
+        "server/src/modules/auth/auth.controller.js",
+        "server/src/modules/auth/auth.repository.js",
+        "server/src/modules/auth/auth.routes.js",
+        "server/src/modules/auth/auth.service.js",
+        "server/src/modules/auth/auth.validation.js",
+        "server/src/modules/auth/oauth.google.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/teams.auth.test.js",
+        "server/src/tests/unit/auth.service.test.js",
+        "server/src/tests/unit/authToken.service.test.js",
+        "server/src/tests/unit/email.service.test.js",
+        "server/src/tests/unit/oauth.google.test.js",
+        "server/src/tests/unit/token.service.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "follows",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/auth"
+          ]
+        },
+        {
+          "id": "c-auth",
+          "kind": "http",
+          "labels": [
+            "/auth/register",
+            "/auth/login",
+            "/auth/logout",
+            "/auth/refresh",
+            "/auth/me",
+            "/auth/request-verification",
+            "/auth/verify-email",
+            "/auth/forgot-password",
+            "/auth/reset-password",
+            "/auth/google",
+            "/auth/avatar"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "http",
+          "labels": [
+            "/auth"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "analytics",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "core-services",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "User, Session, AuthToken"
+          ]
+        },
+        {
+          "id": "google-oauth",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-auth"
+      ]
+    },
+    {
+      "id": "leagues",
+      "label": "leagues",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/leagues",
+      "role": "The largest domain. Owns leagues, league teams, league players, team members, join requests, managers, seasons, standings and player stats. Also the authorization authority: every `assert*` / `can*` league-role helper lives in leagues.service.js.",
+      "models": [
+        "League",
+        "LeagueTeam",
+        "LeaguePlayer",
+        "LeagueTeamMember",
+        "LeagueJoinRequest",
+        "LeagueManager",
+        "LeagueStandings",
+        "LeaguePlayerStats",
+        "Season",
+        "LeagueDataIssueDismissal"
+      ],
+      "mount": "/api/v1/leagues + /api/v1/public/leagues + /api/v1/public/players",
+      "loc": 4992,
+      "files": [
+        "server/src/modules/leagues/dataCompleteness.checks.js",
+        "server/src/modules/leagues/dataCompleteness.repository.js",
+        "server/src/modules/leagues/dataCompleteness.service.js",
+        "server/src/modules/leagues/dataCompleteness.validation.js",
+        "server/src/modules/leagues/leagues.controller.js",
+        "server/src/modules/leagues/leagues.repository.js",
+        "server/src/modules/leagues/leagues.routes.js",
+        "server/src/modules/leagues/leagues.service.js",
+        "server/src/modules/leagues/leagues.validation.js",
+        "server/src/modules/leagues/seasons.repository.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/canonical-enum-writes.test.js",
+        "server/src/tests/integration/leagues.bulk-games.test.js",
+        "server/src/tests/integration/leagues.data-completeness.test.js",
+        "server/src/tests/integration/leagues.seasons.test.js",
+        "server/src/tests/integration/public-player-profiles.test.js",
+        "server/src/tests/unit/bulk-create-league-games.test.js",
+        "server/src/tests/unit/bulk-games-repository.test.js",
+        "server/src/tests/unit/bulk-games-validation.test.js",
+        "server/src/tests/unit/data-completeness-checks.test.js",
+        "server/src/tests/unit/data-completeness-repository.test.js",
+        "server/src/tests/unit/data-completeness-service.test.js",
+        "server/src/tests/unit/data-completeness-validation.test.js",
+        "server/src/tests/unit/leagues.service.test.js",
+        "server/src/tests/unit/seasons.service.test.js",
+        "server/src/tests/unit/weball-saturday.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "follows",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "export",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/leagues"
+          ]
+        },
+        {
+          "id": "c-leagues",
+          "kind": "http",
+          "labels": [
+            "/leagues",
+            "/leagues/my-profiles",
+            "/public/leagues"
+          ]
+        },
+        {
+          "id": "c-players",
+          "kind": "http",
+          "labels": [
+            "/public/players"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "auth",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "League, LeagueTeam, LeaguePlayer, LeagueTeamMember, LeagueJoinRequest, LeagueManager, LeagueStandings, LeaguePlayerStats, Season, LeagueDataIssueDismissal"
+          ]
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-finish-game",
+        "flow-public-league"
+      ]
+    },
+    {
+      "id": "games",
+      "label": "games",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/games",
+      "role": "Live game tracking and derived stats: event recording, clock, lineups, rosters, box score, final score, AI recap. finishGame is the hub that fans out to standings, team summaries, feed cards, auto-feed and milestone detection.",
+      "models": [
+        "Game"
+      ],
+      "mount": "/api/v1/games",
+      "loc": 3864,
+      "files": [
+        "server/src/modules/games/gameRecap.service.js",
+        "server/src/modules/games/gameSummaryAi.service.js",
+        "server/src/modules/games/games.controller.js",
+        "server/src/modules/games/games.repository.js",
+        "server/src/modules/games/games.routes.js",
+        "server/src/modules/games/games.service.js",
+        "server/src/modules/games/games.validation.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/games.public.test.js",
+        "server/src/tests/integration/games.roster-add.test.js",
+        "server/src/tests/integration/leagues.bulk-games.test.js",
+        "server/src/tests/unit/bulk-create-league-games.test.js",
+        "server/src/tests/unit/csv.test.js",
+        "server/src/tests/unit/game-clock.test.js",
+        "server/src/tests/unit/game-recap.service.test.js",
+        "server/src/tests/unit/game-roster-add-service.test.js",
+        "server/src/tests/unit/game-roster-add.test.js",
+        "server/src/tests/unit/game-roster-can-manage.test.js",
+        "server/src/tests/unit/game-roster-target.test.js",
+        "server/src/tests/unit/game-scheduled-status.test.js",
+        "server/src/tests/unit/game-venue.test.js",
+        "server/src/tests/unit/gameSummaryAi.service.test.js",
+        "server/src/tests/unit/games.repository.schema.test.js",
+        "server/src/tests/unit/games.service.opponent.test.js",
+        "server/src/tests/unit/games.service.test.js",
+        "server/src/tests/unit/games.validation.test.js",
+        "server/src/tests/unit/statSummary.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/games"
+          ]
+        },
+        {
+          "id": "c-games",
+          "kind": "http",
+          "labels": [
+            "/games"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "Game"
+          ]
+        },
+        {
+          "id": "openai",
+          "kind": "external",
+          "labels": [
+            "AI recap"
+          ]
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-finish-game"
+      ]
+    },
+    {
+      "id": "feed",
+      "label": "feed",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/feed",
+      "role": "The social pulse feed (/pulse). Owns Post, shareable/discoverable card generation, auto-published game posts, highlight clips, and the Cloudinary upload client.",
+      "models": [
+        "Post"
+      ],
+      "mount": "/api/v1/feed",
+      "loc": 2025,
+      "files": [
+        "server/src/modules/feed/cloudinary.client.js",
+        "server/src/modules/feed/feed.controller.js",
+        "server/src/modules/feed/feed.repository.js",
+        "server/src/modules/feed/feed.routes.js",
+        "server/src/modules/feed/feed.service.js",
+        "server/src/modules/feed/feed.validation.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/feed.test.js",
+        "server/src/tests/unit/cloudinaryUrl.test.js",
+        "server/src/tests/unit/feed.repository.schema.test.js",
+        "server/src/tests/unit/feed.service.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/feed"
+          ]
+        },
+        {
+          "id": "c-feed",
+          "kind": "http",
+          "labels": [
+            "/feed",
+            "/feed/image",
+            "/feed/video",
+            "/feed/game-card",
+            "/feed/player-card",
+            "/feed/team-card",
+            "/feed/highlight-clip",
+            "/feed/shareable",
+            "/feed/discoverable"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "auth",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "Post"
+          ]
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-finish-game",
+        "flow-feed"
+      ]
+    },
+    {
+      "id": "teams",
+      "label": "teams",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/teams",
+      "role": "Standalone (non-league) teams, their rosters and materialized per-season summaries, plus public team and opponent pages.",
+      "models": [
+        "Team",
+        "TeamSeasonSummary"
+      ],
+      "mount": "/api/v1/teams + /api/v1/public/teams + /api/v1/public/opponents",
+      "loc": 1453,
+      "files": [
+        "server/src/modules/teams/teams.controller.js",
+        "server/src/modules/teams/teams.repository.js",
+        "server/src/modules/teams/teams.routes.js",
+        "server/src/modules/teams/teams.service.js",
+        "server/src/modules/teams/teams.validation.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/public-teams.test.js",
+        "server/src/tests/integration/teams.auth.test.js",
+        "server/src/tests/unit/teams.public.service.test.js",
+        "server/src/tests/unit/teams.service.test.js",
+        "server/src/tests/unit/teams.validation.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/teams"
+          ]
+        },
+        {
+          "id": "c-teams",
+          "kind": "http",
+          "labels": [
+            "/teams",
+            "/public/teams",
+            "/public/opponents"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "Team, TeamSeasonSummary"
+          ]
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-finish-game"
+      ]
+    },
+    {
+      "id": "billing",
+      "label": "billing",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/billing",
+      "role": "Resource-scoped Stripe billing (per Team / per League) via hosted Checkout. Stripe is the source of truth; the webhook router is mounted before express.json(). entitlements.service.js resolves plan gates for every other module.",
+      "models": [],
+      "mount": "/api/v1/billing (+ webhook mounted pre-JSON in app.js)",
+      "loc": 1298,
+      "files": [
+        "server/src/modules/billing/billing.controller.js",
+        "server/src/modules/billing/billing.routes.js",
+        "server/src/modules/billing/billing.service.js",
+        "server/src/modules/billing/billing.validation.js",
+        "server/src/modules/billing/entitlements.service.js",
+        "server/src/modules/billing/plan-catalog.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/billing.routes.test.js",
+        "server/src/tests/integration/gates.test.js",
+        "server/src/tests/unit/billing-source.schema.test.js",
+        "server/src/tests/unit/billing.dependency-contract.test.js",
+        "server/src/tests/unit/billing.lifecycle.test.js",
+        "server/src/tests/unit/billing.service.test.js",
+        "server/src/tests/unit/entitlements.service.test.js",
+        "server/src/tests/unit/plan-catalog.test.js",
+        "server/src/tests/unit/planMigration.test.js",
+        "server/src/tests/unit/stripeUrl.test.js",
+        "server/src/tests/unit/webhookIdempotency.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "export",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/billing",
+            "/api/v1/billing/webhooks (pre-JSON, express.raw)"
+          ]
+        },
+        {
+          "id": "c-billing",
+          "kind": "http",
+          "labels": [
+            "/billing/catalog",
+            "/billing/team-checkout",
+            "/billing/league-checkout",
+            "/billing/customer-portal"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "auth",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "core-services",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "stripe",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "email",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-billing",
+        "flow-feed"
+      ]
+    },
+    {
+      "id": "milestones",
+      "label": "milestones",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/milestones",
+      "role": "Career-milestone detection for league players. Detects on game finalization, re-evaluates after edits, re-keys on identity changes, and publishes milestone posts through feed.",
+      "models": [
+        "PlayerMilestone"
+      ],
+      "mount": "/api/v1/public/milestones",
+      "loc": 816,
+      "files": [
+        "server/src/modules/milestones/milestones.catalog.js",
+        "server/src/modules/milestones/milestones.controller.js",
+        "server/src/modules/milestones/milestones.repository.js",
+        "server/src/modules/milestones/milestones.routes.js",
+        "server/src/modules/milestones/milestones.service.js",
+        "server/src/modules/milestones/milestones.validation.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/milestones.routes.test.js",
+        "server/src/tests/unit/milestones.catalog.test.js",
+        "server/src/tests/unit/milestones.detection.test.js",
+        "server/src/tests/unit/milestones.identity.test.js",
+        "server/src/tests/unit/milestones.publish.test.js",
+        "server/src/tests/unit/milestones.reevaluate.test.js",
+        "server/src/tests/unit/milestones.rekey.test.js",
+        "server/src/tests/unit/milestones.repository.schema.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/public/milestones"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "http",
+          "labels": [
+            "/public/milestones"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "PlayerMilestone"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-finish-game",
+        "flow-public-league"
+      ]
+    },
+    {
+      "id": "follows",
+      "label": "follows",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/follows",
+      "role": "Follow graph for leagues, teams and players; powers the Following page and feed personalization.",
+      "models": [
+        "Follow"
+      ],
+      "mount": "/api/v1/follows",
+      "loc": 497,
+      "files": [
+        "server/src/modules/follows/follows.controller.js",
+        "server/src/modules/follows/follows.repository.js",
+        "server/src/modules/follows/follows.routes.js",
+        "server/src/modules/follows/follows.service.js",
+        "server/src/modules/follows/follows.validation.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/follows.test.js",
+        "server/src/tests/unit/follows.dependency-contract.test.js",
+        "server/src/tests/unit/follows.repository.schema.test.js",
+        "server/src/tests/unit/follows.service.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/follows"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "http",
+          "labels": [
+            "/follows",
+            "/follows/following",
+            "/follows/status"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "auth",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "Follow"
+          ]
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "export",
+      "label": "export",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/export",
+      "role": "CSV export of league data, gated by billing entitlements.",
+      "models": [],
+      "mount": "/api/v1/export",
+      "loc": 478,
+      "files": [
+        "server/src/modules/export/export.controller.js",
+        "server/src/modules/export/export.routes.js",
+        "server/src/modules/export/export.service.js",
+        "server/src/modules/export/export.validation.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/export.test.js",
+        "server/src/tests/unit/csv.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/export"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "http",
+          "labels": [
+            "/export/my-sporty",
+            "/export/leagues",
+            "/export"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "calls",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-billing"
+      ]
+    },
+    {
+      "id": "analytics",
+      "label": "analytics",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/analytics",
+      "role": "Server-side PostHog event capture, consent-aware.",
+      "models": [],
+      "mount": "/api/v1/analytics",
+      "loc": 137,
+      "files": [
+        "server/src/modules/analytics/analytics.controller.js",
+        "server/src/modules/analytics/analytics.routes.js",
+        "server/src/modules/analytics/analytics.service.js"
+      ],
+      "tests": [
+        "server/src/tests/unit/analytics.controller.test.js",
+        "server/src/tests/unit/analytics.service.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "calls",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/analytics"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "posthog",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "contact",
+      "label": "contact",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/contact",
+      "role": "Contact form; rate-limited, sends mail through the shared email service. Route-only module (no controller/service split).",
+      "models": [],
+      "mount": "/api/v1/contact",
+      "loc": 88,
+      "files": [
+        "server/src/modules/contact/contact.routes.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/contact.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/contact"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "http",
+          "labels": [
+            "/contact"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "core-services",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "email",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "health",
+      "label": "health",
+      "kind": "server-module",
+      "group": "Server domain modules",
+      "path": "server/src/modules/health",
+      "role": "Liveness/readiness probe.",
+      "models": [],
+      "mount": "/api/v1/health",
+      "loc": 40,
+      "files": [
+        "server/src/modules/health/health.controller.js",
+        "server/src/modules/health/health.routes.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/health.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "app-shell",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/health"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "shared-utils",
+          "kind": "uses",
+          "labels": []
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "c-games",
+      "label": "games (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/games",
+      "role": "Game tracking UI: the interactive court (tap-to-infer shot zones), clock controls, event log, box score, highlight reels, and the game list/detail pages.",
+      "models": [],
+      "mount": null,
+      "loc": 8182,
+      "files": [
+        "client/src/features/games/api/gamesApi.js",
+        "client/src/features/games/components/AddRosterPlayerDialog.jsx",
+        "client/src/features/games/components/GameClockControls.jsx",
+        "client/src/features/games/components/GameDetailHeader.jsx",
+        "client/src/features/games/components/GameFormatFields.jsx",
+        "client/src/features/games/components/GameRecapPanel.jsx",
+        "client/src/features/games/components/GameReplayPanel.jsx",
+        "client/src/features/games/components/GameStatsCharts.jsx",
+        "client/src/features/games/components/GameTrackScoreHeader.jsx",
+        "client/src/features/games/components/GameVideoEmbed.jsx",
+        "client/src/features/games/components/InteractiveCourtImage.jsx",
+        "client/src/features/games/components/InteractiveCourtSvg.jsx",
+        "client/src/features/games/components/RecapShotSnapshot.jsx",
+        "client/src/features/games/components/ScoringTimelineChart.jsx",
+        "client/src/features/games/components/YouTubeHighlightReel.jsx",
+        "client/src/features/games/constants.js",
+        "client/src/features/games/court/courtGeometry.js",
+        "client/src/features/games/court/courtImageCalibration.js",
+        "client/src/features/games/court/courtInference.js",
+        "client/src/features/games/gameClock.js",
+        "client/src/features/games/highlightReel.js",
+        "client/src/features/games/pages/GameDetailPage.jsx",
+        "client/src/features/games/pages/GameTrackPage.jsx",
+        "client/src/features/games/pages/GamesListPage.jsx",
+        "client/src/features/games/pages/NewGamePage.jsx",
+        "client/src/features/games/youtube.js"
+      ],
+      "tests": [
+        "client/src/features/games/components/AddRosterPlayerDialog.test.jsx",
+        "client/src/features/games/components/GameClockControls.test.jsx",
+        "client/src/features/games/components/GameDetailHeader.test.jsx",
+        "client/src/features/games/components/InteractiveCourtImage.test.jsx",
+        "client/src/features/games/components/InteractiveCourtSvg.test.jsx",
+        "client/src/features/games/components/YouTubeHighlightReel.test.jsx",
+        "client/src/features/games/court/courtImageCalibration.test.js",
+        "client/src/features/games/court/courtInference.test.js",
+        "client/src/features/games/gameClock.test.js",
+        "client/src/features/games/highlightReel.test.js",
+        "client/src/features/games/pages/GameDetailPage.test.jsx",
+        "client/src/features/games/pages/GameTrackPage.test.jsx",
+        "client/src/features/games/pages/GamesListPage.test.jsx",
+        "client/src/features/games/pages/NewGamePage.test.jsx"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "games",
+          "kind": "http",
+          "labels": [
+            "/games"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-finish-game"
+      ]
+    },
+    {
+      "id": "c-leagues",
+      "label": "leagues (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/leagues",
+      "role": "The biggest client feature: 18 pages covering league admin (teams, players, managers, schedule builder, data completeness) and the public league/standings/team/player views.",
+      "models": [],
+      "mount": null,
+      "loc": 6959,
+      "files": [
+        "client/src/features/leagues/api/leaguesApi.js",
+        "client/src/features/leagues/components/DataCompletenessPanel.jsx",
+        "client/src/features/leagues/components/JoinRequestsPanel.jsx",
+        "client/src/features/leagues/components/LeagueFormBadges.jsx",
+        "client/src/features/leagues/components/LeagueMembersPanel.jsx",
+        "client/src/features/leagues/components/LeagueRosterTable.jsx",
+        "client/src/features/leagues/components/LeagueStandingsTable.jsx",
+        "client/src/features/leagues/components/ScheduleDraftTable.jsx",
+        "client/src/features/leagues/components/SeasonSelect.jsx",
+        "client/src/features/leagues/hooks/usePublicLeague.js",
+        "client/src/features/leagues/pages/AdminLeaguePage.jsx",
+        "client/src/features/leagues/pages/AdminLeagueSchedulePage.jsx",
+        "client/src/features/leagues/pages/AdminLeagueTeamPage.jsx",
+        "client/src/features/leagues/pages/AdminNewLeagueGamePage.jsx",
+        "client/src/features/leagues/pages/AdminNewLeaguePage.jsx",
+        "client/src/features/leagues/pages/AdminNewLeagueTeamPage.jsx",
+        "client/src/features/leagues/pages/LeaguesPage.jsx",
+        "client/src/features/leagues/pages/MySportyPage.jsx",
+        "client/src/features/leagues/pages/PublicLeagueGamesPage.jsx",
+        "client/src/features/leagues/pages/PublicLeaguePage.jsx",
+        "client/src/features/leagues/pages/PublicLeaguePlayerPage.jsx",
+        "client/src/features/leagues/pages/PublicLeagueStandingsPage.jsx",
+        "client/src/features/leagues/pages/PublicLeagueTeamPage.jsx",
+        "client/src/features/leagues/scheduleBuilder.js",
+        "client/src/features/leagues/seasonTrends.js"
+      ],
+      "tests": [
+        "client/src/features/leagues/components/DataCompletenessPanel.test.jsx",
+        "client/src/features/leagues/components/LeagueStandingsTable.test.jsx",
+        "client/src/features/leagues/components/ScheduleDraftTable.test.jsx",
+        "client/src/features/leagues/pages/AdminLeaguePage.test.jsx",
+        "client/src/features/leagues/pages/AdminLeagueSchedulePage.test.jsx",
+        "client/src/features/leagues/pages/AdminNewLeagueGamePage.test.jsx",
+        "client/src/features/leagues/pages/PublicLeagueStandingsPage.test.jsx",
+        "client/src/features/leagues/pages/PublicLeagueTeamPage.test.jsx",
+        "client/src/features/leagues/scheduleBuilder.test.js",
+        "client/src/features/leagues/seasonTrends.test.js"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "leagues",
+          "kind": "http",
+          "labels": [
+            "/leagues",
+            "/leagues/my-profiles",
+            "/public/leagues"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-public-league"
+      ]
+    },
+    {
+      "id": "c-feed",
+      "label": "feed (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/feed",
+      "role": "The /pulse feed: post cards, shareable card export (html2canvas), share-image hooks.",
+      "models": [],
+      "mount": null,
+      "loc": 3508,
+      "files": [
+        "client/src/features/feed/api/feedApi.js",
+        "client/src/features/feed/cardImage.js",
+        "client/src/features/feed/components/FeedComposer.jsx",
+        "client/src/features/feed/components/FeedList.jsx",
+        "client/src/features/feed/components/FeedPostCard.jsx",
+        "client/src/features/feed/components/FeedTabBar.jsx",
+        "client/src/features/feed/components/FullScreenPost.jsx",
+        "client/src/features/feed/components/ShareImageButton.jsx",
+        "client/src/features/feed/components/cards/ShareCardPrimitives.jsx",
+        "client/src/features/feed/components/cards/ShareableCardExport.jsx",
+        "client/src/features/feed/components/cards/shareExportTheme.js",
+        "client/src/features/feed/components/posts/FullScreenGameCard.jsx",
+        "client/src/features/feed/components/posts/FullScreenHighlightClipPost.jsx",
+        "client/src/features/feed/components/posts/FullScreenImagePost.jsx",
+        "client/src/features/feed/components/posts/FullScreenPlayerCard.jsx",
+        "client/src/features/feed/components/posts/FullScreenTeamCard.jsx",
+        "client/src/features/feed/components/posts/FullScreenVideoPost.jsx",
+        "client/src/features/feed/components/posts/GameCardPost.jsx",
+        "client/src/features/feed/components/posts/HighlightClipPostCard.jsx",
+        "client/src/features/feed/components/posts/ImagePostCard.jsx",
+        "client/src/features/feed/components/posts/MilestonePost.jsx",
+        "client/src/features/feed/components/posts/PlayerCardPost.jsx",
+        "client/src/features/feed/components/posts/TeamCardPost.jsx",
+        "client/src/features/feed/components/posts/VideoPostCard.jsx",
+        "client/src/features/feed/components/posts/cardFixtures.js",
+        "client/src/features/feed/components/posts/cardUtils.js",
+        "client/src/features/feed/hooks/useIsMobileDevice.js",
+        "client/src/features/feed/hooks/useShareImage.js",
+        "client/src/features/feed/hooks/useSnapScrollAutoplay.js",
+        "client/src/features/feed/hooks/useYouTubeAutoplay.js",
+        "client/src/features/feed/pages/FeedPage.jsx"
+      ],
+      "tests": [
+        "client/src/features/feed/components/FeedList.test.jsx",
+        "client/src/features/feed/components/ShareImageButton.test.jsx",
+        "client/src/features/feed/components/cards/ShareableCardExport.test.jsx",
+        "client/src/features/feed/components/cards/shareExportTheme.test.js",
+        "client/src/features/feed/components/posts/CardPosts.test.jsx",
+        "client/src/features/feed/components/posts/MilestonePost.test.jsx",
+        "client/src/features/feed/hooks/useShareImage.test.js",
+        "client/src/features/feed/pages/FeedPage.test.jsx"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "feed",
+          "kind": "http",
+          "labels": [
+            "/feed",
+            "/feed/image",
+            "/feed/video",
+            "/feed/game-card",
+            "/feed/player-card",
+            "/feed/team-card",
+            "/feed/highlight-clip",
+            "/feed/shareable",
+            "/feed/discoverable"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-feed"
+      ]
+    },
+    {
+      "id": "c-teams",
+      "label": "teams (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/teams",
+      "role": "Standalone team pages: create/edit, roster, public team and public player pages, stats tables.",
+      "models": [],
+      "mount": null,
+      "loc": 3056,
+      "files": [
+        "client/src/features/teams/api/teamsApi.js",
+        "client/src/features/teams/components/StatsTable.jsx",
+        "client/src/features/teams/pages/AdminTeamPage.jsx",
+        "client/src/features/teams/pages/EditTeamPage.jsx",
+        "client/src/features/teams/pages/NewTeamPage.jsx",
+        "client/src/features/teams/pages/OpponentPlaceholderPage.jsx",
+        "client/src/features/teams/pages/PublicPlayerPage.jsx",
+        "client/src/features/teams/pages/PublicTeamPage.jsx",
+        "client/src/features/teams/pages/TeamsPage.jsx",
+        "client/src/features/teams/shareCardPayloads.js"
+      ],
+      "tests": [
+        "client/src/features/teams/components/StatsTable.test.jsx",
+        "client/src/features/teams/pages/EditTeamPage.test.jsx",
+        "client/src/features/teams/pages/NewTeamPage.test.jsx",
+        "client/src/features/teams/pages/OpponentPlaceholderPage.test.jsx",
+        "client/src/features/teams/pages/PublicPlayerPage.test.jsx",
+        "client/src/features/teams/pages/PublicTeamPage.test.jsx",
+        "client/src/features/teams/pages/TeamsPage.test.jsx"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "teams",
+          "kind": "http",
+          "labels": [
+            "/teams",
+            "/public/teams",
+            "/public/opponents"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "c-auth",
+      "label": "auth (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/auth",
+      "role": "Login/register, Google completion, email verification, forgot/reset password, plus the AuthContext store.",
+      "models": [],
+      "mount": null,
+      "loc": 762,
+      "files": [
+        "client/src/features/auth/api/authApi.js",
+        "client/src/features/auth/components/LoginForm.jsx",
+        "client/src/features/auth/components/RegisterForm.jsx",
+        "client/src/features/auth/hooks/useAuthForm.js",
+        "client/src/features/auth/pages/AuthPage.jsx",
+        "client/src/features/auth/pages/ForgotPasswordPage.jsx",
+        "client/src/features/auth/pages/GoogleCompletePage.jsx",
+        "client/src/features/auth/pages/ResetPasswordPage.jsx",
+        "client/src/features/auth/pages/VerifyEmailPage.jsx",
+        "client/src/features/auth/schemas/authSchemas.js"
+      ],
+      "tests": [
+        "client/src/features/auth/pages/AuthPage.test.jsx"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "auth",
+          "kind": "http",
+          "labels": [
+            "/auth/register",
+            "/auth/login",
+            "/auth/logout",
+            "/auth/refresh",
+            "/auth/me",
+            "/auth/request-verification",
+            "/auth/verify-email",
+            "/auth/forgot-password",
+            "/auth/reset-password",
+            "/auth/google",
+            "/auth/avatar"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-auth"
+      ]
+    },
+    {
+      "id": "c-billing",
+      "label": "billing (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/billing",
+      "role": "Pricing page (dev-only route), checkout redirect, billing success, status pills. Uses Stripe hosted Checkout — no client Stripe.js card flows.",
+      "models": [],
+      "mount": null,
+      "loc": 821,
+      "files": [
+        "client/src/features/billing/api/billingApi.js",
+        "client/src/features/billing/components/BillingStatusPill.jsx",
+        "client/src/features/billing/components/LockedFeatureCard.jsx",
+        "client/src/features/billing/pages/BillingCancelPage.jsx",
+        "client/src/features/billing/pages/BillingSuccessPage.jsx",
+        "client/src/features/billing/pages/PricingPage.jsx"
+      ],
+      "tests": [
+        "client/src/features/billing/components/BillingStatusPill.test.jsx",
+        "client/src/features/billing/pages/BillingSuccessPage.test.jsx",
+        "client/src/features/billing/pages/PricingPage.test.jsx"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "billing",
+          "kind": "http",
+          "labels": [
+            "/billing/catalog",
+            "/billing/team-checkout",
+            "/billing/league-checkout",
+            "/billing/customer-portal"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "stripe",
+          "kind": "external",
+          "labels": [
+            "redirect to hosted Checkout"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-billing"
+      ]
+    },
+    {
+      "id": "c-players",
+      "label": "players (UI)",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src/features/players",
+      "role": "Public user profiles, profile cards, player milestones, discoverable players.",
+      "models": [],
+      "mount": null,
+      "loc": 478,
+      "files": [
+        "client/src/features/players/api/playersApi.js",
+        "client/src/features/players/components/DiscoverablePlayers.jsx",
+        "client/src/features/players/components/PlayerMilestones.jsx",
+        "client/src/features/players/components/ProfileCard.jsx",
+        "client/src/features/players/pages/PublicUserProfilePage.jsx"
+      ],
+      "tests": [
+        "client/src/features/players/components/DiscoverablePlayers.test.jsx",
+        "client/src/features/players/components/PlayerMilestones.test.jsx",
+        "client/src/features/players/components/ProfileCard.test.jsx",
+        "client/src/features/players/pages/PublicUserProfilePage.test.jsx"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "leagues",
+          "kind": "http",
+          "labels": [
+            "/public/players"
+          ]
+        },
+        {
+          "id": "c-shared",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "c-shared",
+      "label": "shared client core",
+      "kind": "client-feature",
+      "group": "Client features",
+      "path": "client/src",
+      "role": "Composition root and shared plumbing: app/providers, app/router (lazily code-split routes, OPT-001), app/store, lib/apiClient, layouts, components/ui, analytics and media helpers.",
+      "models": [],
+      "mount": null,
+      "loc": 4518,
+      "files": [
+        "client/src/app/providers/AppProviders.jsx",
+        "client/src/app/providers/queryClient.js",
+        "client/src/app/router/AppRouter.jsx",
+        "client/src/app/store/AuthContext.jsx",
+        "client/src/lib/apiClient.js",
+        "client/src/lib/consent.js",
+        "client/src/lib/downloadFile.js",
+        "client/src/lib/env.js",
+        "client/src/lib/posthog.js",
+        "client/src/layouts/AppLayout.jsx",
+        "client/src/components/Breadcrumbs.jsx",
+        "client/src/components/DarkPageHeader.jsx",
+        "client/src/components/PageHeader.jsx",
+        "client/src/components/PlaceholderCard.jsx",
+        "client/src/components/SportsLoader.jsx",
+        "client/src/components/Tabs.jsx",
+        "client/src/components/ui/FloatingActionButton.jsx",
+        "client/src/components/ui/LeagueGameCard.jsx",
+        "client/src/components/ui/Modal.jsx",
+        "client/src/features/analytics/ConsentBanner.jsx",
+        "client/src/features/analytics/PostHogRouteTracker.jsx",
+        "client/src/features/analytics/signupEvents.js",
+        "client/src/features/analytics/trackEvent.js",
+        "client/src/features/analytics/useScrollDepth.js",
+        "client/src/features/media/CloudinaryImage.jsx",
+        "client/src/features/dashboard/AdminPage.jsx",
+        "client/src/features/export/api/exportApi.js",
+        "client/src/features/export/components/ExportCsvButton.jsx",
+        "client/src/features/export/hooks/useExportCsv.js",
+        "client/src/features/follows/api/followsApi.js",
+        "client/src/features/follows/components/FollowButton.jsx",
+        "client/src/features/follows/hooks/useFollowStatus.js",
+        "client/src/features/follows/hooks/useFollowing.js",
+        "client/src/features/follows/pages/FollowingPage.jsx",
+        "client/src/features/contact/contactApi.js",
+        "client/src/pages/AboutPage.jsx",
+        "client/src/pages/ContactPage.jsx",
+        "client/src/pages/HomePage.jsx",
+        "client/src/pages/NotFoundPage.jsx",
+        "client/src/pages/PrivacyPage.jsx",
+        "client/src/hooks/resolveShareImage.js",
+        "client/src/hooks/useDocumentMeta.js",
+        "client/src/utils/placeholder.js",
+        "client/src/utils/testSetup.js"
+      ],
+      "tests": [
+        "client/src/app/router/AppRouter.test.jsx",
+        "client/src/app/store/AuthContext.test.jsx",
+        "client/src/lib/apiClient.test.js",
+        "client/src/lib/consent.test.js",
+        "client/src/lib/downloadFile.test.js",
+        "client/src/lib/posthog.test.js",
+        "client/src/layouts/AppLayout.test.jsx",
+        "client/src/components/ui/Modal.test.jsx",
+        "client/src/features/analytics/ConsentBanner.test.jsx",
+        "client/src/features/analytics/PostHogRouteTracker.test.jsx",
+        "client/src/features/analytics/signupEvents.test.js",
+        "client/src/features/media/CloudinaryImage.test.jsx",
+        "client/src/features/export/components/ExportCsvButton.test.jsx",
+        "client/src/features/export/hooks/useExportCsv.test.js",
+        "client/src/features/follows/components/FollowButton.test.jsx",
+        "client/src/features/follows/pages/FollowingPage.test.jsx",
+        "client/src/pages/AboutPage.test.jsx",
+        "client/src/pages/ContactPage.test.jsx",
+        "client/src/pages/HomePage.test.jsx"
+      ],
+      "upstream": [
+        {
+          "id": "c-games",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "c-leagues",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "c-feed",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "c-teams",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "c-auth",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "c-billing",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        },
+        {
+          "id": "c-players",
+          "kind": "uses",
+          "labels": [
+            "apiClient / router / store"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "contact",
+          "kind": "http",
+          "labels": [
+            "/contact"
+          ]
+        },
+        {
+          "id": "export",
+          "kind": "http",
+          "labels": [
+            "/export/my-sporty",
+            "/export/leagues",
+            "/export"
+          ]
+        },
+        {
+          "id": "follows",
+          "kind": "http",
+          "labels": [
+            "/follows",
+            "/follows/following",
+            "/follows/status"
+          ]
+        },
+        {
+          "id": "posthog",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "auth",
+          "kind": "http",
+          "labels": [
+            "/auth"
+          ]
+        },
+        {
+          "id": "cloudinary",
+          "kind": "external",
+          "labels": [
+            "CloudinaryImage"
+          ]
+        },
+        {
+          "id": "milestones",
+          "kind": "http",
+          "labels": [
+            "/public/milestones"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-auth"
+      ]
+    },
+    {
+      "id": "app-shell",
+      "label": "Express app shell",
+      "kind": "infra",
+      "group": "Platform & infrastructure",
+      "path": "server/src/app.js",
+      "role": "createApp() composes the middleware chain in a load-bearing order: requestId → pino-http → helmet → cors → **billing webhook with express.raw (before express.json)** → express.json → cookieParser → passport → CSRF attach/protect → rate limit → /api/v1 router → notFound → error.",
+      "models": [],
+      "mount": null,
+      "loc": 170,
+      "files": [
+        "server/src/app.js",
+        "server/src/server.js",
+        "server/src/routes/index.js"
+      ],
+      "tests": [
+        "server/src/tests/integration/health.test.js",
+        "server/src/tests/integration/gates.test.js"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "auth",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/auth"
+          ]
+        },
+        {
+          "id": "leagues",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/leagues"
+          ]
+        },
+        {
+          "id": "games",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/games"
+          ]
+        },
+        {
+          "id": "feed",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/feed"
+          ]
+        },
+        {
+          "id": "teams",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/teams"
+          ]
+        },
+        {
+          "id": "billing",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/billing",
+            "/api/v1/billing/webhooks (pre-JSON, express.raw)"
+          ]
+        },
+        {
+          "id": "milestones",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/public/milestones"
+          ]
+        },
+        {
+          "id": "follows",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/follows"
+          ]
+        },
+        {
+          "id": "export",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/export"
+          ]
+        },
+        {
+          "id": "analytics",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/analytics"
+          ]
+        },
+        {
+          "id": "contact",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/contact"
+          ]
+        },
+        {
+          "id": "health",
+          "kind": "routes",
+          "labels": [
+            "/api/v1/health"
+          ]
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-finish-game",
+        "flow-auth",
+        "flow-billing",
+        "flow-public-league",
+        "flow-feed"
+      ]
+    },
+    {
+      "id": "middleware",
+      "label": "middleware",
+      "kind": "infra",
+      "group": "Platform & infrastructure",
+      "path": "server/src/middleware",
+      "role": "Cross-cutting request plumbing. auth.middleware verifies the JWT access cookie; csrf.middleware does double-submit; publicCache.middleware (OPT-019) caches anonymous public GETs and degrades to no-cache when auth is present; rateLimit, requestId, error and notFound complete the chain.",
+      "models": [],
+      "mount": null,
+      "loc": 316,
+      "files": [
+        "server/src/middleware/auth.middleware.js",
+        "server/src/middleware/csrf.middleware.js",
+        "server/src/middleware/error.middleware.js",
+        "server/src/middleware/notFound.middleware.js",
+        "server/src/middleware/publicCache.middleware.js",
+        "server/src/middleware/rateLimit.middleware.js",
+        "server/src/middleware/requestId.middleware.js"
+      ],
+      "tests": [
+        "server/src/tests/unit/publicCache.middleware.test.js",
+        "server/src/tests/unit/rateLimit.middleware.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "follows",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "export",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "analytics",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "uses",
+          "labels": []
+        }
+      ],
+      "downstream": [
+        {
+          "id": "core-services",
+          "kind": "uses",
+          "labels": [
+            "JWT verify"
+          ]
+        }
+      ],
+      "flows": [
+        "flow-public-league"
+      ]
+    },
+    {
+      "id": "core-services",
+      "label": "core services",
+      "kind": "infra",
+      "group": "Platform & infrastructure",
+      "path": "server/src/services",
+      "role": "Auth-adjacent services shared across modules: token.service (JWT access/refresh), authToken.service (verification + reset tokens), session.service (rotating refresh sessions), email.service (Resend/nodemailer transport).",
+      "models": [],
+      "mount": null,
+      "loc": 219,
+      "files": [
+        "server/src/services/authToken.service.js",
+        "server/src/services/email.service.js",
+        "server/src/services/session.service.js",
+        "server/src/services/token.service.js"
+      ],
+      "tests": [
+        "server/src/tests/unit/token.service.test.js",
+        "server/src/tests/unit/authToken.service.test.js",
+        "server/src/tests/unit/email.service.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "contact",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "middleware",
+          "kind": "uses",
+          "labels": [
+            "JWT verify"
+          ]
+        }
+      ],
+      "downstream": [
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "email",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "flows": [
+        "flow-auth"
+      ]
+    },
+    {
+      "id": "shared-utils",
+      "label": "shared + utils",
+      "kind": "infra",
+      "group": "Platform & infrastructure",
+      "path": "server/src/utils",
+      "role": "Pure helpers with no domain state: ApiError/apiResponse/asyncHandler (the error contract), pagination, csv, crypto, escapeHtml, stripeUrl, webhookIdempotency — plus modules/shared (statSummary, gameClock, stats.constants, cloudinaryUrl, pagination.validation).",
+      "models": [],
+      "mount": null,
+      "loc": 819,
+      "files": [
+        "server/src/utils/apiError.js",
+        "server/src/utils/apiResponse.js",
+        "server/src/utils/asyncHandler.js",
+        "server/src/utils/crypto.js",
+        "server/src/utils/csv.js",
+        "server/src/utils/escapeHtml.js",
+        "server/src/utils/pagination.js",
+        "server/src/utils/stripeUrl.js",
+        "server/src/utils/webhookIdempotency.js",
+        "server/src/modules/shared/cloudinaryUrl.js",
+        "server/src/modules/shared/gameClock.js",
+        "server/src/modules/shared/pagination.validation.js",
+        "server/src/modules/shared/statSummary.js",
+        "server/src/modules/shared/stats.constants.js"
+      ],
+      "tests": [
+        "server/src/tests/unit/pagination.test.js",
+        "server/src/tests/unit/statSummary.test.js",
+        "server/src/tests/unit/game-clock.test.js",
+        "server/src/tests/unit/csv.test.js",
+        "server/src/tests/unit/cloudinaryUrl.test.js",
+        "server/src/tests/unit/stripeUrl.test.js",
+        "server/src/tests/unit/webhookIdempotency.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "follows",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "export",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "analytics",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "contact",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "health",
+          "kind": "uses",
+          "labels": []
+        }
+      ],
+      "downstream": [],
+      "flows": []
+    },
+    {
+      "id": "config",
+      "label": "config + env",
+      "kind": "infra",
+      "group": "Platform & infrastructure",
+      "path": "server/src/config",
+      "role": "Boot-time configuration. env.js Zod-validates the environment (loaded from env/server/.env.* via ENV_FILE) and fails fast; db.js opens the Mongoose connection; cors, cookie and logger (pino) configure the rest.",
+      "models": [],
+      "mount": null,
+      "loc": 302,
+      "files": [
+        "server/src/config/cookie.js",
+        "server/src/config/cors.js",
+        "server/src/config/db.js",
+        "server/src/config/env.js",
+        "server/src/config/logger.js"
+      ],
+      "tests": [
+        "server/src/tests/unit/env.schema.test.js"
+      ],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "feed",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "milestones",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "analytics",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "contact",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "app-shell",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "core-services",
+          "kind": "uses",
+          "labels": []
+        },
+        {
+          "id": "scripts",
+          "kind": "uses",
+          "labels": []
+        }
+      ],
+      "downstream": [],
+      "flows": []
+    },
+    {
+      "id": "scripts",
+      "label": "backfill scripts",
+      "kind": "infra",
+      "group": "Platform & infrastructure",
+      "path": "server/src/scripts",
+      "role": "Idempotent operational scripts (all support --dry-run), run as ENV_FILE=… node src/scripts/<name>.js. Covers seeding, migrations (index drops, plan-enum unification) and backfills for derived data: standings, seasons, milestones, team-season summaries, finalScore, auto-feed.",
+      "models": [],
+      "mount": null,
+      "loc": 4135,
+      "files": [
+        "server/src/scripts/backfill-auto-feed.js",
+        "server/src/scripts/backfill-game-finalscore.js",
+        "server/src/scripts/backfill-league-seasons.js",
+        "server/src/scripts/backfill-league-standings.js",
+        "server/src/scripts/backfill-participant-slug.js",
+        "server/src/scripts/backfill-player-milestones.js",
+        "server/src/scripts/backfill-team-season-summaries.js",
+        "server/src/scripts/check-migration-state.js",
+        "server/src/scripts/ensure-system-user.js",
+        "server/src/scripts/export-league-snapshot.js",
+        "server/src/scripts/lib/planMigration.js",
+        "server/src/scripts/migrate-data-issue-dismissal-index.js",
+        "server/src/scripts/migrate-drop-dead-indexes.js",
+        "server/src/scripts/migrate-drop-user-league-fields.js",
+        "server/src/scripts/migrate-league-stripe-customer-index.js",
+        "server/src/scripts/migrate-leaguestandings-season-index.js",
+        "server/src/scripts/migrate-unify-plan-enums.js",
+        "server/src/scripts/retrack-league-games-dual.js",
+        "server/src/scripts/seed-demo-account.js",
+        "server/src/scripts/seed.js"
+      ],
+      "tests": [
+        "server/src/tests/unit/planMigration.test.js"
+      ],
+      "upstream": [],
+      "downstream": [
+        {
+          "id": "mongodb",
+          "kind": "persists",
+          "labels": [
+            "backfills derived data"
+          ]
+        },
+        {
+          "id": "config",
+          "kind": "uses",
+          "labels": []
+        }
+      ],
+      "flows": []
+    },
+    {
+      "id": "mongodb",
+      "label": "MongoDB",
+      "kind": "datastore",
+      "group": "Data store",
+      "path": null,
+      "role": "The single datastore, via Mongoose 8. **There is no models/ directory** — every schema is declared inline in its owning *.repository.js. Derived/materialized data (standings, boxScore, finalScore, season summaries) is written back into documents rather than recomputed per request.",
+      "models": [
+        "AuthToken",
+        "Follow",
+        "Game",
+        "League",
+        "LeagueDataIssueDismissal",
+        "LeagueJoinRequest",
+        "LeagueManager",
+        "LeaguePlayer",
+        "LeaguePlayerStats",
+        "LeagueStandings",
+        "LeagueTeam",
+        "LeagueTeamMember",
+        "PlayerMilestone",
+        "Post",
+        "Season",
+        "Session",
+        "Team",
+        "TeamSeasonSummary",
+        "User"
+      ],
+      "mount": null,
+      "loc": 0,
+      "files": [],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "persists",
+          "labels": [
+            "User, Session, AuthToken"
+          ]
+        },
+        {
+          "id": "leagues",
+          "kind": "persists",
+          "labels": [
+            "League, LeagueTeam, LeaguePlayer, LeagueTeamMember, LeagueJoinRequest, LeagueManager, LeagueStandings, LeaguePlayerStats, Season, LeagueDataIssueDismissal"
+          ]
+        },
+        {
+          "id": "games",
+          "kind": "persists",
+          "labels": [
+            "Game"
+          ]
+        },
+        {
+          "id": "feed",
+          "kind": "persists",
+          "labels": [
+            "Post"
+          ]
+        },
+        {
+          "id": "teams",
+          "kind": "persists",
+          "labels": [
+            "Team, TeamSeasonSummary"
+          ]
+        },
+        {
+          "id": "milestones",
+          "kind": "persists",
+          "labels": [
+            "PlayerMilestone"
+          ]
+        },
+        {
+          "id": "follows",
+          "kind": "persists",
+          "labels": [
+            "Follow"
+          ]
+        },
+        {
+          "id": "scripts",
+          "kind": "persists",
+          "labels": [
+            "backfills derived data"
+          ]
+        }
+      ],
+      "downstream": [],
+      "flows": [
+        "flow-finish-game",
+        "flow-auth",
+        "flow-billing",
+        "flow-public-league",
+        "flow-feed"
+      ]
+    },
+    {
+      "id": "stripe",
+      "label": "Stripe",
+      "kind": "external",
+      "group": "External services",
+      "path": null,
+      "role": "Hosted Checkout + Customer Portal + webhooks. Source of truth for subscription state; the webhook handler claims each event through utils/webhookIdempotency before applying it.",
+      "models": [],
+      "mount": null,
+      "loc": 0,
+      "files": [
+        "server/src/modules/billing/billing.service.js"
+      ],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "billing",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "c-billing",
+          "kind": "external",
+          "labels": [
+            "redirect to hosted Checkout"
+          ]
+        }
+      ],
+      "downstream": [],
+      "flows": [
+        "flow-billing"
+      ]
+    },
+    {
+      "id": "cloudinary",
+      "label": "Cloudinary",
+      "kind": "external",
+      "group": "External services",
+      "path": null,
+      "role": "Image storage and transformation for logos, avatars and feed media. Uploads go through feed/cloudinary.client.js; URL building is shared in modules/shared/cloudinaryUrl.js.",
+      "models": [],
+      "mount": null,
+      "loc": 0,
+      "files": [
+        "server/src/modules/feed/cloudinary.client.js",
+        "server/src/modules/shared/cloudinaryUrl.js"
+      ],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "feed",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "auth",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "leagues",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "teams",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "games",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "follows",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "c-shared",
+          "kind": "external",
+          "labels": [
+            "CloudinaryImage"
+          ]
+        }
+      ],
+      "downstream": [],
+      "flows": [
+        "flow-feed"
+      ]
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI API",
+      "kind": "external",
+      "group": "External services",
+      "path": null,
+      "role": "Generates the natural-language game recap after a game is finalized, called at https://api.openai.com/v1/responses. Fired off-response so finishing a game never blocks on it.",
+      "models": [],
+      "mount": null,
+      "loc": 0,
+      "files": [
+        "server/src/modules/games/gameSummaryAi.service.js"
+      ],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "games",
+          "kind": "external",
+          "labels": [
+            "AI recap"
+          ]
+        }
+      ],
+      "downstream": [],
+      "flows": [
+        "flow-finish-game"
+      ]
+    },
+    {
+      "id": "posthog",
+      "label": "PostHog",
+      "kind": "external",
+      "group": "External services",
+      "path": null,
+      "role": "Product analytics on both sides — posthog-node on the server, posthog-js on the client behind a consent banner.",
+      "models": [],
+      "mount": null,
+      "loc": 0,
+      "files": [
+        "server/src/modules/analytics/analytics.service.js"
+      ],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "analytics",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "c-shared",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "downstream": [],
+      "flows": []
+    },
+    {
+      "id": "google-oauth",
+      "label": "Google OAuth",
+      "kind": "external",
+      "group": "External services",
+      "path": null,
+      "role": "Social sign-in via passport-google-oauth20, exchanged for the app's own session cookies.",
+      "models": [],
+      "mount": null,
+      "loc": 0,
+      "files": [
+        "server/src/modules/auth/oauth.google.js"
+      ],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "auth",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "downstream": [],
+      "flows": []
+    },
+    {
+      "id": "email",
+      "label": "Email (Resend)",
+      "kind": "external",
+      "group": "External services",
+      "path": null,
+      "role": "Transactional mail — verification, password reset, billing notices, contact form.",
+      "models": [],
+      "mount": null,
+      "loc": 0,
+      "files": [
+        "server/src/services/email.service.js"
+      ],
+      "tests": [],
+      "upstream": [
+        {
+          "id": "core-services",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "contact",
+          "kind": "external",
+          "labels": []
+        },
+        {
+          "id": "billing",
+          "kind": "external",
+          "labels": []
+        }
+      ],
+      "downstream": [],
+      "flows": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "auth",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "feed",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "analytics",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "core-services",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "User, Session, AuthToken"
+      ]
+    },
+    {
+      "from": "leagues",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "games",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "feed",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "auth",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "billing",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "milestones",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "teams",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "League, LeagueTeam, LeaguePlayer, LeagueTeamMember, LeagueJoinRequest, LeagueManager, LeagueStandings, LeaguePlayerStats, Season, LeagueDataIssueDismissal"
+      ]
+    },
+    {
+      "from": "games",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "feed",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "teams",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "billing",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "leagues",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "milestones",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "Game"
+      ]
+    },
+    {
+      "from": "feed",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "billing",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "auth",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "games",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "leagues",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "teams",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "milestones",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "feed",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "Post"
+      ]
+    },
+    {
+      "from": "teams",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "games",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "billing",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "feed",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "Team, TeamSeasonSummary"
+      ]
+    },
+    {
+      "from": "billing",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "teams",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "leagues",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "auth",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "core-services",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "milestones",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "milestones",
+      "to": "leagues",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "milestones",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "milestones",
+      "to": "games",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "milestones",
+      "to": "feed",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "milestones",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "PlayerMilestone"
+      ]
+    },
+    {
+      "from": "follows",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "follows",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "follows",
+      "to": "auth",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "follows",
+      "to": "leagues",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "follows",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "Follow"
+      ]
+    },
+    {
+      "from": "export",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "export",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "export",
+      "to": "leagues",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "export",
+      "to": "billing",
+      "kind": "calls",
+      "labels": []
+    },
+    {
+      "from": "analytics",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "analytics",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "analytics",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "contact",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "contact",
+      "to": "core-services",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "contact",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "health",
+      "to": "shared-utils",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "app-shell",
+      "to": "auth",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/auth"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "leagues",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/leagues"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "games",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/games"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "feed",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/feed"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "teams",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/teams"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "billing",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/billing",
+        "/api/v1/billing/webhooks (pre-JSON, express.raw)"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "milestones",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/public/milestones"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "follows",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/follows"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "export",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/export"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "analytics",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/analytics"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "contact",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/contact"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "health",
+      "kind": "routes",
+      "labels": [
+        "/api/v1/health"
+      ]
+    },
+    {
+      "from": "app-shell",
+      "to": "middleware",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "app-shell",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "middleware",
+      "to": "core-services",
+      "kind": "uses",
+      "labels": [
+        "JWT verify"
+      ]
+    },
+    {
+      "from": "core-services",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "core-services",
+      "to": "email",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "scripts",
+      "to": "mongodb",
+      "kind": "persists",
+      "labels": [
+        "backfills derived data"
+      ]
+    },
+    {
+      "from": "scripts",
+      "to": "config",
+      "kind": "uses",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "stripe",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "analytics",
+      "to": "posthog",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "google-oauth",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "openai",
+      "kind": "external",
+      "labels": [
+        "AI recap"
+      ]
+    },
+    {
+      "from": "feed",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "auth",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "leagues",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "teams",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "games",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "follows",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "contact",
+      "to": "email",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "billing",
+      "to": "email",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "c-auth",
+      "to": "auth",
+      "kind": "http",
+      "labels": [
+        "/auth/register",
+        "/auth/login",
+        "/auth/logout",
+        "/auth/refresh",
+        "/auth/me",
+        "/auth/request-verification",
+        "/auth/verify-email",
+        "/auth/forgot-password",
+        "/auth/reset-password",
+        "/auth/google",
+        "/auth/avatar"
+      ]
+    },
+    {
+      "from": "c-billing",
+      "to": "billing",
+      "kind": "http",
+      "labels": [
+        "/billing/catalog",
+        "/billing/team-checkout",
+        "/billing/league-checkout",
+        "/billing/customer-portal"
+      ]
+    },
+    {
+      "from": "c-shared",
+      "to": "contact",
+      "kind": "http",
+      "labels": [
+        "/contact"
+      ]
+    },
+    {
+      "from": "c-shared",
+      "to": "export",
+      "kind": "http",
+      "labels": [
+        "/export/my-sporty",
+        "/export/leagues",
+        "/export"
+      ]
+    },
+    {
+      "from": "c-feed",
+      "to": "feed",
+      "kind": "http",
+      "labels": [
+        "/feed",
+        "/feed/image",
+        "/feed/video",
+        "/feed/game-card",
+        "/feed/player-card",
+        "/feed/team-card",
+        "/feed/highlight-clip",
+        "/feed/shareable",
+        "/feed/discoverable"
+      ]
+    },
+    {
+      "from": "c-shared",
+      "to": "follows",
+      "kind": "http",
+      "labels": [
+        "/follows",
+        "/follows/following",
+        "/follows/status"
+      ]
+    },
+    {
+      "from": "c-games",
+      "to": "games",
+      "kind": "http",
+      "labels": [
+        "/games"
+      ]
+    },
+    {
+      "from": "c-leagues",
+      "to": "leagues",
+      "kind": "http",
+      "labels": [
+        "/leagues",
+        "/leagues/my-profiles",
+        "/public/leagues"
+      ]
+    },
+    {
+      "from": "c-players",
+      "to": "leagues",
+      "kind": "http",
+      "labels": [
+        "/public/players"
+      ]
+    },
+    {
+      "from": "c-teams",
+      "to": "teams",
+      "kind": "http",
+      "labels": [
+        "/teams",
+        "/public/teams",
+        "/public/opponents"
+      ]
+    },
+    {
+      "from": "c-games",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-leagues",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-feed",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-teams",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-auth",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-billing",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-players",
+      "to": "c-shared",
+      "kind": "uses",
+      "labels": [
+        "apiClient / router / store"
+      ]
+    },
+    {
+      "from": "c-shared",
+      "to": "posthog",
+      "kind": "external",
+      "labels": []
+    },
+    {
+      "from": "c-shared",
+      "to": "auth",
+      "kind": "http",
+      "labels": [
+        "/auth"
+      ]
+    },
+    {
+      "from": "c-billing",
+      "to": "stripe",
+      "kind": "external",
+      "labels": [
+        "redirect to hosted Checkout"
+      ]
+    },
+    {
+      "from": "c-shared",
+      "to": "cloudinary",
+      "kind": "external",
+      "labels": [
+        "CloudinaryImage"
+      ]
+    },
+    {
+      "from": "c-shared",
+      "to": "milestones",
+      "kind": "http",
+      "labels": [
+        "/public/milestones"
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-finish-game",
+      "name": "Finish a game → the derived-data fan-out",
+      "why": "The most consequential write path in the codebase. One request flips a game to completed, freezes its box score, then fans out to five independent recompute jobs. Almost every materialized field in the product is written here.",
+      "steps": [
+        {
+          "node": "c-games",
+          "label": "GameTrackPage → finishGame()",
+          "file": "client/src/features/games/api/gamesApi.js",
+          "symbol": "apiClient.post(`/games/${gameId}/finish"
+        },
+        {
+          "node": "app-shell",
+          "label": "POST /api/v1/games/:id/finish",
+          "file": "server/src/modules/games/games.routes.js",
+          "symbol": "finish"
+        },
+        {
+          "node": "games",
+          "label": "finishGameForUser — assertGameAccess, then canFinalizeLeagueGame for league games",
+          "file": "server/src/modules/games/games.service.js",
+          "symbol": "async function finishGameForUser"
+        },
+        {
+          "node": "games",
+          "label": "status=completed, pause clock, syncGameEventCount, syncGameFinalScore, computeBoxScore → game.boxScore, then save",
+          "file": "server/src/modules/games/games.service.js",
+          "symbol": "function computeBoxScore"
+        },
+        {
+          "node": "leagues",
+          "label": "fan-out 1 — scheduleLeagueRecomputeForGame rebuilds LeagueStandings + LeaguePlayerStats",
+          "file": "server/src/modules/games/games.service.js",
+          "symbol": "function scheduleLeagueRecomputeForGame"
+        },
+        {
+          "node": "teams",
+          "label": "fan-out 2 — scheduleTeamSummaryRecomputeForGame rewrites TeamSeasonSummary",
+          "file": "server/src/modules/games/games.service.js",
+          "symbol": "function scheduleTeamSummaryRecomputeForGame"
+        },
+        {
+          "node": "feed",
+          "label": "fan-out 3 + 4 — refresh existing feed cards, then auto-publish the game post",
+          "file": "server/src/modules/games/games.service.js",
+          "symbol": "function scheduleAutoFeedForGame"
+        },
+        {
+          "node": "milestones",
+          "label": "fan-out 5 — detectForFinalizedGame reads boxScore lines against career totals",
+          "file": "server/src/modules/milestones/milestones.service.js",
+          "symbol": "async function detectForFinalizedGame"
+        },
+        {
+          "node": "feed",
+          "label": "milestones publish their own Post through feed",
+          "file": "server/src/modules/milestones/milestones.service.js",
+          "symbol": "feed.service"
+        },
+        {
+          "node": "openai",
+          "label": "off-response: buildPersistedGameSummary → OpenAI /v1/responses for the recap",
+          "file": "server/src/modules/games/gameSummaryAi.service.js",
+          "symbol": "OPENAI_RESPONSES_URL"
+        },
+        {
+          "node": "mongodb",
+          "label": "Game, LeagueStandings, LeaguePlayerStats, TeamSeasonSummary, Post, PlayerMilestone all written",
+          "file": "server/src/modules/games/games.repository.js",
+          "symbol": "mongoose.model('Game'"
+        }
+      ]
+    },
+    {
+      "id": "flow-auth",
+      "name": "Login → rotating session + CSRF",
+      "why": "Establishes the identity every other flow depends on. Notable because authorization is deliberately NOT middleware RBAC — User.roles is unused; permission checks happen later, in leagues.service assert* helpers.",
+      "steps": [
+        {
+          "node": "c-auth",
+          "label": "AuthPage submits credentials",
+          "file": "client/src/features/auth/api/authApi.js",
+          "symbol": "apiClient.post('/auth/login'"
+        },
+        {
+          "node": "app-shell",
+          "label": "POST /api/v1/auth/login — behind authLimiter, after attachCsrfToken/csrfProtection",
+          "file": "server/src/modules/auth/auth.routes.js",
+          "symbol": "login"
+        },
+        {
+          "node": "auth",
+          "label": "Zod-validated at the controller, then auth.service verifies the bcrypt hash",
+          "file": "server/src/modules/auth/auth.validation.js",
+          "symbol": "login"
+        },
+        {
+          "node": "core-services",
+          "label": "session.service mints a rotating refresh session; token.service signs the JWT pair",
+          "file": "server/src/services/session.service.js",
+          "symbol": "session"
+        },
+        {
+          "node": "mongodb",
+          "label": "Session document persisted alongside User",
+          "file": "server/src/modules/auth/auth.repository.js",
+          "symbol": "mongoose.model('Session'"
+        },
+        {
+          "node": "auth",
+          "label": "httpOnly access + refresh cookies set via config/cookie",
+          "file": "server/src/modules/auth/auth.controller.js",
+          "symbol": "cookie"
+        },
+        {
+          "node": "c-shared",
+          "label": "AuthContext holds the user; apiClient replays through /auth/refresh on 401",
+          "file": "client/src/lib/apiClient.js",
+          "symbol": "refresh"
+        }
+      ]
+    },
+    {
+      "id": "flow-billing",
+      "name": "Checkout → Stripe webhook → entitlement gates",
+      "why": "Billing is resource-scoped (per Team / per League), not per user. The webhook is mounted before express.json() with express.raw so signature verification sees the untouched body — reordering that line silently breaks payments.",
+      "steps": [
+        {
+          "node": "c-billing",
+          "label": "PricingPage → team-checkout / league-checkout",
+          "file": "client/src/features/billing/api/billingApi.js",
+          "symbol": "apiClient.post('/billing/team-checkout'"
+        },
+        {
+          "node": "billing",
+          "label": "billing.service creates a hosted Checkout Session (no client Stripe.js)",
+          "file": "server/src/modules/billing/billing.service.js",
+          "symbol": "checkout"
+        },
+        {
+          "node": "stripe",
+          "label": "User pays on Stripe-hosted pages, then Stripe posts the event back",
+          "file": "server/src/modules/billing/billing.service.js",
+          "symbol": "stripe.webhooks.constructEvent"
+        },
+        {
+          "node": "app-shell",
+          "label": "POST /api/v1/billing/webhooks — express.raw, mounted BEFORE express.json()",
+          "file": "server/src/app.js",
+          "symbol": "'/api/v1/billing/webhooks'"
+        },
+        {
+          "node": "billing",
+          "label": "Signature verified, then each handler claims the event for idempotency and order-safety",
+          "file": "server/src/utils/webhookIdempotency.js",
+          "symbol": "claimWebhookEvent"
+        },
+        {
+          "node": "mongodb",
+          "label": "Plan + subscription state written onto the Team or League document",
+          "file": "server/src/modules/teams/teams.repository.js",
+          "symbol": "mongoose.model('Team'"
+        },
+        {
+          "node": "billing",
+          "label": "entitlements.service resolves the gates every other module consults",
+          "file": "server/src/modules/billing/entitlements.service.js",
+          "symbol": "resolveEntitlements"
+        },
+        {
+          "node": "export",
+          "label": "Downstream gate example — CSV export refuses without the entitlement",
+          "file": "server/src/modules/export/export.service.js",
+          "symbol": "entitlements.service"
+        }
+      ]
+    },
+    {
+      "id": "flow-public-league",
+      "name": "Public league page → cached materialized reads",
+      "why": "The main anonymous read path. It is fast because it serves pre-materialized standings rather than aggregating on request, and because publicCacheMiddleware (OPT-019) lets browsers and CDNs cache it — degrading to no-cache the moment a request carries auth.",
+      "steps": [
+        {
+          "node": "c-leagues",
+          "label": "PublicLeaguePage / PublicLeagueStandingsPage fetch by slug",
+          "file": "client/src/features/leagues/api/leaguesApi.js",
+          "symbol": "apiClient.get('/public/leagues'"
+        },
+        {
+          "node": "app-shell",
+          "label": "GET /api/v1/public/leagues/* behind publicCacheMiddleware",
+          "file": "server/src/routes/index.js",
+          "symbol": "'/public/leagues'"
+        },
+        {
+          "node": "middleware",
+          "label": "OPT-019 — cacheable for anonymous viewers, private/no-cache when authenticated",
+          "file": "server/src/middleware/publicCache.middleware.js",
+          "symbol": "publicCache"
+        },
+        {
+          "node": "leagues",
+          "label": "assertLeagueVisible gates archived/private leagues",
+          "file": "server/src/modules/leagues/leagues.service.js",
+          "symbol": "async function assertLeagueVisible"
+        },
+        {
+          "node": "mongodb",
+          "label": "Reads materialized LeagueStandings / LeaguePlayerStats — no per-request aggregation",
+          "file": "server/src/modules/leagues/leagues.repository.js",
+          "symbol": "mongoose.model('LeagueStandings'"
+        },
+        {
+          "node": "milestones",
+          "label": "Player views additionally pull milestone summaries",
+          "file": "server/src/modules/milestones/milestones.service.js",
+          "symbol": "getMilestoneSummaryForLeaguePlayer"
+        }
+      ]
+    },
+    {
+      "id": "flow-feed",
+      "name": "Share a card → the /pulse feed",
+      "why": "The social loop, and the clearest example of the feed module being written to by others rather than only read. Cards are generated server-side from already-frozen game data, so a shared card cannot drift from the box score.",
+      "steps": [
+        {
+          "node": "c-feed",
+          "label": "ShareImageButton posts a game/player/team card",
+          "file": "client/src/features/feed/api/feedApi.js",
+          "symbol": "apiClient.post('/feed/game-card'"
+        },
+        {
+          "node": "app-shell",
+          "label": "POST /api/v1/feed/* — authenticated",
+          "file": "server/src/modules/feed/feed.routes.js",
+          "symbol": "card"
+        },
+        {
+          "node": "billing",
+          "label": "feed.controller consults billing before allowing the post",
+          "file": "server/src/modules/feed/feed.controller.js",
+          "symbol": "billing.service"
+        },
+        {
+          "node": "feed",
+          "label": "feed.service builds the card from frozen game/league data",
+          "file": "server/src/modules/feed/feed.service.js",
+          "symbol": "card"
+        },
+        {
+          "node": "cloudinary",
+          "label": "Any uploaded media goes through the Cloudinary client",
+          "file": "server/src/modules/feed/cloudinary.client.js",
+          "symbol": "cloudinary"
+        },
+        {
+          "node": "mongodb",
+          "label": "Post document persisted",
+          "file": "server/src/modules/feed/feed.repository.js",
+          "symbol": "mongoose.model('Post'"
+        },
+        {
+          "node": "c-feed",
+          "label": "FeedPage renders /pulse; html2canvas exports the shareable image client-side",
+          "file": "client/src/features/feed/components/cards/ShareableCardExport.test.jsx",
+          "symbol": "ShareableCardExport"
+        }
+      ]
+    }
+  ]
+}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const N = Object.fromEntries(D.nodes.map(n => [n.id, n]));
+const KIND = {
+  'server-module': {c:'var(--server)', t:'Server module'},
+  'client-feature':{c:'var(--client)', t:'Client feature'},
+  'infra':        {c:'var(--infra)',  t:'Platform'},
+  'datastore':    {c:'var(--db)',     t:'Data store'},
+  'external':     {c:'var(--ext)',    t:'External service'},
+};
+// The first screen is capped at 20 primary nodes. Two lanes ship collapsed into
+// a single aggregate node; minor server modules are folded in too. Each is
+// expandable, and the aggregates synthesise their children's edges so the
+// collapsed view still tells the truth about what talks to what.
+const MINOR = new Set(['health','contact','analytics','follows','export']);
+const GROUPS = {
+  'g-client': {
+    label:'Client (React SPA)', kind:'client-feature', group:'Client features',
+    members: D.nodes.filter(n => n.kind==='client-feature').map(n => n.id),
+    path:'client/src',
+    role:'The React 18 + Vite SPA, as one node. 8 feature areas under '
+      +'<code>client/src/features/</code> plus the composition root in <code>client/src/app/</code>. '
+      +'All traffic leaves through <code>lib/apiClient.js</code>, which handles the CSRF header and '
+      +'replays a request once through <code>/auth/refresh</code> on a 401. Expand the lane to see '
+      +'each feature and the exact endpoints it calls.',
+  },
+  'g-external': {
+    label:'External services', kind:'external', group:'External services',
+    members: D.nodes.filter(n => n.kind==='external').map(n => n.id),
+    path:null,
+    role:'The six third-party dependencies, as one node: Stripe (hosted Checkout + webhooks), '
+      +'Cloudinary (media), OpenAI (game recaps), PostHog (analytics), Google OAuth (sign-in) '
+      +'and Resend (transactional email). Expand to see which modules reach each one.',
+  },
+};
+let expanded = new Set();   // group ids that are expanded
+let showMinor = false, sel = null, query = '';
+
+// Map a real node id to whatever currently represents it on screen.
+function repr(id){
+  for (const [gid,g] of Object.entries(GROUPS))
+    if (!expanded.has(gid) && g.members.includes(id)) return gid;
+  return id;
+}
+function visible(){
+  const out = [];
+  for (const [gid,g] of Object.entries(GROUPS)) if (!expanded.has(gid)) out.push(synth(gid));
+  for (const n of D.nodes){
+    if (repr(n.id) !== n.id) continue;                 // folded into an aggregate
+    if (!showMinor && MINOR.has(n.id)) continue;       // minor module, hidden
+    out.push(n);
+  }
+  return out;
+}
+// Build the aggregate node: union of members' files, tests, models and edges.
+function synth(gid){
+  const g = GROUPS[gid], mem = g.members.map(id => N[id]);
+  return {
+    id: gid, label: g.label, kind: g.kind, group: g.group, path: g.path, role: g.role,
+    isGroup: true, memberIds: g.members,
+    models: [...new Set(mem.flatMap(m => m.models))],
+    mount: null,
+    loc: mem.reduce((s,m) => s+m.loc, 0),
+    files: mem.flatMap(m => m.files), tests: mem.flatMap(m => m.tests),
+    flows: [...new Set(mem.flatMap(m => m.flows))],
+  };
+}
+
+/* ── layout: four vertical lanes, ordered by request direction ───────────── */
+const LANES = [
+  {t:'Client features',      f:n => n.kind==='client-feature'},
+  {t:'Platform',             f:n => n.kind==='infra'},
+  {t:'Server domain modules',f:n => n.kind==='server-module'},
+  {t:'Data & external',      f:n => n.kind==='datastore'||n.kind==='external'},
+];
+const NW=158, NH=40, GAPY=13, LANEW=210, TOP=42, PADX=16;
+
+function layout(){
+  const cols = LANES.map(l => visible().filter(l.f));
+  const maxRows = Math.max(...cols.map(c => c.length));
+  const H = TOP + maxRows*(NH+GAPY) + 24;
+  const W = PADX*2 + LANES.length*LANEW;
+  const pos = {};
+  const track = maxRows*(NH+GAPY)-GAPY;
+  cols.forEach((col,ci) => {
+    // Distribute evenly down the tallest lane's track: a lane with few nodes
+    // spreads out to meet its neighbours rather than clumping or floating.
+    col.forEach((n,ri) => {
+      const y = col.length === 1
+        ? TOP + (track - NH)/2
+        : TOP + ri*(track - NH)/(col.length - 1);
+      pos[n.id] = {x: PADX+ci*LANEW+(LANEW-NW)/2, y, ci};
+    });
+  });
+  return {pos, W, H, cols, laid: cols.flat()};
+}
+
+function edgePath(a,b){
+  const x1=a.x+NW, y1=a.y+NH/2, x2=b.x, y2=b.y+NH/2;
+  if (b.ci > a.ci){ const m=(x1+x2)/2; return `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`; }
+  // backward / same-lane edge: route around the left side
+  const xa=a.x, xb=b.x+NW, off=Math.max(26, 20+Math.abs(y1-y2)/7);
+  return `M${xa},${y1} C${xa-off},${y1} ${xb+off},${y2} ${xb},${y2}`;
+}
+
+function render(){
+  const {pos,W,H,cols,laid} = layout();
+  const svg = document.getElementById('graph');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const vis = new Set(Object.keys(pos));
+  // Project every real edge onto the currently-visible representatives, then
+  // dedupe so a collapsed lane shows one arrow per relationship, not eight.
+  const seen = new Map();
+  for (const e of D.edges){
+    const f = repr(e.from), t = repr(e.to);
+    if (f === t || !vis.has(f) || !vis.has(t)) continue;
+    const k = f+'>'+t+'>'+e.kind;
+    if (!seen.has(k)) seen.set(k, {from:f, to:t, kind:e.kind, labels:[...e.labels]});
+    else { const x = seen.get(k); for (const l of e.labels) if (!x.labels.includes(l)) x.labels.push(l); }
+  }
+  const eds = [...seen.values()];
+
+  const hi = new Set(), hiEdge = new Set();
+  if (sel){ hi.add(sel);
+    eds.forEach((e,i) => { if(e.from===sel||e.to===sel){ hi.add(e.from); hi.add(e.to); hiEdge.add(i);} });
+  }
+  const match = n => !query || (n.label+' '+(n.path||'')+' '+n.role).toLowerCase().includes(query);
+
+  let s = `<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6"
+    markerHeight="6" orient="auto"><path d="M0,1 L7,4 L0,7 z" fill="currentColor" opacity=".3"/></marker>
+    <marker id="ahh" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5"
+    markerHeight="6.5" orient="auto"><path d="M0,1 L7,4 L0,7 z" fill="var(--accent)"/></marker></defs>`;
+
+  LANES.forEach((l,i) => {
+    s += `<rect class="lanebg" x="${PADX+i*LANEW-4}" y="${TOP-26}" width="${LANEW-8}"
+      height="${H-TOP+16}" rx="10"/>`;
+    s += `<text class="lane" x="${PADX+i*LANEW+LANEW/2}" y="${TOP-32}" text-anchor="middle">${l.t}</text>`;
+  });
+
+  eds.forEach((e,i) => {
+    const on = hiEdge.has(i);
+    const cls = 'ed' + (on?' hi':(sel?' dim':''));
+    const tip = (e.from+' \u2192 '+e.to+(e.labels.length?': '+e.labels.join(', '):''))
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    s += `<path class="${cls}" data-from="${e.from}" data-to="${e.to}"
+      d="${edgePath(pos[e.from],pos[e.to])}"
+      marker-end="url(#${on?'ahh':'ah'})"><title>${tip}</title></path>`;
+  });
+
+  laid.forEach(n => {
+    const p = pos[n.id], k = KIND[n.kind];
+    const dim = (sel && !hi.has(n.id)) || !match(n);
+    const sub = n.isGroup ? n.memberIds.length+' grouped · '+n.loc.toLocaleString()+' loc'
+      : n.kind==='datastore' ? n.models.length+' models'
+      : n.loc ? n.loc.toLocaleString()+' loc' : 'integration';
+    s += `<g class="nd${n.id===sel?' sel':''}${dim?' dim':''}" data-id="${n.id}"
+        tabindex="0" role="button" aria-label="${n.label}${n.isGroup?', grouped, activate to expand':''}">`;
+    if (n.isGroup) s += `<rect x="${p.x+4}" y="${p.y+4.5}" width="${NW}" height="${NH}" rx="8"
+        fill="var(--panel)" stroke="${k.c}" stroke-width="1" opacity=".45"/>`;
+    s += `<rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="8"
+        fill="var(--panel)" stroke="${k.c}" stroke-width="1.5"/>
+      <rect x="${p.x}" y="${p.y}" width="3.5" height="${NH}" rx="1.75" fill="${k.c}"/>
+      <text x="${p.x+13}" y="${p.y+17}">${n.label}</text>
+      <text class="cnt" x="${p.x+13}" y="${p.y+31}">${sub}</text>
+      ${n.isGroup?`<text class="cnt" x="${p.x+NW-11}" y="${p.y+23}" text-anchor="end"
+        style="font-size:13px;font-weight:700;fill:${k.c}">+</text>`:''}
+    </g>`;
+  });
+  svg.innerHTML = s;
+  svg.querySelectorAll('.nd').forEach(g => {
+    const pick = () => {
+      const id = g.dataset.id;
+      if (GROUPS[id]) { expanded.add(id); sel = null; syncGroupBtns(); render(); detail(); return; }
+      sel = (sel===id?null:id); render(); detail();
+    };
+    g.addEventListener('click', pick);
+    g.addEventListener('mouseenter', () => { if(!sel) hoverEdges(g.dataset.id, true); });
+    g.addEventListener('mouseleave', () => { if(!sel) hoverEdges(g.dataset.id, false); });
+    g.addEventListener('keydown', ev => { if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick();} });
+  });
+}
+
+// Light up a node's edges on hover (only while nothing is selected).
+function hoverEdges(id, on){
+  document.getElementById('graph').querySelectorAll('.ed').forEach(p => {
+    if (p.dataset.from === id || p.dataset.to === id) p.classList.toggle('hi', on);
+  });
+}
+
+/* ── detail panel ───────────────────────────────────────────────────────── */
+const VERB = {calls:'calls',uses:'uses',persists:'persists',routes:'mounts',external:'integrates',http:'HTTP'};
+
+function relList(rels, dir){
+  if (!rels.length) return '<div class="empty">None.</div>';
+  return '<div class="rel">' + rels.map(r => {
+    const t = N[r.id]; if(!t) return '';
+    const lbl = r.labels && r.labels.length ? `<span class="lbl">${r.labels.join(' · ')}</span>` : '';
+    return `<a href="#" data-go="${r.id}"><span class="vb">${VERB[r.kind]||r.kind}</span>
+      <span>${t.label}${lbl?' '+lbl:''}</span></a>`;
+  }).join('') + '</div>';
+}
+
+function detail(){
+  const el = document.getElementById('detail');
+  if (!sel){
+    el.innerHTML = `<h3>Select a node</h3>
+      <p class="role">Click any box in the map to see its role, who calls into it,
+      what it depends on, what it can break downstream, and the test files that
+      cover it. Every path shown is read from the working tree at
+      <code>${D.meta.generatedFrom.commit.slice(0,7)}</code>.</p>
+      <div class="sec"><h4>Reading the map</h4><p class="role">
+      Lanes run in request order — client features call server modules through
+      <code>lib/apiClient.js</code>, modules call each other directly, and the right lane holds
+      MongoDB and the external services. Backward-curving arrows are the interesting ones:
+      they mark modules that call <em>into</em> a lane to their left, like
+      <code>games</code> reaching back through <code>feed</code> to publish a post.</p></div>`;
+    return;
+  }
+  const n = GROUPS[sel] ? synth(sel) : N[sel], k = KIND[n.kind];
+  if (n.isGroup){
+    n.upstream = []; n.downstream = [];
+    const seenU = new Set(), seenD = new Set();
+    for (const e of D.edges){
+      const f = repr(e.from), t = repr(e.to);
+      if (t === sel && f !== sel && !seenU.has(f+e.kind)){ seenU.add(f+e.kind); n.upstream.push({id:f,kind:e.kind,labels:e.labels}); }
+      if (f === sel && t !== sel && !seenD.has(t+e.kind)){ seenD.add(t+e.kind); n.downstream.push({id:t,kind:e.kind,labels:e.labels}); }
+    }
+  }
+  const fl = D.flows.filter(f => n.flows.includes(f.id));
+  el.innerHTML = `
+    <span class="kindtag" style="color:${k.c};background:color-mix(in srgb,${k.c} 12%,transparent)">${k.t}</span>
+    <h3>${n.label}</h3>
+    ${n.path?`<div class="ppath mono">${n.path}/</div>`:''}
+    <p class="role">${n.role}</p>
+    ${n.isGroup?`<div class="sec"><h4>Grouped nodes <span>${n.memberIds.length}</span></h4>
+      <div class="rel">${n.memberIds.map(id=>`<a href="#" data-go="${id}">
+        <span class="vb">open</span><span>${N[id].label}</span></a>`).join('')}</div>
+      <p style="margin:9px 0 0"><button class="t" data-g="${sel}">Expand this lane in the map</button></p>
+      </div>`:''}
+    ${n.mount?`<div class="sec"><h4>Mounted at</h4><div class="mono" style="font-size:11.5px">${n.mount}</div></div>`:''}
+    ${n.models.length?`<div class="sec"><h4>Mongoose models <span>${n.models.length}</span></h4>
+      <div class="mods">${n.models.map(m=>`<span>${m}</span>`).join('')}</div></div>`:''}
+    <div class="sec"><h4>Upstream callers <span>${n.upstream.length}</span></h4>${relList(n.upstream)}</div>
+    <div class="sec"><h4>Dependencies &amp; downstream impact <span>${n.downstream.length}</span></h4>${relList(n.downstream)}</div>
+    ${fl.length?`<div class="sec"><h4>Appears in flows</h4><div class="rel">${
+      fl.map(f=>`<a href="#" data-flow="${f.id}"><span class="vb">flow</span><span>${f.name}</span></a>`).join('')
+    }</div></div>`:''}
+    <div class="sec"><h4>Tests <span>${n.tests.length}</span></h4>${
+      n.tests.length?`<ul class="files">${n.tests.map(t=>{
+        const b=t.split('/').pop(); return `<li>${t.slice(0,t.length-b.length)}<b>${b}</b></li>`;}).join('')}</ul>`
+      :'<div class="empty">No dedicated test files.</div>'}</div>
+    <div class="sec"><h4>Source files <span>${n.files.length}</span></h4>${
+      n.files.length?`<ul class="files">${n.files.map(f=>{
+        const b=f.split('/').pop(); return `<li>${f.slice(0,f.length-b.length)}<b>${b}</b></li>`;}).join('')}</ul>`
+      :'<div class="empty">External — no files in this repo.</div>'}</div>`;
+
+  el.querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault();
+    const id = a.dataset.go;
+    reveal(id);
+    sel = id; render(); detail(); el.scrollTop = 0;
+  }));
+  el.querySelectorAll('[data-g]').forEach(b => b.addEventListener('click', () => {
+    expanded.add(b.dataset.g); sel = null; syncGroupBtns(); render(); detail();
+  }));
+  el.querySelectorAll('[data-flow]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault(); showFlow(a.dataset.flow);
+    document.getElementById('ftabs').scrollIntoView({behavior:'smooth',block:'center'});
+  }));
+}
+
+/* ── flows ──────────────────────────────────────────────────────────────── */
+let curFlow = D.flows[0].id;
+function showFlow(id){
+  curFlow = id;
+  document.querySelectorAll('#ftabs .ft').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.f===id)));
+  const f = D.flows.find(x => x.id===id);
+  document.getElementById('fpane').innerHTML =
+    `<p class="fwhy"><b>Why it matters —</b> ${f.why}</p><ol class="steps">${
+      f.steps.map(s => {
+        const t = N[s.node] || synth(s.node), c = KIND[t.kind].c;
+        const b = s.file.split('/').pop();
+        return `<li><div class="stitle">${s.label}</div>
+          <button class="snode" data-go="${s.node}" style="color:${c}">${t.label}</button>
+          <div class="sfile">${s.file.slice(0,s.file.length-b.length)}<b>${b}</b>${
+            s.symbol?` · <span style="color:var(--accent)">${s.symbol.replace(/</g,'&lt;')}</span>`:''}</div></li>`;
+      }).join('')}</ol>`;
+  document.querySelectorAll('#fpane .snode').forEach(btn => btn.addEventListener('click', () => {
+    const id2 = btn.dataset.go;
+    reveal(id2);
+    sel = id2; render(); detail();
+    document.getElementById('graph').scrollIntoView({behavior:'smooth',block:'center'});
+  }));
+}
+
+/* ── header + controls ──────────────────────────────────────────────────── */
+const m = D.meta;
+document.getElementById('subtitle').textContent = m.subtitle;
+document.getElementById('meta').innerHTML = [
+  ['server modules', m.counts.serverModules], ['client features', m.counts.clientFeatures],
+  ['Mongoose models', m.counts.mongooseModels], ['server tests', m.counts.serverTestFiles],
+  ['client tests', m.counts.clientTestFiles], ['commit', m.generatedFrom.commit.slice(0,7)],
+].map(([k,v]) => `<span class="chip"><b>${v}</b> ${k}</span>`).join('');
+document.getElementById('foot').innerHTML =
+  `Generated from <code>${m.generatedFrom.branch}</code> @ <code>${m.generatedFrom.commit.slice(0,10)}</code>
+   — ${m.counts.primaryNodes} nodes, ${D.edges.length} edges, ${D.flows.length} flows.
+   Module edges are extracted by parsing every <code>require()</code> in
+   <code>server/src/modules</code>; client→server edges from <code>apiClient</code>
+   call sites. Data: <code>codemap.json</code> · integrity: <code>codemap.lock</code>.
+   Regenerate after structural changes — <code>codemap.lock</code> records the tree it was built from.`;
+
+// Make a real node addressable: unfold its group and unhide minor modules.
+function reveal(id){
+  if (MINOR.has(id) && !showMinor){ showMinor = true; syncTgl(); }
+  for (const [gid,g] of Object.entries(GROUPS))
+    if (g.members.includes(id) && !expanded.has(gid)) expanded.add(gid);
+  syncGroupBtns();
+}
+function syncGroupBtns(){
+  document.querySelectorAll('[data-g]').forEach(b => {
+    const on = expanded.has(b.dataset.g);
+    b.setAttribute('aria-pressed', String(on));
+    const word = b.dataset.g==='g-client' ? 'client' : 'external';
+    b.textContent = (on?'Collapse ':'Expand ') + word;
+  });
+}
+function syncTgl(){
+  const b = document.getElementById('tgl');
+  b.setAttribute('aria-pressed', String(showMinor));
+  b.textContent = showMinor ? 'Hide minor modules' : 'Show minor modules';
+}
+document.getElementById('tgl').addEventListener('click', () => {
+  showMinor = !showMinor; syncTgl();
+  if (sel && MINOR.has(sel) && !showMinor){ sel = null; detail(); }
+  render();
+});
+document.querySelectorAll('[data-g]').forEach(b => b.addEventListener('click', () => {
+  const g = b.dataset.g;
+  if (expanded.has(g)){
+    expanded.delete(g);
+    if (sel && GROUPS[g].members.includes(sel)) { sel = null; detail(); }
+  } else expanded.add(g);
+  syncGroupBtns(); render(); detail();
+}));
+document.getElementById('rst').addEventListener('click', () => {
+  sel=null; query=''; showMinor=false; expanded=new Set();
+  document.getElementById('q').value='';
+  syncTgl(); syncGroupBtns(); render(); detail();
+});
+document.getElementById('q').addEventListener('input', e => {
+  query = e.target.value.trim().toLowerCase(); render();
+});
+document.getElementById('ftabs').innerHTML = D.flows.map(f =>
+  `<button class="ft" role="tab" data-f="${f.id}">${f.name}</button>`).join('');
+document.querySelectorAll('#ftabs .ft').forEach(b =>
+  b.addEventListener('click', () => showFlow(b.dataset.f)));
+
+syncTgl(); syncGroupBtns(); render(); detail(); showFlow(curFlow);
+</script>
+</body>
+</html>
