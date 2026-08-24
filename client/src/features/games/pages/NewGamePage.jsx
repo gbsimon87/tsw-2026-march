@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
+import {
+  controlClass,
+  controlInvalidClass,
+  hintClass,
+  labelClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  sectionHeadingClass,
+} from '../../../components/ui/formStyles';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { gamesApi } from '../api/gamesApi';
 import { GameFormatFields } from '../components/GameFormatFields';
@@ -9,19 +18,25 @@ import { DEFAULT_GAME_FORMAT } from '../gameClock';
 
 export function NewGamePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedTeamId = searchParams.get('teamId') || '';
+
   const [teams, setTeams] = useState([]);
   const [knownOpponents, setKnownOpponents] = useState([]);
   const [teamId, setTeamId] = useState('');
   const [title, setTitle] = useState('');
+  const [titleError, setTitleError] = useState('');
   const [opponentMode, setOpponentMode] = useState('new');
   const [selectedOpponent, setSelectedOpponent] = useState('');
   const [newOpponent, setNewOpponent] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
+  const titleRef = useRef(null);
 
   useEffect(() => {
     Promise.allSettled([teamsApi.list(), gamesApi.list()])
@@ -30,7 +45,12 @@ export function NewGamePage() {
           const loadedTeams = teamsResult.value.teams || [];
           setTeams(loadedTeams);
           if (loadedTeams.length > 0) {
-            setTeamId(loadedTeams[0].id);
+            // Honour ?teamId= so arriving from a specific team's "Track a game"
+            // does not silently switch to the first team in the list.
+            const preselected = loadedTeams.some((team) => team.id === requestedTeamId)
+              ? requestedTeamId
+              : loadedTeams[0].id;
+            setTeamId(preselected);
           }
         } else {
           setError(teamsResult.reason?.message || 'Failed to load teams');
@@ -61,11 +81,22 @@ export function NewGamePage() {
       .finally(() => {
         setIsLoading(false);
       });
-  }, []);
+  }, [requestedTeamId]);
 
   async function onSubmit(event) {
     event.preventDefault();
     setError('');
+    setTitleError('');
+
+    // Game Title is the only required field on this form, and it used to be the
+    // only one without a marker — so the first submit always failed, through a
+    // native browser tooltip.
+    if (!title.trim()) {
+      setTitleError('Give the game a name so you can find it later.');
+      titleRef.current?.focus();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -73,7 +104,7 @@ export function NewGamePage() {
         gameContext: 'standalone',
         trackingMode: 'one_sided',
         teamId,
-        title,
+        title: title.trim(),
         gameFormat,
       };
 
@@ -108,51 +139,56 @@ export function NewGamePage() {
 
   if (teams.length === 0) {
     return (
-      <main className="space-y-6">
+      <main className="mx-auto max-w-3xl space-y-6">
         <PageHeader
           title="Create Game"
           description="Set up game details and start tracking your team performance."
         />
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-600">You need a team before creating a game.</p>
-          <button
-            type="button"
-            className="mt-3 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-            onClick={() => navigate('/teams/new')}
-          >
-            Create Team First
-          </button>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+          <p className="text-base font-semibold text-slate-900">Add a team first</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">
+            A game is tracked against one of your teams, so there needs to be a team to track.
+          </p>
+          <Link to="/teams/new" className={`${primaryButtonClass} mt-5`}>
+            Create your team
+          </Link>
         </section>
       </main>
     );
   }
 
+  const backTo = teamId ? `/admin/teams/${teamId}` : '/admin';
+
   return (
-    <main className="mx-auto max-w-3xl space-y-8">
+    <main className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title="Create Game"
-        description="Prepare game details in seconds and move directly into live tracking."
+        description="Name the game and start tracking. Everything else can wait."
       />
 
-      {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
-
       <form
-        className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        className="space-y-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
         onSubmit={onSubmit}
+        noValidate
       >
-        <section aria-labelledby="game-details-heading" className="space-y-3">
-          <h2 id="game-details-heading" className="text-xl font-semibold text-slate-900">
-            Game Details
+        <div aria-live="assertive" role="alert">
+          {error ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <section aria-labelledby="game-details-heading" className="space-y-4">
+          <h2 id="game-details-heading" className={sectionHeadingClass}>
+            Game details
           </h2>
+
           <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Team</span>
+            <span className={labelClass}>Team</span>
             <select
-              className="w-full rounded border border-slate-300 px-3 py-2"
+              className={controlClass}
               value={teamId}
               onChange={(event) => setTeamId(event.target.value)}
             >
@@ -164,34 +200,55 @@ export function NewGamePage() {
             </select>
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Game Title</span>
+          <div>
+            <label htmlFor="game-title" className={labelClass}>
+              Game title
+            </label>
             <input
+              id="game-title"
+              ref={titleRef}
               type="text"
-              required
-              className="w-full rounded border border-slate-300 px-3 py-2"
-              placeholder="vs Wildcats - March 12"
+              autoComplete="off"
+              aria-invalid={titleError ? 'true' : undefined}
+              aria-describedby={titleError ? 'game-title-error' : 'game-title-hint'}
+              className={titleError ? controlInvalidClass : controlClass}
+              placeholder="vs Wildcats — March 12"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                if (titleError) setTitleError('');
+              }}
             />
-          </label>
+            {titleError ? (
+              <p id="game-title-error" className="mt-1.5 text-xs font-medium text-red-600">
+                {titleError}
+              </p>
+            ) : (
+              <p id="game-title-hint" className={hintClass}>
+                Required.
+              </p>
+            )}
+          </div>
         </section>
 
         <section aria-labelledby="opponent-heading" className="space-y-3">
-          <h2 id="opponent-heading" className="text-xl font-semibold text-slate-900">
-            Opponent
-          </h2>
-          <p className="text-sm text-slate-600">
-            Optional: choose a previous opponent or add a new one for this game.
-          </p>
+          <div>
+            <h2 id="opponent-heading" className={sectionHeadingClass}>
+              Opponent
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Optional — their score is tracked either way.
+            </p>
+          </div>
           {knownOpponents.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-4 text-sm">
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-4 text-sm text-slate-700">
                 <label className="inline-flex items-center gap-2">
                   <input
                     type="radio"
                     name="opponentMode"
                     value="existing"
+                    className="h-4 w-4"
                     checked={opponentMode === 'existing'}
                     onChange={() => setOpponentMode('existing')}
                   />
@@ -202,6 +259,7 @@ export function NewGamePage() {
                     type="radio"
                     name="opponentMode"
                     value="new"
+                    className="h-4 w-4"
                     checked={opponentMode === 'new'}
                     onChange={() => setOpponentMode('new')}
                   />
@@ -211,11 +269,12 @@ export function NewGamePage() {
 
               {opponentMode === 'existing' ? (
                 <select
-                  className="w-full rounded border border-slate-300 px-3 py-2"
+                  aria-label="Previous opponent"
+                  className={controlClass}
                   value={selectedOpponent}
                   onChange={(event) => setSelectedOpponent(event.target.value)}
                 >
-                  <option value="">Select opponent (optional)</option>
+                  <option value="">Select opponent</option>
                   {knownOpponents.map((opponent) => (
                     <option key={opponent} value={opponent}>
                       {opponent}
@@ -225,7 +284,9 @@ export function NewGamePage() {
               ) : (
                 <input
                   type="text"
-                  className="w-full rounded border border-slate-300 px-3 py-2"
+                  autoComplete="off"
+                  aria-label="Opponent name"
+                  className={controlClass}
                   placeholder="Enter opponent name"
                   value={newOpponent}
                   onChange={(event) => setNewOpponent(event.target.value)}
@@ -233,63 +294,86 @@ export function NewGamePage() {
               )}
             </div>
           ) : (
-            <div className="space-y-1">
+            <div>
               <input
                 type="text"
-                className="w-full rounded border border-slate-300 px-3 py-2"
+                autoComplete="off"
+                aria-label="Opponent name"
+                className={controlClass}
                 placeholder="Enter opponent name"
                 value={newOpponent}
                 onChange={(event) => setNewOpponent(event.target.value)}
               />
-              <p className="text-xs text-slate-500">No previous opponents yet. You can type one.</p>
+              <p className={hintClass}>No previous opponents yet. You can type one.</p>
             </div>
           )}
         </section>
 
-        <section aria-labelledby="schedule-heading" className="space-y-3">
-          <h2 id="schedule-heading" className="text-xl font-semibold text-slate-900">
-            Schedule
-          </h2>
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">Scheduled At (optional)</span>
-            <input
-              type="datetime-local"
-              className="w-full rounded border border-slate-300 px-3 py-2"
-              value={scheduledAt}
-              onChange={(event) => setScheduledAt(event.target.value)}
-            />
-          </label>
-        </section>
-
-        <GameFormatFields value={gameFormat} onChange={setGameFormat} />
-
-        <section aria-labelledby="video-heading" className="space-y-3">
-          <h2 id="video-heading" className="text-xl font-semibold text-slate-900">
-            Video
-          </h2>
-          <label className="block">
-            <span className="mb-1 block text-sm text-slate-700">YouTube URL (optional)</span>
-            <input
-              type="url"
-              className="w-full rounded border border-slate-300 px-3 py-2"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={videoUrl}
-              onChange={(event) => setVideoUrl(event.target.value)}
-            />
-          </label>
-          <p className="text-sm text-slate-600">
-            Use an unlisted YouTube link to test playback without paying for app-side video storage.
-          </p>
-        </section>
-
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Schedule, format and video are all optional and all rarely changed at
+            tip-off, so they no longer stand between the coach and the button. */}
+        <section className="border-t border-slate-100 pt-5">
           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+            type="button"
+            aria-expanded={showMoreOptions}
+            aria-controls="game-more-options"
+            onClick={() => setShowMoreOptions((previous) => !previous)}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-left text-sm font-semibold text-slate-700 transition-colors hover:text-slate-900"
           >
-            {isSubmitting ? 'Creating...' : 'Create and Start Tracking'}
+            <span>Schedule, format and video</span>
+            <svg
+              viewBox="0 0 16 16"
+              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+                showMoreOptions ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
+
+          {showMoreOptions ? (
+            <div id="game-more-options" className="t-panel mt-5 space-y-6">
+              <label className="block">
+                <span className={labelClass}>Scheduled at</span>
+                <input
+                  type="datetime-local"
+                  autoComplete="off"
+                  className={controlClass}
+                  value={scheduledAt}
+                  onChange={(event) => setScheduledAt(event.target.value)}
+                />
+              </label>
+
+              <GameFormatFields value={gameFormat} onChange={setGameFormat} />
+
+              <label className="block">
+                <span className={labelClass}>YouTube link</span>
+                <input
+                  type="url"
+                  autoComplete="off"
+                  className={controlClass}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={videoUrl}
+                  onChange={(event) => setVideoUrl(event.target.value)}
+                />
+                <span className={hintClass}>
+                  Sync a recording with your tracked events for replay.
+                </span>
+              </label>
+            </div>
+          ) : null}
+        </section>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center">
+          <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
+            {isSubmitting ? 'Creating…' : 'Create and start tracking'}
+          </button>
+          <Link to={backTo} className={secondaryButtonClass}>
+            Cancel
+          </Link>
         </div>
       </form>
     </main>

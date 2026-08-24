@@ -267,7 +267,7 @@ export function PublicLeagueTeamPage() {
   const visibleTabs = TABS;
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
 
       {/* Team card header */}

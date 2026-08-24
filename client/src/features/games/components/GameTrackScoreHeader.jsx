@@ -1,6 +1,7 @@
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import gameConstants from '../constants';
+import { LiveScore } from './LiveScore';
 
 const { TEAM_SIDES } = gameConstants;
 
@@ -44,7 +45,7 @@ export function GameTrackScoreHeader({
                 side === TEAM_SIDES.HOME
                   ? 'col-start-1 row-start-1 justify-start border-r border-slate-200 lg:border-r-0'
                   : 'col-start-2 row-start-1 justify-end lg:col-start-3'
-              } ${isActive ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 hover:bg-slate-50'}`}
+              } ${isActive ? 'bg-[#141414] text-white' : 'bg-white text-slate-800 hover:bg-slate-50'}`}
             >
               {side === TEAM_SIDES.HOME ? (
                 <>
@@ -61,22 +62,26 @@ export function GameTrackScoreHeader({
                   />
                   <div className="min-w-0 text-left">
                     <p
-                      className={`truncate text-[11px] font-semibold sm:text-xs ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}
+                      className={`truncate text-[11px] font-semibold sm:text-xs ${isActive ? 'text-white/70' : 'text-slate-500'}`}
                     >
                       {sideLabel}
                     </p>
-                    <p className="text-2xl font-black tabular-nums sm:text-3xl">{points || 0}</p>
+                    <p className="text-2xl font-black sm:text-3xl">
+                      <LiveScore value={points} />
+                    </p>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="min-w-0 text-right">
                     <p
-                      className={`truncate text-[11px] font-semibold sm:text-xs ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}
+                      className={`truncate text-[11px] font-semibold sm:text-xs ${isActive ? 'text-white/70' : 'text-slate-500'}`}
                     >
                       {sideLabel}
                     </p>
-                    <p className="text-2xl font-black tabular-nums sm:text-3xl">{points || 0}</p>
+                    <p className="text-2xl font-black sm:text-3xl">
+                      <LiveScore value={points} />
+                    </p>
                   </div>
                   <CloudinaryImage
                     src={participant?.logo?.url || teamPlaceholder}
@@ -108,52 +113,58 @@ export function GameTrackScoreHeader({
       className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm"
       data-testid="game-track-score-header"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{game.title}</p>
-      <div className="mt-2 grid gap-3 sm:grid-cols-[auto_minmax(15rem,auto)] sm:items-center lg:grid-cols-[auto_minmax(15rem,auto)_1fr]">
-        <div className="flex items-end gap-4">
-          <div className="flex items-center gap-2">
-            <CloudinaryImage
-              src={team?.logo?.url || teamPlaceholder}
-              alt={team?.name || 'Team'}
-              width={32}
-              height={32}
-              loading="lazy"
-              decoding="async"
-              srcSetWidths={[32, 64, 96]}
-              sizes="32px"
-              className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-            />
+      <div className="mx-auto w-full max-w-5xl">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{game.title}</p>
+        <div className="mt-2 grid gap-x-6 gap-y-3 sm:grid-cols-[auto_minmax(15rem,1fr)] sm:items-center lg:grid-cols-[auto_minmax(15rem,auto)_1fr]">
+          <div className="flex items-end gap-4">
+            <div className="flex items-center gap-2">
+              <CloudinaryImage
+                src={team?.logo?.url || teamPlaceholder}
+                alt={team?.name || 'Team'}
+                width={32}
+                height={32}
+                loading="lazy"
+                decoding="async"
+                srcSetWidths={[32, 64, 96]}
+                sizes="32px"
+                className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+              />
+              <div>
+                <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
+                <p className="text-3xl font-bold text-slate-900">
+                  <LiveScore value={gameSummary.teamPoints} />
+                </p>
+              </div>
+            </div>
+            <span className="mb-1 text-xl font-bold text-slate-300">—</span>
             <div>
-              <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
-              <p className="text-3xl font-bold text-slate-900">{gameSummary.teamPoints || 0}</p>
+              <p className="text-xs font-medium text-slate-500">Opponent</p>
+              <p className="text-3xl font-bold text-slate-900">
+                <LiveScore value={gameSummary.opponentPoints} />
+              </p>
             </div>
           </div>
-          <span className="mb-1 text-xl font-bold text-slate-300">—</span>
-          <div>
-            <p className="text-xs font-medium text-slate-500">Opponent</p>
-            <p className="text-3xl font-bold text-slate-900">{gameSummary.opponentPoints || 0}</p>
+          {clockControls}
+          <div className="flex flex-wrap gap-3 text-xs text-slate-500 sm:col-span-2 lg:col-span-1">
+            <span>
+              REB <strong className="text-slate-700">{boxScore.teamTotals?.reb || 0}</strong>
+            </span>
+            <span>
+              AST <strong className="text-slate-700">{boxScore.teamTotals?.ast || 0}</strong>
+            </span>
+            <span>
+              FG2%{' '}
+              <strong className="text-slate-700">
+                {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
+              </strong>
+            </span>
+            <span>
+              FG3%{' '}
+              <strong className="text-slate-700">
+                {formatPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
+              </strong>
+            </span>
           </div>
-        </div>
-        {clockControls}
-        <div className="flex flex-wrap gap-3 text-xs text-slate-500 sm:col-span-2 lg:col-span-1">
-          <span>
-            REB <strong className="text-slate-700">{boxScore.teamTotals?.reb || 0}</strong>
-          </span>
-          <span>
-            AST <strong className="text-slate-700">{boxScore.teamTotals?.ast || 0}</strong>
-          </span>
-          <span>
-            FG2%{' '}
-            <strong className="text-slate-700">
-              {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
-            </strong>
-          </span>
-          <span>
-            FG3%{' '}
-            <strong className="text-slate-700">
-              {formatPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
-            </strong>
-          </span>
         </div>
       </div>
     </div>

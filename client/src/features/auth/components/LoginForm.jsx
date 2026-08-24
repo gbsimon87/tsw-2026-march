@@ -4,6 +4,8 @@ import { trackOauthStarted } from '../../analytics/signupEvents';
 import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
+import { FormField } from '../../../components/ui/FormField';
+import { FormAlert } from './FormAlert';
 
 function GoogleIcon() {
   return (
@@ -28,13 +30,10 @@ function GoogleIcon() {
   );
 }
 
-const inputClass =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20';
-
-export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
+export function LoginForm({ redirectTo = '/pulse' }) {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const { values, onChange, submit, isSubmitting, error } = useAuthForm(
+  const { values, onChange, submit, isSubmitting, error, fieldErrors, isShaking } = useAuthForm(
     { email: '', password: '' },
     loginSchema,
     async (payload) => {
@@ -44,57 +43,52 @@ export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
   );
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      {error ? (
-        <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-sm text-red-600">
-          {error}
-        </p>
-      ) : null}
+    // noValidate: the app owns validation, so the browser's native tooltip
+    // never pre-empts it. See RegisterForm.
+    <form
+      onSubmit={submit}
+      noValidate
+      className={`t-shake space-y-4 ${isShaking ? 'is-shaking' : ''}`}
+    >
+      <FormAlert message={error} />
+
+      <FormField
+        label="Email"
+        name="email"
+        type="email"
+        value={values.email}
+        onChange={onChange}
+        error={fieldErrors.email}
+        autoComplete="email"
+        inputMode="email"
+        required
+      />
 
       <div>
-        <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium text-slate-700">
-          Email
-        </label>
-        <input
-          id="login-email"
-          className={inputClass}
-          type="email"
-          name="email"
-          value={values.email}
+        <FormField
+          label="Password"
+          name="password"
+          type="password"
+          value={values.password}
           onChange={onChange}
-          autoComplete="email"
+          error={fieldErrors.password}
+          autoComplete="current-password"
           required
         />
-      </div>
-
-      <div>
-        <div className="mb-1.5 flex items-center justify-between">
-          <label htmlFor="login-password" className="text-sm font-medium text-slate-700">
-            Password
-          </label>
+        <p className="mt-1.5 text-right">
           <Link
             className="text-xs text-slate-500 transition-colors hover:text-slate-700"
             to="/forgot-password"
           >
             Forgot password?
           </Link>
-        </div>
-        <input
-          id="login-password"
-          className={inputClass}
-          type="password"
-          name="password"
-          value={values.password}
-          onChange={onChange}
-          autoComplete="current-password"
-          required
-        />
+        </p>
       </div>
 
       <button
         type="submit"
         aria-label="Log in"
-        className="w-full rounded-lg bg-[#141414] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1B4332] active:bg-[#123328] disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-[#141414] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2a2a2a] active:bg-[#000] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={isSubmitting}
       >
         {isSubmitting ? 'Logging in…' : 'Log in'}
@@ -114,18 +108,6 @@ export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
         <GoogleIcon />
         Continue with Google
       </a>
-
-      <p className="text-center text-sm text-slate-500">
-        No account?{' '}
-        <button
-          type="button"
-          aria-label="Sign up"
-          className="font-medium text-slate-700 underline-offset-2 hover:underline"
-          onClick={onSwitchToRegister}
-        >
-          Sign up
-        </button>
-      </p>
 
       <p className="text-center">
         <Link

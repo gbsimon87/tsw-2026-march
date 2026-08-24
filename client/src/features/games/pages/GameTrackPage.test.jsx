@@ -575,7 +575,12 @@ describe('GameTrackPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
     fireEvent.click(screen.getByRole('button', { name: 'Go back to lineup' }));
 
-    expect(screen.queryByText('Start with fewer than five players?')).not.toBeInTheDocument();
+    // The dialog stays mounted for the length of its exit animation before it
+    // leaves the tree, so this waits for the removal rather than asserting on
+    // the same tick as the click.
+    await waitFor(() =>
+      expect(screen.queryByText('Start with fewer than five players?')).not.toBeInTheDocument()
+    );
     expect(screen.getByText('Starting Lineup')).toBeInTheDocument();
   });
 
@@ -751,7 +756,7 @@ describe('GameTrackPage', () => {
     expect(screen.queryByText(/Set .* Starting Lineup/i)).not.toBeInTheDocument();
   });
 
-  test('shows only on-court players for assist follow-up and includes No Assist', async () => {
+  test('shows only on-court players for assist follow-up and includes Unassisted', async () => {
     currentResponse = createResponse({
       game: {
         currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
@@ -808,7 +813,7 @@ describe('GameTrackPage', () => {
     expect(
       within(overlay).getByRole('button', { name: playerButtonName('Evan') })
     ).toBeInTheDocument();
-    expect(within(overlay).getByRole('button', { name: /No Assist/i })).toBeInTheDocument();
+    expect(within(overlay).getByRole('button', { name: /Unassisted/i })).toBeInTheDocument();
   });
 
   test('shows all five on-court players for rebound follow-up and logs opponent rebound', async () => {

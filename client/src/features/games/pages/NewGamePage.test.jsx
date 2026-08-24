@@ -56,7 +56,7 @@ describe('NewGamePage', () => {
       expect(screen.getByText(/Create Game/i)).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats - March 12/i), {
+    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats — March 12/i), {
       target: { value: 'Friday Night' },
     });
     fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'Wildcats' } });
@@ -90,7 +90,7 @@ describe('NewGamePage', () => {
       expect(screen.getByText(/No previous opponents yet/i)).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats - March 12/i), {
+    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats — March 12/i), {
       target: { value: 'Saturday Game' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Create and Start Tracking/i }));
@@ -122,9 +122,12 @@ describe('NewGamePage', () => {
       expect(screen.getByText(/Create Game/i)).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats - March 12/i), {
+    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats — March 12/i), {
       target: { value: 'Film Session' },
     });
+    // Schedule, format and video moved behind a disclosure — all optional, and
+    // they used to sit between the required title and the submit button.
+    fireEvent.click(screen.getByRole('button', { name: /Schedule, format and video/i }));
     fireEvent.change(screen.getByPlaceholderText(/https:\/\/www\.youtube\.com\/watch\?v=/i), {
       target: { value: 'https://youtu.be/dQw4w9WgXcQ' },
     });

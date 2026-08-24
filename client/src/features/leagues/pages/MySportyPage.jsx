@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { leaguesApi } from '../api/leaguesApi';
 import { authApi } from '../../auth/api/authApi';
@@ -8,6 +9,7 @@ import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { ProfileCard } from '../../players/components/ProfileCard';
 import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
+import { primaryButtonClass, secondaryButtonClass } from '../../../components/ui/formStyles';
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
@@ -57,7 +59,7 @@ export function MySportyPage() {
   }
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       {/* Player card header */}
       <section
         aria-label="My Sporty"
@@ -140,7 +142,7 @@ export function MySportyPage() {
               My Account
             </p>
             <h1
-              className="mt-2 truncate text-3xl leading-none text-white md:text-4xl"
+              className="mt-2 text-balance text-3xl leading-tight text-white md:text-4xl"
               style={{ fontFamily: "'Archivo Black', sans-serif" }}
             >
               {user?.name || 'My Sporty'}
@@ -175,13 +177,27 @@ export function MySportyPage() {
         {error ? (
           <p className="mt-4 text-sm text-red-600">{error}</p>
         ) : profiles.length === 0 ? (
-          <p
+          // This empty state used to explain what it would one day contain and
+          // offer nothing to do — the first dead end a new account hits. The
+          // two things a new user actually wants from here are now present.
+          <div
             role="status"
-            className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
+            className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-5 py-8 text-center"
           >
-            You have no claimed league profiles yet. When a league manager links your account to a
-            player slot, it will appear here.
-          </p>
+            <p className="text-base font-semibold text-slate-900">No league profiles yet</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
+              A profile appears here when a league manager links your account to a player slot. In
+              the meantime you can track your own team.
+            </p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link to="/admin" className={primaryButtonClass}>
+                Set up your team
+              </Link>
+              <Link to="/home" className={secondaryButtonClass}>
+                Find your league
+              </Link>
+            </div>
+          </div>
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {profiles.map((profile) => (

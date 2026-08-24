@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import CloudinaryImage from '../../../features/media/CloudinaryImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { LeagueFormBadges } from './LeagueFormBadges';
+import { HorizontalScroller } from '../../../components/ui/HorizontalScroller';
 
 export function LeagueStandingsTable({
   standings = [],
@@ -13,12 +14,19 @@ export function LeagueStandingsTable({
   const showForm = typeof getTeamForm === 'function';
 
   return (
-    <div className={`overflow-x-auto rounded-2xl border border-slate-200 bg-white ${className}`}>
-      <table className="w-full text-sm">
+    <HorizontalScroller
+      className={`rounded-2xl border border-slate-200 bg-white ${className}`}
+      fadeColor="#ffffff"
+    >
+      {/* min-w keeps the columns at a readable width and lets the region
+          scroll, instead of squeezing "Late Entry FC" into three lines in a
+          77px cell while the Form column keeps 130px. */}
+      <table className="w-full min-w-[34rem] text-sm">
         <thead className="bg-slate-50 text-slate-600">
           <tr>
             <th className="py-2 pl-3 pr-2 text-center">Team</th>
-            <th className="whitespace-nowrap px-1 py-2 text-center text-xs">W-L</th>
+            {/* Values carry ties ("2-1-1"), which a two-part "W-L" header does not describe. */}
+            <th className="whitespace-nowrap px-1 py-2 text-center text-xs">Record</th>
             {showForm ? <th className="px-1 py-2 text-center text-xs">Form</th> : null}
             <th className="px-1 py-2 text-center text-xs">PF</th>
             <th className="px-1 py-2 text-center text-xs">PA</th>
@@ -32,7 +40,7 @@ export function LeagueStandingsTable({
 
             return (
               <tr key={row.teamId} className="border-t border-slate-200">
-                <td className="max-w-[10rem] py-2 pl-3 pr-2 font-medium text-slate-900 sm:max-w-none">
+                <td className="py-2 pl-3 pr-2 font-medium text-slate-900">
                   <div className="flex min-w-0 items-center gap-2">
                     <CloudinaryImage
                       src={getTeamLogo ? (getTeamLogo(row) ?? teamPlaceholder) : teamPlaceholder}
@@ -46,12 +54,14 @@ export function LeagueStandingsTable({
                     {teamHref ? (
                       <Link
                         to={teamHref}
-                        className="min-w-0 break-words font-semibold leading-tight text-[#1B4332] underline decoration-[#F4A300]/60 underline-offset-2 transition hover:text-[#123328] hover:decoration-[#F4A300]"
+                        // Five permanently underlined rows read as noise; the underline now
+                        // arrives on hover, and colour plus weight carry the link at rest.
+                        className="whitespace-nowrap font-semibold leading-tight text-[#1B4332] decoration-[#F4A300] decoration-2 underline-offset-4 transition-colors hover:text-[#123328] hover:underline"
                       >
                         {row.teamName}
                       </Link>
                     ) : (
-                      <span className="min-w-0 break-words leading-tight">{row.teamName}</span>
+                      <span className="whitespace-nowrap leading-tight">{row.teamName}</span>
                     )}
                   </div>
                 </td>
@@ -71,6 +81,6 @@ export function LeagueStandingsTable({
           })}
         </tbody>
       </table>
-    </div>
+    </HorizontalScroller>
   );
 }

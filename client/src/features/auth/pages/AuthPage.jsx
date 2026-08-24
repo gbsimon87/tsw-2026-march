@@ -101,13 +101,9 @@ export function AuthPage() {
         </div>
 
         {isRegister ? (
-          <RegisterForm
-            redirectTo={redirectTo}
-            onRegistered={handleRegistered}
-            onSwitchToLogin={() => goToLogin()}
-          />
+          <RegisterForm redirectTo={redirectTo} onRegistered={handleRegistered} />
         ) : (
-          <LoginForm redirectTo={redirectTo} onSwitchToRegister={goToRegister} />
+          <LoginForm redirectTo={redirectTo} />
         )}
       </div>
     </div>

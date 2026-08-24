@@ -255,7 +255,7 @@ export function PricingPage() {
           ))}
         </div>
         {interval === 'season' && (
-          <span className="text-xs font-medium text-emerald-700">Best value</span>
+          <span className="text-xs font-medium text-[#1B4332]">Best value</span>
         )}
       </div>
 
@@ -267,11 +267,15 @@ export function PricingPage() {
           description={starterPlan?.tagline}
           features={starterPlan?.features}
         >
+          {/* The Starter column promises "live stat tracking and box scores are
+              free, forever" and its only control used to open a social feed —
+              the copy's promise with none of the mechanism behind it. Send a
+              signed-in visitor to the surface that actually tracks. */}
           <Link
-            to="/pulse"
-            className="block w-full rounded-lg border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
+            to={user ? '/admin' : '/register'}
+            className="block w-full rounded-lg border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50"
           >
-            View The Pulse
+            {user ? 'Start tracking free' : 'Create a free account'}
           </Link>
         </PlanCard>
 

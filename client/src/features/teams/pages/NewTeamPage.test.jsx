@@ -45,9 +45,10 @@ describe('NewTeamPage', () => {
 
     renderPage();
 
-    fireEvent.change(screen.getByLabelText(/Team Name/i), {
+    fireEvent.change(screen.getByLabelText('Team Name'), {
       target: { value: 'TSW Blue' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /Logo, colours and home venue/i }));
     fireEvent.change(screen.getByLabelText(/Arena Name/i), {
       target: { value: 'Main Gym' },
     });
@@ -66,14 +67,14 @@ describe('NewTeamPage', () => {
     fireEvent.change(screen.getByLabelText(/Country/i), {
       target: { value: 'Canada' },
     });
-    fireEvent.change(screen.getByPlaceholderText(/Player Name/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Player name/i), {
       target: { value: 'Jordan' },
     });
     fireEvent.change(screen.getByRole('combobox'), {
       target: { value: 'PG' },
     });
 
-    const colorInputs = screen.getAllByDisplayValue('#000000');
+    const colorInputs = screen.getAllByDisplayValue('#f4a300');
     fireEvent.change(colorInputs[0], {
       target: { value: '#112233' },
     });
@@ -97,15 +98,18 @@ describe('NewTeamPage', () => {
       });
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/pricing?teamId=team-1');
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/teams/team-1', {
+      state: { createdTeamName: 'TSW Blue' },
+    });
   });
 
   test('shows friendly inline errors when venue details are incomplete', async () => {
     renderPage();
 
-    fireEvent.change(screen.getByLabelText(/Team Name/i), {
+    fireEvent.change(screen.getByLabelText('Team Name'), {
       target: { value: 'TSW Blue' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /Logo, colours and home venue/i }));
     fireEvent.change(screen.getByLabelText(/Arena Name/i), {
       target: { value: 'Main Gym' },
     });

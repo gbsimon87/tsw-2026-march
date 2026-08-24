@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import { GameClockControls } from './GameClockControls';
 
@@ -36,7 +36,7 @@ describe('GameClockControls manual period finish', () => {
     expect(onCommand).toHaveBeenCalledWith({ action: 'finish_segment' });
   });
 
-  test('labels overtime correctly and honors cancellation', () => {
+  test('labels overtime correctly and honors cancellation', async () => {
     const onCommand = vi.fn();
     render(
       <GameClockControls
@@ -49,7 +49,10 @@ describe('GameClockControls manual period finish', () => {
 
     expect(screen.getByRole('dialog', { name: 'Finish OT3?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Keep tracking' }));
-    expect(screen.queryByRole('dialog', { name: 'Finish OT3?' })).not.toBeInTheDocument();
+    // The dialog unmounts after its exit animation, not on the same tick.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Finish OT3?' })).not.toBeInTheDocument()
+    );
     expect(onCommand).not.toHaveBeenCalled();
   });
 
