@@ -2,6 +2,11 @@ const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { connectDb } = require('../config/db');
 const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../modules/shared/stats.constants');
+const {
+  SEGMENT_KINDS,
+  DEFAULT_GAME_FORMAT,
+  regulationSegmentCount,
+} = require('../modules/shared/gameClock');
 
 require('../modules/auth/auth.repository');
 require('../modules/teams/teams.repository');
@@ -411,6 +416,38 @@ function buildPlayerBlueprints(teamIndex, options = {}) {
   }));
 }
 
+// Every game event carries a clock snapshot (segmentKind / segmentNumber /
+// clockMillisecondsRemaining) — all three are required by the event schema.
+// Seeded events have no real clock, so spread them evenly across regulation
+// segments with a descending clock inside each one; this satisfies
+// gameClock.validateSnapshot for the default 4x10:00 format.
+function assignClockSnapshots(events, format = DEFAULT_GAME_FORMAT) {
+  if (events.length === 0) {
+    return events;
+  }
+
+  const segmentCount = regulationSegmentCount(format);
+  const segmentMilliseconds = format.regulationSegmentDurationSeconds * 1000;
+  const perSegment = Math.ceil(events.length / segmentCount);
+
+  return events.map((event, index) => {
+    const segmentIndex = Math.min(segmentCount - 1, Math.floor(index / perSegment));
+    const indexInSegment = index - segmentIndex * perSegment;
+    const countInSegment = Math.min(perSegment, events.length - segmentIndex * perSegment);
+    const elapsedFraction = countInSegment <= 1 ? 0.5 : indexInSegment / countInSegment;
+
+    return {
+      ...event,
+      segmentKind: SEGMENT_KINDS.REGULATION,
+      segmentNumber: segmentIndex + 1,
+      clockMillisecondsRemaining: Math.max(
+        0,
+        Math.round(segmentMilliseconds * (1 - elapsedFraction))
+      ),
+    };
+  });
+}
+
 function buildGameEvents(players, scheduledAt) {
   const events = [];
   let minuteOffset = 0;
@@ -572,7 +609,9 @@ function buildGameEvents(players, scheduledAt) {
     events.push(createOpponentEvent(STAT_TYPES.OPP_REB, nextOccurredAt()));
   }
 
-  return events.sort((eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt));
+  return assignClockSnapshots(
+    events.sort((eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt))
+  );
 }
 
 function buildGameDocs(userId, team) {
