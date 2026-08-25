@@ -166,23 +166,29 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
     });
   }
 
+  let clientOrigins;
+  try {
+    clientOrigins = data.CLIENT_ORIGIN.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((value) => new URL(value).origin);
+    if (clientOrigins.length === 0) throw new Error('No client origins configured');
+  } catch {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['CLIENT_ORIGIN'],
+      message: 'CLIENT_ORIGIN must contain valid comma-separated URLs when Stripe is enabled',
+    });
+    clientOrigins = [];
+  }
+
   for (const key of ['STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL']) {
-    if (data[key]) {
-      try {
-        if (new URL(data[key]).origin !== new URL(data.CLIENT_ORIGIN).origin) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [key],
-            message: `${key} must use the same origin as CLIENT_ORIGIN`,
-          });
-        }
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['CLIENT_ORIGIN'],
-          message: 'CLIENT_ORIGIN must be a valid URL when Stripe is enabled',
-        });
-      }
+    if (data[key] && !clientOrigins.includes(new URL(data[key]).origin)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `${key} must use an origin allowed by CLIENT_ORIGIN`,
+      });
     }
   }
 });

@@ -144,6 +144,21 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts redirect URLs matching one of multiple comma-separated client origins', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        CLIENT_ORIGIN:
+          'https://dev.thesportyway.com,https://tsw-2026-march-client-dev.onrender.com',
+        STRIPE_SECRET_KEY: 'sk_test_123',
+        ...FULL_STRIPE,
+        STRIPE_SUCCESS_URL: 'https://dev.thesportyway.com/billing/success',
+        STRIPE_CANCEL_URL: 'https://dev.thesportyway.com/billing/cancel',
+      })
+    );
+
+    expect(result.success).toBe(true);
+  });
+
   it('no longer carries the retired STRIPE_PRICE_ID_PRO_MONTHLY', () => {
     const result = envSchema.safeParse(
       baseEnv({ STRIPE_PRICE_ID_PRO_MONTHLY: 'price_legacy_pro' })
