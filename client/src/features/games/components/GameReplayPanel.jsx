@@ -316,20 +316,10 @@ export function GameReplayPanel({
             </button>
           </div>
 
-          <div className="rounded border bg-slate-50 p-2 text-xs text-slate-700">
-            <p className="font-medium">
-              {activeTeamName ? `${activeTeamName}: ` : ''}
-              {currentEvent?.playerName || (currentEvent?.playerId ? 'Unknown Player' : 'Opponent')}
-              : {STAT_LABELS[currentEvent?.statType] || currentEvent?.statType}
-            </p>
-            <p>
-              {ZONE_LABELS[currentEvent?.zoneId] || currentEvent?.zoneId} | (
-              {currentEvent?.x?.toFixed(1)}, {currentEvent?.y?.toFixed(1)}) |{' '}
-              {eventTime(currentEvent?.occurredAt)}
-            </p>
-          </div>
-
-          <div className="relative mx-auto w-full max-w-[420px]" data-testid="replay-shot-map">
+          <div
+            className="relative mx-auto w-full max-w-[280px] sm:max-w-[340px] lg:max-w-[380px]"
+            data-testid="replay-shot-map"
+          >
             <CloudinaryImage
               src={courtImage}
               alt="Replay court"
@@ -357,6 +347,19 @@ export function GameReplayPanel({
                 />
               );
             })}
+          </div>
+
+          <div className="rounded border bg-slate-50 p-2 text-xs text-slate-700">
+            <p className="font-medium">
+              {activeTeamName ? `${activeTeamName}: ` : ''}
+              {currentEvent?.playerName || (currentEvent?.playerId ? 'Unknown Player' : 'Opponent')}
+              : {STAT_LABELS[currentEvent?.statType] || currentEvent?.statType}
+            </p>
+            <p>
+              {ZONE_LABELS[currentEvent?.zoneId] || currentEvent?.zoneId} | (
+              {currentEvent?.x?.toFixed(1)}, {currentEvent?.y?.toFixed(1)}) |{' '}
+              {eventTime(currentEvent?.occurredAt)}
+            </p>
           </div>
 
           <div className="space-y-3" data-testid="replay-box-score">

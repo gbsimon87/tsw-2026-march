@@ -307,11 +307,14 @@ free, makes other standalone Teams paid-capacity, and grandfathers every
 pre-launch League as complimentary so the three current production Leagues
 continue unchanged.
 
-Status on 24 August 2026: the code is ready for local test-mode development.
-Deployed development and production are not ready until the Stripe Dashboard,
-Render, database migration, and real-payment steps are completed. Production
-Pricing is still deliberately hidden. [`stripe.md`](./stripe.md) is the only
-setup, testing, lifecycle, checklist, manual-action, and launch-status guide.
+Status on 25 August 2026: local development is code-ready and deployed
+development is undergoing manual sandbox testing. The development catalog,
+Render values, webhook, and capacity migration have been configured. The
+Pricing route is public in code and linked from navigation. Production is not
+ready until the remaining sandbox checks, live Stripe/Render setup, production
+backup and migration, tax decision, and controlled live payments are complete.
+[`stripe.md`](./stripe.md) is the only setup, testing, lifecycle, checklist,
+manual-action, and launch-status guide.
 
 ## Integrations
 

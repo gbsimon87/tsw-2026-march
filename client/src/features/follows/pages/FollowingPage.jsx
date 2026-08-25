@@ -97,12 +97,18 @@ function FollowingSection({ heading, query, emptyLabel, renderCard }) {
           {error?.message || `Failed to load ${heading.toLowerCase()}.`}
         </p>
       ) : entries.length === 0 ? (
-        <p
+        <div
           role="status"
           className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-6 text-center text-sm text-slate-600"
         >
-          {emptyLabel}
-        </p>
+          <p>{emptyLabel}</p>
+          <Link
+            to="/home"
+            className="mt-3 inline-flex rounded-lg bg-[#141414] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
+          >
+            Discover {heading.toLowerCase()}
+          </Link>
+        </div>
       ) : (
         <ul className="grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map(renderCard)}

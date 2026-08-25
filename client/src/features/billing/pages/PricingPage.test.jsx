@@ -148,6 +148,14 @@ describe('PricingPage', () => {
     expect(billingApiMocks.createTeamCheckoutSession).not.toHaveBeenCalled();
   });
 
+  test('links an existing free team to management instead of offering a first team', async () => {
+    renderPricing();
+
+    const link = await screen.findByRole('link', { name: 'Manage your free team' });
+    expect(link).toHaveAttribute('href', '/admin/teams/team-free');
+    expect(screen.queryByRole('link', { name: /create your free team/i })).not.toBeInTheDocument();
+  });
+
   test('can make an inactive paid team the free team', async () => {
     billingApiMocks.chooseFreeTeam.mockResolvedValue({ team: { capacityType: 'free' } });
     renderPricing();
@@ -263,6 +271,60 @@ describe('PricingPage', () => {
       expect(billingApiMocks.changeLeaguePlan).toHaveBeenCalledWith('league-plus', 'league_plus')
     );
     expect(screen.getByText(/scheduled downgrade was canceled/i)).toBeInTheDocument();
+  });
+
+  test('links a blocked League Plus downgrade to team archiving', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-plus',
+          name: 'Big League',
+          billing: {
+            plan: 'league_plus',
+            subscriptionStatus: 'active',
+            managedByStripe: true,
+          },
+        },
+      ],
+    });
+    billingApiMocks.changeLeaguePlan.mockRejectedValue(
+      new Error('Archive teams until this League has 10 or fewer before downgrading')
+    );
+    renderPricing();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Change to League' }));
+
+    expect(
+      await screen.findByRole('link', { name: 'Manage and archive league teams' })
+    ).toHaveAttribute('href', '/admin/leagues/league-plus?tab=teams');
+  });
+
+  test('refreshes league billing state when the page regains focus after Stripe', async () => {
+    leaguesApiMocks.list
+      .mockResolvedValueOnce({
+        leagues: [
+          {
+            id: 'league-1',
+            name: 'City League',
+            billing: { plan: 'league', subscriptionStatus: 'inactive', managedByStripe: true },
+          },
+        ],
+      })
+      .mockResolvedValue({
+        leagues: [
+          {
+            id: 'league-1',
+            name: 'City League',
+            billing: { plan: 'league_plus', subscriptionStatus: 'active', managedByStripe: true },
+          },
+        ],
+      });
+    renderPricing('/pricing?resourceType=league&leagueId=league-1');
+
+    expect((await screen.findAllByRole('button', { name: /start 14-day trial/i })).length).toBe(2);
+    fireEvent(window, new Event('focus'));
+
+    expect(await screen.findByRole('button', { name: 'Manage billing' })).toBeInTheDocument();
   });
 
   test('signed-out visitors see signup links', async () => {

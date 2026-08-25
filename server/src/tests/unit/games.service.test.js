@@ -404,6 +404,39 @@ describe('games service create game', () => {
     expect(result).toHaveProperty('game');
   });
 
+  test('rejects a new event before the game clock has started', async () => {
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
+      teamId: 'team-1',
+      events: buildEvents([]),
+      status: 'in_progress',
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    };
+    findGameById.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'p1',
+        statType: STAT_TYPES.FG2_MADE,
+      })
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Start the game clock before recording an event',
+    });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
   test('persists a trimmed YouTube video URL', async () => {
     findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
     createGame.mockResolvedValue({

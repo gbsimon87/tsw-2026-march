@@ -118,7 +118,7 @@ describe('AppRouter', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/home');
   });
 
-  test('renders pricing page in development so league checkout is reachable', async () => {
+  test('renders the public pricing route so checkout is reachable', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
 
     renderWithProviders(

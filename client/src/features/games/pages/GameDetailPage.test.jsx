@@ -423,6 +423,7 @@ describe('GameDetailPage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));
     expect(screen.getByText('Event 1 of 4')).toBeInTheDocument();
+    expect(screen.getByTestId('replay-shot-map')).toHaveClass('max-w-[280px]');
     expect(screen.getAllByTestId('replay-marker')).toHaveLength(1);
     expect(screen.getByTestId('replay-box-score')).toBeInTheDocument();
     expect(screen.getByText('Alex')).toBeInTheDocument();

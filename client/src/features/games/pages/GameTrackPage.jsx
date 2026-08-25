@@ -338,6 +338,7 @@ export function GameTrackPage() {
   // The derived step below exits as soon as a side has ONE player, so without
   // this there is no way to reopen it — see returnToShortLineup.
   const [lineupRevisitSide, setLineupRevisitSide] = useState(null);
+  const [isStandaloneLineupEditing, setIsStandaloneLineupEditing] = useState(false);
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
     [TEAM_SIDES.AWAY]: createEmptySideState(),
@@ -705,6 +706,10 @@ export function GameTrackPage() {
   function requireLineup() {
     if (showClockRecovery) {
       setError('Resolve the running clock recovery before tracking an event');
+      return false;
+    }
+    if (data?.game?.clock?.status === 'ready') {
+      setError('Start the game clock before recording an event');
       return false;
     }
     if (isDualTeam) {
@@ -1395,6 +1400,7 @@ export function GameTrackPage() {
       // Leaving the reopened step on save keeps the exit predictable: press
       // Start again and the warning re-targets whichever side is now emptier.
       setLineupRevisitSide(null);
+      setIsStandaloneLineupEditing(false);
     } catch (saveError) {
       setError(saveError.message || 'Failed to save lineup');
     } finally {
@@ -1555,6 +1561,7 @@ export function GameTrackPage() {
     }
 
     setActivePanel('court');
+    setIsStandaloneLineupEditing(true);
     if (isDualTeam) {
       setActiveSide(homeLineupCount < 5 ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY);
     }
@@ -2248,35 +2255,58 @@ export function GameTrackPage() {
                   <div
                     className={isMobileVideoWatchView ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMobileEntryMode(true);
-                        if (pauseVideoOnEntry) {
-                          pauseVideo();
-                        }
-                      }}
-                      className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-                    >
-                      <svg
-                        viewBox="0 0 20 20"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <rect x="2" y="2" width="16" height="16" rx="2" />
-                        <path d="M10 2v16M2 10h16" />
-                      </svg>
-                      Track Stat
-                    </button>
-                    <div className="min-h-0 flex-1">
-                      <GameVideoPanel
-                        videoUrl={game.videoUrl}
-                        title={game.title}
-                        videoIframeRef={videoIframeRef}
-                      />
-                    </div>
+                    {!isDualTeam && (lineupIds.length === 0 || isStandaloneLineupEditing) ? (
+                      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                        <LineupPicker
+                          isDualTeam={false}
+                          teamDisplayName={team?.name || 'Team'}
+                          players={players}
+                          canManageRoster={canAddRosterPlayer}
+                          onAddPlayer={() => setIsAddPlayerOpen(true)}
+                          lineupDraft={currentSideState.lineupDraft}
+                          onToggle={(playerId, checked) => {
+                            const nextDraft = checked
+                              ? [...currentSideState.lineupDraft, playerId]
+                              : currentSideState.lineupDraft.filter((id) => id !== playerId);
+                            updateSideState(activeKey, { lineupDraft: nextDraft });
+                          }}
+                          onSave={saveLineup}
+                          isSaving={isSaving}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMobileEntryMode(true);
+                            if (pauseVideoOnEntry) {
+                              pauseVideo();
+                            }
+                          }}
+                          className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                        >
+                          <svg
+                            viewBox="0 0 20 20"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <rect x="2" y="2" width="16" height="16" rx="2" />
+                            <path d="M10 2v16M2 10h16" />
+                          </svg>
+                          Track Stat
+                        </button>
+                        <div className="min-h-0 flex-1">
+                          <GameVideoPanel
+                            videoUrl={game.videoUrl}
+                            title={game.title}
+                            videoIframeRef={videoIframeRef}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : null}
 
@@ -2452,7 +2482,7 @@ export function GameTrackPage() {
                         />
                       ) : null}
 
-                      {lineupIds.length < 5 ? (
+                      {lineupIds.length === 0 || (!isDualTeam && isStandaloneLineupEditing) ? (
                         <LineupPicker
                           variant="inline"
                           isDualTeam={isDualTeam}

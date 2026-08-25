@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
@@ -97,8 +97,10 @@ export function PricingPage() {
   const [pendingAction, setPendingAction] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const isCreatingLeague =
-    searchParams.get('resourceType') === 'league' && searchParams.get('action') === 'create';
+  const requestedTeamId = searchParams.get('teamId');
+  const requestedLeagueId = searchParams.get('leagueId');
+  const resourceType = searchParams.get('resourceType');
+  const isCreatingLeague = resourceType === 'league' && searchParams.get('action') === 'create';
 
   useEffect(() => {
     billingApi
@@ -107,45 +109,84 @@ export function PricingPage() {
       .catch((err) => setError(err.message || 'Failed to load pricing'));
   }, []);
 
-  useEffect(() => {
-    if (!user) {
-      setTeams([]);
-      setLeagues([]);
-      return;
-    }
+  const loadBillingResources = useCallback(
+    async ({ showLoader = true } = {}) => {
+      if (!user) {
+        setTeams([]);
+        setLeagues([]);
+        return;
+      }
 
-    setIsLoadingData(true);
-    Promise.all([teamsApi.list(), leaguesApi.list()])
-      .then(([teamsResponse, leaguesResponse]) => {
+      if (showLoader) setIsLoadingData(true);
+      try {
+        const [teamsResponse, leaguesResponse] = await Promise.all([
+          teamsApi.list(),
+          leaguesApi.list(),
+        ]);
         const nextTeams = teamsResponse.teams || [];
         const nextLeagues = leaguesResponse.leagues || leaguesResponse || [];
-        const requestedTeamId = searchParams.get('teamId');
-        const requestedLeagueId = searchParams.get('leagueId');
 
         setTeams(nextTeams);
         setLeagues(nextLeagues);
-        setSelectedTeamId(
+        setSelectedTeamId((current) =>
           requestedTeamId && nextTeams.some((team) => team.id === requestedTeamId)
             ? requestedTeamId
-            : nextTeams.find((team) => team.billing?.capacityType === 'paid')?.id ||
+            : current && nextTeams.some((team) => team.id === current)
+              ? current
+              : nextTeams.find((team) => team.billing?.capacityType === 'paid')?.id ||
                 nextTeams[0]?.id ||
                 ''
         );
-        setSelectedLeagueId(
+        setSelectedLeagueId((current) =>
           requestedLeagueId && nextLeagues.some((league) => league.id === requestedLeagueId)
             ? requestedLeagueId
-            : nextLeagues[0]?.id || ''
+            : current && nextLeagues.some((league) => league.id === current)
+              ? current
+              : nextLeagues[0]?.id || ''
         );
-      })
-      .catch((err) => setError(err.message || 'Failed to load billing data'))
-      .finally(() => setIsLoadingData(false));
-  }, [searchParams, user]);
+      } catch (err) {
+        setError(err.message || 'Failed to load billing data');
+      } finally {
+        if (showLoader) setIsLoadingData(false);
+      }
+    },
+    [requestedLeagueId, requestedTeamId, user]
+  );
+
+  useEffect(() => {
+    loadBillingResources();
+  }, [loadBillingResources]);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const refresh = () => loadBillingResources({ showLoader: false });
+    window.addEventListener('focus', refresh);
+
+    // Stripe may redirect back before its webhook has updated our database.
+    // Brief background refreshes stop stale trial/manage CTAs lingering until a
+    // hard refresh while still leaving Stripe webhooks authoritative.
+    const shouldPollAfterStripeReturn = Boolean(
+      resourceType && (requestedTeamId || requestedLeagueId)
+    );
+    const timers = shouldPollAfterStripeReturn
+      ? [1500, 4000, 8000].map((delay) => window.setTimeout(refresh, delay))
+      : [];
+
+    return () => {
+      window.removeEventListener('focus', refresh);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [loadBillingResources, requestedLeagueId, requestedTeamId, resourceType, user]);
 
   const plans = useMemo(
     () => Object.fromEntries(catalog.map((plan) => [plan.id, plan])),
     [catalog]
   );
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) || null;
+  const freeTeam = teams.find((team) => team.billing?.capacityType === 'free') || null;
   const selectedLeague = leagues.find((league) => league.id === selectedLeagueId) || null;
   const selectedTeamUsesPortal =
     PORTAL_STATUSES.has(selectedTeam?.billing?.subscriptionStatus) &&
@@ -249,9 +290,17 @@ export function PricingPage() {
       />
 
       {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p>{error}</p>
+          {error.includes('Archive teams until this League has 10 or fewer') && selectedLeagueId ? (
+            <Link
+              to={`/admin/leagues/${encodeURIComponent(selectedLeagueId)}?tab=teams`}
+              className="mt-3 inline-flex rounded-lg bg-red-700 px-4 py-2 font-semibold text-white transition hover:bg-red-600"
+            >
+              Manage and archive league teams
+            </Link>
+          ) : null}
+        </div>
       ) : null}
       {notice ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -267,8 +316,21 @@ export function PricingPage() {
           features={plans.starter?.features}
         >
           {user ? (
-            <Link to="/teams/new" className={buttonClass}>
-              Create your free team
+            <Link
+              to={
+                freeTeam
+                  ? `/admin/teams/${encodeURIComponent(freeTeam.id)}`
+                  : teams.length
+                    ? `/pricing?teamId=${encodeURIComponent(teams[0].id)}#additional-team`
+                    : '/teams/new'
+              }
+              className={buttonClass}
+            >
+              {freeTeam
+                ? 'Manage your free team'
+                : teams.length
+                  ? 'Choose your free team below'
+                  : 'Create your free team'}
             </Link>
           ) : (
             <SignupLink source={SIGNUP_SOURCE.PRICING}>Create your free team</SignupLink>
@@ -281,6 +343,7 @@ export function PricingPage() {
           description={plans.team_extra?.tagline || 'For each standalone team after your first.'}
           features={plans.team_extra?.features}
         >
+          <span id="additional-team" className="sr-only" aria-hidden="true" />
           {user ? (
             <>
               <ResourceSelect

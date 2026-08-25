@@ -1855,6 +1855,15 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   const gameFormat = game.gameFormat;
   const eventSnapshot = payload;
+  const insertBeforeEventId = options.insertBeforeEventId || null;
+
+  if (
+    !insertBeforeEventId &&
+    game.status !== 'completed' &&
+    game.clock?.status === CLOCK_STATUSES.READY
+  ) {
+    throw new ApiError(400, 'Start the game clock before recording an event');
+  }
 
   if (!validateSnapshot(gameFormat, eventSnapshot)) {
     throw new ApiError(400, 'Event period and clock time are invalid for this game');
@@ -1863,7 +1872,6 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   // Tracking is free (T-12): no active-subscription gate on appending events.
 
   const context = await resolveGameTeamContext(userId, game);
-  const insertBeforeEventId = options.insertBeforeEventId || null;
 
   if (
     insertBeforeEventId &&

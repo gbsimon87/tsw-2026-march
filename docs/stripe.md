@@ -58,17 +58,17 @@ if the dry run does not show exactly the production data you expect.
 
 ## Honest readiness status
 
-Status checked on 24 August 2026.
+Status checked on 25 August 2026.
 
-| Place                        | Status            | Meaning                                                                                                                                                                                         |
-| ---------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local development            | **Code ready**    | Without a Stripe key, local League creation is complimentary. With the complete sandbox configuration, local Team and League Checkout both use Stripe test mode.                                |
-| Deployed development/testing | **Not ready yet** | You must create the three sandbox Prices, add the sandbox Render values, create the sandbox webhook, run the migration on the development database, and complete the test checklist below.      |
-| Production                   | **Not ready**     | Live Products/Prices, live Render values, the live webhook, a production backup and migration, a controlled live purchase, and the deliberate production pricing-page launch are still missing. |
+| Place                        | Status         | Meaning                                                                                                                                                                    |
+| ---------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local development            | **Code ready** | Without a Stripe key, local League creation is complimentary. With the complete sandbox configuration, local Team and League Checkout both use Stripe test mode.           |
+| Deployed development/testing | **In testing** | The sandbox catalog, Render configuration, webhook, and development migration are in place. Finish every success, cancellation, failure, access, and capacity check below. |
+| Production                   | **Not ready**  | Live Products/Prices, live Render values, the live webhook, a production backup and migration, a controlled live purchase, and the tax decision are still missing.         |
 
-No real Stripe account or Render dashboard was changed by the code work. No
-real payment has been made. That is why production is not yet ready for real
-customers.
+The owner has configured the development Stripe sandbox and development Render
+service. No live Stripe configuration or verified real payment has been
+completed. That is why production is not yet ready for real customers.
 
 ## The nine server environment variables
 
@@ -300,9 +300,16 @@ Instance Type**, select **Free**, and save again.
 
 Use the **TSW Development** Stripe sandbox only.
 
+Do these tests on **https://dev.thesportyway.com**, not on localhost. Sign in
+with a normal development test account that does not own a paid Team or League.
+If you reset the seeded development database, use the seeded normal user from
+the development seed instructions. Otherwise, register a new test-only account
+with an email address you control. Never use a real customer's account for these
+tests.
+
 ### Additional Team
 
-1. Sign in as a normal test user.
+1. Sign in with that normal development test account.
 2. Create the first Team. Confirm it is labelled **Free Team** and can be edited.
 3. Create a second Team. Confirm its saved data is visible but management asks
    for the $5 subscription.
@@ -418,7 +425,9 @@ https://YOUR-PRODUCTION-API.example.com/api/v1/billing/webhooks
 4. Use only the live secret/restricted key, live Price IDs, live webhook secret,
    and production client URLs.
 5. Save the values.
-6. Do not deploy the public pricing page yet.
+6. Do not merge or deploy the production client until Parts 9 and 10 can be
+   completed in one controlled launch window. The Pricing route is now public
+   in the code.
 
 ## Part 9: protect and migrate production data
 
@@ -452,22 +461,20 @@ free before running the real migration.
 
 ## Part 10: make one controlled live payment
 
-1. Deploy the production API with Stripe configured while `/pricing` is still
-   hidden.
-2. Use a controlled production account.
-3. Temporarily reach the flow only in a deliberate private test deployment, or
-   use the final pricing-page change immediately before this check.
+1. Complete the live Stripe configuration and production migration first.
+2. During a controlled launch window, deploy the production API and client. The
+   Pricing route is public as soon as this client version is deployed.
+3. Immediately use a controlled production account and watch Render and Stripe
+   webhook logs while testing.
 4. Buy one $5 Additional Team with a real card.
 5. Confirm Checkout, webhook delivery, database state, receipt, portal, and Team
    management all work.
 6. Cancel the subscription, verify the end-of-period state, and refund the test
    charge if appropriate from Stripe.
 7. Repeat with one League trial. Confirm the exact League gets access.
-8. Only after both work should you remove the production redirect at
-   `client/src/app/router/AppRouter.jsx` for `/pricing` and deploy the client.
-
-Removing that redirect is a launch decision. It is intentionally not part of
-this code change.
+8. If either purchase fails, roll back the client deployment or disable the
+   production service while the problem is fixed. Do not continue marketing the
+   paid flow.
 
 ## Moving safely from a sandbox to live mode
 
@@ -479,11 +486,10 @@ Use this order:
 4. Put only live values in the production Render API.
 5. Back up production.
 6. Dry-run and run the production migration.
-7. Deploy the API while Pricing is hidden.
-8. Make controlled live purchases.
+7. Deploy the API and public Pricing client in a controlled launch window.
+8. Immediately make controlled live purchases.
 9. Check the three grandfathered Leagues.
-10. Enable the production Pricing route.
-11. Watch Stripe webhook failures, Render errors, payment-failure emails, and
+10. Watch Stripe webhook failures, Render errors, payment-failure emails, and
     the first real subscriptions closely.
 
 Never reuse a sandbox Price ID in live mode. Stripe can copy a sandbox Product
@@ -543,12 +549,17 @@ Always copy the new live `price_...` ID.
       access loss/restoration, upgrades, downgrades, free-Team movement, League
       limits, and the pricing UI.
 - [x] Consolidated Stripe instructions into this file.
+- [x] Made Pricing public and added it to desktop and mobile navigation.
+- [x] Added direct links for League Plus upgrades and blocked downgrades.
+- [x] Added automatic billing-state refresh after returning from Stripe so plan
+      buttons do not remain stale until a hard refresh.
+- [x] Corrected the free-Team CTA when the user already owns a free Team.
 
 ### Still requiring action from you
 
 Follow these boxes from top to bottom. Do not skip ahead to live mode. Stripe's
 Dashboard wording below was checked against Stripe's current documentation on
-24 August 2026.
+25 August 2026.
 
 Stripe links normally open the account or sandbox you used most recently. Look
 at the banner and account picker every time. A **sandbox** uses fake money. The
@@ -908,8 +919,9 @@ https://YOUR-REAL-PRODUCTION-API/api/v1/billing/webhooks
 
 #### 13. Add the live values to the production Render API
 
-- [ ] Merge the fully tested `dev` branch into `main`. Do not remove the
-      production Pricing redirect yet.
+- [ ] Merge the fully tested `dev` branch into `main` only when you are ready for
+      the controlled production launch window. This version makes `/pricing`
+      public.
 - [ ] In Render, open `tsw-2026-march-api-prod`.
 - [ ] Click **Environment**.
 - [ ] Confirm `APP_ENV=production` and `NODE_ENV=production`.
@@ -925,7 +937,6 @@ https://YOUR-REAL-PRODUCTION-API/api/v1/billing/webhooks
 - [ ] Recheck every value character by character. Never put `test`, `sandbox`, or
       a development hostname in a production Stripe value.
 - [ ] Choose **Save, rebuild, and deploy**.
-- [ ] Keep the production `/pricing` route hidden.
 - [ ] Confirm the production API health endpoint responds after deployment.
 
 #### 14. Protect and migrate production data
@@ -954,12 +965,12 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
 - [ ] Confirm each existing owner has exactly one manageable free standalone
       Team.
 
-#### 15. Prove the live path before opening Pricing
+#### 15. Prove the live path during the controlled Pricing launch
 
-- [ ] Ask the developer to prepare either a private live-payment test path or the
-      final one-line Pricing redirect removal. Do not create a Stripe Payment
-      Link: it bypasses the app's Team/League metadata and is not a valid test of
-      this integration.
+- [ ] Choose a quiet launch window. Deploy the production API and client only
+      after steps 11–14 are complete. Do not create a Stripe Payment Link: it
+      bypasses the app's Team/League metadata and is not a valid test of this
+      integration.
 - [ ] Use a controlled account and a real card to buy one $5 Additional Team.
 - [ ] In Stripe, open **Workbench → Webhooks → production destination → Event
       deliveries** and confirm the live events are **Delivered** with HTTP `200`.
@@ -975,10 +986,9 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
       before approval.
 - [ ] Test the ordinary Portal. Confirm it offers cards, invoices, and
       end-of-period cancellation, but does not offer plan switching. If plan
-      switching appears, stop and leave production Pricing hidden.
-- [ ] After every check passes, remove the production `/pricing` redirect in
-      `client/src/app/router/AppRouter.jsx`, deploy the production client, and
-      visit `/pricing` in a signed-out browser.
+      switching appears, stop and roll back the production client.
+- [ ] Visit `/pricing` in a signed-out browser and confirm all four plans and
+      prices are correct.
 - [ ] Watch Stripe **Event deliveries**, Render logs, and the first real
       subscriptions closely after launch.
 
@@ -991,26 +1001,25 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
 - [ ] Add a scheduled Stripe-to-database reconciliation report.
 - [ ] Automate a browser test against a Stripe sandbox in a protected test
       environment.
-- [ ] Replace the hard-coded production Pricing redirect with a controlled
-      launch feature flag.
+- [ ] Add a controlled Pricing emergency-disable feature flag for faster rollback.
 
 ## Final launch blockers
 
 Stripe is **not ready for real customers yet**. The code is ready to be tested,
 but these external blockers remain:
 
-1. Sandbox Products, Prices, Portal, Render values, and webhook are not verified.
-2. The development database migration and full manual sandbox checklist have
-   not been completed.
+1. The full manual sandbox success, cancellation, failure, access, and capacity
+   checklist has not been completed.
+2. The development changes found during manual testing must be deployed and
+   rechecked.
 3. Live Products, Prices, Portal, Render values, and webhook do not yet exist or
    have not been verified.
 4. The production database has not been backed up and migrated to preserve the
    three current Leagues.
 5. No controlled live payment has proved the complete real-money path.
 6. The live tax and registration decision has not been recorded.
-7. The production `/pricing` route is still deliberately hidden.
 
-Do not market paid self-service until all seven blockers are closed.
+Do not market paid self-service until all six blockers are closed.
 
 ## Official Stripe help
 

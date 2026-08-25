@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
@@ -73,9 +73,17 @@ export function AdminNewLeagueTeamPage() {
       <PageHeader title="Add League Team" description="Create a new team for this league." />
 
       {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p>{error}</p>
+          {error.includes('Upgrade this League to League Plus') ? (
+            <Link
+              to={`/pricing?leagueId=${encodeURIComponent(leagueId)}&resourceType=league`}
+              className="mt-3 inline-flex rounded-lg bg-red-700 px-4 py-2 font-semibold text-white transition hover:bg-red-600"
+            >
+              Upgrade this league
+            </Link>
+          ) : null}
+        </div>
       ) : null}
 
       <form

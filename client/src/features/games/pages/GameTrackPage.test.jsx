@@ -508,6 +508,39 @@ describe('GameTrackPage', () => {
     expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     expect(screen.getByText(/Starting five set/i)).toBeInTheDocument();
     expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
+    expect(screen.queryByText('Starting Lineup')).not.toBeInTheDocument();
+  });
+
+  test('blocks new events until the game clock has started', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+    });
+
+    renderPage();
+    pointerDown(await screen.findByTestId('interactive-court-image'), {
+      clientX: 250,
+      clientY: 800,
+    });
+
+    expect(screen.getByText(/start the game clock before recording an event/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /close event picker/i })).not.toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
   });
 
   test('warns before starting a game with a short lineup and allows continuing', async () => {
@@ -1254,6 +1287,27 @@ describe('GameTrackPage', () => {
       expect(payload.videoTimestamp).toBeUndefined();
     } finally {
       window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  test('mobile video-first flow shows lineup setup before video and hides it after saving', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: { videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      });
+
+      renderPage();
+
+      expect(await screen.findByText('Starting Lineup')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Track Stat/i })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText(/Select Alex for the starting lineup/i));
+      fireEvent.click(screen.getByRole('button', { name: 'Save Lineup' }));
+
+      expect(await screen.findByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      expect(screen.queryByText('Starting Lineup')).not.toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
     }
   });
 

@@ -61,6 +61,9 @@ describe('FollowingPage', () => {
     expect(screen.getByRole('heading', { name: 'Players' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Leagues' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Teams' })).toBeInTheDocument();
+    const discoverLinks = screen.getAllByRole('link', { name: /discover/i });
+    expect(discoverLinks).toHaveLength(3);
+    expect(discoverLinks.every((link) => link.getAttribute('href') === '/home')).toBe(true);
   });
 
   test('renders a player card with a profile link when public', async () => {
