@@ -59,6 +59,13 @@ function getPortalConfigurationId() {
   return env.STRIPE_PORTAL_CONFIGURATION_ID;
 }
 
+function getPortalUpgradeConfigurationId() {
+  if (!env.STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID) {
+    throw new ApiError(503, 'Billing upgrades are not configured');
+  }
+  return env.STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID;
+}
+
 // Audit M3: run a Stripe SDK call, masking any SDK error as a generic 502. The
 // error middleware only masks >=500, so an unwrapped StripeInvalidRequestError
 // (statusCode 400, e.g. "No such price: price_1ABC…") would be returned verbatim,
@@ -534,7 +541,7 @@ async function changeLeaguePlan(userId, leagueId, targetPlanId) {
     const returnUrl = buildPortalReturnUrl('league', String(league._id));
     const portal = await callStripe(() =>
       stripe.billingPortal.sessions.create({
-        configuration: getPortalConfigurationId(),
+        configuration: getPortalUpgradeConfigurationId(),
         customer: league.stripeCustomerId,
         return_url: returnUrl,
         flow_data: {

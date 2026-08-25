@@ -16,6 +16,7 @@ const FULL_STRIPE = {
   ...PRICE_IDS,
   STRIPE_WEBHOOK_SECRET: 'whsec_123',
   STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_tsw_locked_down',
+  STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID: 'bpc_tsw_upgrade_only',
   STRIPE_SUCCESS_URL: 'http://localhost:5173/billing/success',
   STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
 };
@@ -57,6 +58,7 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
     for (const key of [
       'STRIPE_WEBHOOK_SECRET',
       'STRIPE_PORTAL_CONFIGURATION_ID',
+      'STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID',
       'STRIPE_SUCCESS_URL',
       'STRIPE_CANCEL_URL',
     ]) {

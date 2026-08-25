@@ -70,27 +70,28 @@ No real Stripe account or Render dashboard was changed by the code work. No
 real payment has been made. That is why production is not yet ready for real
 customers.
 
-## The eight server environment variables
+## The nine server environment variables
 
-Add all eight together on Render. A half-finished deployed setup makes the API
+Add all nine together on Render. A half-finished deployed setup makes the API
 refuse to start.
 
 Local development is the one exception. `NODE_ENV=development` is allowed to
 start while Stripe is missing or still has old Price variables. The first Team
 and local complimentary Leagues still work, but paid Checkout says billing is
-not configured until all eight current values below are present. Both Render
+not configured until all nine current values below are present. Both Render
 APIs use `NODE_ENV=production`, so this exception cannot weaken a deployment.
 
-| Variable                          | What to put in development                                                       | What to put in production                                                        |
-| --------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `STRIPE_SECRET_KEY`               | Test secret key beginning `sk_test_` or test restricted key beginning `rk_test_` | Live secret key beginning `sk_live_` or live restricted key beginning `rk_live_` |
-| `STRIPE_WEBHOOK_SECRET`           | Test endpoint secret beginning `whsec_`                                          | Live endpoint secret beginning `whsec_`                                          |
-| `STRIPE_PRICE_ID_ADDITIONAL_TEAM` | Test $5 Price ID beginning `price_`                                              | Live $5 Price ID beginning `price_`                                              |
-| `STRIPE_PRICE_ID_LEAGUE`          | Test $29 Price ID beginning `price_`                                             | Live $29 Price ID beginning `price_`                                             |
-| `STRIPE_PRICE_ID_LEAGUE_PLUS`     | Test $49 Price ID beginning `price_`                                             | Live $49 Price ID beginning `price_`                                             |
-| `STRIPE_PORTAL_CONFIGURATION_ID`  | Test portal configuration beginning `bpc_`                                       | Live portal configuration beginning `bpc_`                                       |
-| `STRIPE_SUCCESS_URL`              | Development client URL plus `/billing/success`                                   | Production client URL plus `/billing/success`                                    |
-| `STRIPE_CANCEL_URL`               | Development client URL plus `/billing/cancel`                                    | Production client URL plus `/billing/cancel`                                     |
+| Variable                                 | What to put in development                                                       | What to put in production                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `STRIPE_SECRET_KEY`                      | Test secret key beginning `sk_test_` or test restricted key beginning `rk_test_` | Live secret key beginning `sk_live_` or live restricted key beginning `rk_live_` |
+| `STRIPE_WEBHOOK_SECRET`                  | Test endpoint secret beginning `whsec_`                                          | Live endpoint secret beginning `whsec_`                                          |
+| `STRIPE_PRICE_ID_ADDITIONAL_TEAM`        | Test $5 Price ID beginning `price_`                                              | Live $5 Price ID beginning `price_`                                              |
+| `STRIPE_PRICE_ID_LEAGUE`                 | Test $29 Price ID beginning `price_`                                             | Live $29 Price ID beginning `price_`                                             |
+| `STRIPE_PRICE_ID_LEAGUE_PLUS`            | Test $49 Price ID beginning `price_`                                             | Live $49 Price ID beginning `price_`                                             |
+| `STRIPE_PORTAL_CONFIGURATION_ID`         | Test portal configuration beginning `bpc_`                                       | Live portal configuration beginning `bpc_`                                       |
+| `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` | Test upgrade-only portal configuration beginning `bpc_`                          | Live upgrade-only portal configuration beginning `bpc_`                          |
+| `STRIPE_SUCCESS_URL`                     | Development client URL plus `/billing/success`                                   | Production client URL plus `/billing/success`                                    |
+| `STRIPE_CANCEL_URL`                      | Development client URL plus `/billing/cancel`                                    | Production client URL plus `/billing/cancel`                                     |
 
 Examples of the URL shape only:
 
@@ -155,8 +156,9 @@ pnpm --filter server stripe:create-portal-config
 ```
 
 7. The command checks that the Prices really are $5, $29, and $49 USD monthly.
-   It then prints one line beginning `STRIPE_PORTAL_CONFIGURATION_ID=bpc_`.
-8. Copy that whole line into `env/server/.env.development`.
+   It then prints two lines beginning `STRIPE_PORTAL_CONFIGURATION_ID=bpc_` and
+   `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_`.
+8. Copy both whole lines into `env/server/.env.development`.
 9. Start the app with `pnpm dev`.
 
 Your first standalone Team is free. Create a second Team to see the $5 test
@@ -219,7 +221,7 @@ Do this before touching live mode.
 2. Open **tsw-2026-march-api-dev**.
 3. Open **Environment**.
 4. Confirm `APP_ENV=development` and `NODE_ENV=production`.
-5. Add the eight Stripe variables.
+5. Add the nine Stripe variables.
 6. Use only `sk_test_...`/`rk_test_...`, test `price_...` IDs, and a test
    `whsec_...`.
 7. Set success and cancel URLs to the real development client address.
@@ -233,17 +235,38 @@ Do this before touching live mode.
 3. Add this endpoint, using the real development API address:
 
 ```text
-https://YOUR-DEV-API.example.com/api/v1/billing/webhooks
+https://dev-api.thesportyway.com/api/v1/billing/webhooks
 ```
 
 4. Click **Create new destination**, choose the latest API version, and choose
    **Events on your account**.
-5. Select all 11 events listed above and click **Continue**.
-6. Select **Webhook**, enter the endpoint URL, and click **Create destination**.
-7. Reveal its signing secret.
-8. Put that destination's `whsec_...` into the development Render API.
-9. Redeploy again.
-10. Open the destination's **Event deliveries** tab and confirm deliveries show
+5. Search for and select exactly these 11 events:
+
+```text
+checkout.session.completed
+checkout.session.async_payment_succeeded
+checkout.session.async_payment_failed
+checkout.session.expired
+customer.subscription.created
+customer.subscription.updated
+customer.subscription.deleted
+customer.subscription.trial_will_end
+invoice.paid
+invoice.payment_failed
+invoice.finalization_failed
+```
+
+6. Check that Stripe says **11 events selected**, then click **Continue**. Do not
+   select **All events**.
+7. Select **Webhook** and enter the endpoint URL.
+8. Use `TSW development billing webhook` as the destination name.
+9. Use `Stripe sandbox billing events for dev-api.thesportyway.com` as the
+   description, then click **Create destination**.
+10. Reveal its signing secret.
+11. In the development Render API, set the environment variable named
+    `STRIPE_WEBHOOK_SECRET` to that destination's `whsec_...` value.
+12. Redeploy again.
+13. Open the destination's **Event deliveries** tab and confirm deliveries show
     **Delivered** with HTTP `200`.
 
 A local CLI `whsec_...` is not the Render webhook secret. Every endpoint has
@@ -391,7 +414,7 @@ https://YOUR-PRODUCTION-API.example.com/api/v1/billing/webhooks
 
 1. Open **tsw-2026-march-api-prod** in Render.
 2. Confirm `APP_ENV=production` and `NODE_ENV=production`.
-3. Add all eight Stripe variables.
+3. Add all nine Stripe variables.
 4. Use only the live secret/restricted key, live Price IDs, live webhook secret,
    and production client URLs.
 5. Save the values.
@@ -583,10 +606,12 @@ Use a restricted key because it can do much less damage if it is ever exposed.
 - [ ] Under **Restricted keys**, click **Create restricted key**.
 - [ ] Choose to start with no permissions.
 - [ ] Name it `TSW development Render API`.
-- [ ] Give **Write** access to **Checkout Sessions**, **Customer/Billing Portal**,
-      and **Subscription Schedules**.
-- [ ] Give **Read** access to **Subscriptions** and **Prices**. The one-time
-      setup command reads the Prices so it can catch a wrong amount.
+- [ ] Give **Write** access to **Checkout Sessions**, **Customer Portal**, and
+      **Subscriptions**. Stripe's current permission screen groups subscription
+      schedule operations under **Subscriptions**; it does not show a separate
+      **Subscription Schedules** row.
+- [ ] Give **Read** access to **Prices**. The one-time setup command reads the
+      Prices so it can catch a wrong amount.
 - [ ] Leave unrelated permissions as **None**.
 - [ ] Click **Create key** and complete Stripe's two-factor check.
 - [ ] Copy the value beginning `rk_test_` immediately. Stripe might not show it
@@ -599,9 +624,10 @@ Use a restricted key because it can do much less damage if it is ever exposed.
 
 #### 4. Create the safe sandbox Customer Portal configuration
 
-The app uses a locked-down Portal configuration so the normal Portal cannot
-jump around the app's team-count and downgrade rules. The provided command
-makes it for you.
+The app uses one locked-down configuration for normal Portal visits and a
+separate upgrade-only configuration for the explicit League Plus confirmation
+screen. This prevents the normal Portal from jumping around the app's team-count
+and downgrade rules. The provided command makes both for you.
 
 - [ ] On your computer, open `env/server/.env.development`.
 - [ ] Put the sandbox `STRIPE_SECRET_KEY`, all three sandbox `price_...` values,
@@ -621,23 +647,66 @@ pnpm --filter server stripe:create-portal-config
 
 - [ ] Stop if the command reports a wrong Price, currency, interval, Product, or
       key mode. Fix the Stripe Product or copied value; do not weaken the check.
-- [ ] Copy the command's one output line, which looks like this:
+- [ ] Copy both output lines, which look like this:
 
 ```text
 STRIPE_PORTAL_CONFIGURATION_ID=bpc_REAL_SANDBOX_VALUE
+STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_REAL_SANDBOX_UPGRADE_VALUE
 ```
 
-- [ ] Paste it into `env/server/.env.development` and the private note holding
+- [ ] Paste both into `env/server/.env.development` and the private note holding
       your sandbox values.
-- [ ] Run the command once more. Confirm it prints the same `bpc_...` value
-      instead of making another configuration.
+- [ ] Run the command once more. Confirm it prints the same two `bpc_...` values
+      instead of making more configurations.
 
 This Portal lets customers update cards, see invoices, and cancel at the end of
 the paid period. Its normal home page hides plan switching. The app can still
 open Stripe's confirmation page for the one safe League Plus upgrade. The app
 itself schedules a downgrade for the next billing date.
 
-#### 5. Add the sandbox values to the development Render API
+#### 5. Create the local webhook secret with Stripe CLI
+
+This secret is only for your computer. Do not copy it to Render. The Render
+webhook gets a different secret later.
+
+- [ ] Install the Stripe CLI using Stripe's
+      [official installation instructions](https://docs.stripe.com/stripe-cli).
+- [ ] Open a terminal and run `stripe login`.
+- [ ] When Stripe opens in your browser, choose **TSW Development**, check for
+      the sandbox banner, and click **Allow access**.
+- [ ] Return to the repository root in that terminal and run:
+
+```bash
+pnpm --filter server stripe-listen
+```
+
+- [ ] Leave that command running. It forwards Stripe sandbox events to:
+
+```text
+http://localhost:4000/api/v1/billing/webhooks
+```
+
+- [ ] Find the line that says **Your webhook signing secret is** and copy the
+      value beginning `whsec_`.
+- [ ] Open `env/server/.env.development` and add or replace this line:
+
+```text
+STRIPE_WEBHOOK_SECRET=whsec_REAL_VALUE_FROM_STRIPE_CLI
+```
+
+- [ ] Never reuse an older `whsec_...` value and never paste this secret into
+      Git, chat, email, analytics, or a screenshot.
+- [ ] Open a second terminal at the repository root and run `pnpm dev`. If the
+      app was already running when you changed the environment file, restart it.
+- [ ] Keep both `pnpm dev` and `stripe-listen` running while testing payments.
+- [ ] If a later `stripe-listen` run prints a different secret, update
+      `STRIPE_WEBHOOK_SECRET` and restart the app before testing again.
+
+Do not complete a test Checkout without the listener. Stripe might accept the
+test payment, but the app would not receive the signed event that grants or
+removes access.
+
+#### 6. Add the sandbox values to the development Render API
 
 - [ ] Review and commit this branch, then merge it into the repository's `dev`
       branch so Render can deploy the new billing code.
@@ -647,7 +716,7 @@ itself schedules a downgrade for the next billing date.
 - [ ] Click **Environment** in the left pane.
 - [ ] Confirm `APP_ENV` is `development` and `NODE_ENV` is `production`.
 - [ ] Under **Environment Variables**, click **+ Add Environment Variable** for
-      each of the seven rows below, or use **Add from .env**.
+      each of the eight rows below, or use **Add from .env**.
 
 ```text
 STRIPE_SECRET_KEY=rk_test_VALUE_FROM_STEP_3
@@ -655,6 +724,7 @@ STRIPE_PRICE_ID_ADDITIONAL_TEAM=price_VALUE_FROM_ADDITIONAL_TEAM
 STRIPE_PRICE_ID_LEAGUE=price_VALUE_FROM_LEAGUE
 STRIPE_PRICE_ID_LEAGUE_PLUS=price_VALUE_FROM_LEAGUE_PLUS
 STRIPE_PORTAL_CONFIGURATION_ID=bpc_VALUE_FROM_STEP_4
+STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_UPGRADE_VALUE_FROM_STEP_4
 STRIPE_SUCCESS_URL=https://YOUR-REAL-DEV-CLIENT/billing/success
 STRIPE_CANCEL_URL=https://YOUR-REAL-DEV-CLIENT/billing/cancel
 ```
@@ -664,9 +734,9 @@ STRIPE_CANCEL_URL=https://YOUR-REAL-DEV-CLIENT/billing/cancel
       Add `/billing/success` and `/billing/cancel` to make the two URLs.
 - [ ] Do not save yet because the real development webhook secret is created in
       the next step. Keep Render open in a separate browser tab. The server
-      requires all eight values together.
+      requires all nine values together.
 
-#### 6. Create the sandbox webhook for the development deployment
+#### 7. Create the sandbox webhook for the development deployment
 
 - [ ] Return to Stripe and make sure **TSW Development** and its sandbox banner
       are visible.
@@ -697,10 +767,12 @@ invoice.finalization_failed
 - [ ] Enter the real development API URL followed by the exact route:
 
 ```text
-https://YOUR-REAL-DEV-API/api/v1/billing/webhooks
+https://dev-api.thesportyway.com/api/v1/billing/webhooks
 ```
 
-- [ ] Enter `TSW development billing webhook` as the name or description.
+- [ ] Enter `TSW development billing webhook` as the destination name.
+- [ ] Enter `Stripe sandbox billing events for dev-api.thesportyway.com` as the
+      description.
 - [ ] Click **Create destination**.
 - [ ] Open the new destination, find **Signing secret**, and click **Reveal**.
 - [ ] Copy the value beginning `whsec_`. This is not the API key and is not the
@@ -708,9 +780,10 @@ https://YOUR-REAL-DEV-API/api/v1/billing/webhooks
 - [ ] Return to Render and put this value in `STRIPE_WEBHOOK_SECRET`.
 - [ ] Choose **Save, rebuild, and deploy** in Render.
 - [ ] Wait for Render to show a successful deploy.
-- [ ] Open `https://YOUR-REAL-DEV-API/api/v1/health` and confirm it responds.
+- [ ] Open `https://dev-api.thesportyway.com/api/v1/health` and confirm it
+      responds.
 
-#### 7. Verify the development webhook and database
+#### 8. Verify the development webhook and database
 
 - [ ] Back up the development database using
       [`mongodb-production-backup.md`](./mongodb-production-backup.md), but use
@@ -750,7 +823,7 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
       deploy to succeed.
 - [ ] Do not continue to live mode until every development check passes.
 
-#### 8. Prepare the live Stripe account
+#### 9. Prepare the live Stripe account
 
 - [ ] In Stripe's account picker, leave **TSW Development** and open the live
       account. Check that the sandbox banner has disappeared.
@@ -762,7 +835,7 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
       where you must register for sales tax, VAT, or GST. Do not turn on Stripe
       Tax until the needed registrations are active.
 
-#### 9. Create the three live Products and Prices
+#### 10. Create the three live Products and Prices
 
 - [ ] Open **More → Product catalog** in the live account.
 - [ ] Create **Additional Team**, **League**, and **League Plus** again using the
@@ -775,7 +848,7 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
 - [ ] Archive old Team Pro or season Products only after checking historical
       subscriptions. Do not delete or repurpose them.
 
-#### 10. Create the live key and configure the live Customer Portal
+#### 11. Create the live key and configure the live Customer Portal
 
 - [ ] In the live account, open [API keys](https://dashboard.stripe.com/apikeys).
 - [ ] Create a restricted key named `TSW production Render API` with the same
@@ -804,22 +877,23 @@ STRIPE_SUCCESS_URL=https://YOUR-REAL-PRODUCTION-CLIENT/billing/success
 ENV_FILE="$(pwd)/env/server/.env.stripe-live.local" pnpm --filter server stripe:create-portal-config
 ```
 
-- [ ] Confirm the command validates the three live Prices and prints a new live
-      `STRIPE_PORTAL_CONFIGURATION_ID=bpc_...` value.
-- [ ] Save that live `bpc_...` value privately. It is different from the sandbox
-      configuration.
+- [ ] Confirm the command validates the three live Prices and prints new live
+      `STRIPE_PORTAL_CONFIGURATION_ID=bpc_...` and
+      `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_...` values.
+- [ ] Save both live `bpc_...` values privately. They are different from the
+      sandbox configurations.
 - [ ] Delete `env/server/.env.stripe-live.local` after you have safely added the
-      live values to Render in step 12.
+      live values to Render in step 13.
 
-The sandbox Portal configuration does not work in live mode. This step creates
-the matching locked-down live configuration.
+The sandbox Portal configurations do not work in live mode. This step creates
+the matching locked-down and upgrade-only live configurations.
 
-#### 11. Create the live production webhook
+#### 12. Create the live production webhook
 
 - [ ] Stay in the live account and open **Workbench → Webhooks**.
 - [ ] Click **Create new destination**.
 - [ ] Choose the same API version, **Events on your account**, and the same 11
-      event types from step 6.
+      event types from step 7.
 - [ ] Choose **Webhook**.
 - [ ] Enter the real production API endpoint:
 
@@ -832,7 +906,7 @@ https://YOUR-REAL-PRODUCTION-API/api/v1/billing/webhooks
 - [ ] Keep it separate from both the sandbox endpoint secret and the local CLI
       secret.
 
-#### 12. Add the live values to the production Render API
+#### 13. Add the live values to the production Render API
 
 - [ ] Merge the fully tested `dev` branch into `main`. Do not remove the
       production Pricing redirect yet.
@@ -841,7 +915,9 @@ https://YOUR-REAL-PRODUCTION-API/api/v1/billing/webhooks
 - [ ] Confirm `APP_ENV=production` and `NODE_ENV=production`.
 - [ ] Set `STRIPE_SECRET_KEY` to the `rk_live_...` key.
 - [ ] Put the three live `price_...` IDs in their three matching Price variables.
-- [ ] Set `STRIPE_PORTAL_CONFIGURATION_ID` to the live `bpc_...` value from step 10. Do not use the sandbox `bpc_...` value.
+- [ ] Set `STRIPE_PORTAL_CONFIGURATION_ID` to the live `bpc_...` value from step 11. Do not use the sandbox `bpc_...` value.
+- [ ] Set `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` to the second live `bpc_...`
+      value from step 11. Do not use the sandbox value.
 - [ ] Set `STRIPE_WEBHOOK_SECRET` to the production destination's `whsec_...`
       signing secret.
 - [ ] Set `STRIPE_SUCCESS_URL` and `STRIPE_CANCEL_URL` to the production client
@@ -852,7 +928,7 @@ https://YOUR-REAL-PRODUCTION-API/api/v1/billing/webhooks
 - [ ] Keep the production `/pricing` route hidden.
 - [ ] Confirm the production API health endpoint responds after deployment.
 
-#### 13. Protect and migrate production data
+#### 14. Protect and migrate production data
 
 - [ ] Make and verify the MongoDB backup described in
       [`mongodb-production-backup.md`](./mongodb-production-backup.md).
@@ -878,7 +954,7 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
 - [ ] Confirm each existing owner has exactly one manageable free standalone
       Team.
 
-#### 14. Prove the live path before opening Pricing
+#### 15. Prove the live path before opening Pricing
 
 - [ ] Ask the developer to prepare either a private live-payment test path or the
       final one-line Pricing redirect removal. Do not create a Stripe Payment

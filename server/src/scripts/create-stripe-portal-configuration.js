@@ -1,7 +1,7 @@
-// Creates the locked-down Stripe Customer Portal configuration used by the app.
+// Creates the two Stripe Customer Portal configurations used by the app.
 // The ordinary portal can update payment methods, show invoices, and schedule
-// cancellation. Plan switching is hidden there. The app's explicit League Plus
-// upgrade flow can still ask Stripe to confirm that one configured Price change.
+// cancellation, but cannot switch plans. A separate configuration is used only
+// for the app's explicit League Plus upgrade confirmation flow.
 //
 // Safe to rerun: an exact existing configuration is reused.
 
@@ -38,7 +38,20 @@ function sameStringSet(left, right) {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-function matchesConfiguration(configuration, { returnUrl, leagueProducts }) {
+function matchesBaseConfiguration(configuration, returnUrl) {
+  const update = configuration.features?.subscription_update;
+  return (
+    configuration.active !== false &&
+    configuration.default_return_url === returnUrl &&
+    configuration.features?.invoice_history?.enabled === true &&
+    configuration.features?.payment_method_update?.enabled === true &&
+    configuration.features?.subscription_cancel?.enabled === true &&
+    configuration.features?.subscription_cancel?.mode === 'at_period_end' &&
+    update?.enabled === false
+  );
+}
+
+function matchesUpgradeConfiguration(configuration, { returnUrl, leagueProducts }) {
   const update = configuration.features?.subscription_update;
   const configuredProducts = (update?.products || []).map((entry) => ({
     product: typeof entry.product === 'string' ? entry.product : entry.product?.id,
@@ -48,12 +61,9 @@ function matchesConfiguration(configuration, { returnUrl, leagueProducts }) {
   return (
     configuration.active !== false &&
     configuration.default_return_url === returnUrl &&
-    configuration.features?.invoice_history?.enabled === true &&
     configuration.features?.payment_method_update?.enabled === true &&
-    configuration.features?.subscription_cancel?.enabled === true &&
-    configuration.features?.subscription_cancel?.mode === 'at_period_end' &&
     update?.enabled === true &&
-    (update.default_allowed_updates || []).length === 0 &&
+    sameStringSet(update.default_allowed_updates || [], ['price']) &&
     leagueProducts.every((expected) =>
       configuredProducts.some(
         (actual) =>
@@ -110,44 +120,63 @@ async function main() {
   );
 
   const existing = await stripe.billingPortal.configurations.list({ limit: 100 });
-  const match = existing.data.find((configuration) =>
-    matchesConfiguration(configuration, { returnUrl, leagueProducts })
+  let baseConfiguration = existing.data.find((configuration) =>
+    matchesBaseConfiguration(configuration, returnUrl)
   );
-  if (match) {
-    console.log(`STRIPE_PORTAL_CONFIGURATION_ID=${match.id}`);
-    return;
-  }
-
-  const configuration = await stripe.billingPortal.configurations.create(
-    {
-      default_return_url: returnUrl,
-      business_profile: { headline: 'Manage your TSW billing' },
-      features: {
-        customer_update: { enabled: false },
-        invoice_history: { enabled: true },
-        payment_method_update: { enabled: true },
-        subscription_cancel: { enabled: true, mode: 'at_period_end' },
-        subscription_update: {
-          enabled: true,
-          default_allowed_updates: [],
-          proration_behavior: 'always_invoice',
-          products: leagueProducts.map((entry) => ({
-            ...entry,
-            adjustable_quantity: { enabled: false },
-          })),
+  if (!baseConfiguration) {
+    baseConfiguration = await stripe.billingPortal.configurations.create(
+      {
+        name: 'TSW billing management',
+        default_return_url: returnUrl,
+        business_profile: { headline: 'Manage your TSW billing' },
+        features: {
+          invoice_history: { enabled: true },
+          payment_method_update: { enabled: true },
+          subscription_cancel: { enabled: true, mode: 'at_period_end' },
         },
       },
-    },
-    {
-      idempotencyKey: `tsw_portal_${createHash('sha256')
-        .update(
-          `${keyMode}:${returnUrl}:${leagueProducts.map((entry) => entry.prices[0]).join(':')}`
-        )
-        .digest('hex')}`,
-    }
-  );
+      {
+        idempotencyKey: `tsw_portal_base_${createHash('sha256')
+          .update(`${keyMode}:${returnUrl}`)
+          .digest('hex')}`,
+      }
+    );
+  }
 
-  console.log(`STRIPE_PORTAL_CONFIGURATION_ID=${configuration.id}`);
+  let upgradeConfiguration = existing.data.find((configuration) =>
+    matchesUpgradeConfiguration(configuration, { returnUrl, leagueProducts })
+  );
+  if (!upgradeConfiguration) {
+    upgradeConfiguration = await stripe.billingPortal.configurations.create(
+      {
+        name: 'TSW League Plus upgrade',
+        default_return_url: returnUrl,
+        business_profile: { headline: 'Confirm your TSW League Plus upgrade' },
+        features: {
+          payment_method_update: { enabled: true },
+          subscription_update: {
+            enabled: true,
+            default_allowed_updates: ['price'],
+            proration_behavior: 'always_invoice',
+            products: leagueProducts.map((entry) => ({
+              ...entry,
+              adjustable_quantity: { enabled: false },
+            })),
+          },
+        },
+      },
+      {
+        idempotencyKey: `tsw_portal_upgrade_v2_${createHash('sha256')
+          .update(
+            `${keyMode}:${returnUrl}:${leagueProducts.map((entry) => entry.prices[0]).join(':')}`
+          )
+          .digest('hex')}`,
+      }
+    );
+  }
+
+  console.log(`STRIPE_PORTAL_CONFIGURATION_ID=${baseConfiguration.id}`);
+  console.log(`STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=${upgradeConfiguration.id}`);
 }
 
 main().catch((error) => {

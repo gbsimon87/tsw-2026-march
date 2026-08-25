@@ -284,9 +284,10 @@ Checkout and customer management use Stripe-hosted Checkout and Billing Portal
 URLs. Stripe webhooks are mounted with a raw body before JSON parsing and are
 the authority for subscription state. Comped resources use
 `billingSource: 'comp'` and must not be changed by Stripe events.
-The app always passes a locked-down `STRIPE_PORTAL_CONFIGURATION_ID`: ordinary
-Portal sessions cannot switch plans, while the explicit League Plus upgrade
-uses Stripe's confirmation flow.
+The app passes a locked-down `STRIPE_PORTAL_CONFIGURATION_ID` for ordinary
+Portal sessions and a separate `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` only for
+the explicit League Plus confirmation flow. Ordinary Portal sessions cannot
+switch plans.
 
 Only `active` and `trialing` Stripe subscriptions grant paid management. A
 cancel-at-period-end subscription remains manageable until Stripe ends it;

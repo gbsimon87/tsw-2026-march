@@ -32,6 +32,7 @@ jest.mock('../../config/env', () => ({
     STRIPE_PRICE_ID_LEAGUE: 'price_league',
     STRIPE_PRICE_ID_LEAGUE_PLUS: 'price_league_plus',
     STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_tsw_locked_down',
+    STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID: 'bpc_tsw_upgrade_only',
     STRIPE_SUCCESS_URL: 'http://localhost:5173/billing/success',
     STRIPE_CANCEL_URL: 'http://localhost:5173/billing/cancel',
   },

@@ -42,6 +42,7 @@ const baseEnvSchema = z.object({
   STRIPE_PRICE_ID_LEAGUE: z.string().optional(),
   STRIPE_PRICE_ID_LEAGUE_PLUS: z.string().optional(),
   STRIPE_PORTAL_CONFIGURATION_ID: z.string().optional(),
+  STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID: z.string().optional(),
   STRIPE_SUCCESS_URL: z.string().url().optional(),
   STRIPE_CANCEL_URL: z.string().url().optional(),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -98,6 +99,7 @@ const REQUIRED_STRIPE_CONFIG = [
   'STRIPE_PRICE_ID_LEAGUE',
   'STRIPE_PRICE_ID_LEAGUE_PLUS',
   'STRIPE_PORTAL_CONFIGURATION_ID',
+  'STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_SUCCESS_URL',
   'STRIPE_CANCEL_URL',
@@ -129,6 +131,7 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
     ['STRIPE_PRICE_ID_LEAGUE', /^price_/, 'must start with price_'],
     ['STRIPE_PRICE_ID_LEAGUE_PLUS', /^price_/, 'must start with price_'],
     ['STRIPE_PORTAL_CONFIGURATION_ID', /^bpc_/, 'must start with bpc_'],
+    ['STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID', /^bpc_/, 'must start with bpc_'],
   ];
   for (const [key, pattern, message] of formatChecks) {
     if (data[key] && !pattern.test(data[key])) {
