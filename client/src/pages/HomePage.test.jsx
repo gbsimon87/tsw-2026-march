@@ -91,6 +91,22 @@ describe('HomePage', () => {
     });
   });
 
+  test('opens the Discover tab requested in the URL', async () => {
+    teamsApi.listPublic.mockResolvedValue({
+      teams: [{ id: 'team-1', name: 'TSW Blue', logo: null }],
+    });
+    leaguesApi.listPublic.mockResolvedValue({ leagues: [] });
+
+    render(
+      <MemoryRouter initialEntries={['/home?tab=teams']}>
+        <HomePage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('tab', { name: 'Teams' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
+  });
+
   test('filters leagues and teams by search input', async () => {
     teamsApi.listPublic.mockResolvedValue({
       teams: [{ id: 'team-1', name: 'TSW Blue', logo: null }],

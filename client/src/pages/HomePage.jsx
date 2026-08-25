@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import CloudinaryImage from '../features/media/CloudinaryImage';
 import { useAuth } from '../app/store/AuthContext';
 import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../features/analytics/signupEvents';
@@ -89,11 +89,22 @@ function matchesSearch(text, query) {
 
 export function HomePage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [publicLeagues, setPublicLeagues] = useState([]);
   const [publicTeams, setPublicTeams] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [leagueQuery, setLeagueQuery] = useState('');
   const [teamQuery, setTeamQuery] = useState('');
+  const requestedTab = searchParams.get('tab');
+  const discoverTab = ['leagues', 'teams', 'players'].includes(requestedTab)
+    ? requestedTab
+    : 'leagues';
+
+  function selectDiscoverTab(tab) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', tab);
+    setSearchParams(nextParams, { replace: true });
+  }
 
   useDocumentMeta({
     title: 'Discover Leagues & Teams — The Sporty Way',
@@ -170,7 +181,9 @@ export function HomePage() {
       {/* Discover: leagues, teams, players */}
       <section aria-label="Discover leagues, teams, and players">
         <Tabs
-          defaultValue="leagues"
+          key={discoverTab}
+          defaultValue={discoverTab}
+          onChange={selectDiscoverTab}
           items={[
             {
               value: 'leagues',

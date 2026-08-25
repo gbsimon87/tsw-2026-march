@@ -71,7 +71,7 @@ function FollowingEntryCard({
 // A section wraps one target type's list: its own loading/empty/error state
 // driven by its own useFollowing(type) query. Rendered independently so a slow
 // or empty type never blocks the others.
-function FollowingSection({ heading, query, emptyLabel, renderCard }) {
+function FollowingSection({ heading, discoverTab, query, emptyLabel, renderCard }) {
   const { data: entries = [], isLoading, isError, error } = query;
 
   return (
@@ -103,7 +103,7 @@ function FollowingSection({ heading, query, emptyLabel, renderCard }) {
         >
           <p>{emptyLabel}</p>
           <Link
-            to="/home"
+            to={`/home?tab=${discoverTab}`}
             className="mt-3 inline-flex rounded-lg bg-[#141414] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
           >
             Discover {heading.toLowerCase()}
@@ -139,6 +139,7 @@ export function FollowingPage() {
 
       <FollowingSection
         heading="Players"
+        discoverTab="players"
         query={usersQuery}
         emptyLabel="You're not following any players yet. Discover players and tap Follow to see them here."
         renderCard={(entry) => (
@@ -158,6 +159,7 @@ export function FollowingPage() {
 
       <FollowingSection
         heading="Leagues"
+        discoverTab="leagues"
         query={leaguesQuery}
         emptyLabel="You're not following any leagues yet. Open a public league and tap Follow."
         renderCard={(entry) => (
@@ -176,6 +178,7 @@ export function FollowingPage() {
 
       <FollowingSection
         heading="Teams"
+        discoverTab="teams"
         query={teamsQuery}
         emptyLabel="You're not following any teams yet. Open a team within a public league and tap Follow."
         renderCard={(entry) => (
