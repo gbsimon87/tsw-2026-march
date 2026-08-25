@@ -8,6 +8,7 @@ import { teamsApi } from '../../teams/api/teamsApi';
 import { billingApi } from '../api/billingApi';
 
 const PORTAL_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
+const PAYMENT_RECOVERY_STATUSES = new Set(['past_due', 'unpaid', 'paused']);
 
 function isSafeStripeUrl(url) {
   try {
@@ -195,6 +196,9 @@ export function PricingPage() {
   const selectedLeagueUsesPortal =
     PORTAL_STATUSES.has(selectedLeague?.billing?.subscriptionStatus) &&
     selectedLeague?.billing?.managedByStripe !== false;
+  const selectedLeagueNeedsPaymentRecovery = PAYMENT_RECOVERY_STATUSES.has(
+    selectedLeague?.billing?.subscriptionStatus
+  );
   const selectedLeagueIsComplimentary = selectedLeague?.billing?.managedByStripe === false;
 
   async function followStripeResponse(response) {
@@ -250,7 +254,10 @@ export function PricingPage() {
     return runAction(`league-${planId}`, async () => {
       let response;
       if (selectedLeagueUsesPortal && !isCreatingLeague) {
-        if (selectedLeague?.billing?.plan === planId && !selectedLeague?.billing?.scheduledPlan) {
+        if (
+          selectedLeagueNeedsPaymentRecovery ||
+          (selectedLeague?.billing?.plan === planId && !selectedLeague?.billing?.scheduledPlan)
+        ) {
           response = await billingApi.createCustomerPortalSession({
             leagueId: selectedLeagueId,
           });
@@ -428,13 +435,15 @@ export function PricingPage() {
                       ? 'Complimentary League'
                       : pendingAction === `league-${planId}`
                         ? 'Redirecting…'
-                        : cancelsScheduledChange
-                          ? `Keep ${planId === 'league' ? 'League' : 'League Plus'}`
-                          : isCurrentPlan && selectedLeagueUsesPortal && !isCreatingLeague
-                            ? 'Manage billing'
-                            : selectedLeagueUsesPortal && !isCreatingLeague
-                              ? `Change to ${planId === 'league' ? 'League' : 'League Plus'}`
-                              : 'Start 14-day trial'}
+                        : selectedLeagueNeedsPaymentRecovery
+                          ? 'Manage billing'
+                          : cancelsScheduledChange
+                            ? `Keep ${planId === 'league' ? 'League' : 'League Plus'}`
+                            : isCurrentPlan && selectedLeagueUsesPortal && !isCreatingLeague
+                              ? 'Manage billing'
+                              : selectedLeagueUsesPortal && !isCreatingLeague
+                                ? `Change to ${planId === 'league' ? 'League' : 'League Plus'}`
+                                : 'Start 14-day trial'}
                   </button>
                 </>
               ) : (

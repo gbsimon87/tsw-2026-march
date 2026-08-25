@@ -185,6 +185,34 @@ describe('PricingPage', () => {
     );
   });
 
+  test('opens the portal so a past-due League can repair its payment method', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-past-due',
+          name: 'Needs Payment',
+          billing: {
+            plan: 'starter',
+            subscriptionStatus: 'past_due',
+            managedByStripe: true,
+          },
+        },
+      ],
+    });
+    renderPricing();
+
+    const manageButtons = await screen.findAllByRole('button', { name: 'Manage billing' });
+    expect(manageButtons).toHaveLength(2);
+    fireEvent.click(manageButtons[0]);
+
+    await waitFor(() =>
+      expect(billingApiMocks.createCustomerPortalSession).toHaveBeenCalledWith({
+        leagueId: 'league-past-due',
+      })
+    );
+    expect(billingApiMocks.changeLeaguePlan).not.toHaveBeenCalled();
+  });
+
   test('starts League Plus checkout with the correct plan ID', async () => {
     renderPricing();
     const buttons = await screen.findAllByRole('button', { name: /start 14-day trial/i });

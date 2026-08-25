@@ -357,31 +357,270 @@ Do every item inside the **TSW Development** Stripe sandbox.
 
 ### Failed payment
 
-1. Use Stripe's test card `4000 0000 0000 0341` for a test renewal scenario.
-2. Confirm Stripe sends `invoice.payment_failed`.
-3. Confirm the app records `past_due`, emails the billing address when email is
-   configured, and stops management.
-4. Fix the payment method in the portal.
-5. Pay the invoice.
-6. Confirm `invoice.paid` and the subscription webhook restore management.
+This test checks a **renewal payment**, not merely a card being rejected on the
+Checkout screen. Use a brand-new development user who has never started a
+League trial. That is important because an owner gets only one League trial.
+
+Stripe's card `4000 0000 0000 0341` can be saved to a customer, but Stripe
+rejects any attempt to charge it. That makes it suitable for this test.
+
+#### A. Start a League trial with a card that will fail later
+
+1. Open **https://dev.thesportyway.com**.
+2. Register or sign in with a fresh test-only user. Use an email address you
+   control if you also want to check the payment-failed email.
+3. Open **Pricing**.
+4. Under **League**, click **Start 14-day trial**.
+5. On Stripe Checkout, enter:
+   - Card number: `4000 0000 0000 0341`
+   - Expiry: any future date, such as `12/34`
+   - CVC: any three digits
+   - Postcode: any valid postcode
+6. Complete Checkout. It should succeed because Stripe saves the card now but
+   does not charge it until the trial ends.
+7. Finish creating the League in TSW.
+8. Confirm the League can be managed while its status is `trialing`.
+
+#### B. Find the exact test subscription in Stripe
+
+1. Open the Stripe Dashboard.
+2. Use the account picker to open **TSW Development**.
+3. Check that the sandbox/test banner is visible. Stop if you are in live mode.
+4. In the left menu, open **Billing → Subscriptions**.
+5. Search for the test user's email address.
+6. Open the new League subscription.
+7. Confirm all of these before continuing:
+   - Status is **Trialing**.
+   - The Product is **League**.
+   - The amount after the trial is **$29 monthly**.
+   - Metadata contains `resourceType=league`.
+   - Metadata contains the expected `ownerUserId`.
+   - For a purchase made for an existing League, metadata also contains its
+     `leagueId`. A brand-new League purchase can leave `leagueId` empty because
+     TSW creates that League after Checkout.
+8. Copy the subscription ID beginning `sub_...`. Do not copy the customer ID
+   beginning `cus_...`.
+
+#### C. End the trial now so Stripe attempts payment
+
+Do this in Stripe's browser-based Workbench. You do not need to paste an API key.
+
+1. In Stripe, open **Workbench → Shell**.
+2. Check again that **TSW Development** is the selected sandbox.
+3. Replace `sub_REPLACE_ME` below with the subscription ID you just copied:
+
+```bash
+stripe subscriptions update sub_REPLACE_ME -d trial_end=now
+```
+
+4. Run the command once.
+5. Return to **Billing → Subscriptions** and reopen the subscription.
+6. Stripe may take up to about one hour to finalise the new invoice and attempt
+   payment. Refresh the page until the invoice is open and its payment has
+   failed. Do not run the command again.
+7. Open **Workbench → Webhooks**.
+8. Select the development destination named **TSW Development API**.
+9. Open **Event deliveries** and refresh it.
+10. Find `invoice.payment_failed`. Open it and confirm the delivery says
+    **Delivered** with HTTP `200`.
+11. Also find the related `customer.subscription.updated` delivery and confirm
+    HTTP `200`.
+
+#### D. Confirm TSW removes management access
+
+1. Return to TSW and refresh the Pricing page.
+2. In Stripe, confirm the subscription status is **Past due**. TSW does not need
+   to display Stripe's raw status word, so the management check below is the
+   important app test.
+3. Open that League's Admin page.
+4. Confirm its saved games, teams, standings, and public pages can still be
+   viewed. A payment problem must not delete data.
+5. Try a management action, such as adding a League team or creating a League
+   game.
+6. Confirm TSW blocks the action because the paid League is not active.
+7. If `RESEND_API_KEY` is configured on the development API and the test user's
+   email is deliverable, check that the payment-failed email arrives. If email
+   is not configured, write down **email check blocked by development email
+   setup**; do not mistake that for a Stripe webhook failure.
+
+#### E. Fix the card and restore access
+
+1. In TSW, open **Pricing** and select the failed League.
+2. Click **Manage billing**. While payment needs attention, both League plan
+   cards can show this button; either one opens the same customer portal.
+3. In Stripe's Customer Portal, choose the option to update the payment method.
+4. Replace the failing card with:
+   - Card number: `4242 4242 4242 4242`
+   - Expiry: any future date
+   - CVC: any three digits
+   - Postcode: any valid postcode
+5. Save the new card and return to TSW.
+6. In the Stripe Dashboard, open **Billing → Invoices**.
+7. Open the failed invoice for this exact League and customer.
+8. Click **Charge customer**. If Stripe instead labels the button **Retry
+   payment**, use that button. Do not choose **Mark as paid**; that bypasses the
+   card payment being tested.
+9. Confirm the invoice becomes **Paid**.
+10. In **Workbench → Webhooks → TSW Development API → Event deliveries**, confirm
+    `invoice.paid` and the related `customer.subscription.updated` delivery both
+    receive HTTP `200`.
+11. Return to TSW and refresh Pricing. The page also refreshes billing state in
+    the background for a few seconds after returning from Stripe.
+12. Confirm the League is active again and the management action blocked in the
+    previous section now works.
+
+This test passes only if access is available before the failure, removed after
+`invoice.payment_failed`, and restored after the real test invoice is paid.
 
 ### Other important checks
 
-1. Start Checkout and press Back or Cancel. Confirm no access is granted.
-2. Let a Checkout Session expire. Confirm no access is granted.
-3. Send an async-payment-failed event. Confirm no access is granted.
-4. Send the same webhook twice. Confirm the second delivery changes nothing.
-5. Send a webhook with a bad signature. Confirm the API rejects it.
-6. Try a Price ID from the wrong Product. Confirm access fails closed.
-7. Cancel a subscription, then send an older paid event. Confirm it does not
-   reopen the canceled resource.
-8. Try another League trial with an owner who already used one. Confirm there is
-   no second trial.
-9. Try moving the free-Team slot to an actively subscribed Team. Confirm the app
-   says to cancel that subscription first.
-10. Archive League Plus teams down to 10, request League, and confirm the
-    downgrade is scheduled for the next billing date. Confirm League Plus works
-    until then.
+Do these one at a time. Use a clearly named test Team or League so you always
+know which resource you are checking.
+
+#### 1. Leave Checkout without paying
+
+1. In TSW, create a new second Team that does not have a subscription.
+2. Open Pricing, select that Team, and click **Subscribe for this team**.
+3. When Stripe Checkout opens, do not enter a card.
+4. Use Stripe's back link to return to TSW. If Stripe does not show one, use the
+   browser Back button.
+5. If TSW shows its cancellation page, confirm it says no payment was taken. If
+   the browser returns directly to Pricing, continue with the access check below.
+6. Open that Team's Admin page and try to edit it.
+7. Confirm paid management was not granted.
+8. In **Workbench → Events**, confirm there is no
+   `checkout.session.completed` event for that Checkout Session.
+
+#### 2. Expire an unfinished Checkout Session
+
+Stripe normally leaves an unfinished Checkout Session open for 24 hours. This
+test expires it immediately.
+
+1. Start Checkout again for the same unpaid Team and leave the Checkout tab open.
+2. In Stripe, open **Workbench → Logs** and click **Refresh logs**.
+3. Open the newest successful `POST /v1/checkout/sessions` request.
+4. In its response, copy the `id` beginning `cs_test_...`.
+5. Open **Workbench → Shell**.
+6. Replace `cs_test_REPLACE_ME` below with that ID and run the command once:
+
+```bash
+stripe checkout sessions expire cs_test_REPLACE_ME
+```
+
+7. Return to the Stripe Checkout tab and refresh it. Stripe should say the
+   session expired and must not accept payment.
+8. Open **Workbench → Webhooks → TSW Development API → Event deliveries**.
+9. Confirm `checkout.session.expired` was delivered with HTTP `200`.
+10. Return to TSW and confirm the Team is still unpaid and cannot be managed as
+    an additional Team.
+
+#### 3. Make a card fail on the Checkout screen
+
+This is different from the failed-renewal test above.
+
+1. Start Additional Team Checkout again.
+2. Enter card `4000 0000 0000 0002`, any future date, any CVC, and any postcode.
+3. Click the payment button.
+4. Confirm Checkout displays a decline and does not show the TSW success page.
+5. Return to TSW and confirm the Team still has no paid access.
+6. Confirm there is no successful `checkout.session.completed` event for this
+   attempt.
+
+#### 4. Deliver the same real webhook twice
+
+1. Complete one successful sandbox payment first.
+2. In Stripe, open **Workbench → Events**.
+3. Filter for `invoice.paid` and open the event for that exact Team or League.
+4. Note the resource's current plan and access in TSW.
+5. In the event's successful delivery attempt, click **Resend**. If you are
+   looking at the destination's **Event deliveries** view, the equivalent button
+   can be labelled **Retry now**.
+6. Confirm the repeated delivery also returns HTTP `200`.
+7. Refresh TSW and confirm nothing was duplicated: one subscription, one plan,
+   and unchanged access. Stripe reuses the same event ID, so TSW ignores the
+   already-processed change.
+
+#### 5. Prove a fake webhook signature is rejected
+
+Run this command in your computer's normal Terminal, not Stripe Workbench:
+
+```bash
+curl -i -X POST https://dev-api.thesportyway.com/api/v1/billing/webhooks \
+  -H 'Content-Type: application/json' \
+  -H 'Stripe-Signature: definitely-not-valid' \
+  --data '{}'
+```
+
+The response must be HTTP `400`. HTTP `200` would be a launch blocker. This
+request contains no secret and must not change any Team or League.
+
+#### 6. Confirm an owner cannot receive a second League trial
+
+1. Use the same development user who already completed a League trial Checkout.
+2. Cancel that test subscription if it is still open.
+3. In TSW, start another new League purchase.
+4. Continue to Stripe Checkout.
+5. Confirm Stripe asks for the first $29 or $49 payment now and does **not** show
+   another 14-day trial.
+6. You do not need to finish this payment. Return to TSW and confirm no new
+   League access was granted.
+
+#### 7. Confirm an active paid Team cannot become the free Team
+
+1. Use an account with one free Team and one active $5 Additional Team.
+2. Open Pricing and select the active Additional Team.
+3. Click **Make this my free team**.
+4. Confirm TSW refuses and tells you to cancel that Team's subscription first.
+5. Confirm the original free Team is still free and the Additional Team still
+   has exactly one subscription.
+
+#### 8. Test the League Plus downgrade rule
+
+1. Use a League Plus test League with 11 active teams.
+2. Open Pricing, select that exact League, and click **Change to League**.
+3. Confirm TSW blocks the downgrade and shows a link to manage/archive teams.
+4. Follow the link to the League's **Teams** tab.
+5. Archive one team. Confirm archived records remain saved and only 10 teams now
+   count toward capacity.
+6. Return to Pricing and click **Change to League** again.
+7. Confirm the downgrade is scheduled for the next billing date rather than
+   happening immediately.
+8. Confirm League Plus remains active until that date.
+9. In Stripe, open the subscription and confirm its schedule contains the League
+   Price for the next phase.
+
+#### 9. Checks you should not perform by deliberately breaking Render
+
+Do **not** temporarily put a wrong Price ID or webhook secret into Render. That
+can damage the shared development test state and does not imitate customer
+behaviour.
+
+Instead, verify each development Price safely:
+
+1. In Render, copy one `STRIPE_PRICE_ID_...` value without changing it.
+2. In the **TSW Development** Stripe sandbox, paste it into the Dashboard search.
+3. Open the Price and confirm it is active, recurring monthly, and belongs to
+   the expected Product:
+   - Additional Team: $5
+   - League: $29
+   - League Plus: $49
+4. Repeat for all three values.
+
+Unknown Prices, repeated event IDs, bad signatures, and old paid events arriving
+after cancellation are also covered by the automated billing tests. Those
+malformed/out-of-order cases are safer and more accurate to test in code than by
+editing a real Render service.
+
+`checkout.session.async_payment_failed` only occurs for a delayed payment method,
+such as a bank debit. A card decline does not produce that event. If Checkout
+currently offers only cards, mark that one manual check **not applicable** and
+leave the webhook event selected for future payment methods. Do not enable a new
+payment method merely to complete this checklist.
+
+Official references: [Stripe Billing failure testing](https://docs.stripe.com/billing/testing),
+[Stripe test cards](https://docs.stripe.com/testing),
+[Workbench events and retries](https://docs.stripe.com/workbench/overview), and
+[expiring a Checkout Session](https://docs.stripe.com/api/checkout/sessions/expire).
 
 ## Part 6: set up production in Stripe live mode
 
@@ -554,6 +793,8 @@ Always copy the new live `price_...` ID.
 - [x] Added automatic billing-state refresh after returning from Stripe so plan
       buttons do not remain stale until a hard refresh.
 - [x] Corrected the free-Team CTA when the user already owns a free Team.
+- [x] Kept Customer Portal recovery reachable when a League is `past_due`,
+      `unpaid`, or `paused`, so the owner can replace a failed payment method.
 
 ### Still requiring action from you
 
