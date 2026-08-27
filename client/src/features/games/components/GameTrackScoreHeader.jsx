@@ -4,26 +4,19 @@ import gameConstants from '../constants';
 
 const { TEAM_SIDES } = gameConstants;
 
-function formatPercentage(made, attempts) {
-  if (!attempts) return '--';
-  return `${((made / attempts) * 100).toFixed(1)}%`;
-}
-
 export function GameTrackScoreHeader({
-  game,
   gameSummary,
   activeSide,
   onChangeActiveSide,
   isDualTeam,
   participantsBySide,
   team,
-  boxScore,
   clockControls = null,
 }) {
   if (isDualTeam) {
     return (
       <div
-        className="grid grid-cols-2 border-b border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
+        className="grid grid-cols-2 border-b border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
         data-testid="game-track-score-header"
       >
         {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
@@ -42,8 +35,8 @@ export function GameTrackScoreHeader({
               aria-pressed={isActive}
               className={`flex min-w-0 items-center gap-2 px-3 py-3 transition sm:gap-3 sm:px-4 sm:py-4 ${
                 side === TEAM_SIDES.HOME
-                  ? 'col-start-1 row-start-1 justify-start border-r border-slate-200 lg:border-r-0'
-                  : 'col-start-2 row-start-1 justify-end lg:col-start-3'
+                  ? 'col-start-1 row-start-1 justify-start border-r border-slate-200 md:border-r-0'
+                  : 'col-start-2 row-start-1 justify-end text-right md:col-start-3'
               } ${isActive ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 hover:bg-slate-50'}`}
             >
               {side === TEAM_SIDES.HOME ? (
@@ -76,7 +69,9 @@ export function GameTrackScoreHeader({
                     >
                       {sideLabel}
                     </p>
-                    <p className="text-2xl font-black tabular-nums sm:text-3xl">{points || 0}</p>
+                    <p className="text-right text-2xl font-black tabular-nums sm:text-3xl">
+                      {points || 0}
+                    </p>
                   </div>
                   <CloudinaryImage
                     src={participant?.logo?.url || teamPlaceholder}
@@ -95,7 +90,7 @@ export function GameTrackScoreHeader({
           );
         })}
         {clockControls ? (
-          <div className="col-span-2 col-start-1 row-start-2 border-t border-slate-200 bg-slate-950 p-2 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:border-x lg:border-t-0 lg:p-0">
+          <div className="col-span-2 col-start-1 row-start-2 border-t border-slate-200 bg-slate-950 p-2 md:col-span-1 md:col-start-2 md:row-start-1 md:border-x md:border-t-0 md:p-0">
             {clockControls}
           </div>
         ) : null}
@@ -105,57 +100,45 @@ export function GameTrackScoreHeader({
 
   return (
     <div
-      className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm"
+      className="grid grid-cols-2 border-b border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
       data-testid="game-track-score-header"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{game.title}</p>
-      <div className="mt-2 grid gap-3 sm:grid-cols-[auto_minmax(15rem,auto)] sm:items-center lg:grid-cols-[auto_minmax(15rem,auto)_1fr]">
-        <div className="flex items-end gap-4">
-          <div className="flex items-center gap-2">
-            <CloudinaryImage
-              src={team?.logo?.url || teamPlaceholder}
-              alt={team?.name || 'Team'}
-              width={32}
-              height={32}
-              loading="lazy"
-              decoding="async"
-              srcSetWidths={[32, 64, 96]}
-              sizes="32px"
-              className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-            />
-            <div>
-              <p className="text-xs font-medium text-slate-500">{team?.name || 'Team'}</p>
-              <p className="text-3xl font-bold text-slate-900">{gameSummary.teamPoints || 0}</p>
-            </div>
-          </div>
-          <span className="mb-1 text-xl font-bold text-slate-300">—</span>
-          <div>
-            <p className="text-xs font-medium text-slate-500">Opponent</p>
-            <p className="text-3xl font-bold text-slate-900">{gameSummary.opponentPoints || 0}</p>
-          </div>
-        </div>
-        {clockControls}
-        <div className="flex flex-wrap gap-3 text-xs text-slate-500 sm:col-span-2 lg:col-span-1">
-          <span>
-            REB <strong className="text-slate-700">{boxScore.teamTotals?.reb || 0}</strong>
-          </span>
-          <span>
-            AST <strong className="text-slate-700">{boxScore.teamTotals?.ast || 0}</strong>
-          </span>
-          <span>
-            FG2%{' '}
-            <strong className="text-slate-700">
-              {formatPercentage(boxScore.teamTotals?.fg2m, boxScore.teamTotals?.fg2a)}
-            </strong>
-          </span>
-          <span>
-            FG3%{' '}
-            <strong className="text-slate-700">
-              {formatPercentage(boxScore.teamTotals?.fg3m, boxScore.teamTotals?.fg3a)}
-            </strong>
-          </span>
+      <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 border-r border-slate-200 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:border-r-0">
+        <CloudinaryImage
+          src={team?.logo?.url || teamPlaceholder}
+          alt={team?.name || 'Team'}
+          width={36}
+          height={36}
+          loading="lazy"
+          decoding="async"
+          srcSetWidths={[36, 72, 108]}
+          sizes="36px"
+          className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover sm:h-9 sm:w-9"
+        />
+        <div className="min-w-0 text-left">
+          <p className="truncate text-[11px] font-semibold text-slate-500 sm:text-xs">
+            {team?.name || 'Team'}
+          </p>
+          <p className="text-2xl font-black tabular-nums text-slate-900 sm:text-3xl">
+            {gameSummary.teamPoints || 0}
+          </p>
         </div>
       </div>
+
+      <div className="col-start-2 row-start-1 flex min-w-0 flex-col items-end justify-center px-3 py-3 text-right sm:px-4 sm:py-4 md:col-start-3">
+        <p className="w-full truncate text-right text-[11px] font-semibold text-slate-500 sm:text-xs">
+          Opponent
+        </p>
+        <p className="w-full text-right text-2xl font-black tabular-nums text-slate-900 sm:text-3xl">
+          {gameSummary.opponentPoints || 0}
+        </p>
+      </div>
+
+      {clockControls ? (
+        <div className="col-span-2 col-start-1 row-start-2 border-t border-slate-200 bg-slate-950 p-2 md:col-span-1 md:col-start-2 md:row-start-1 md:border-x md:border-t-0 md:p-0">
+          {clockControls}
+        </div>
+      ) : null}
     </div>
   );
 }

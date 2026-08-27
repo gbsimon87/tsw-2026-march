@@ -435,17 +435,15 @@ describe('GameTrackPage', () => {
     expect(await screen.findByText('Admin destination')).toBeInTheDocument();
   });
 
-  test('blocks full-screen tracking until the starting five is set', async () => {
+  test('shows lineup setup before any tracking controls for a new one-sided game', async () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeInTheDocument();
+      expect(screen.getByText(/Set TSW Team Starting Lineup/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
-
-    expect(screen.getByText(/Set a starting lineup before tracking/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Fullscreen Tracking/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Fullscreen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Court' })).not.toBeInTheDocument();
   });
 
   test('inserts a quick stat before a selected recent event', async () => {
@@ -509,6 +507,118 @@ describe('GameTrackPage', () => {
     expect(screen.getByText(/Starting five set/i)).toBeInTheDocument();
     expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
     expect(screen.queryByText('Starting Lineup')).not.toBeInTheDocument();
+  });
+
+  test('does not render the game title above the score header', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Court' })).toBeInTheDocument();
+    expect(screen.queryByText('Dev Scrimmage')).not.toBeInTheDocument();
+    expect(screen.getByText('Opponent')).toHaveClass('text-right');
+    expect(screen.getByText('Opponent').nextElementSibling).toHaveClass('text-right');
+  });
+
+  test('does not reopen first-time lineup setup after a starting lineup was saved', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: [],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Court' })).toBeInTheDocument();
+    expect(screen.queryByText(/Set TSW Team Starting Lineup/i)).not.toBeInTheDocument();
+  });
+
+  test('waits for the entry clock pause before saving a quickly tapped free throw', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    let pauseResolved = false;
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+    apiMocks.updateClock.mockImplementation(async (gameId, command) => {
+      if (command.action === 'pause') {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        pauseResolved = true;
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              status: 'paused',
+              runningSince: null,
+            },
+          },
+        };
+      }
+
+      return currentResponse;
+    });
+    apiMocks.appendEvent.mockImplementation((gameId, payload) => {
+      expect(pauseResolved).toBe(true);
+      currentResponse = {
+        ...currentResponse,
+        game: {
+          ...currentResponse.game,
+          events: [
+            ...currentResponse.game.events,
+            {
+              id: 'event-1',
+              ...payload,
+            },
+          ],
+        },
+      };
+      return Promise.resolve({
+        game: currentResponse.game,
+        boxScore: currentResponse.boxScore,
+        gameSummary: currentResponse.gameSummary,
+      });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+    pointerDown(getActiveCourt(), { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    const freeThrowButton = within(getEventPicker()).getByRole('button', { name: 'FT+' });
+    expect(freeThrowButton).toBeEnabled();
+    fireEvent.click(freeThrowButton);
+
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(apiMocks.appendEvent).toHaveBeenCalledWith(
+        'game-1',
+        expect.objectContaining({ playerId: 'player-1', statType: 'FT_MADE' })
+      );
+    });
   });
 
   test('blocks new events until the game clock has started', async () => {
@@ -784,6 +894,38 @@ describe('GameTrackPage', () => {
     expect(screen.queryByText(/Set .* Starting Lineup/i)).not.toBeInTheDocument();
   });
 
+  test('centres the clock from tablet width and right-aligns the away score block', async () => {
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    currentResponse.game = {
+      ...currentResponse.game,
+      gameFormat: {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      },
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    };
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+
+    const awayButton = await screen.findByRole('button', { name: 'Select Away Squad' });
+    expect(awayButton).toHaveClass('md:col-start-3', 'text-right');
+    expect(within(awayButton).getByText('0')).toHaveClass('text-right');
+
+    const clockContainer = screen.getByLabelText('Game clock').closest('section').parentElement;
+    expect(clockContainer).toHaveClass('md:col-start-2', 'md:row-start-1');
+    expect(screen.getByTestId('game-track-score-header')).toHaveClass(
+      'md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'
+    );
+  });
+
   test('shows only on-court players for assist follow-up and includes No Assist', async () => {
     currentResponse = createResponse({
       game: {
@@ -999,7 +1141,7 @@ describe('GameTrackPage', () => {
     expect(screen.getByText(/On Bench/i)).toBeInTheDocument();
   });
 
-  test('renders the score summary and tracking quick actions', async () => {
+  test('renders the score and tracking quick actions without the extra stats strip', async () => {
     currentResponse = createResponse({
       game: {
         currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
@@ -1082,8 +1224,8 @@ describe('GameTrackPage', () => {
     expect(within(overlay).getByRole('button', { name: 'TOV' })).toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'FOUL' })).toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'DREB' })).toBeInTheDocument();
-    expect(screen.getAllByText('66.7%').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('50.0%').length).toBeGreaterThan(0);
+    expect(screen.queryByText('66.7%')).not.toBeInTheDocument();
+    expect(screen.queryByText('50.0%')).not.toBeInTheDocument();
     expect(screen.getAllByText('24').length).toBeGreaterThan(0);
     expect(screen.getAllByText('18').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Opponent').length).toBeGreaterThan(0);
