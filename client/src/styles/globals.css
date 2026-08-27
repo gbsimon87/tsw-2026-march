@@ -2,17 +2,371 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Design tokens. The app's incumbent world: warm off-white surface, near-black
+   ink, amber accent, forest green for confirmation. Everything below reads from
+   these so a colour has exactly one definition.
+   --------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
+
+  --tsw-surface: #f7f5f0;
+  --tsw-ink: #141414;
+  --tsw-accent: #f4a300;
+  --tsw-confirm: #1b4332;
+
+  /* transitions-dev — universal install block. Every t-* snippet reads these. */
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --digit-dur: 500ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+  --text-swap-dur: 200ms;
+  --text-swap-translate-y: 8px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-out;
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-slide-dur: 200ms;
+  --page-fade-dur: 200ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --icon-swap-dur: 200ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  --check-opacity-dur: 550ms;
+  --check-rotate-dur: 550ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 450ms;
+  --check-y-amount: 40px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 10px;
+  --check-path-dur: 550ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
 }
 
 body {
   margin: 0;
   font-family: 'Inter', 'Segoe UI', sans-serif;
-  background-color: #f8fafc;
+  background-color: var(--tsw-surface);
   color: #0f172a;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ---------------------------------------------------------------------------
+   Browser surfaces. These ship with defaults that belong to no design system.
+   --------------------------------------------------------------------------- */
+::selection {
+  background-color: color-mix(in srgb, var(--tsw-accent) 30%, transparent);
+  color: var(--tsw-ink);
+}
+
+:root {
+  caret-color: var(--tsw-ink);
+  accent-color: var(--tsw-ink);
+  scrollbar-color: #cfc9bd var(--tsw-surface);
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--tsw-ink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scores, clocks, box scores and standings all compare digits column to column.
+   Proportional numerals make those columns jitter. */
+.tsw-tnum,
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   transitions-dev — modal open / close (06-modal)
+   --------------------------------------------------------------------------- */
+.t-modal-backdrop {
+  animation: t-modal-backdrop-in var(--modal-open-dur) var(--modal-ease) both;
+}
+
+.t-modal-backdrop.is-closing {
+  animation: t-modal-backdrop-out var(--modal-close-dur) var(--modal-ease) both;
+}
+
+.t-modal {
+  animation: t-modal-in var(--modal-open-dur) var(--modal-ease) both;
+  will-change: transform, opacity;
+}
+
+.t-modal.is-closing {
+  animation: t-modal-out var(--modal-close-dur) var(--modal-ease) both;
+}
+
+@keyframes t-modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes t-modal-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes t-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(var(--modal-scale));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes t-modal-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(var(--modal-scale-close));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   transitions-dev — panel reveal (07-panel-reveal), used for tab panels
+   --------------------------------------------------------------------------- */
+.t-panel {
+  animation: t-panel-in var(--page-slide-dur) var(--page-slide-ease) both;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes t-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--page-slide-distance));
+    filter: blur(var(--page-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   transitions-dev — number pop-in (02-number-pop-in), used for live scores
+   --------------------------------------------------------------------------- */
+.t-digit {
+  display: inline-block;
+  animation: t-digit-in var(--digit-dur) var(--digit-ease) both;
+  animation-delay: calc(var(--digit-index, 0) * var(--digit-stagger));
+  will-change: transform, opacity, filter;
+}
+
+@keyframes t-digit-in {
+  from {
+    opacity: 0;
+    transform: translate(
+      calc(var(--digit-dir-x) * var(--digit-distance)),
+      calc(var(--digit-dir-y) * var(--digit-distance))
+    );
+    filter: blur(var(--digit-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+    filter: blur(0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   transitions-dev — success check (10-success-check)
+   --------------------------------------------------------------------------- */
+.t-success-check {
+  animation:
+    t-check-opacity var(--check-opacity-dur) var(--check-ease-opacity) both,
+    t-check-rotate var(--check-rotate-dur) var(--check-ease-rotate) both,
+    t-check-bob var(--check-bob-dur) var(--check-ease-bob) both,
+    t-check-blur var(--check-blur-dur) var(--check-ease-out) both;
+  will-change: transform, opacity, filter;
+}
+
+.t-success-check .t-success-check-path {
+  stroke-dasharray: var(--check-path-length, 24);
+  stroke-dashoffset: var(--check-path-length, 24);
+  animation: t-check-path var(--check-path-dur) var(--check-ease-path) var(--check-path-delay) both;
+}
+
+@keyframes t-check-opacity {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes t-check-rotate {
+  from {
+    rotate: var(--check-rotate-from);
+  }
+  to {
+    rotate: 0deg;
+  }
+}
+
+@keyframes t-check-bob {
+  from {
+    translate: 0 var(--check-y-amount);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+@keyframes t-check-blur {
+  from {
+    filter: blur(var(--check-blur-from));
+  }
+  to {
+    filter: blur(0);
+  }
+}
+
+@keyframes t-check-path {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   transitions-dev — error state shake (12-error-state-shake)
+   --------------------------------------------------------------------------- */
+.t-shake.is-shaking {
+  animation:
+    t-shake-a var(--shake-dur-a) var(--shake-ease) both,
+    t-shake-b var(--shake-dur-b) var(--shake-ease) var(--shake-dur-a) both,
+    t-shake-c var(--shake-dur-b) var(--shake-ease) calc(var(--shake-dur-a) + var(--shake-dur-b))
+      both;
+  will-change: transform;
+}
+
+@keyframes t-shake-a {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(var(--shake-distance) * -1));
+  }
+}
+
+@keyframes t-shake-b {
+  from {
+    transform: translateX(calc(var(--shake-distance) * -1));
+  }
+  to {
+    transform: translateX(var(--shake-overshoot));
+  }
+}
+
+@keyframes t-shake-c {
+  from {
+    transform: translateX(var(--shake-overshoot));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .t-modal,
+  .t-modal.is-closing,
+  .t-modal-backdrop,
+  .t-modal-backdrop.is-closing,
+  .t-panel,
+  .t-digit,
+  .t-success-check,
+  .t-success-check .t-success-check-path,
+  .t-shake.is-shaking {
+    animation: none !important;
+  }
+
+  .t-success-check .t-success-check-path {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   transitions-dev — panel reveal, applied to the consent banner. It used to
+   appear and vanish in a single frame on a visitor's first paint.
+   --------------------------------------------------------------------------- */
+.t-consent {
+  animation: t-consent-in var(--panel-open-dur) var(--panel-ease) both;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes t-consent-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--panel-translate-y));
+    filter: blur(var(--panel-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-consent {
+    animation: none !important;
+  }
 }

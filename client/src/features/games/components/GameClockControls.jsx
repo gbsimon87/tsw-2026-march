@@ -11,6 +11,9 @@ export function GameClockControls({
   game,
   onCommand,
   disabled = false,
+  // A greyed-out "Start game" at tip-off with no explanation is the worst
+  // moment in the tracker: the gate (save a starting five) was never stated.
+  disabledReason = '',
   serverOffsetMilliseconds = 0,
 }) {
   const [tick, setTick] = useState(0);
@@ -79,7 +82,7 @@ export function GameClockControls({
         </span>
         <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300">
           <span
-            className={`h-2 w-2 rounded-full ${clock.status === 'running' ? 'animate-pulse bg-emerald-400' : clock.status === 'segment_complete' ? 'bg-amber-400' : 'bg-slate-400'}`}
+            className={`h-2 w-2 rounded-full ${clock.status === 'running' ? 'animate-pulse bg-[#4ade80]' : clock.status === 'segment_complete' ? 'bg-[#F4A300]' : 'bg-slate-400'}`}
             aria-hidden="true"
           />
           {statusLabel}
@@ -91,7 +94,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'pause' })}
-            className="min-h-9 flex-1 rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-amber-300 disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg bg-[#F4A300] px-3 py-2 text-xs font-black text-[#141414] transition-colors hover:bg-[#ffb524] disabled:opacity-50"
           >
             Pause
           </button>
@@ -100,7 +103,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'start' })}
-            className="min-h-9 flex-1 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             {clock.segmentNumber === 1 &&
             clock.segmentKind === 'regulation' &&
@@ -113,7 +116,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'next_segment' })}
-            className="min-h-9 flex-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-black text-white transition hover:bg-indigo-400 disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             Next period
           </button>
@@ -122,7 +125,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'start_overtime' })}
-            className="min-h-9 flex-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-black text-white transition hover:bg-indigo-400 disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             Start overtime
           </button>
@@ -144,12 +147,17 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => setShowFinishConfirm(true)}
-            className="min-h-9 rounded-lg border border-red-400/60 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
+            className="min-h-9 rounded-lg border border-red-400/60 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-100 transition-colors hover:bg-red-500/25 disabled:opacity-50"
           >
             {finishLabel}
           </button>
         ) : null}
       </div>
+      {disabled && disabledReason ? (
+        <p className="w-full text-balance text-center text-[11px] font-semibold leading-snug text-amber-200">
+          {disabledReason}
+        </p>
+      ) : null}
       {editing ? (
         <div className="flex w-full flex-wrap items-center justify-center gap-1.5 rounded-lg border border-slate-600 bg-slate-900 p-2 text-white shadow-inner">
           <input
@@ -174,7 +182,7 @@ export function GameClockControls({
           <button
             type="button"
             onClick={saveCorrection}
-            className="h-9 rounded-md bg-emerald-500 px-3 text-xs font-black text-slate-950"
+            className="h-9 rounded-md bg-[#1B4332] px-3 text-xs font-black text-white transition-colors hover:bg-[#245c44]"
           >
             Save
           </button>
@@ -207,7 +215,7 @@ export function GameClockControls({
           <button
             type="button"
             onClick={finishSegment}
-            className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500"
+            className="flex-1 rounded-xl bg-[#B42318] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#912013]"
           >
             Finish period
           </button>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../app/store/AuthContext';
 import { ConsentBanner, openConsentSettings } from '../features/analytics/ConsentBanner';
@@ -19,8 +19,29 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // The drawer covers the page but Escape did nothing, and the page behind it
+  // still scrolled — the two things anyone expects of an open overlay.
+  useEffect(() => {
+    if (!isMobileMenuOpen) return undefined;
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+      }
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isMobileMenuOpen]);
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#F7F5F0] text-slate-900">
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center gap-4 p-4">
           <Link to="/pulse" className="text-lg font-semibold">
@@ -67,7 +88,11 @@ export function AppLayout() {
                 Sign in / Join
               </NavLink>
             ) : (
-              <button type="button" className="rounded py-1 text-sm text-dark" onClick={logout}>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                onClick={logout}
+              >
                 Logout
               </button>
             )}
@@ -213,7 +238,7 @@ export function AppLayout() {
             ) : (
               <button
                 type="button"
-                className="w-fit rounded py-1 text-sm text-dark"
+                className="w-fit rounded-md px-2 py-1 text-left text-base text-slate-600 transition-colors hover:text-slate-900"
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   logout();
@@ -226,11 +251,11 @@ export function AppLayout() {
         </nav>
       </div>
 
-      <main className="mx-auto max-w-7xl p-4 pb-20 md:pb-4">
+      <main className="mx-auto w-full max-w-7xl flex-1 p-4 pb-20 md:pb-4">
         <Outlet />
       </main>
 
-      <footer className="mx-auto max-w-7xl px-4 pb-24 pt-2 text-sm text-slate-500 md:pb-8">
+      <footer className="mx-auto w-full max-w-7xl px-4 pb-24 pt-2 text-sm text-slate-500 md:pb-8">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4">
           <Link to="/privacy" className="hover:text-slate-700">
             Privacy

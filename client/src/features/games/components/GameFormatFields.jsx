@@ -1,45 +1,53 @@
+import { controlClass, labelClass } from '../../../components/ui/formStyles';
+
 export function GameFormatFields({ value, onChange, legend = 'Game format', disabled = false }) {
   function set(field, next) {
     onChange({ ...value, [field]: next });
   }
 
   return (
-    <fieldset disabled={disabled} className="rounded-xl border border-slate-200 p-4">
-      <legend className="px-1 text-sm font-semibold text-slate-900">{legend}</legend>
+    // A bordered fieldset with an inset legend was the only control of its kind
+    // in the app; this now matches every other grouped set of fields.
+    <fieldset disabled={disabled} className="min-w-0">
+      <legend className="mb-2 text-sm font-semibold text-slate-900">{legend}</legend>
       <div className="grid gap-4 sm:grid-cols-3">
-        <label className="text-sm text-slate-700">
-          Regulation format
+        <label className="block">
+          <span className={labelClass}>Regulation format</span>
           <select
             value={value.regulationSegmentType}
             onChange={(event) => set('regulationSegmentType', event.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className={controlClass}
           >
             <option value="quarter">Four quarters</option>
             <option value="half">Two halves</option>
           </select>
         </label>
-        <label className="text-sm text-slate-700">
-          Minutes per {value.regulationSegmentType}
+        <label className="block">
+          <span className={labelClass}>Minutes per {value.regulationSegmentType}</span>
           <input
             type="number"
+            inputMode="numeric"
+            autoComplete="off"
             min="1"
             max="60"
             value={value.regulationSegmentDurationSeconds / 60}
             onChange={(event) =>
               set('regulationSegmentDurationSeconds', Number(event.target.value) * 60)
             }
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className={controlClass}
           />
         </label>
-        <label className="text-sm text-slate-700">
-          Overtime minutes
+        <label className="block">
+          <span className={labelClass}>Overtime minutes</span>
           <input
             type="number"
+            inputMode="numeric"
+            autoComplete="off"
             min="1"
             max="60"
             value={value.overtimeDurationSeconds / 60}
             onChange={(event) => set('overtimeDurationSeconds', Number(event.target.value) * 60)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className={controlClass}
           />
         </label>
       </div>

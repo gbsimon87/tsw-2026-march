@@ -40,12 +40,12 @@ export function Tabs({ items, defaultValue, onChange }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div
-        className="grid border-b border-slate-200"
+        className="grid gap-1 border-b border-slate-200 p-2"
         role="tablist"
         aria-label="Game detail sections"
         style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
       >
-        {items.map((item, index) => {
+        {items.map((item) => {
           const isActive = item.value === activeItem.value;
           const tabId = `${baseId}-${item.value}-tab`;
           const panelId = `${baseId}-${item.value}-panel`;
@@ -60,12 +60,10 @@ export function Tabs({ items, defaultValue, onChange }) {
               aria-controls={panelId}
               aria-label={item.label}
               tabIndex={isActive ? 0 : -1}
-              className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
-                index < items.length - 1 ? 'border-r border-slate-200' : ''
-              } ${
+              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
                 isActive
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  ? 'bg-[#141414] text-white'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               }`}
               onClick={() => setActiveAndNotify(item.value)}
               onKeyDown={onKeyDown}
@@ -78,10 +76,11 @@ export function Tabs({ items, defaultValue, onChange }) {
       </div>
 
       <div
+        key={activeItem.value}
         id={`${baseId}-${activeItem.value}-panel`}
         role="tabpanel"
         aria-labelledby={`${baseId}-${activeItem.value}-tab`}
-        className="p-4 sm:p-5"
+        className="t-panel p-4 sm:p-5"
       >
         {activeItem.content}
       </div>

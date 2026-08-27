@@ -270,7 +270,7 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
                 aria-current={index === activeIndex ? 'true' : undefined}
                 onClick={() => goToHighlight(index)}
                 className={`h-2.5 rounded-full transition ${
-                  index === activeIndex ? 'w-7 bg-amber-400' : 'w-2.5 bg-white/30 hover:bg-white/60'
+                  index === activeIndex ? 'w-7 bg-[#F4A300]' : 'w-2.5 bg-white/30 hover:bg-white/60'
                 }`}
               />
             ))}
@@ -280,7 +280,7 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
             <button
               type="button"
               onClick={() => goToHighlight(0)}
-              className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-300"
+              className="rounded-lg bg-[#F4A300] px-3 py-2 text-sm font-semibold text-[#141414] transition-colors hover:bg-[#ffb524]"
             >
               Replay
             </button>
