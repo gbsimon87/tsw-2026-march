@@ -106,6 +106,18 @@ describe('DiscoverablePlayers link routing', () => {
     expect(link).toHaveAttribute('href', '/teams/team-1/players/p-1');
     expect(screen.queryByText(/view full profile/i)).not.toBeInTheDocument();
   });
+
+  test('can keep its search input fixed below the Discover tabs', async () => {
+    feedApi.listDiscoverablePlayers.mockResolvedValue({ players: [] });
+
+    renderWithProviders(<DiscoverablePlayers stickySearch />);
+
+    expect(await screen.findByTestId('discover-search-bar')).toHaveClass(
+      'sticky',
+      'top-14',
+      'sm:top-12'
+    );
+  });
 });
 
 describe('DiscoverablePlayers follow-status batching', () => {

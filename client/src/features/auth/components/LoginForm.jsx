@@ -6,6 +6,7 @@ import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
 import { FormField } from '../../../components/ui/FormField';
 import { FormAlert } from './FormAlert';
+import { getPostAuthDestination } from '../postAuthDestination';
 
 function GoogleIcon() {
   return (
@@ -30,15 +31,17 @@ function GoogleIcon() {
   );
 }
 
-export function LoginForm({ redirectTo = '/pulse' }) {
+export function LoginForm({ redirectTo }) {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error, fieldErrors, isShaking } = useAuthForm(
     { email: '', password: '' },
     loginSchema,
     async (payload) => {
-      await login(payload);
-      navigate(redirectTo);
+      const result = await login(payload);
+      // A brand-new account goes to onboarding unless an explicit redirectTo
+      // (a gated action the user was mid-way through) takes precedence.
+      navigate(getPostAuthDestination(result.user, redirectTo));
     }
   );
 

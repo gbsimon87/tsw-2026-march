@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 
-export function Tabs({ items, defaultValue, onChange }) {
+export function Tabs({ items, defaultValue, onChange, ariaLabel, stickyTabList = false }) {
   const fallback = items[0]?.value || '';
   const [active, setActive] = useState(defaultValue || fallback);
 
@@ -38,11 +38,21 @@ export function Tabs({ items, defaultValue, onChange }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div
+      className={`rounded-2xl border border-slate-200 bg-white ${
+        // A sticky tab list cannot live inside an overflow-hidden ancestor.
+        stickyTabList ? 'overflow-visible' : 'overflow-hidden'
+      }`}
+    >
       <div
-        className="grid gap-1 border-b border-slate-200 p-2"
+        // The fixed height on the sticky variant is what lets a sticky element
+        // inside a panel (e.g. Discover's search bar) offset itself to sit
+        // flush beneath the tabs.
+        className={`grid gap-1 border-b border-slate-200 p-2 ${
+          stickyTabList ? 'sticky top-0 z-20 h-14 rounded-t-2xl bg-white shadow-sm sm:h-12' : ''
+        }`}
         role="tablist"
-        aria-label="Game detail sections"
+        aria-label={ariaLabel || 'Game detail sections'}
         style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
       >
         {items.map((item) => {
@@ -60,7 +70,9 @@ export function Tabs({ items, defaultValue, onChange }) {
               aria-controls={panelId}
               aria-label={item.label}
               tabIndex={isActive ? 0 : -1}
-              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
+              className={`flex flex-col items-center gap-1 rounded-xl text-xs font-semibold transition-colors sm:flex-row sm:justify-center sm:gap-1.5 sm:text-sm ${
+                stickyTabList ? 'h-full py-1.5' : 'py-2.5'
+              } ${
                 isActive
                   ? 'bg-[#141414] text-white'
                   : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'

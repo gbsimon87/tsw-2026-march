@@ -362,6 +362,7 @@ export function GameTrackPage() {
   const videoCurrentTimeRef = useRef(null);
   const entryClockSnapshotRef = useRef(null);
   const entryClockWasRunningRef = useRef(false);
+  const entryClockTransitionRef = useRef(Promise.resolve());
   const clockOperatedThisMountRef = useRef(false);
   const rotateCourt = courtOrientation === 'horizontal';
 
@@ -621,20 +622,30 @@ export function GameTrackPage() {
   const awayLineupCount = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length;
   const homeLineupReady = homeLineupCount > 0;
   const awayLineupReady = awayLineupCount > 0;
+  const homeStartingLineupSet =
+    (data?.lineups?.[TEAM_SIDES.HOME]?.startingPlayerIds || []).length > 0;
+  const awayStartingLineupSet =
+    (data?.lineups?.[TEAM_SIDES.AWAY]?.startingPlayerIds || []).length > 0;
+  const startingLineupsSet = isDualTeam
+    ? homeStartingLineupSet && awayStartingLineupSet
+    : (game?.startingLineupPlayerIds || []).length > 0;
   const allStartingLineupsReady = isDualTeam
     ? homeLineupReady && awayLineupReady
     : (game?.currentLineupPlayerIds || []).length > 0;
   const hasShortStartingLineup = isDualTeam
     ? homeLineupCount < 5 || awayLineupCount < 5
     : (game?.currentLineupPlayerIds || []).length < 5;
-  const derivedLineupSetupStep =
-    isLeagueGame && isDualTeam
-      ? !homeLineupReady
+  const derivedLineupSetupStep = !isCompleted
+    ? isDualTeam
+      ? !homeStartingLineupSet
         ? 'home'
-        : !awayLineupReady
+        : !awayStartingLineupSet
           ? 'away'
           : null
-      : null;
+      : !startingLineupsSet
+        ? 'oneSided'
+        : null
+    : null;
   // A side counts as "ready" at one player, so both sides can be ready while
   // still being short of five. lineupRevisitSide reopens the step in that case.
   const lineupSetupStep =
@@ -758,9 +769,13 @@ export function GameTrackPage() {
     return { teamSide: activeSide, ...withClock };
   }
 
-  function submitEvent(payload, { insertBeforeId = '' } = {}) {
+  async function submitEvent(payload, { insertBeforeId = '' } = {}) {
     captureEntrySnapshot();
     const eventPayload = buildEventPayload(payload);
+    // Pausing/resuming the clock writes the same optimistically-concurrent Game
+    // document as a stat. Wait for any entry clock transition so a quick tap on
+    // FT+ (or another stat) cannot race that write and receive a false 409.
+    await entryClockTransitionRef.current.catch(() => undefined);
     return insertBeforeId
       ? gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
       : gamesApi.appendEvent(gameId, eventPayload);
@@ -794,32 +809,38 @@ export function GameTrackPage() {
     return entryClockSnapshotRef.current;
   }
 
-  async function pauseClockForEntry() {
+  function pauseClockForEntry() {
     if (
       !pauseVideoOnEntry ||
       data?.game?.clock?.status !== 'running' ||
       entryClockWasRunningRef.current
     )
-      return;
+      return entryClockTransitionRef.current;
     entryClockWasRunningRef.current = true;
-    try {
-      const response = await gamesApi.updateClock(gameId, { action: 'pause' });
-      updateData(response);
-    } catch (clockError) {
-      entryClockWasRunningRef.current = false;
-      setError(clockError.message || 'Failed to pause the game clock');
-    }
+    const transition = entryClockTransitionRef.current
+      .catch(() => undefined)
+      .then(() => gamesApi.updateClock(gameId, { action: 'pause' }))
+      .then((response) => updateData(response))
+      .catch((clockError) => {
+        entryClockWasRunningRef.current = false;
+        setError(clockError.message || 'Failed to pause the game clock');
+      });
+    entryClockTransitionRef.current = transition;
+    return transition;
   }
 
-  async function resumeClockAfterEntry() {
-    if (!entryClockWasRunningRef.current) return;
+  function resumeClockAfterEntry() {
+    if (!entryClockWasRunningRef.current) return entryClockTransitionRef.current;
     entryClockWasRunningRef.current = false;
-    try {
-      const response = await gamesApi.updateClock(gameId, { action: 'start' });
-      updateData(response);
-    } catch (clockError) {
-      setError(clockError.message || 'Stat saved, but the game clock remains paused');
-    }
+    const transition = entryClockTransitionRef.current
+      .catch(() => undefined)
+      .then(() => gamesApi.updateClock(gameId, { action: 'start' }))
+      .then((response) => updateData(response))
+      .catch((clockError) => {
+        setError(clockError.message || 'Stat saved, but the game clock remains paused');
+      });
+    entryClockTransitionRef.current = transition;
+    return transition;
   }
 
   function onCourtSelect(point) {
@@ -2127,14 +2148,12 @@ export function GameTrackPage() {
       ) : null}
 
       <GameTrackScoreHeader
-        game={game}
         gameSummary={gameSummary}
         activeSide={activeSide}
         onChangeActiveSide={changeActiveSide}
         isDualTeam={isDualTeam}
         participantsBySide={participantsBySide}
         team={team}
-        boxScore={boxScore}
         clockControls={
           <GameClockControls
             game={game}
@@ -2173,15 +2192,19 @@ export function GameTrackPage() {
                 stepLabel={
                   lineupRevisitSide
                     ? 'Add players'
-                    : lineupSetupStep === 'home'
-                      ? 'Step 1 of 2'
-                      : 'Step 2 of 2'
+                    : !isDualTeam
+                      ? null
+                      : lineupSetupStep === 'home'
+                        ? 'Step 1 of 2'
+                        : 'Step 2 of 2'
                 }
-                isDualTeam
+                isDualTeam={isDualTeam}
                 teamDisplayName={
-                  participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+                  isDualTeam
+                    ? participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+                    : team?.name || 'Team'
                 }
-                players={participantsBySide[lineupSetupStep]?.players || []}
+                players={isDualTeam ? participantsBySide[lineupSetupStep]?.players || [] : players}
                 canManageRoster={canAddRosterPlayer}
                 onAddPlayer={() => setIsAddPlayerOpen(true)}
                 onExit={lineupRevisitSide ? () => setLineupRevisitSide(null) : null}
@@ -3530,14 +3553,12 @@ export function GameTrackPage() {
             style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
           >
             <GameTrackScoreHeader
-              game={game}
               gameSummary={gameSummary}
               activeSide={activeSide}
               onChangeActiveSide={changeActiveSide}
               isDualTeam={isDualTeam}
               participantsBySide={participantsBySide}
               team={team}
-              boxScore={boxScore}
               clockControls={
                 <GameClockControls
                   game={game}

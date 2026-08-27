@@ -1,10 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Player image placeholder">
-  <!-- Was sky #0ea5e9, which put player avatars in a hue the app uses nowhere
-       else and made the same person read as two different colours depending on
-       the surface. Ink ground with the amber figure keeps it in the brand and
-       still reads as "a player", not "a team". -->
-  <rect width="512" height="512" rx="96" fill="#141414" />
-  <circle cx="256" cy="186" r="94" fill="#F4A300" />
-  <path d="M128 392c28-78 86-132 128-132s100 54 128 132" fill="#F4A300" />
-  <path d="M198 176c10 18 30 30 58 30s48-12 58-30" fill="none" stroke="#141414" stroke-width="18" stroke-linecap="round" />
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Default player portrait">
+  <!-- Ink/green ground with an amber figure. Was sky #0ea5e9, which put player
+       avatars in a hue the app uses nowhere else and made the same person read
+       as two different colours depending on the surface. Pairs with
+       team-logo-placeholder.svg so a player and a crest look like one set. -->
+  <defs>
+    <linearGradient id="player-bg" x1="70" y1="36" x2="445" y2="476" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#214F3C"/>
+      <stop offset="1" stop-color="#10281F"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#player-bg)"/>
+  <circle cx="394" cy="116" r="67" fill="#E78800" stroke="#F8D77A" stroke-width="8"/>
+  <path d="M330 116h128M394 52v128M350 72c22 18 33 33 33 44s-11 26-33 44M438 72c-22 18-33 33-33 44s11 26 33 44" fill="none" stroke="#141414" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="231" cy="174" r="86" fill="#F4A300" stroke="#F8D77A" stroke-width="9"/>
+  <path d="M110 454c4-108 50-174 121-174s117 66 121 174H110Z" fill="#F4A300"/>
+  <path d="M178 290c12 18 30 28 53 28s41-10 53-28l26 20-28 144H180l-28-144 26-20Z" fill="#F7F5F0"/>
+  <path d="M180 454h102l17-88H163l17 88Z" fill="#141414"/>
+  <path d="M213 382h36v57h-36z" fill="#F4A300"/>
 </svg>

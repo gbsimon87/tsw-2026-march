@@ -6,6 +6,7 @@ import { useAuthForm } from '../hooks/useAuthForm';
 import { PASSWORD_HINT, registerSchema } from '../schemas/authSchemas';
 import { FormField } from '../../../components/ui/FormField';
 import { FormAlert } from './FormAlert';
+import { getPostAuthDestination } from '../postAuthDestination';
 
 function GoogleIcon() {
   return (
@@ -30,21 +31,21 @@ function GoogleIcon() {
   );
 }
 
-export function RegisterForm({ redirectTo = '/pulse', onRegistered }) {
+export function RegisterForm({ redirectTo, onRegistered }) {
   const { register } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error, fieldErrors, isShaking } = useAuthForm(
     { name: '', email: '', password: '' },
     registerSchema,
     async (payload) => {
-      await register(payload);
+      const result = await register(payload);
       // Registration signs the user in, so go straight to the destination
       // rather than sending them to the login form to re-enter what they
       // just typed. Mirrors LoginForm.
       if (onRegistered) {
-        onRegistered();
+        onRegistered(result);
       } else {
-        navigate(redirectTo);
+        navigate(getPostAuthDestination(result.user, redirectTo));
       }
     }
   );

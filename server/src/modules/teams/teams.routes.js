@@ -24,6 +24,7 @@ publicOpponentsRouter.get('/:opponentSlug', asyncHandler(controller.getPublicOpp
 teamsRouter.use(authMiddleware);
 teamsRouter.post('/', asyncHandler(controller.create));
 teamsRouter.get('/', asyncHandler(controller.list));
+teamsRouter.get('/player-profiles/mine', asyncHandler(controller.getMyPlayerProfiles));
 teamsRouter.get('/:teamId', asyncHandler(controller.getById));
 teamsRouter.get('/:teamId/entitlements', asyncHandler(controller.getEntitlements));
 teamsRouter.patch('/:teamId', asyncHandler(controller.update));
@@ -32,6 +33,19 @@ teamsRouter.delete('/:teamId/logo', asyncHandler(controller.removeLogo));
 teamsRouter.post('/:teamId/players', asyncHandler(controller.addPlayer));
 teamsRouter.patch('/:teamId/players/:playerId', asyncHandler(controller.updatePlayer));
 teamsRouter.delete('/:teamId/players/:playerId', asyncHandler(controller.removePlayer));
+teamsRouter.post(
+  '/:teamId/players/:playerId/claim-requests',
+  asyncHandler(controller.requestPlayerClaim)
+);
+teamsRouter.get('/:teamId/player-claim-requests', asyncHandler(controller.listPlayerClaimRequests));
+teamsRouter.post(
+  '/:teamId/player-claim-requests/:requestId/approve',
+  asyncHandler(controller.approvePlayerClaim)
+);
+teamsRouter.post(
+  '/:teamId/player-claim-requests/:requestId/reject',
+  asyncHandler(controller.rejectPlayerClaim)
+);
 
 module.exports = {
   teamsRouter,

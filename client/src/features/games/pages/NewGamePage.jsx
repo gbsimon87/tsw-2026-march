@@ -14,6 +14,12 @@ import {
 import { teamsApi } from '../../teams/api/teamsApi';
 import { gamesApi } from '../api/gamesApi';
 import { GameFormatFields } from '../components/GameFormatFields';
+import {
+  buildReusableVenues,
+  emptyVenueDetails,
+  VenueFields,
+  venuePayload,
+} from '../components/VenueFields';
 import { DEFAULT_GAME_FORMAT } from '../gameClock';
 
 export function NewGamePage() {
@@ -36,6 +42,8 @@ export function NewGamePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
+  const [venueDetails, setVenueDetails] = useState(emptyVenueDetails);
+  const [pastGames, setPastGames] = useState([]);
   const titleRef = useRef(null);
 
   useEffect(() => {
@@ -57,6 +65,7 @@ export function NewGamePage() {
         }
 
         if (gamesResult.status === 'fulfilled') {
+          setPastGames(gamesResult.value.games || []);
           const values = [];
           const seen = new Set();
 
@@ -120,6 +129,8 @@ export function NewGamePage() {
         payload.scheduledAt = new Date(scheduledAt).toISOString();
       }
 
+      Object.assign(payload, venuePayload(venueDetails));
+
       if (videoUrl.trim()) {
         payload.videoUrl = videoUrl.trim();
       }
@@ -159,6 +170,16 @@ export function NewGamePage() {
   }
 
   const backTo = teamId ? `/admin/teams/${teamId}` : '/admin';
+
+  const selectedTeam = teams.find((team) => team.id === teamId);
+  const reusableVenues = buildReusableVenues([
+    ...(selectedTeam?.homeVenue?.arenaName
+      ? [{ name: selectedTeam.homeVenue.arenaName, address: selectedTeam.homeVenue }]
+      : []),
+    ...pastGames.filter((game) =>
+      [game.teamId, game.homeTeamId, game.awayTeamId].filter(Boolean).includes(teamId)
+    ),
+  ]);
 
   return (
     <main className="mx-auto max-w-3xl space-y-6">
@@ -346,6 +367,12 @@ export function NewGamePage() {
                   onChange={(event) => setScheduledAt(event.target.value)}
                 />
               </label>
+
+              <VenueFields
+                value={venueDetails}
+                onChange={setVenueDetails}
+                reusableVenues={reusableVenues}
+              />
 
               <GameFormatFields value={gameFormat} onChange={setGameFormat} />
 

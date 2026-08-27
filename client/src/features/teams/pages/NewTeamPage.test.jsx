@@ -103,6 +103,24 @@ describe('NewTeamPage', () => {
     });
   });
 
+  test('keeps all team colour controls in one row', () => {
+    renderPage();
+
+    // The colour slots live behind the "Logo, colours and home venue" disclosure.
+    fireEvent.click(screen.getByRole('button', { name: /Logo, colours and home venue/i }));
+
+    // grid-cols-3 with no sm: prefix — all three stay on one line at every width.
+    expect(screen.getByTestId('team-colour-grid')).toHaveClass('grid-cols-3');
+    const slots = screen.getAllByLabelText(/^Colour \d$/i);
+    expect(slots).toHaveLength(3);
+
+    // A Clear control only appears once a slot holds a colour, and it names its
+    // slot so three of them are distinguishable.
+    expect(screen.queryByRole('button', { name: 'Clear colour 1' })).not.toBeInTheDocument();
+    fireEvent.change(slots[0], { target: { value: '#123456' } });
+    expect(screen.getByRole('button', { name: 'Clear colour 1' })).toBeInTheDocument();
+  });
+
   test('shows friendly inline errors when venue details are incomplete', async () => {
     renderPage();
 

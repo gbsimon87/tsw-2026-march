@@ -88,6 +88,8 @@ export function EditTeamPage() {
   const [isRosterExpanded, setIsRosterExpanded] = useState(false);
   const [error, setError] = useState('');
   const [logoError, setLogoError] = useState('');
+  const [claimRequests, setClaimRequests] = useState([]);
+  const [reviewingClaimId, setReviewingClaimId] = useState('');
 
   useEffect(() => {
     let isActive = true;
@@ -97,7 +99,10 @@ export function EditTeamPage() {
       setError('');
 
       try {
-        const response = await teamsApi.getById(teamId);
+        const [response, claimsResponse] = await Promise.all([
+          teamsApi.getById(teamId),
+          teamsApi.listPlayerClaimRequests(teamId),
+        ]);
         if (!isActive) {
           return;
         }
@@ -112,6 +117,7 @@ export function EditTeamPage() {
           loadedTeam?.colors?.[2] || '',
         ]);
         setHomeVenue(hydrateVenue(loadedTeam?.homeVenue));
+        setClaimRequests(claimsResponse.requests || []);
       } catch (loadError) {
         if (!isActive) {
           return;
@@ -225,6 +231,28 @@ export function EditTeamPage() {
       setError(submitError.message || 'Failed to remove player');
     } finally {
       setActivePlayerId('');
+    }
+  }
+
+  async function reviewClaim(requestId, decision) {
+    setError('');
+    setReviewingClaimId(requestId);
+    try {
+      if (decision === 'approve') {
+        await teamsApi.approvePlayerClaim(teamId, requestId);
+      } else {
+        await teamsApi.rejectPlayerClaim(teamId, requestId);
+      }
+      setClaimRequests((current) => current.filter((request) => request.id !== requestId));
+      if (decision === 'approve') {
+        const response = await teamsApi.getById(teamId);
+        setTeam(response.team);
+        setPlayers(hydratePlayers(response.team?.players));
+      }
+    } catch (reviewError) {
+      setError(reviewError.message || 'Failed to review player claim');
+    } finally {
+      setReviewingClaimId('');
     }
   }
 
@@ -487,6 +515,54 @@ export function EditTeamPage() {
           </div>
         </section>
       </form>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Player profile requests</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Approve a request only when you recognise the player and requester.
+          </p>
+        </div>
+        {claimRequests.length === 0 ? (
+          <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            No pending player profile requests.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {claimRequests.map((request) => (
+              <article
+                key={request.id}
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-semibold text-slate-900">{request.playerName}</p>
+                  <p className="text-sm text-slate-600">
+                    Requested by <span className="font-medium">{request.requesterName}</span>
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={Boolean(reviewingClaimId)}
+                    onClick={() => reviewClaim(request.id, 'reject')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(reviewingClaimId)}
+                    onClick={() => reviewClaim(request.id, 'approve')}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {reviewingClaimId === request.id ? 'Reviewing…' : 'Approve'}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">

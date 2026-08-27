@@ -1106,6 +1106,7 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsByI
 
     gameRows.push({
       gameId: String(game.id || game._id),
+      seasonId: game.seasonId ? String(game.seasonId) : null,
       title: game.title,
       scheduledAt: game.scheduledAt ?? null,
       completedAt: game.completedAt ?? null,
@@ -1317,10 +1318,11 @@ async function getPublicLeaguePlayerBySlug(
 
   // Deliberately unscoped (all games ever, not just the current season) — this
   // is a player CAREER profile page, not a current-season standings view.
-  const [games, allTeams, usersById] = await Promise.all([
+  const [games, allTeams, usersById, seasons] = await Promise.all([
     listLeagueGamesByLeagueId(league._id),
     listLeagueTeams(league._id),
     buildUsersMap([player.claimedByUserId]),
+    listSeasonsByLeague(league._id),
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
@@ -1353,6 +1355,7 @@ async function getPublicLeaguePlayerBySlug(
     player: sanitizedPlayer,
     summary: buildLeaguePlayerSummary(gameRows),
     games: gameRows,
+    seasons: (seasons || []).map(sanitizeSeason),
     highlights,
     sharedEventIds,
     milestones: await getMilestoneSummaryForLeaguePlayer(league._id, player),
@@ -2021,6 +2024,8 @@ function createLeagueGameRow(game, teamsById) {
     trackingMode: game.trackingMode || 'one_sided',
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
+    venue: game.venue ?? null,
+    venueAddress: game.venueAddress?.toObject?.() || game.venueAddress || null,
     completedAt: game.completedAt ?? null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
     awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { safeInternalPath } from '../../../lib/safeRedirect';
 import { PageHeader } from '../../../components/PageHeader';
 import {
   controlClass,
@@ -149,12 +150,14 @@ function ColorSlot({ index, value, onChange, onClear }) {
   const isSet = Boolean(value);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/60 p-2 sm:p-3">
       <label htmlFor={inputId} className={labelClass}>
         Colour {index + 1}
       </label>
-      <div className="flex items-center gap-3">
-        <div className="relative h-10 w-14 shrink-0">
+      {/* Three slots share one row even at 320px, so the swatch goes
+          full-width and the value/Clear pair stacks until sm. */}
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+        <div className="relative h-9 w-full shrink-0 sm:h-10 sm:w-14">
           <input
             id={inputId}
             type="color"
@@ -177,18 +180,21 @@ function ColorSlot({ index, value, onChange, onClear }) {
             }
           />
         </div>
-        <span className="tsw-tnum min-w-0 flex-1 truncate text-xs uppercase tracking-wide text-slate-500">
-          {value || 'Not set'}
-        </span>
-        {isSet ? (
-          <button
-            type="button"
-            className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900"
-            onClick={onClear}
-          >
-            Clear
-          </button>
-        ) : null}
+        <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+          <span className="tsw-tnum max-w-full truncate text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">
+            {value || 'Not set'}
+          </span>
+          {isSet ? (
+            <button
+              type="button"
+              aria-label={`Clear colour ${index + 1}`}
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900 sm:px-2 sm:py-1 sm:text-xs"
+              onClick={onClear}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -207,8 +213,9 @@ export function NewTeamPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showIdentity, setShowIdentity] = useState(false);
-  const rawRedirectTo = searchParams.get('redirectTo') || '';
-  const redirectTo = rawRedirectTo.startsWith('/') ? rawRedirectTo : '';
+  // Same-origin only: this page is reachable as /teams/new?redirectTo=… from
+  // the onboarding hand-off. See lib/safeRedirect.
+  const redirectTo = safeInternalPath(searchParams.get('redirectTo'), '');
   // Keyed by row index so a newly added row can take focus; without this the
   // focus stayed on "Add player" and the new name field had to be found by hand.
   const nameInputRefs = useRef({});
@@ -562,7 +569,7 @@ export function NewTeamPage() {
                   Used on shareable cards and your public team page.
                 </p>
                 {renderFieldError(fieldErrors.colors)}
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3" data-testid="team-colour-grid">
                   {Array.from({ length: COLOR_SLOTS }).map((_, index) => (
                     <ColorSlot
                       key={index}

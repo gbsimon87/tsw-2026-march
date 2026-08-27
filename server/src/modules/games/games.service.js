@@ -383,12 +383,26 @@ function sanitizeGame(game, options = {}) {
       : [],
     scheduledAt: game.scheduledAt ?? null,
     venue: game.venue ?? null,
+    venueAddress: normalizeVenueAddress(game.venueAddress),
     completedAt: game.completedAt ?? null,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
     events: (game.events || []).map((event) => sanitizeEvent(event, { includePremiumMedia })),
     aiSummary: sanitizeAiSummary(game.aiSummary),
   };
+}
+
+function normalizeVenueAddress(value) {
+  if (!value || typeof value !== 'object') return null;
+  const address = {
+    addressLine1: String(value.addressLine1 || '').trim(),
+    addressLine2: String(value.addressLine2 || '').trim(),
+    city: String(value.city || '').trim(),
+    state: String(value.state || '').trim(),
+    postalCode: String(value.postalCode || '').trim(),
+    country: String(value.country || '').trim(),
+  };
+  return Object.values(address).some(Boolean) ? address : null;
 }
 
 function getTeamPlayers(team, options = {}) {
@@ -1391,6 +1405,8 @@ async function createGameForUser(userId, payload) {
       awayRosterSnapshot: buildRosterSnapshotFromStandaloneTeam(awayTeam),
       title: payload.title?.trim() || `${awayTeam.name} at ${homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+      venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       status: 'in_progress',
     });
@@ -1458,6 +1474,7 @@ async function createGameForUser(userId, payload) {
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+      venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       // A league game starts life as a fixture, not a live game: nothing is in
       // progress until someone starts the clock, which promotes 'scheduled' →
@@ -1485,6 +1502,7 @@ async function createGameForUser(userId, payload) {
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+      venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       // A league game starts life as a fixture, not a live game: nothing is in
       // progress until someone starts the clock, which promotes 'scheduled' →
@@ -1511,6 +1529,8 @@ async function createGameForUser(userId, payload) {
     title: payload.title.trim(),
     opponent: payload.opponent?.trim() ? payload.opponent.trim() : undefined,
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+    venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+    venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
     videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
     status: 'in_progress',
     // Kept as an audit snapshot only. Current billing state authorizes reads.
@@ -1585,6 +1605,7 @@ async function listGamesForUser(userId, filter = {}) {
       status: game.status,
       scheduledAt: game.scheduledAt ?? null,
       venue: game.venue ?? null,
+      venueAddress: normalizeVenueAddress(game.venueAddress),
       completedAt: game.completedAt ?? null,
       eventCount: (game.events || []).length,
       createdAt: game.createdAt,
@@ -1609,10 +1630,11 @@ async function updateGameForUser(userId, gameId, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
     game.scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   }
-  // Venue is league-only: standalone games use the team's homeVenue instead, and
-  // nothing in the standalone UI surfaces a per-game location.
-  if (Object.prototype.hasOwnProperty.call(payload, 'venue') && game.gameContext === 'league') {
+  if (Object.prototype.hasOwnProperty.call(payload, 'venue')) {
     game.venue = payload.venue?.trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'venueAddress')) {
+    game.venueAddress = normalizeVenueAddress(payload.venueAddress);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
@@ -1804,13 +1826,14 @@ async function getPublicGame(gameId, viewerUserId = null) {
   const highlightEventIds = (result.highlights || []).map((h) => h.eventId).filter(Boolean);
   result.sharedEventIds = await findSharedEventIds(highlightEventIds);
   result.canShareHighlights = false;
+  result.canManageGame = false;
 
   if (viewerUserId) {
     const rawGame = await findGameById(gameId);
     if (rawGame) {
+      result.canManageGame = await canAccessGame(viewerUserId, rawGame);
       result.canShareHighlights =
-        (await canAccessGame(viewerUserId, rawGame)) ||
-        isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
+        result.canManageGame || isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
     }
   }
   return result;

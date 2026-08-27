@@ -14,6 +14,7 @@ import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
+import { GameMatchupPreview } from '../components/GameMatchupPreview';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameRecapPanel } from '../components/GameRecapPanel';
 import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
@@ -290,6 +291,7 @@ export function GameDetailPage() {
     queryKey: ['game', gameId],
     queryFn: () => gamesApi.getById(gameId),
     enabled: Boolean(gameId),
+    refetchInterval: (query) => (query.state.data?.game?.status === 'in_progress' ? 15_000 : false),
   });
 
   useEffect(() => {
@@ -317,11 +319,21 @@ export function GameDetailPage() {
     : undefined;
 
   useDocumentMeta({
-    title: data ? `${data.game?.title || metaMatchupName} — Game Recap` : undefined,
+    title: data
+      ? `${data.game?.title || metaMatchupName} — ${
+          data.game?.status === 'scheduled'
+            ? 'Matchup Preview'
+            : data.game?.status === 'in_progress'
+              ? 'Live Game'
+              : 'Game Recap'
+        }`
+      : undefined,
     description: data
-      ? metaIsDualTeam
-        ? `${metaMatchupName} final: ${metaGameSummary.homePoints || 0}-${metaGameSummary.awayPoints || 0}.`
-        : `${metaMatchupName} final: ${metaGameSummary.teamPoints || 0}-${metaGameSummary.opponentPoints || 0}.`
+      ? data.game?.status === 'scheduled'
+        ? `${metaMatchupName} is scheduled for ${formatGameDate(data.game?.scheduledAt)}.`
+        : metaIsDualTeam
+          ? `${metaMatchupName} ${data.game?.status === 'in_progress' ? 'live' : 'final'}: ${metaGameSummary.homePoints || 0}-${metaGameSummary.awayPoints || 0}.`
+          : `${metaMatchupName} ${data.game?.status === 'in_progress' ? 'live' : 'final'}: ${metaGameSummary.teamPoints || 0}-${metaGameSummary.opponentPoints || 0}.`
       : undefined,
     image: data ? resolveShareImage(metaImage) : undefined,
     url: data ? `${window.location.origin}/games/${gameId}` : undefined,
@@ -337,6 +349,8 @@ export function GameDetailPage() {
 
   const { game, team, boxScore, participants } = data;
   const isDualTeam = game.trackingMode === 'dual_team';
+  const isScheduled = game.status === 'scheduled';
+  const isLive = game.status === 'in_progress' || game.status === 'live';
   const recap = data.recap;
   const aiSummary = data.aiSummary || game.aiSummary || null;
   const playersById = buildPlayersById(data, isDualTeam);
@@ -789,7 +803,15 @@ export function GameDetailPage() {
   return (
     <section className="space-y-4">
       {!isPrintMode && leagueBreadcrumbs ? <Breadcrumbs crumbs={leagueBreadcrumbs} /> : null}
-      {!isPrintMode ? (
+      {!isPrintMode && isScheduled ? (
+        <GameMatchupPreview
+          game={game}
+          league={data.league}
+          participants={participants}
+          canManageGame={Boolean(data.canManageGame || game.ownerUserId)}
+        />
+      ) : null}
+      {!isPrintMode && !isScheduled ? (
         <GameDetailHeader
           gameId={game.id}
           game={game}
@@ -802,9 +824,7 @@ export function GameDetailPage() {
           // A scheduled fixture is trackable — starting the clock is what makes
           // it in_progress — so it needs a route into the tracker from here, not
           // only from the league admin page's Track button.
-          canContinueTracking={Boolean(
-            (game.status === 'in_progress' || game.status === 'scheduled') && game.ownerUserId
-          )}
+          canContinueTracking={Boolean(isLive && (data.canManageGame || game.ownerUserId))}
           actions={
             <>
               <button
@@ -839,9 +859,23 @@ export function GameDetailPage() {
         />
       ) : null}
 
+      {!isPrintMode && isLive ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm"
+        >
+          <span className="inline-flex items-center gap-2 font-semibold text-emerald-800">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+            Live score
+          </span>
+          <span className="text-emerald-700">Updates automatically every 15 seconds</span>
+        </div>
+      ) : null}
+
       {isPrintMode ? printContent : null}
 
-      {!isPrintMode ? (
+      {!isPrintMode && !isScheduled ? (
         <Tabs
           defaultValue="recap"
           onChange={(tab) => trackEvent('game_detail_tab_changed', { game_id: gameId, tab })}

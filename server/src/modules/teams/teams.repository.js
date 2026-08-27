@@ -32,6 +32,7 @@ const playerSchema = new mongoose.Schema(
     jerseyNumber: { type: Number },
     position: { type: String, enum: ['PG', 'SG', 'SF', 'PF', 'C'], default: null },
     isActive: { type: Boolean, default: true },
+    claimedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { _id: true }
 );
@@ -88,6 +89,33 @@ const teamSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const playerClaimRequestSchema = new mongoose.Schema(
+  {
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+    playerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+    requesterUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      index: true,
+    },
+    reviewedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reviewedAt: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
+
+playerClaimRequestSchema.index(
+  { teamId: 1, playerId: 1, requesterUserId: 1 },
+  { unique: true, partialFilterExpression: { status: 'pending' } }
+);
+
 teamSchema.index({ ownerUserId: 1, name: 1 });
 teamSchema.index(
   { ownerUserId: 1, capacityType: 1 },
@@ -114,6 +142,9 @@ const teamSeasonSummarySchema = new mongoose.Schema(
 );
 
 const Team = mongoose.models.Team || mongoose.model('Team', teamSchema);
+const PlayerClaimRequest =
+  mongoose.models.PlayerClaimRequest ||
+  mongoose.model('PlayerClaimRequest', playerClaimRequestSchema);
 const TeamSeasonSummary =
   mongoose.models.TeamSeasonSummary || mongoose.model('TeamSeasonSummary', teamSeasonSummarySchema);
 
@@ -142,6 +173,30 @@ async function findTeamById(teamId) {
 
 async function listTeams() {
   return Team.find().sort({ createdAt: -1 });
+}
+
+async function listTeamsByClaimedPlayerUserId(userId) {
+  return Team.find({ 'players.claimedByUserId': userId }).sort({ createdAt: -1 });
+}
+
+async function createPlayerClaimRequest(input) {
+  return PlayerClaimRequest.create(input);
+}
+
+async function findPendingPlayerClaimRequest(teamId, playerId, requesterUserId) {
+  return PlayerClaimRequest.findOne({ teamId, playerId, requesterUserId, status: 'pending' });
+}
+
+async function listPendingPlayerClaimRequests(teamId) {
+  return PlayerClaimRequest.find({ teamId, status: 'pending' }).sort({ createdAt: 1 });
+}
+
+async function findPlayerClaimRequestById(requestId) {
+  return PlayerClaimRequest.findById(requestId);
+}
+
+async function savePlayerClaimRequest(request) {
+  return request.save();
 }
 
 async function saveTeam(team) {
@@ -198,7 +253,14 @@ module.exports = {
   findTeamByIdAndOwner,
   findTeamById,
   listTeams,
+  listTeamsByClaimedPlayerUserId,
   saveTeam,
+  PlayerClaimRequest,
+  createPlayerClaimRequest,
+  findPendingPlayerClaimRequest,
+  listPendingPlayerClaimRequests,
+  findPlayerClaimRequestById,
+  savePlayerClaimRequest,
   makeOwnedTeamFree,
   claimTeamWebhookEvent,
   releaseTeamWebhookEvent,

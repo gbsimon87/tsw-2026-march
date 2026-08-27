@@ -62,6 +62,18 @@ const participantSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const venueAddressSchema = new mongoose.Schema(
+  {
+    addressLine1: { type: String, trim: true, maxlength: 160, default: null },
+    addressLine2: { type: String, trim: true, maxlength: 160, default: null },
+    city: { type: String, trim: true, maxlength: 100, default: null },
+    state: { type: String, trim: true, maxlength: 100, default: null },
+    postalCode: { type: String, trim: true, maxlength: 32, default: null },
+    country: { type: String, trim: true, maxlength: 100, default: null },
+  },
+  { _id: false }
+);
+
 const shotEventSchema = new mongoose.Schema(
   {
     playerId: { type: mongoose.Schema.Types.ObjectId, required: false },
@@ -250,9 +262,10 @@ const gameSchema = new mongoose.Schema(
     awayCurrentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     scheduledAt: { type: Date },
     // Schedule Builder: free-text location for a fixture. Venue entities (with
-    // capacity, double-booking checks and a map) are a separate future feature;
-    // this is deliberately just a label.
+    // Venue remains a reusable display label. The optional address supports a
+    // public map link; capacity and double-booking rules remain out of scope.
     venue: { type: String, trim: true, maxlength: 120 },
+    venueAddress: { type: venueAddressSchema, default: null },
     completedAt: { type: Date },
     rosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
@@ -420,6 +433,7 @@ async function listLeagueGamesForCompleteness(leagueId, seasonId) {
       status: 1,
       scheduledAt: 1,
       venue: 1,
+      venueAddress: 1,
       trackingMode: 1,
       homeLeagueTeamId: 1,
       awayLeagueTeamId: 1,
