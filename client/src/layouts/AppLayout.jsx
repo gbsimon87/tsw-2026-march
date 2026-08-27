@@ -36,6 +36,11 @@ export function AppLayout() {
                 My Sporty
               </NavLink>
             ) : null}
+            {user && ['not_started', 'in_progress'].includes(user.onboarding?.status) ? (
+              <NavLink to="/onboarding" className={desktopNavLinkClass}>
+                Finish setup
+              </NavLink>
+            ) : null}
             {user ? (
               <NavLink to="/following" className={desktopNavLinkClass}>
                 Following
@@ -150,6 +155,15 @@ export function AppLayout() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 My Sporty
+              </NavLink>
+            ) : null}
+            {user && ['not_started', 'in_progress'].includes(user.onboarding?.status) ? (
+              <NavLink
+                to="/onboarding"
+                className={mobileNavLinkClass}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Finish setup
               </NavLink>
             ) : null}
             {user ? (

@@ -364,6 +364,34 @@ describe('teams public service', () => {
     ]);
   });
 
+  // The standalone public player endpoint serves any team by id with no
+  // public-visibility gate, so it must never expose the claimer's user id —
+  // leagues.service only exposes claimedUserId for public leagues.
+  test('never exposes the claimer user id on the public player endpoint', async () => {
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      logo: null,
+      players: [
+        {
+          _id: 'p1',
+          displayName: 'Alex',
+          jerseyNumber: 12,
+          isActive: true,
+          claimedByUserId: 'claimer-1',
+        },
+      ],
+    });
+    listTeams.mockResolvedValue([]);
+    listGamesByTeamId.mockResolvedValue([]);
+
+    const result = await getPublicPlayer('team-1', 'p1');
+
+    expect(result.player.isClaimed).toBe(true);
+    expect(result.player).not.toHaveProperty('claimedUserId');
+    expect(JSON.stringify(result)).not.toContain('claimer-1');
+  });
+
   test('returns player public profile summary and most recent game rows first', async () => {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
@@ -434,6 +462,7 @@ describe('teams public service', () => {
       displayName: 'Alex',
       jerseyNumber: 12,
       position: null,
+      isClaimed: false,
     });
     expect(result.summary).toEqual({
       gamesCount: 2,

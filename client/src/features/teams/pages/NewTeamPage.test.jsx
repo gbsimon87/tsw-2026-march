@@ -100,6 +100,14 @@ describe('NewTeamPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/pricing?teamId=team-1');
   });
 
+  test('keeps all team colour controls in one row', () => {
+    renderPage();
+
+    expect(screen.getByTestId('team-colour-grid')).toHaveClass('grid-cols-3');
+    expect(screen.getAllByLabelText(/^Colour \d$/i)).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Clear colour 1' })).toBeInTheDocument();
+  });
+
   test('shows friendly inline errors when venue details are incomplete', async () => {
     renderPage();
 

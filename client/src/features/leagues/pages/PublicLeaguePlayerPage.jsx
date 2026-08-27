@@ -13,6 +13,13 @@ import { feedApi } from '../../feed/api/feedApi';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { FollowButton } from '../../follows/components/FollowButton';
 import { PlayerMilestones } from '../../players/components/PlayerMilestones';
+import { PlayerStatsFilters } from '../../players/components/PlayerStatsFilters';
+import {
+  buildPlayerSeasonOptions,
+  filterPlayerGamesBySeason,
+  getCategoryStatIds,
+  summarizePlayerGames,
+} from '../../players/playerStats';
 
 const HIGHLIGHT_LABELS = {
   FG2_MADE: '2PT Make',
@@ -96,6 +103,8 @@ export function PublicLeaguePlayerPage() {
   const [claimError, setClaimError] = useState('');
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
   const [clipShareState, setClipShareState] = useState({});
+  const [selectedSeason, setSelectedSeason] = useState('all');
+  const [statCategory, setStatCategory] = useState('all');
   const pendingHandled = useRef(false);
   const pendingKey = `claim_pending_${leagueSlug}_${teamSlug}_${leaguePlayerId}`;
 
@@ -162,20 +171,12 @@ export function PublicLeaguePlayerPage() {
     }
   }
 
-  const totals = useMemo(() => {
-    return (data?.games || []).reduce(
-      (summary, game) => ({
-        points: summary.points + game.stats.points,
-        reb: summary.reb + game.stats.reb,
-        ast: summary.ast + game.stats.ast,
-        stl: summary.stl + game.stats.stl,
-        blk: summary.blk + (game.stats.blk || 0),
-        tov: summary.tov + game.stats.tov,
-        foul: summary.foul + game.stats.foul,
-      }),
-      { points: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, foul: 0 }
-    );
-  }, [data]);
+  const seasonOptions = useMemo(() => buildPlayerSeasonOptions(data?.games, data?.seasons), [data]);
+  const filteredGames = useMemo(
+    () => filterPlayerGamesBySeason(data?.games, selectedSeason),
+    [data, selectedSeason]
+  );
+  const filteredSummary = useMemo(() => summarizePlayerGames(filteredGames), [filteredGames]);
 
   if (isLoading) {
     return <SportsLoader label="Loading player" fullPage />;
@@ -185,7 +186,8 @@ export function PublicLeaguePlayerPage() {
     return <p className="text-sm text-red-600">{error || 'League player not found'}</p>;
   }
 
-  const { league, team, player, summary, games } = data;
+  const { league, team, player } = data;
+  const summary = filteredSummary;
   const playerLabel =
     typeof player.jerseyNumber === 'number'
       ? `#${player.jerseyNumber} ${player.displayName}`
@@ -197,15 +199,20 @@ export function PublicLeaguePlayerPage() {
     { label: 'APG', value: formatAverage(summary.assistsPerGame) },
   ];
   const totalStats = [
-    { label: 'PTS', value: totals.points, featured: false },
-    { label: 'REB', value: totals.reb, featured: false },
-    { label: 'AST', value: totals.ast, featured: false },
-    { label: 'STL', value: totals.stl },
-    { label: 'BLK', value: totals.blk },
-    { label: 'TOV', value: totals.tov },
-    { label: 'FOUL', value: totals.foul },
-  ];
-  const gameLogRows = games.map((game) => ({
+    { id: 'ft', label: 'FT', value: `${summary.ftm}/${summary.fta}` },
+    { id: 'fg2', label: '2PT', value: `${summary.fg2m}/${summary.fg2a}` },
+    { id: 'fg3', label: '3PT', value: `${summary.fg3m}/${summary.fg3a}` },
+    { id: 'ast', label: 'AST', value: summary.ast },
+    { id: 'stl', label: 'STL', value: summary.stl },
+    { id: 'blk', label: 'BLK', value: summary.blk },
+    { id: 'tov', label: 'TOV', value: summary.tov },
+    { id: 'foul', label: 'FOUL', value: summary.foul },
+    { id: 'oreb', label: 'OREB', value: summary.oreb },
+    { id: 'dreb', label: 'DREB', value: summary.dreb },
+    { id: 'reb', label: 'REB', value: summary.reb },
+    { id: 'points', label: 'PTS', value: summary.points },
+  ].filter((stat) => getCategoryStatIds(statCategory).includes(stat.id));
+  const gameLogRows = filteredGames.map((game) => ({
     id: game.gameId,
     opponent: game.opponent || 'Opponent',
     opponentLogoUrl: game.opponentLogoUrl || null,
@@ -248,14 +255,38 @@ export function PublicLeaguePlayerPage() {
       sortKey: 'dateValue',
       render: (row) => row.dateLabel,
     },
-    { id: 'points', label: 'PTS', align: 'right', render: (row) => row.points },
-    { id: 'reb', label: 'REB', align: 'right', render: (row) => row.reb },
+    {
+      id: 'ft',
+      label: 'FT',
+      align: 'right',
+      render: (row) => `${row.ftm}/${row.fta}`,
+    },
+    {
+      id: 'fg2',
+      label: '2PT',
+      align: 'right',
+      render: (row) => `${row.fg2m}/${row.fg2a}`,
+    },
+    {
+      id: 'fg3',
+      label: '3PT',
+      align: 'right',
+      render: (row) => `${row.fg3m}/${row.fg3a}`,
+    },
     { id: 'ast', label: 'AST', align: 'right', render: (row) => row.ast },
     { id: 'stl', label: 'STL', align: 'right', render: (row) => row.stl },
     { id: 'blk', label: 'BLK', align: 'right', render: (row) => row.blk },
     { id: 'tov', label: 'TOV', align: 'right', render: (row) => row.tov },
     { id: 'foul', label: 'FOUL', align: 'right', render: (row) => row.foul },
-  ];
+    { id: 'oreb', label: 'OREB', align: 'right', render: (row) => row.oreb },
+    { id: 'dreb', label: 'DREB', align: 'right', render: (row) => row.dreb },
+    { id: 'reb', label: 'REB', align: 'right', render: (row) => row.reb },
+    { id: 'points', label: 'PTS', align: 'right', render: (row) => row.points },
+  ].filter(
+    (column) =>
+      ['opponent', 'date'].includes(column.id) ||
+      getCategoryStatIds(statCategory).includes(column.id)
+  );
 
   const breadcrumbs = [
     { label: 'Discover', href: '/home' },
@@ -429,7 +460,7 @@ export function PublicLeaguePlayerPage() {
 
       {/* Season totals scoreboard */}
       <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
-        <header className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
               Season totals
@@ -441,14 +472,21 @@ export function PublicLeaguePlayerPage() {
               Production Snapshot
             </h2>
           </div>
-          <p
-            className="text-sm text-slate-400"
-            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-          >
-            {summary.gamesCount} GP
-          </p>
+          <PlayerStatsFilters
+            seasons={seasonOptions}
+            selectedSeason={selectedSeason}
+            onSeasonChange={setSelectedSeason}
+            category={statCategory}
+            onCategoryChange={setStatCategory}
+          />
         </header>
-        <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-7">
+        <p
+          className="mt-4 text-sm text-slate-400"
+          style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+        >
+          {summary.gamesCount} GP in this view
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {totalStats.map((stat) => (
             <article
               key={stat.label}
@@ -537,6 +575,9 @@ export function PublicLeaguePlayerPage() {
         <div className="mt-4 overflow-x-auto">
           <StatsTable columns={gameLogColumns} rows={gameLogRows} tableClassName="w-full text-sm" />
         </div>
+        {filteredGames.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">No games match this season.</p>
+        ) : null}
       </section>
     </main>
   );

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { safeInternalPath } from '../../../lib/safeRedirect';
 import { PageHeader } from '../../../components/PageHeader';
 import { teamsApi } from '../api/teamsApi';
 
@@ -140,8 +141,9 @@ export function NewTeamPage() {
   const [logoError, setLogoError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const rawRedirectTo = searchParams.get('redirectTo') || '';
-  const redirectTo = rawRedirectTo.startsWith('/') ? rawRedirectTo : '';
+  // Same-origin only: this page is reachable as
+  // /teams/new?redirectTo=… from the onboarding hand-off.
+  const redirectTo = safeInternalPath(searchParams.get('redirectTo'), '');
 
   const playerRows = useMemo(
     () =>
@@ -313,11 +315,16 @@ export function NewTeamPage() {
             Team Colours
           </h2>
           {renderFieldError(fieldErrors.colors)}
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3" data-testid="team-colour-grid">
             {Array.from({ length: COLOR_SLOTS }).map((_, index) => (
-              <div key={index} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <div
+                key={index}
+                className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/60 p-2 sm:p-3"
+              >
                 <label className="block">
-                  <span className="mb-1 block text-sm text-slate-700">Colour {index + 1}</span>
+                  <span className="mb-1 block text-xs text-slate-700 sm:text-sm">
+                    Colour {index + 1}
+                  </span>
                   <input
                     type="color"
                     className="h-10 w-full rounded border border-slate-300 bg-white"
@@ -325,13 +332,14 @@ export function NewTeamPage() {
                     onChange={(event) => updateColor(index, event.target.value)}
                   />
                 </label>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <span className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                  <span className="truncate text-[10px] uppercase tracking-wide text-slate-500 sm:text-xs">
                     {colors[index] || 'Not set'}
                   </span>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                    aria-label={`Clear colour ${index + 1}`}
+                    className="self-start text-[11px] font-semibold text-slate-600 hover:text-slate-900 sm:text-xs"
                     onClick={() => clearColor(index)}
                   >
                     Clear

@@ -13,10 +13,17 @@ const {
   findTeamByIdAndOwner,
   findTeamById,
   listTeams,
+  listTeamsByClaimedPlayerUserId,
   saveTeam,
+  createPlayerClaimRequest,
+  findPendingPlayerClaimRequest,
+  listPendingPlayerClaimRequests,
+  findPlayerClaimRequestById,
+  savePlayerClaimRequest,
   findTeamSeasonSummary,
   upsertTeamSeasonSummary,
 } = require('./teams.repository');
+const { findUsersByIds } = require('../auth/auth.repository');
 const { listGamesByTeamId, listPublicCompletedGames } = require('../games/games.repository');
 const { computeBoxScore } = require('../games/games.service');
 const { logger } = require('../../config/logger');
@@ -75,6 +82,7 @@ function sanitizeTeam(team) {
       jerseyNumber: player.jerseyNumber ?? null,
       position: normalizePlayerPosition(player.position),
       isActive: Boolean(player.isActive),
+      isClaimed: Boolean(player.claimedByUserId),
     })),
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
@@ -212,6 +220,11 @@ function sanitizePublicPlayer(player) {
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
     position: normalizePlayerPosition(player.position),
+    // Deliberately exposes only the boolean. This endpoint serves any standalone
+    // team by id with no public-visibility gate, so leaking the claimer's user id
+    // here would break the rule leagues.service enforces for league players
+    // (claimedUserId is public-league-only). The Join UI only needs isClaimed.
+    isClaimed: Boolean(player.claimedByUserId),
   };
 }
 
@@ -656,6 +669,129 @@ async function getPublicPlayer(teamId, playerId) {
   };
 }
 
+async function requestStandalonePlayerClaim(userId, teamId, playerId) {
+  if (!mongoose.Types.ObjectId.isValid(teamId) || !mongoose.Types.ObjectId.isValid(playerId)) {
+    throw new ApiError(404, 'Player not found');
+  }
+
+  const team = await findTeamById(teamId);
+  const player = team ? findPlayerById(team, playerId) : null;
+  if (!team || !player || !player.isActive) {
+    throw new ApiError(404, 'Player not found');
+  }
+  if (player.claimedByUserId) {
+    throw new ApiError(409, 'This player profile is already linked to an account');
+  }
+  if (
+    team.players.some(
+      (candidate) =>
+        candidate.claimedByUserId && String(candidate.claimedByUserId) === String(userId)
+    )
+  ) {
+    throw new ApiError(409, 'Your account is already linked to a player on this team');
+  }
+  if (await findPendingPlayerClaimRequest(teamId, playerId, userId)) {
+    throw new ApiError(409, 'You already have a pending claim request for this profile');
+  }
+
+  const request = await createPlayerClaimRequest({
+    teamId,
+    playerId,
+    requesterUserId: userId,
+  });
+  return { id: String(request._id), status: request.status };
+}
+
+async function listStandalonePlayerClaimRequests(userId, teamId) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) throw new ApiError(404, 'Team not found');
+
+  const requests = await listPendingPlayerClaimRequests(teamId);
+  const users = await findUsersByIds(requests.map((request) => request.requesterUserId));
+  const usersById = new Map(users.map((requester) => [String(requester._id), requester]));
+
+  return requests
+    .map((request) => {
+      const player = findPlayerById(team, request.playerId);
+      if (!player || !player.isActive || player.claimedByUserId) return null;
+      const requester = usersById.get(String(request.requesterUserId));
+      return {
+        id: String(request._id),
+        playerId: String(player._id),
+        playerName: player.displayName,
+        requesterUserId: String(request.requesterUserId),
+        requesterName: requester?.name || 'User',
+        requestedAt: request.createdAt,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function reviewStandalonePlayerClaim(userId, teamId, requestId, decision) {
+  const team = await findTeamByIdAndOwner(teamId, userId);
+  if (!team) throw new ApiError(404, 'Team not found');
+  const request = await findPlayerClaimRequestById(requestId);
+  if (!request || String(request.teamId) !== String(teamId) || request.status !== 'pending') {
+    throw new ApiError(404, 'Pending claim request not found');
+  }
+
+  const player = findPlayerById(team, request.playerId);
+  if (!player || !player.isActive) throw new ApiError(404, 'Player not found');
+
+  if (decision === 'approved') {
+    if (player.claimedByUserId) {
+      throw new ApiError(409, 'This player profile is already linked to an account');
+    }
+    const duplicate = team.players.some(
+      (candidate) =>
+        candidate.claimedByUserId &&
+        String(candidate.claimedByUserId) === String(request.requesterUserId)
+    );
+    if (duplicate) {
+      throw new ApiError(409, 'That account is already linked to a player on this team');
+    }
+    player.claimedByUserId = request.requesterUserId;
+    await saveTeam(team);
+  }
+
+  request.status = decision;
+  request.reviewedByUserId = userId;
+  request.reviewedAt = new Date();
+  await savePlayerClaimRequest(request);
+  return { id: String(request._id), status: request.status };
+}
+
+async function getMyStandalonePlayerProfiles(userId) {
+  const teams = await listTeamsByClaimedPlayerUserId(userId);
+  const allTeams = await listTeams();
+  const teamLookup = buildTeamLookup(allTeams);
+  const profiles = [];
+
+  for (const team of teams) {
+    const games = await listGamesByTeamId(team._id);
+    for (const player of team.players || []) {
+      if (!player.claimedByUserId || String(player.claimedByUserId) !== String(userId)) continue;
+      const gameRows = buildPublicPlayerGameRows(games, team, player, teamLookup);
+      profiles.push({
+        id: `standalone:${team._id}:${player._id}`,
+        displayName: player.displayName,
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: normalizePlayerPosition(player.position),
+        memberRoleLabel: 'One-off team',
+        profileHref: `/teams/${team._id}/players/${player._id}`,
+        team: {
+          id: String(team._id),
+          name: team.name,
+          logo: sanitizeLogo(team.logo),
+        },
+        summary: buildPublicPlayerSummary(gameRows),
+      });
+    }
+  }
+
+  return profiles;
+}
+
 async function getPublicOpponentBySlug(opponentSlug) {
   const targetSlug = slugifyOpponentName(opponentSlug);
   // OPT-004: Use optimized query with limit (larger buffer for filtering)
@@ -1006,4 +1142,8 @@ module.exports = {
   updatePlayerOnTeam,
   deactivatePlayerOnTeam,
   getEntitlementsForUser,
+  requestStandalonePlayerClaim,
+  listStandalonePlayerClaimRequests,
+  reviewStandalonePlayerClaim,
+  getMyStandalonePlayerProfiles,
 };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -9,6 +9,13 @@ import { StatsTable } from '../components/StatsTable';
 import { PlayerCardPost } from '../../feed/components/posts/PlayerCardPost';
 import { ShareImageButton } from '../../feed/components/ShareImageButton';
 import { extractYouTubeVideoId } from '../../games/youtube';
+import { PlayerStatsFilters } from '../../players/components/PlayerStatsFilters';
+import {
+  buildPlayerSeasonOptions,
+  filterPlayerGamesBySeason,
+  getCategoryStatIds,
+  summarizePlayerGames,
+} from '../../players/playerStats';
 
 function formatGameDate(game) {
   const rawValue = game.date || game.scheduledAt || game.completedAt || game.createdAt || null;
@@ -26,26 +33,6 @@ function formatGameDate(game) {
 
 function formatAverage(value) {
   return Number.isFinite(value) ? value.toFixed(1) : '0.0';
-}
-
-function emptyStats() {
-  return {
-    ftm: 0,
-    fta: 0,
-    fg2m: 0,
-    fg2a: 0,
-    fg3m: 0,
-    fg3a: 0,
-    ast: 0,
-    oreb: 0,
-    dreb: 0,
-    stl: 0,
-    blk: 0,
-    tov: 0,
-    foul: 0,
-    reb: 0,
-    points: 0,
-  };
 }
 
 function FeedIcon() {
@@ -127,6 +114,14 @@ export function PublicPlayerPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [feedPostState, setFeedPostState] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState('all');
+  const [statCategory, setStatCategory] = useState('all');
+  const [claimConfirmed, setClaimConfirmed] = useState(false);
+  const [claimStatus, setClaimStatus] = useState('');
+  const [claimError, setClaimError] = useState('');
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const pendingClaimHandled = useRef(false);
+  const pendingClaimKey = `standalone_claim_pending_${teamId}_${playerId}`;
 
   useEffect(() => {
     teamsApi
@@ -136,31 +131,20 @@ export function PublicPlayerPage() {
       .finally(() => setIsLoading(false));
   }, [teamId, playerId]);
 
-  const totals = useMemo(() => {
-    const zeroTotals = emptyStats();
-    const games = data?.games || [];
+  useEffect(() => {
+    if (!data?.player || !user || pendingClaimHandled.current) return;
+    if (sessionStorage.getItem(pendingClaimKey) !== '1') return;
+    pendingClaimHandled.current = true;
+    sessionStorage.removeItem(pendingClaimKey);
+    submitClaimRequest();
+  }, [data, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return games.reduce(
-      (summary, game) => ({
-        ftm: summary.ftm + game.stats.ftm,
-        fta: summary.fta + game.stats.fta,
-        fg2m: summary.fg2m + game.stats.fg2m,
-        fg2a: summary.fg2a + game.stats.fg2a,
-        fg3m: summary.fg3m + game.stats.fg3m,
-        fg3a: summary.fg3a + game.stats.fg3a,
-        ast: summary.ast + (game.stats.ast || 0),
-        oreb: summary.oreb + (game.stats.oreb || 0),
-        dreb: summary.dreb + (game.stats.dreb || 0),
-        stl: summary.stl + (game.stats.stl || 0),
-        blk: summary.blk + (game.stats.blk || 0),
-        tov: summary.tov + (game.stats.tov || 0),
-        foul: summary.foul + (game.stats.foul || 0),
-        reb: summary.reb + (game.stats.reb || 0),
-        points: summary.points + (game.stats.points || 0),
-      }),
-      zeroTotals
-    );
-  }, [data]);
+  const seasonOptions = useMemo(() => buildPlayerSeasonOptions(data?.games), [data]);
+  const filteredGames = useMemo(
+    () => filterPlayerGamesBySeason(data?.games, selectedSeason),
+    [data, selectedSeason]
+  );
+  const summary = useMemo(() => summarizePlayerGames(filteredGames), [filteredGames]);
 
   if (isLoading) {
     return <SportsLoader label="Loading player" fullPage />;
@@ -169,24 +153,6 @@ export function PublicPlayerPage() {
   if (!data) {
     return <p className="text-sm text-red-600">{error || 'Player not found'}</p>;
   }
-
-  const summary = data.summary || {
-    gamesCount: 0,
-    points: 0,
-    reb: 0,
-    ast: 0,
-    stl: 0,
-    blk: 0,
-    tov: 0,
-    foul: 0,
-    pointsPerGame: 0,
-    reboundsPerGame: 0,
-    assistsPerGame: 0,
-    stealsPerGame: 0,
-    blocksPerGame: 0,
-    turnoversPerGame: 0,
-    foulsPerGame: 0,
-  };
 
   const playerLabel =
     typeof data.player.jerseyNumber === 'number'
@@ -225,8 +191,35 @@ export function PublicPlayerPage() {
       setFeedPostState((current) => (current === 'posted' ? '' : current));
     }, 1500);
   }
+
+  async function submitClaimRequest() {
+    setClaimError('');
+    setIsSubmittingClaim(true);
+    try {
+      await teamsApi.createPlayerClaimRequest(teamId, playerId);
+      setClaimStatus('Request sent to the team owner for approval.');
+    } catch (submitError) {
+      const message = submitError.message || '';
+      if (/pending claim request/i.test(message)) {
+        setClaimStatus('You already have a pending claim request for this profile.');
+      } else {
+        setClaimError(message || 'Failed to request this profile.');
+      }
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  }
+
+  async function onClaimProfile() {
+    if (!user) {
+      sessionStorage.setItem(pendingClaimKey, '1');
+      navigate(`/login?redirectTo=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    await submitClaimRequest();
+  }
   const gameLogRows = [
-    ...data.games.map((game) => ({
+    ...filteredGames.map((game) => ({
       id: game.gameId,
       opponent: game.opponent || game.title || 'Opponent TBD',
       opponentDestination: game.opponentDestination || {
@@ -242,9 +235,19 @@ export function PublicPlayerPage() {
       opponent: 'Totals',
       dateLabel: 'Season',
       dateValue: null,
-      ...totals,
+      ...summary,
     },
   ];
+
+  const averageStats = [
+    { id: 'points', label: 'PPG', value: summary.pointsPerGame },
+    { id: 'reb', label: 'RPG', value: summary.reboundsPerGame },
+    { id: 'ast', label: 'APG', value: summary.assistsPerGame },
+    { id: 'stl', label: 'SPG', value: summary.stealsPerGame },
+    { id: 'blk', label: 'BPG', value: summary.blocksPerGame },
+    { id: 'tov', label: 'TOPG', value: summary.turnoversPerGame },
+    { id: 'foul', label: 'FPG', value: summary.foulsPerGame },
+  ].filter((stat) => getCategoryStatIds(statCategory).includes(stat.id));
   const gameLogColumns = [
     {
       id: 'opponent',
@@ -300,14 +303,18 @@ export function PublicPlayerPage() {
     { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
     { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
     {
-      id: 'pts',
+      id: 'points',
       label: 'PTS',
       align: 'right',
       sortKey: 'points',
       emphasis: true,
       render: (row) => row.points,
     },
-  ];
+  ].filter(
+    (column) =>
+      ['opponent', 'date'].includes(column.id) ||
+      getCategoryStatIds(statCategory).includes(column.id)
+  );
 
   return (
     <main className="mx-auto max-w-5xl space-y-6">
@@ -384,43 +391,80 @@ export function PublicPlayerPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">PPG</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatAverage(summary.pointsPerGame)}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {data.player.isClaimed ? (
+          <div className="flex items-center gap-3 text-sm text-emerald-800">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100">
+              ✓
+            </span>
+            <div>
+              <p className="font-semibold">Linked player profile</p>
+              <p className="text-emerald-700">This profile has been verified by the team owner.</p>
+            </div>
+          </div>
+        ) : claimStatus ? (
+          <p role="status" className="text-sm font-medium text-emerald-700">
+            {claimStatus}
           </p>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">RPG</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatAverage(summary.reboundsPerGame)}
-          </p>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">APG</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatAverage(summary.assistsPerGame)}
-          </p>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">SPG</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatAverage(summary.stealsPerGame)}
-          </p>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">TOPG</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatAverage(summary.turnoversPerGame)}
-          </p>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FPG</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {formatAverage(summary.foulsPerGame)}
-          </p>
-        </article>
+        ) : (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Is this your player profile?</h2>
+              <label className="mt-2 flex max-w-xl items-start gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={claimConfirmed}
+                  onChange={(event) => setClaimConfirmed(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#1B4332]"
+                />
+                <span>
+                  I confirm this profile represents me. The team owner will review my request before
+                  it is linked.
+                </span>
+              </label>
+              {claimError ? <p className="mt-2 text-sm text-red-600">{claimError}</p> : null}
+            </div>
+            <button
+              type="button"
+              disabled={!claimConfirmed || isSubmittingClaim}
+              onClick={onClaimProfile}
+              className="shrink-0 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isSubmittingClaim ? 'Sending…' : 'Request this profile'}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Statistics</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {summary.gamesCount} {summary.gamesCount === 1 ? 'game' : 'games'} in this view
+            </p>
+          </div>
+          <PlayerStatsFilters
+            seasons={seasonOptions}
+            selectedSeason={selectedSeason}
+            onSeasonChange={setSelectedSeason}
+            category={statCategory}
+            onCategoryChange={setStatCategory}
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {averageStats.map((stat) => (
+            <article
+              key={stat.id}
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {stat.label}
+              </p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">{formatAverage(stat.value)}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
       {data.highlights?.length > 0 ? (
@@ -446,8 +490,12 @@ export function PublicPlayerPage() {
           <p className="text-sm text-slate-500">{summary.gamesCount} public completed games</p>
         </div>
 
-        {data.games.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-600">No completed public games yet.</p>
+        {filteredGames.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">
+            {data.games.length === 0
+              ? 'No completed public games yet.'
+              : 'No completed public games match this season.'}
+          </p>
         ) : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">

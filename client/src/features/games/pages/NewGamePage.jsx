@@ -6,11 +6,18 @@ import { teamsApi } from '../../teams/api/teamsApi';
 import { gamesApi } from '../api/gamesApi';
 import { GameFormatFields } from '../components/GameFormatFields';
 import { DEFAULT_GAME_FORMAT } from '../gameClock';
+import {
+  buildReusableVenues,
+  emptyVenueDetails,
+  VenueFields,
+  venuePayload,
+} from '../components/VenueFields';
 
 export function NewGamePage() {
   const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [knownOpponents, setKnownOpponents] = useState([]);
+  const [pastGames, setPastGames] = useState([]);
   const [teamId, setTeamId] = useState('');
   const [title, setTitle] = useState('');
   const [opponentMode, setOpponentMode] = useState('new');
@@ -22,6 +29,7 @@ export function NewGamePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
+  const [venueDetails, setVenueDetails] = useState(emptyVenueDetails);
 
   useEffect(() => {
     Promise.allSettled([teamsApi.list(), gamesApi.list()])
@@ -37,6 +45,7 @@ export function NewGamePage() {
         }
 
         if (gamesResult.status === 'fulfilled') {
+          setPastGames(gamesResult.value.games || []);
           const values = [];
           const seen = new Set();
 
@@ -89,6 +98,8 @@ export function NewGamePage() {
         payload.scheduledAt = new Date(scheduledAt).toISOString();
       }
 
+      Object.assign(payload, venuePayload(venueDetails));
+
       if (videoUrl.trim()) {
         payload.videoUrl = videoUrl.trim();
       }
@@ -127,6 +138,21 @@ export function NewGamePage() {
       </main>
     );
   }
+
+  const selectedTeam = teams.find((team) => team.id === teamId);
+  const reusableVenues = buildReusableVenues([
+    ...(selectedTeam?.homeVenue?.arenaName
+      ? [
+          {
+            name: selectedTeam.homeVenue.arenaName,
+            address: selectedTeam.homeVenue,
+          },
+        ]
+      : []),
+    ...pastGames.filter((game) =>
+      [game.teamId, game.homeTeamId, game.awayTeamId].filter(Boolean).includes(teamId)
+    ),
+  ]);
 
   return (
     <main className="mx-auto max-w-3xl space-y-8">
@@ -250,15 +276,20 @@ export function NewGamePage() {
           <h2 id="schedule-heading" className="text-xl font-semibold text-slate-900">
             Schedule
           </h2>
-          <label className="block">
+          <label className="block min-w-0">
             <span className="mb-1 block text-sm text-slate-700">Scheduled At (optional)</span>
             <input
               type="datetime-local"
-              className="w-full rounded border border-slate-300 px-3 py-2"
+              className="w-full min-w-0 max-w-full rounded border border-slate-300 px-3 py-2"
               value={scheduledAt}
               onChange={(event) => setScheduledAt(event.target.value)}
             />
           </label>
+          <VenueFields
+            value={venueDetails}
+            onChange={setVenueDetails}
+            reusableVenues={reusableVenues}
+          />
         </section>
 
         <GameFormatFields value={gameFormat} onChange={setGameFormat} />

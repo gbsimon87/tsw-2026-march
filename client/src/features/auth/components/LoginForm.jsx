@@ -4,6 +4,7 @@ import { trackOauthStarted } from '../../analytics/signupEvents';
 import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
 import { loginSchema } from '../schemas/authSchemas';
+import { getPostAuthDestination } from '../postAuthDestination';
 
 function GoogleIcon() {
   return (
@@ -31,15 +32,15 @@ function GoogleIcon() {
 const inputClass =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20';
 
-export function LoginForm({ redirectTo = '/pulse', onSwitchToRegister }) {
+export function LoginForm({ redirectTo, onSwitchToRegister }) {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { values, onChange, submit, isSubmitting, error } = useAuthForm(
     { email: '', password: '' },
     loginSchema,
     async (payload) => {
-      await login(payload);
-      navigate(redirectTo);
+      const result = await login(payload);
+      navigate(getPostAuthDestination(result.user, redirectTo));
     }
   );
 

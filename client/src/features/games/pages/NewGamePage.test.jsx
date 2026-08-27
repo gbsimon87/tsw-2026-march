@@ -56,6 +56,8 @@ describe('NewGamePage', () => {
       expect(screen.getByText(/Create Game/i)).toBeInTheDocument();
     });
 
+    expect(screen.getByLabelText(/Scheduled At/i)).toHaveClass('min-w-0', 'max-w-full');
+
     fireEvent.change(screen.getByPlaceholderText(/vs Wildcats - March 12/i), {
       target: { value: 'Friday Night' },
     });

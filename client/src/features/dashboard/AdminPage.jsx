@@ -36,11 +36,9 @@ const TABS = [
     ),
   },
 ];
-import { useAuth } from '../../app/store/AuthContext';
 import { teamsApi } from '../teams/api/teamsApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
-import { DarkPageHeader } from '../../components/DarkPageHeader';
 import { getLeagueHeaderImage } from '../feed/cardImage';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../media/CloudinaryImage';
@@ -56,7 +54,6 @@ function getLeagueRoleLabel(viewerRole) {
 }
 
 export function AdminPage() {
-  const { user } = useAuth();
   const [teams, setTeams] = useState([]);
   const [leagues, setLeagues] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,15 +73,7 @@ export function AdminPage() {
   return (
     <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
       <Breadcrumbs crumbs={[{ label: 'Admin' }]} />
-
-      <DarkPageHeader
-        titleAriaLabel="Admin"
-        eyebrow="Dashboard"
-        title="Admin"
-        description="Manage your leagues and non-league teams all in one place."
-      >
-        {user?.name ? <p className="text-sm text-white/60">Welcome back, {user.name}.</p> : null}
-      </DarkPageHeader>
+      <h1 className="sr-only">Admin</h1>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

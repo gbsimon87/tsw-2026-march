@@ -217,5 +217,23 @@ describe('games service opponent support', () => {
 
     expect(result.game.opponent).toBe('Wolves');
     expect(result.game.ownerUserId).toBeUndefined();
+    expect(result.canManageGame).toBe(false);
+  });
+
+  test('getPublicGame tells an authenticated owner they can manage the fixture', async () => {
+    findTeamById.mockResolvedValue({ _id: 'team-1', name: 'Team', players: [] });
+    findGameById.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Scheduled Game',
+      status: 'scheduled',
+      events: [],
+    });
+
+    const result = await getPublicGame('game-1', 'user-1');
+
+    expect(result.canManageGame).toBe(true);
+    expect(result.game.ownerUserId).toBeUndefined();
   });
 });

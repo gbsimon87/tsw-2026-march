@@ -1,5 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Team logo placeholder">
-  <rect width="512" height="512" rx="96" fill="#f59e0b" />
-  <circle cx="256" cy="208" r="96" fill="#fef3c7" opacity="0.95" />
-  <path d="M152 376c20-58 74-96 104-96s84 38 104 96" fill="#fef3c7" opacity="0.95" />
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Default team crest">
+  <defs>
+    <linearGradient id="team-bg" x1="70" y1="44" x2="440" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#214F3C"/>
+      <stop offset="1" stop-color="#10281F"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#141414"/>
+  <path d="M256 54 423 119v126c0 102-62 176-167 218C151 421 89 347 89 245V119L256 54Z" fill="url(#team-bg)" stroke="#F4A300" stroke-width="18"/>
+  <circle cx="256" cy="247" r="111" fill="#F4A300"/>
+  <circle cx="256" cy="247" r="99" fill="#E78800" stroke="#141414" stroke-width="10"/>
+  <path d="M158 247h196M256 148v198M187 173c35 29 53 53 53 74s-18 45-53 74M325 173c-35 29-53 53-53 74s18 45 53 74" fill="none" stroke="#141414" stroke-width="11" stroke-linecap="round"/>
+  <path d="m151 117 9 19 21 3-15 15 4 21-19-10-19 10 4-21-15-15 21-3 9-19ZM361 117l9 19 21 3-15 15 4 21-19-10-19 10 4-21-15-15 21-3 9-19Z" fill="#F8D77A"/>
 </svg>

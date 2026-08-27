@@ -2,7 +2,7 @@ import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { FollowButton } from './FollowButton';
+import { FollowButton, PENDING_FOLLOW_KEY } from './FollowButton';
 import { followsApi } from '../api/followsApi';
 import { useAuth } from '../../../app/store/AuthContext';
 
@@ -32,6 +32,7 @@ function renderButton(props) {
 describe('FollowButton', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     followsApi.getStatuses.mockResolvedValue({ statuses: {} });
   });
 
@@ -45,7 +46,13 @@ describe('FollowButton', () => {
     renderButton({ targetUserId: 'target-1' });
 
     const cta = screen.getByText(/join to follow/i);
-    expect(cta.closest('a')).toHaveAttribute('href', '/register');
+    expect(cta.closest('a')).toHaveAttribute('href', '/register?redirectTo=%2F');
+    fireEvent.click(cta);
+    expect(JSON.parse(sessionStorage.getItem(PENDING_FOLLOW_KEY))).toEqual({
+      targetType: 'user',
+      targetId: 'target-1',
+      returnTo: '/',
+    });
     expect(followsApi.getStatuses).not.toHaveBeenCalled();
   });
 
@@ -148,5 +155,20 @@ describe('FollowButton', () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Network down'));
+  });
+
+  test('completes a matching anonymous follow intent after authentication', async () => {
+    sessionStorage.setItem(
+      PENDING_FOLLOW_KEY,
+      JSON.stringify({ targetType: 'league', targetId: 'league-1', returnTo: '/league/city' })
+    );
+    useAuth.mockReturnValue({ user: { id: 'me-1' } });
+    followsApi.follow.mockResolvedValue({ follow: { isFollowing: true } });
+
+    renderButton({ targetType: 'league', targetId: 'league-1' });
+
+    await waitFor(() => expect(followsApi.follow).toHaveBeenCalledWith('league', 'league-1'));
+    await waitFor(() => expect(sessionStorage.getItem(PENDING_FOLLOW_KEY)).toBeNull());
+    expect(screen.getByRole('button', { name: /unfollow/i })).toHaveTextContent('Following');
   });
 });

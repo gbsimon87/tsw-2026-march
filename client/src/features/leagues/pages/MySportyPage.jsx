@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { authApi } from '../../auth/api/authApi';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -8,6 +9,7 @@ import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { ProfileCard } from '../../players/components/ProfileCard';
 import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
+import { teamsApi } from '../../teams/api/teamsApi';
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
@@ -25,10 +27,21 @@ export function MySportyPage() {
     error: queryError,
   } = useQuery({
     queryKey: ['myProfiles'],
-    queryFn: () => leaguesApi.getMyProfiles(),
+    queryFn: async () => {
+      const [leagueResult, standaloneResult] = await Promise.all([
+        leaguesApi.getMyProfiles(),
+        teamsApi.getMyPlayerProfiles(),
+      ]);
+      return {
+        leagueProfiles: leagueResult.profiles || [],
+        standaloneProfiles: standaloneResult.profiles || [],
+      };
+    },
   });
 
-  const profiles = data?.profiles || [];
+  const leagueProfiles = data?.leagueProfiles || [];
+  const standaloneProfiles = data?.standaloneProfiles || [];
+  const profiles = [...leagueProfiles, ...standaloneProfiles];
   const error = isError ? queryError?.message || 'Failed to load profiles' : '';
 
   async function handleAvatarChange(event) {
@@ -145,7 +158,7 @@ export function MySportyPage() {
             >
               {user?.name || 'My Sporty'}
             </h1>
-            <p className="mt-3 text-white/60">Claimed league profiles for your account.</p>
+            <p className="mt-3 text-white/60">Player profiles linked to your account.</p>
             {avatarError ? <p className="mt-2 text-sm text-[#F4A300]">{avatarError}</p> : null}
           </div>
         </div>
@@ -161,16 +174,31 @@ export function MySportyPage() {
               className="mt-1 text-2xl text-slate-900"
               style={{ fontFamily: "'Archivo Black', sans-serif" }}
             >
-              League Profiles
+              Player Profiles
             </h2>
           </div>
-          {profiles.length > 0 ? (
+          {leagueProfiles.length > 0 ? (
             <ExportCsvButton
               fetcher={() => exportApi.getMySportyCsv()}
               label="Export my stats (CSV)"
             />
           ) : null}
         </header>
+
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border border-[#F4A300]/30 bg-[#F4A300]/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Can’t see your player profile?</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Find it in Discover, open the player page, and request to link it to your account.
+            </p>
+          </div>
+          <Link
+            to="/home?tab=players"
+            className="shrink-0 self-start rounded-lg bg-[#141414] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1B4332] sm:self-auto"
+          >
+            Find my profile
+          </Link>
+        </div>
 
         {error ? (
           <p className="mt-4 text-sm text-red-600">{error}</p>
@@ -179,8 +207,8 @@ export function MySportyPage() {
             role="status"
             className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
           >
-            You have no claimed league profiles yet. When a league manager links your account to a
-            player slot, it will appear here.
+            You have no linked player profiles yet. Approved profiles from leagues and one-off teams
+            will appear here.
           </p>
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

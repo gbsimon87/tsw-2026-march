@@ -20,6 +20,25 @@ const userSchema = new mongoose.Schema(
       url: { type: String, default: null },
       publicId: { type: String, default: null },
     },
+    onboarding: {
+      status: {
+        type: String,
+        enum: ['not_started', 'in_progress', 'completed', 'skipped'],
+        // Existing accounts pre-date onboarding and should keep their current
+        // landing experience. Account-creation paths explicitly opt new users
+        // into `not_started` below.
+        default: 'completed',
+      },
+      roles: {
+        type: [String],
+        // `fan` covers someone who only browses and follows; they get no
+        // create/connect obligations and land on the Pulse.
+        enum: ['league_manager', 'league_team_manager', 'team_manager', 'player', 'fan'],
+        default: [],
+      },
+      completedSteps: { type: [String], default: [] },
+      updatedAt: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,
@@ -114,6 +133,7 @@ async function findOrCreateGoogleUser({ googleId, email, name }) {
     emailVerified: true,
     emailVerifiedAt: new Date(),
     roles: ['user'],
+    onboarding: { status: 'not_started', roles: [], completedSteps: [] },
   });
 
   return { user, isNew: true };
@@ -221,6 +241,21 @@ async function updateUserAvatar(userId, avatarData) {
   return User.findByIdAndUpdate(userId, { $set: { avatar: avatarData } }, { new: true });
 }
 
+async function updateUserOnboarding(userId, onboarding) {
+  return User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        onboarding: {
+          ...onboarding,
+          updatedAt: new Date(),
+        },
+      },
+    },
+    { new: true }
+  );
+}
+
 module.exports = {
   createUser,
   findUserByEmail,
@@ -240,4 +275,5 @@ module.exports = {
   updateUserPassword,
   updateUserPlan,
   updateUserAvatar,
+  updateUserOnboarding,
 };
