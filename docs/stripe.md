@@ -10,23 +10,23 @@ the customer sees after paying.
 
 ## The prices we chose
 
-All prices are monthly and in US dollars.
+All prices are monthly and in pounds sterling (GBP).
 
 | What the customer gets          |      Price |      Free trial | Important rule                                                                           |
 | ------------------------------- | ---------: | --------------: | ---------------------------------------------------------------------------------------- |
 | First standalone Team           |       Free | No trial needed | One free Team per owner                                                                  |
-| Each additional standalone Team |   $5/month |              No | Each Team has its own subscription and may be in a completely different real-life league |
-| League                          |  $29/month |         14 days | One TSW League with up to 10 active teams                                                |
-| League Plus                     |  $49/month |         14 days | One TSW League with 11–24 active teams                                                   |
+| Each additional standalone Team |   £5/month |              No | Each Team has its own subscription and may be in a completely different real-life league |
+| League                          |  £29/month |         14 days | One TSW League with up to 10 active teams                                                |
+| League Plus                     |  £49/month |         14 days | One TSW League with 11–24 active teams                                                   |
 | More than 24 teams              | Contact us |               — | Do not promise a price in the app                                                        |
 
 A Team and a TSW League are separate things:
 
-- Paying $5 makes one additional standalone Team manageable.
+- Paying £5 makes one additional standalone Team manageable.
 - Paying for a League makes one TSW League manageable.
 - A customer can own several TSW Leagues. Each League needs its own League
   subscription.
-- Teams inside a paid League do not need separate $5 subscriptions.
+- Teams inside a paid League do not need separate £5 subscriptions.
 - Every current Team feature is available to every Team. Payment buys extra
   management capacity, not extra feature buttons.
 - If one standalone game uses two Teams owned by the same person, both Teams
@@ -58,17 +58,439 @@ if the dry run does not show exactly the production data you expect.
 
 ## Honest readiness status
 
-Status checked on 25 August 2026.
+Status checked on 2 September 2026.
 
-| Place                        | Status         | Meaning                                                                                                                                                                    |
-| ---------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local development            | **Code ready** | Without a Stripe key, local League creation is complimentary. With the complete sandbox configuration, local Team and League Checkout both use Stripe test mode.           |
-| Deployed development/testing | **In testing** | The sandbox catalog, Render configuration, webhook, and development migration are in place. Finish every success, cancellation, failure, access, and capacity check below. |
-| Production                   | **Not ready**  | Live Products/Prices, live Render values, the live webhook, a production backup and migration, a controlled live purchase, and the tax decision are still missing.         |
+| Place                        | Status              | Meaning                                                                                                                                                                      |
+| ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local development            | **Code ready**      | The code now requires GBP. The sandbox Price IDs and Portal configuration must be updated from USD to GBP before the next paid test.                                         |
+| Deployed development/testing | **Update required** | Replace the three sandbox USD Price IDs with new GBP Price IDs, regenerate the Portal configuration, deploy, and repeat the final development gate.                          |
+| Production                   | **Not ready**       | The GBP and no-VAT-launch decisions are recorded. Live Products/Prices, live Render values, the live webhook, a production backup and migration, and a live purchase remain. |
 
 The owner has configured the development Stripe sandbox and development Render
-service. No live Stripe configuration or verified real payment has been
-completed. That is why production is not yet ready for real customers.
+service. Its existing Prices were created under the earlier USD plan and must be
+replaced with GBP Prices. No live Stripe configuration or verified real payment
+has been completed. That is why production is not yet ready for real customers.
+
+## Production setup: start here
+
+This is the short, beginner-friendly path from the working development setup to
+real payments. Complete the boxes in order. Parts 1–5 later in this document are
+the detailed development and troubleshooting reference; you do not need to
+repeat them if the final development gate below passes.
+
+You will work in three places:
+
+- **Stripe live account**: creates the things that take real money.
+- **Render production API**: holds the private live values used by the server.
+- **This repository**: stays on `dev` until the controlled launch. Production
+  Render deploys `main` and development Render deploys `dev`.
+
+Never paste a real `rk_live_...`, `sk_live_...`, or `whsec_...` value into this
+document, Git, a screenshot, chat, email, or any client-side `VITE_...`
+variable. Store them in a password manager until they are in Render. If a secret
+is ever exposed, roll it immediately in Stripe and replace it in Render.
+
+### Step 0: record the two business decisions
+
+#### A. Charging currency: decided
+
+On 2 September 2026, the owner chose **British pounds sterling (GBP)** for the
+primarily UK customer base. The app, UI, tests, and setup command now require:
+
+| Product         | Current live price to create |
+| --------------- | ---------------------------: |
+| Additional Team |                 £5 GBP/month |
+| League          |                £29 GBP/month |
+| League Plus     |                £49 GBP/month |
+
+- [x] Charge customers in GBP and show the pound sign (`£`) in the app.
+- [x] Keep the same numeric prices: £5, £29, and £49 per month.
+
+Do not create USD Prices for this launch. Stripe Price currencies cannot be
+edited after creation, so an accidental USD Price must be replaced by a new GBP
+Price ID. See Stripe's guide to
+[managing Prices](https://docs.stripe.com/products-prices/manage-prices).
+
+#### B. Tax/VAT launch setting: decided
+
+Company registration and VAT registration are different. The current Checkout
+code does **not** enable Stripe Tax and therefore does not automatically add or
+collect VAT, sales tax, or GST.
+
+- [x] On 2 September 2026, the owner confirmed that this is a new UK company,
+      it is not VAT registered, and its turnover is below the thresholds stated
+      in its government registration email.
+- [x] Launch with Stripe Tax and automatic tax **off** because the business has
+      no active VAT or other indirect-tax registration to record in Stripe.
+- [ ] Monitor taxable turnover and review the VAT position regularly, before
+      approaching a threshold, and before materially expanding sales outside the
+      UK. Ask an accountant or tax adviser when the position changes.
+
+The current UK registration threshold and special cases remain governed by
+[HMRC's VAT guidance](https://www.gov.uk/register-for-vat), not this document.
+If the company later becomes VAT registered, stop before the effective date and
+request the tax integration change. Adding a
+[Stripe Tax registration](https://docs.stripe.com/tax/registering) records a
+registration you already have; it does not register the company with HMRC.
+
+### Step 1: do one final development gate
+
+Stripe does not let you edit the currency of an existing Price. Update the
+working sandbox from USD to GBP, then prove its essential path still works
+before copying the pattern to live mode.
+
+- [ ] In the **TSW Development** sandbox, open each of the existing Products:
+      **Additional Team**, **League**, and **League Plus**.
+- [ ] Add one new recurring, flat-rate, monthly GBP Price to each Product: £5,
+      £29, and £49 respectively. Do not add a trial to the Prices.
+- [ ] Copy the three new `price_...` IDs into the matching variables in
+      `env/server/.env.development`.
+- [ ] Run `pnpm --filter server stripe:create-portal-config` from the repository
+      root. The command must accept all three GBP Prices and print two
+      `bpc_...` Portal configuration IDs.
+- [ ] Put the three new Price IDs and both printed Portal IDs into the
+      development Render API. Keep its existing test key, webhook secret, and
+      development success/cancel URLs unchanged.
+- [ ] Save and redeploy the development API, then confirm its health endpoint.
+- [ ] In `https://dev.thesportyway.com`, confirm Pricing displays £5, £29, and
+      £49 rather than dollar prices.
+- [ ] In `https://dev.thesportyway.com`, complete one sandbox Checkout with card
+      `4242 4242 4242 4242`.
+- [ ] Before confirming payment, check that Stripe Checkout says **GBP** and the
+      amount is correct. Confirm no tax is being added.
+- [ ] Confirm the exact Team or League becomes manageable.
+- [ ] In the Stripe **TSW Development** sandbox, confirm the relevant webhook
+      deliveries say **Delivered** and HTTP `200`.
+- [ ] Open **Manage billing** and confirm the sandbox Customer Portal opens.
+- [ ] Confirm the development tests in Parts 4 and 5 have no unresolved launch
+      blocker. If you are not sure whether they were completed, run them before
+      continuing.
+- [ ] After the GBP flow passes, archive the old USD sandbox Prices so nobody
+      copies them into Render later. Do not delete the Products.
+
+### Step 2: activate and secure the Stripe live account
+
+These are Dashboard actions that only you, as the business owner, can complete.
+Stripe might use slightly different button wording as its Dashboard evolves.
+
+- [ ] Sign in to [Stripe](https://dashboard.stripe.com/) and use the account
+      picker to open the **live account**, not **TSW Development**.
+- [ ] Check that there is no sandbox/test banner.
+- [ ] If Stripe shows **Activate payments**, open it and complete every requested
+      item. Use the UK company's exact Companies House details.
+- [ ] Be ready to provide the registered company name and number, registered and
+      trading addresses, business activity and website, directors/owners and
+      their identity details, support contact details, and a company bank account
+      for payouts. Only provide the subset Stripe asks for.
+- [ ] Wait until the Dashboard no longer shows an activation or verification
+      requirement that blocks payments or payouts. Respond to any verification
+      request before launch.
+- [ ] In **Settings → Team and security**, enable two-factor authentication.
+      Prefer a passkey, security key, or authenticator app; avoid SMS when
+      possible.
+- [ ] In public business details, enter the customer-facing business name,
+      website, support email, and support phone/address you are comfortable
+      customers seeing.
+- [ ] Set a recognisable statement descriptor, for example a short form of
+      `THE SPORTY WAY`. Stripe requires 5–22 characters and has character rules.
+      A recognisable name helps prevent customer disputes.
+- [ ] Add and double-check the production payout bank account. A wrong account
+      number can send payouts to the wrong place.
+- [ ] Choose a payout schedule you understand. Daily automatic payouts are the
+      simplest default; changing the schedule does not make funds settle faster.
+- [ ] In **Settings → Branding**, add the real logo/icon and brand colours.
+- [ ] In Checkout/public settings, add the production support, privacy-policy,
+      terms, cancellation, and refund links. Confirm those pages are publicly
+      reachable.
+- [ ] In the live **Payment methods** settings, confirm cards are enabled. The
+      app lets Stripe choose eligible methods dynamically. Do not enable an
+      unfamiliar delayed payment method for launch until its success and failure
+      flow has passed in the sandbox.
+- [ ] In **Customer emails**, enable receipts for successful payments and the
+      Billing emails you want customers to receive for failed or expiring
+      payments. Send yourself a test email and check the business name, support
+      details, and links.
+- [ ] In your notification preferences, turn on at least successful-payment,
+      failed-payment, dispute, and payout-failure notifications.
+- [ ] Review Stripe's own
+      [account checklist](https://docs.stripe.com/get-started/account/checklist).
+
+### Step 3: create the three live Products and Prices
+
+Remain in the live account and confirm there is still no sandbox banner.
+
+For each row below, create one Product with one recurring, flat-rate, monthly
+Price. Do not put a trial on the Price; the app adds the one-time 14-day League
+trial itself.
+
+| Product name    | Price           | Copy the `price_...` ID into      |
+| --------------- | --------------- | --------------------------------- |
+| Additional Team | £5 GBP monthly  | `STRIPE_PRICE_ID_ADDITIONAL_TEAM` |
+| League          | £29 GBP monthly | `STRIPE_PRICE_ID_LEAGUE`          |
+| League Plus     | £49 GBP monthly | `STRIPE_PRICE_ID_LEAGUE_PLUS`     |
+
+- [ ] Open **More → Product catalog**.
+- [ ] Click **+ Add product** and enter the exact first Product name.
+- [ ] Choose **Recurring**, **Flat-rate**, **GBP**, and **Monthly**.
+- [ ] Enter the matching amount and leave trials off.
+- [ ] Save the Product, open its Price, and copy the ID beginning `price_`.
+      Do not copy the Product ID beginning `prod_`.
+- [ ] Save the ID beside the matching variable name in a private password-manager
+      note.
+- [ ] Repeat for all three rows.
+- [ ] Reopen all three live Prices and verify the name, amount, GBP currency,
+      monthly recurrence, and **Active** status.
+
+You may use Stripe's **Copy to live mode** action on the sandbox Products, but
+you must still copy the newly created live `price_...` IDs. Sandbox IDs cannot
+be used in live mode. Do not delete or repurpose old Prices with subscription
+history; archive them only after checking that history.
+
+### Step 4: create the live restricted server key
+
+This app uses Stripe-hosted Checkout, so it needs only a private server key. It
+does **not** need a `pk_live_...` publishable key in the client.
+
+- [ ] Open the live [API keys page](https://dashboard.stripe.com/apikeys).
+- [ ] Under **Restricted keys**, choose **Create restricted key** and start with
+      no permissions.
+- [ ] Name it `TSW production Render API`.
+- [ ] Give **Write** access to **Checkout Sessions**, **Customer Portal**, and
+      **Subscriptions**.
+- [ ] Give **Read** access to **Prices**.
+- [ ] Leave unrelated permissions as **None**.
+- [ ] Create the key, complete Stripe's security check, and immediately copy the
+      value beginning `rk_live_` into the private note as
+      `STRIPE_SECRET_KEY`. Stripe might not show it again.
+- [ ] If the app later receives a Stripe `403`, inspect this key's request logs
+      and add only the permission Stripe identifies. Do not replace it with the
+      unrestricted account secret as a shortcut.
+
+### Step 5: let the repository create the two safe live Portals
+
+The script validates the live key and all three Prices, then makes one normal
+Portal and one League-Plus-upgrade Portal. Run it from the current `dev` branch;
+do not merge to `main` yet.
+
+- [ ] In Render, open `tsw-2026-march-api-prod` and copy its existing
+      `CLIENT_ORIGIN`. This is the production website origin, with no path.
+- [ ] On your computer, create the ignored file
+      `env/server/.env.stripe-live.local` with these lines, replacing every
+      example value:
+
+```text
+APP_ENV=production
+STRIPE_SECRET_KEY=rk_live_REPLACE_ME
+STRIPE_PRICE_ID_ADDITIONAL_TEAM=price_REPLACE_ME
+STRIPE_PRICE_ID_LEAGUE=price_REPLACE_ME
+STRIPE_PRICE_ID_LEAGUE_PLUS=price_REPLACE_ME
+STRIPE_SUCCESS_URL=https://YOUR-PRODUCTION-WEBSITE/billing/success
+```
+
+- [ ] Confirm the production website in `STRIPE_SUCCESS_URL` exactly matches one
+      of the origins in production `CLIENT_ORIGIN`.
+- [ ] From the repository root, run:
+
+```bash
+ENV_FILE="$(pwd)/env/server/.env.stripe-live.local" pnpm --filter server stripe:create-portal-config
+```
+
+- [ ] Stop and fix the copied value if the command reports a test key, wrong
+      amount, wrong currency, non-monthly Price, reused Product, or other error.
+- [ ] Copy the two printed lines into the private note:
+
+```text
+STRIPE_PORTAL_CONFIGURATION_ID=bpc_REPLACE_ME
+STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_REPLACE_ME
+```
+
+- [ ] Run the same command once more and confirm it prints the same two IDs.
+      That proves the safe configurations are being reused.
+- [ ] Keep the temporary file only until the values are safely in Render. It is
+      ignored by Git, but it still contains a real key.
+
+The normal Portal allows payment-method updates, invoice history, and
+end-of-period cancellation. It deliberately hides arbitrary plan switching so a
+customer cannot bypass the app's Team-count rules. Do not replace it with a
+manually configured general-purpose Portal.
+
+### Step 6: create the live webhook destination
+
+A webhook is Stripe's signed message to the production API. Without it, a card
+can be charged while the app never grants access.
+
+- [ ] In Render, open `tsw-2026-march-api-prod`, copy its public service URL, and
+      confirm `/api/v1/health` works. This is the **API URL**, not the website
+      `CLIENT_ORIGIN`.
+- [ ] In Stripe, confirm once more that you are in the live account.
+- [ ] Open **Workbench → Webhooks** and click **Create new destination**.
+- [ ] Select API version **2026-06-24.dahlia**. Do not choose a newer version for
+      this endpoint until the code has been tested against it.
+- [ ] Choose **Events on your account**, not connected-account events and not
+      **All events**.
+- [ ] Select exactly these 11 events:
+
+```text
+checkout.session.completed
+checkout.session.async_payment_succeeded
+checkout.session.async_payment_failed
+checkout.session.expired
+customer.subscription.created
+customer.subscription.updated
+customer.subscription.deleted
+customer.subscription.trial_will_end
+invoice.paid
+invoice.payment_failed
+invoice.finalization_failed
+```
+
+- [ ] Choose **Webhook** and enter the production API URL plus the exact path:
+
+```text
+https://YOUR-PRODUCTION-API/api/v1/billing/webhooks
+```
+
+- [ ] Name it `TSW production billing webhook` and create it.
+- [ ] Open the destination, reveal its signing secret, and copy the new
+      `whsec_...` value into the private note as `STRIPE_WEBHOOK_SECRET`.
+- [ ] Keep it separate from both the development webhook secret and the local
+      Stripe CLI secret.
+
+It is normal for this destination to have no successful live deliveries yet.
+The controlled real purchase in Step 9 proves it.
+
+### Step 7: prepare the nine production Render values
+
+Do not save a half-complete set. Prepare all nine values in the private note
+first:
+
+```text
+STRIPE_SECRET_KEY=rk_live_REPLACE_ME
+STRIPE_WEBHOOK_SECRET=whsec_REPLACE_ME
+STRIPE_PRICE_ID_ADDITIONAL_TEAM=price_REPLACE_ME
+STRIPE_PRICE_ID_LEAGUE=price_REPLACE_ME
+STRIPE_PRICE_ID_LEAGUE_PLUS=price_REPLACE_ME
+STRIPE_PORTAL_CONFIGURATION_ID=bpc_REPLACE_ME
+STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_REPLACE_ME
+STRIPE_SUCCESS_URL=https://YOUR-PRODUCTION-WEBSITE/billing/success
+STRIPE_CANCEL_URL=https://YOUR-PRODUCTION-WEBSITE/billing/cancel
+```
+
+- [ ] Confirm every placeholder has been replaced and there are no quote marks.
+- [ ] Confirm `STRIPE_SECRET_KEY` begins `rk_live_`, not `rk_test_` or `sk_test_`.
+- [ ] Confirm all three `price_...` IDs came from the live Product catalog.
+- [ ] Confirm both `bpc_...` IDs came from the live portal command.
+- [ ] Confirm `STRIPE_WEBHOOK_SECRET` came from the live production destination.
+- [ ] Confirm both URLs use an origin already present in production
+      `CLIENT_ORIGIN`.
+- [ ] In production Render, confirm `APP_ENV=production` and
+      `NODE_ENV=production`.
+
+Do not add a Stripe key to the production client service. All nine values belong
+only to `tsw-2026-march-api-prod`.
+
+### Step 8: controlled deploy, backup, and migration
+
+Choose a quiet time when you can watch Stripe and Render for at least an hour.
+Do not market or announce paid self-service yet.
+
+- [ ] Run the repository secret scan:
+
+```bash
+pnpm check-secrets
+```
+
+- [ ] Confirm it says `Secret scan passed` before continuing.
+- [ ] Review and commit the documentation/code on `dev` and let the development
+      deployment complete.
+- [ ] Merge the fully tested `dev` branch into `main`. Do not commit directly to
+      `main`.
+- [ ] Immediately before the migration, create and verify the production MongoDB
+      backup in [`mongodb-production-backup.md`](./mongodb-production-backup.md).
+- [ ] In the **production API** Render service, add all nine prepared values and
+      choose **Save, rebuild, and deploy**.
+- [ ] Wait for the API deployment to succeed and open its `/api/v1/health`
+      endpoint. Stop if the service fails to start; the environment validation
+      usually names the missing or mixed-mode value.
+- [ ] Do **not** deploy the production client yet. This leaves the public paid
+      entry point closed while the database is prepared.
+- [ ] Open the production API's Render **Shell** and run the dry run:
+
+```bash
+pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js --dry-run
+```
+
+- [ ] Confirm it shows the expected Team owners, exactly the three known
+      pre-launch production Leagues, the expected free Team for each owner, and
+      no unexpected open Stripe subscriptions.
+- [ ] If any name or count is surprising, **stop**. Save the output and do not
+      run the real migration.
+- [ ] If every line is correct, run the real migration once:
+
+```bash
+pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
+```
+
+- [ ] In the production app, verify all three old Leagues are still editable and
+      show complimentary/grandfathered billing.
+- [ ] Confirm each existing owner has exactly one manageable free standalone
+      Team.
+- [ ] Now manually deploy `tsw-2026-march-client-prod` from `main`.
+- [ ] Open `/pricing` while signed out and verify the four displayed options and
+      GBP prices before proceeding.
+
+The API must be deployed before the migration because the migration script is
+part of that server release. The client is deliberately deployed afterward so
+customers cannot start Checkout during the migration.
+
+### Step 9: prove the real-money path
+
+Do not use a Payment Link and do not use a Stripe test card. This must exercise
+the app's live Checkout metadata and webhook flow.
+
+- [ ] Use a controlled production account and a real card you are authorised to
+      use.
+- [ ] Create/select an Additional Team and buy the £5 GBP monthly subscription.
+- [ ] Keep Stripe's live webhook destination and Render logs open while paying.
+- [ ] In Stripe, confirm the relevant webhook deliveries say **Delivered** with
+      HTTP `200`.
+- [ ] In the app, confirm the exact Team becomes manageable and no other Team's
+      access changes.
+- [ ] Check that the Stripe Customer, Subscription, Invoice, and metadata all
+      refer to that Team and owner.
+- [ ] Open **Manage billing** and confirm payment-method update, invoice history,
+      and end-of-period cancellation are available, but arbitrary plan switching
+      is not.
+- [ ] Schedule cancellation and confirm the Team remains manageable until the
+      paid period ends. A refund does not cancel a subscription.
+- [ ] Refund the controlled charge in Stripe if appropriate.
+- [ ] Repeat with one League and confirm Checkout shows the 14-day trial, the
+      exact League receives access, and a League-to-League-Plus upgrade shows the
+      prorated amount before approval.
+- [ ] If any charge succeeds but access is not granted, immediately stop the paid
+      launch, hide or roll back the production Pricing client, preserve all logs,
+      and do not ask the customer to pay again.
+
+### Step 10: finish and monitor
+
+- [ ] Delete the local `env/server/.env.stripe-live.local` file after confirming
+      the values are safely stored in Render and the password manager.
+- [ ] Run `pnpm check-secrets` again before pushing any final documentation
+      updates.
+- [ ] For the first week, check live webhook failures, disputes, failed invoices,
+      Render errors, and subscriptions every day.
+- [ ] Confirm the first payout appears in Stripe with the expected bank account
+      and expected arrival date. New accounts can have a longer first-payout
+      wait; the Dashboard is the source of truth.
+- [ ] After successful live testing, inspect the restricted key's request logs
+      and remove any permission that was not used.
+- [ ] Subscribe the account owner to Stripe API/security announcements and keep
+      the Stripe SDK and pinned webhook/API version under normal dependency
+      review.
+
+Production is ready for customers only when every box in Steps 0–9 is complete
+and there is no unresolved tax, currency, account-verification, webhook,
+migration, or live-purchase issue. Step 10 is the immediate post-launch routine.
 
 ## The nine server environment variables
 
@@ -85,9 +507,9 @@ APIs use `NODE_ENV=production`, so this exception cannot weaken a deployment.
 | ---------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `STRIPE_SECRET_KEY`                      | Test secret key beginning `sk_test_` or test restricted key beginning `rk_test_` | Live secret key beginning `sk_live_` or live restricted key beginning `rk_live_` |
 | `STRIPE_WEBHOOK_SECRET`                  | Test endpoint secret beginning `whsec_`                                          | Live endpoint secret beginning `whsec_`                                          |
-| `STRIPE_PRICE_ID_ADDITIONAL_TEAM`        | Test $5 Price ID beginning `price_`                                              | Live $5 Price ID beginning `price_`                                              |
-| `STRIPE_PRICE_ID_LEAGUE`                 | Test $29 Price ID beginning `price_`                                             | Live $29 Price ID beginning `price_`                                             |
-| `STRIPE_PRICE_ID_LEAGUE_PLUS`            | Test $49 Price ID beginning `price_`                                             | Live $49 Price ID beginning `price_`                                             |
+| `STRIPE_PRICE_ID_ADDITIONAL_TEAM`        | Test £5 GBP Price ID beginning `price_`                                          | Live £5 GBP Price ID beginning `price_`                                          |
+| `STRIPE_PRICE_ID_LEAGUE`                 | Test £29 GBP Price ID beginning `price_`                                         | Live £29 GBP Price ID beginning `price_`                                         |
+| `STRIPE_PRICE_ID_LEAGUE_PLUS`            | Test £49 GBP Price ID beginning `price_`                                         | Live £49 GBP Price ID beginning `price_`                                         |
 | `STRIPE_PORTAL_CONFIGURATION_ID`         | Test portal configuration beginning `bpc_`                                       | Live portal configuration beginning `bpc_`                                       |
 | `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` | Test upgrade-only portal configuration beginning `bpc_`                          | Live upgrade-only portal configuration beginning `bpc_`                          |
 | `STRIPE_SUCCESS_URL`                     | Development client URL plus `/billing/success`                                   | Production client URL plus `/billing/success`                                    |
@@ -121,11 +543,11 @@ test values. Render production must use live values. The API checks this using
    the sandbox.
 4. Open **More → Product catalog**.
 5. Create a Product called **Additional Team**.
-6. Give it one recurring Price: **$5 USD every month**.
+6. Give it one recurring Price: **£5 GBP every month**.
 7. Create a separate Product called **League**.
-8. Give it one recurring Price: **$29 USD every month**.
+8. Give it one recurring Price: **£29 GBP every month**.
 9. Create a separate Product called **League Plus**.
-10. Give it one recurring Price: **$49 USD every month**.
+10. Give it one recurring Price: **£49 GBP every month**.
 11. Do not put a trial on the Prices. The app adds the 14-day League trial.
 12. Copy each `price_...` ID into the matching environment variable.
 
@@ -155,13 +577,13 @@ STRIPE_CANCEL_URL=http://localhost:5173/billing/cancel
 pnpm --filter server stripe:create-portal-config
 ```
 
-7. The command checks that the Prices really are $5, $29, and $49 USD monthly.
+7. The command checks that the Prices really are £5, £29, and £49 GBP monthly.
    It then prints two lines beginning `STRIPE_PORTAL_CONFIGURATION_ID=bpc_` and
    `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_`.
 8. Copy both whole lines into `env/server/.env.development`.
 9. Start the app with `pnpm dev`.
 
-Your first standalone Team is free. Create a second Team to see the $5 test
+Your first standalone Team is free. Create a second Team to see the £5 test
 Checkout. When no Stripe key exists, local League creation is complimentary so
 ordinary development is not blocked. When the complete sandbox configuration
 exists, local League Checkout uses Stripe test mode too.
@@ -312,7 +734,7 @@ tests.
 1. Sign in with that normal development test account.
 2. Create the first Team. Confirm it is labelled **Free Team** and can be edited.
 3. Create a second Team. Confirm its saved data is visible but management asks
-   for the $5 subscription.
+   for the £5 subscription.
 4. Open Pricing and choose the second Team.
 5. Click the subscribe button.
 6. In Stripe Checkout use card `4242 4242 4242 4242`, any future date, any CVC,
@@ -321,7 +743,7 @@ tests.
 8. Confirm the success page becomes active after the webhook arrives.
 9. Edit the Team, add a player, create and track a game, view replay and shot
    maps, and export CSV.
-10. In Stripe, confirm the customer, $5 subscription, invoice, and metadata all
+10. In Stripe, confirm the customer, £5 subscription, invoice, and metadata all
     point to that exact Team.
 
 ### League and League Plus
@@ -392,7 +814,7 @@ rejects any attempt to charge it. That makes it suitable for this test.
 7. Confirm all of these before continuing:
    - Status is **Trialing**.
    - The Product is **League**.
-   - The amount after the trial is **$29 monthly**.
+   - The amount after the trial is **£29 monthly**.
    - Metadata contains `resourceType=league`.
    - Metadata contains the expected `ownerUserId`.
    - For a purchase made for an existing League, metadata also contains its
@@ -560,14 +982,14 @@ request contains no secret and must not change any Team or League.
 2. Cancel that test subscription if it is still open.
 3. In TSW, start another new League purchase.
 4. Continue to Stripe Checkout.
-5. Confirm Stripe asks for the first $29 or $49 payment now and does **not** show
+5. Confirm Stripe asks for the first £29 or £49 payment now and does **not** show
    another 14-day trial.
 6. You do not need to finish this payment. Return to TSW and confirm no new
    League access was granted.
 
 #### 7. Confirm an active paid Team cannot become the free Team
 
-1. Use an account with one free Team and one active $5 Additional Team.
+1. Use an account with one free Team and one active £5 Additional Team.
 2. Open Pricing and select the active Additional Team.
 3. Click **Make this my free team**.
 4. Confirm TSW refuses and tells you to cancel that Team's subscription first.
@@ -601,9 +1023,9 @@ Instead, verify each development Price safely:
 2. In the **TSW Development** Stripe sandbox, paste it into the Dashboard search.
 3. Open the Price and confirm it is active, recurring monthly, and belongs to
    the expected Product:
-   - Additional Team: $5
-   - League: $29
-   - League Plus: $49
+   - Additional Team: £5 GBP
+   - League: £29 GBP
+   - League Plus: £49 GBP
 4. Repeat for all three values.
 
 Unknown Prices, repeated event IDs, bad signatures, and old paid events arriving
@@ -621,119 +1043,6 @@ Official references: [Stripe Billing failure testing](https://docs.stripe.com/bi
 [Stripe test cards](https://docs.stripe.com/testing),
 [Workbench events and retries](https://docs.stripe.com/workbench/overview), and
 [expiring a Checkout Session](https://docs.stripe.com/api/checkout/sessions/expire).
-
-## Part 6: set up production in Stripe live mode
-
-Do not start this until every development test above passes.
-
-1. In the account picker, leave the sandbox and open the live account. Check
-   that no sandbox banner is visible.
-2. Open **More → Product catalog** and create three new live Products:
-   **Additional Team**, **League**, and
-   **League Plus**.
-3. Create one live monthly Price for each: $5, $29, and $49.
-4. Do not add trials to the Prices.
-5. Copy the three new live `price_...` IDs. Test Price IDs do not work in live
-   mode.
-6. Create the locked-down live Customer Portal configuration with the setup
-   command in the manual checklist below.
-7. Keep the old Team Pro/season Prices archived when they are no longer needed.
-   Do not delete or repurpose them while checking historical data.
-
-## Part 7: configure the production webhook
-
-1. Keep Stripe in live mode.
-2. Open **Workbench → Webhooks**.
-3. Add this endpoint using the real production API address:
-
-```text
-https://YOUR-PRODUCTION-API.example.com/api/v1/billing/webhooks
-```
-
-4. Click **Create new destination**, select the latest API version, choose
-   **Events on your account**, and select the same 11 events listed earlier.
-5. Select **Webhook**, enter the URL, and click **Create destination**.
-6. Reveal and copy its live `whsec_...`.
-7. Do not use the development webhook secret.
-
-## Part 8: add production values in Render
-
-1. Open **tsw-2026-march-api-prod** in Render.
-2. Confirm `APP_ENV=production` and `NODE_ENV=production`.
-3. Add all nine Stripe variables.
-4. Use only the live secret/restricted key, live Price IDs, live webhook secret,
-   and production client URLs.
-5. Save the values.
-6. Do not merge or deploy the production client until Parts 9 and 10 can be
-   completed in one controlled launch window. The Pricing route is now public
-   in the code.
-
-## Part 9: protect and migrate production data
-
-1. Make a verified MongoDB backup. Follow
-   [`mongodb-production-backup.md`](./mongodb-production-backup.md).
-2. Open a production Render Shell.
-3. Run:
-
-```bash
-pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js --dry-run
-```
-
-4. Confirm it shows the expected Team owners and exactly the three existing
-   production Leagues.
-5. Confirm it finds no unexpected open Stripe subscriptions.
-6. If anything is surprising, stop and do not run the real command.
-7. If everything is right, run:
-
-```bash
-pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
-```
-
-8. Check all three old Leagues in the app. They must still be editable and show
-   complimentary/grandfathered billing.
-9. Check each existing owner has exactly one free standalone Team.
-
-The script makes the oldest Team for each owner free. Other existing standalone
-Teams become read-only paid-capacity Teams until subscribed. If that is wrong
-for a particular owner, stop after the dry run and decide which Team should be
-free before running the real migration.
-
-## Part 10: make one controlled live payment
-
-1. Complete the live Stripe configuration and production migration first.
-2. During a controlled launch window, deploy the production API and client. The
-   Pricing route is public as soon as this client version is deployed.
-3. Immediately use a controlled production account and watch Render and Stripe
-   webhook logs while testing.
-4. Buy one $5 Additional Team with a real card.
-5. Confirm Checkout, webhook delivery, database state, receipt, portal, and Team
-   management all work.
-6. Cancel the subscription, verify the end-of-period state, and refund the test
-   charge if appropriate from Stripe.
-7. Repeat with one League trial. Confirm the exact League gets access.
-8. If either purchase fails, roll back the client deployment or disable the
-   production service while the problem is fixed. Do not continue marketing the
-   paid flow.
-
-## Moving safely from a sandbox to live mode
-
-Use this order:
-
-1. Finish every sandbox check.
-2. Create new live Products and Prices.
-3. Create a new live webhook endpoint.
-4. Put only live values in the production Render API.
-5. Back up production.
-6. Dry-run and run the production migration.
-7. Deploy the API and public Pricing client in a controlled launch window.
-8. Immediately make controlled live purchases.
-9. Check the three grandfathered Leagues.
-10. Watch Stripe webhook failures, Render errors, payment-failure emails, and
-    the first real subscriptions closely.
-
-Never reuse a sandbox Price ID in live mode. Stripe can copy a sandbox Product
-to live mode, but the copy is a separate live object with a new live Price ID.
-Always copy the new live `price_...` ID.
 
 ## What the code now does
 
@@ -757,483 +1066,7 @@ Always copy the new live `price_...` ID.
 - Enforces 10- and 24-team limits in the API, not only in the browser.
 - Keeps every current Team feature available at every tier.
 
-## Final checklist
-
-### Already completed before this pricing change
-
-- [x] Stripe-hosted Checkout and Billing Portal integration existed.
-- [x] Webhooks used the raw request body and signature verification.
-- [x] Billing lived on individual Team and League resources.
-- [x] Subscription status, cancellation date, trial date, and Stripe IDs were
-      stored.
-- [x] Webhook replay protection and safe redirect validation existed.
-- [x] Failed-payment and trial-ending email hooks existed.
-
-### Completed during this task
-
-- [x] Replaced Team Pro and season pricing with the four-part capacity model.
-- [x] Made the first standalone Team free and each additional Team $5/month.
-- [x] Removed the Team trial and kept a one-time 14-day League trial.
-- [x] Added League $29 for 1–10 teams and League Plus $49 for 11–24 teams.
-- [x] Added immediate confirmed upgrades and next-period downgrades.
-- [x] Added a locked-down Portal configuration so the ordinary portal cannot
-      bypass the app's downgrade rules.
-- [x] Added API enforcement at teams 11 and 25.
-- [x] Made canceled or unpaid paid-capacity resources read-only while preserving
-      data and reads.
-- [x] Removed all current Team feature gates.
-- [x] Added the safe migration that grandfathers all pre-launch Leagues.
-- [x] Updated Render's environment-variable contract.
-- [x] Added and updated automated tests for price selection, trials, webhooks,
-      access loss/restoration, upgrades, downgrades, free-Team movement, League
-      limits, and the pricing UI.
-- [x] Consolidated Stripe instructions into this file.
-- [x] Made Pricing public and added it to desktop and mobile navigation.
-- [x] Added direct links for League Plus upgrades and blocked downgrades.
-- [x] Added automatic billing-state refresh after returning from Stripe so plan
-      buttons do not remain stale until a hard refresh.
-- [x] Corrected the free-Team CTA when the user already owns a free Team.
-- [x] Kept Customer Portal recovery reachable when a League is `past_due`,
-      `unpaid`, or `paused`, so the owner can replace a failed payment method.
-
-### Still requiring action from you
-
-Follow these boxes from top to bottom. Do not skip ahead to live mode. Stripe's
-Dashboard wording below was checked against Stripe's current documentation on
-25 August 2026.
-
-Stripe links normally open the account or sandbox you used most recently. Look
-at the banner and account picker every time. A **sandbox** uses fake money. The
-**live account** uses real money.
-
-#### 1. Create and open the development sandbox
-
-- [ ] Sign in at [dashboard.stripe.com](https://dashboard.stripe.com/).
-- [ ] Click the account picker near the top-left of the Dashboard.
-- [ ] Click **Switch to sandbox**.
-- [ ] If **TSW Development** already exists, open it. Otherwise click **Create
-      sandbox**.
-- [ ] Enter `TSW Development` in **Name**.
-- [ ] Choose **Create an account from scratch**. This keeps development changes
-      away from the live account.
-- [ ] Click **Create sandbox**.
-- [ ] Check that Stripe shows a sandbox banner. Stop if it does not.
-
-#### 2. Create the three sandbox Products and Prices
-
-Do the next steps once for each row:
-
-| Product name    | Price | Currency | Pricing model | Payment type | Billing period | Save this ID as                   |
-| --------------- | ----: | -------- | ------------- | ------------ | -------------- | --------------------------------- |
-| Additional Team |    $5 | USD      | Flat-rate     | Recurring    | Monthly        | `STRIPE_PRICE_ID_ADDITIONAL_TEAM` |
-| League          |   $29 | USD      | Flat-rate     | Recurring    | Monthly        | `STRIPE_PRICE_ID_LEAGUE`          |
-| League Plus     |   $49 | USD      | Flat-rate     | Recurring    | Monthly        | `STRIPE_PRICE_ID_LEAGUE_PLUS`     |
-
-- [ ] While still inside **TSW Development**, click **More → Product catalog**.
-- [ ] Click **+ Add product**.
-- [ ] Enter the exact Product name from the table.
-- [ ] A description is optional. Do not promise features or limits that are not
-      in the price table at the top of this guide.
-- [ ] Under pricing, choose **Flat-rate** and **Recurring**.
-- [ ] Enter the amount from the table, choose **USD**, and choose **Monthly** as
-      the billing period.
-- [ ] Do not add a trial to the Price. The app adds the 14-day League trial.
-- [ ] Leave tax settings at their current default for sandbox testing. Do not
-      guess a Product tax code or turn on Stripe Tax as a production decision.
-- [ ] Click **Add product**.
-- [ ] Open the Product. In **Pricing**, click its monthly Price.
-- [ ] Copy the ID beginning `price_`. Copy the **Price ID**, not the Product ID
-      beginning `prod_`.
-- [ ] Paste the ID into a temporary private password-manager note beside the
-      matching variable name from the table.
-- [ ] Repeat until Product catalog contains exactly these three new Products,
-      each with one active monthly USD Price.
-
-#### 3. Create the sandbox server key
-
-Use a restricted key because it can do much less damage if it is ever exposed.
-
-- [ ] Stay inside **TSW Development**.
-- [ ] Open Stripe's [API keys page](https://dashboard.stripe.com/apikeys).
-- [ ] Under **Restricted keys**, click **Create restricted key**.
-- [ ] Choose to start with no permissions.
-- [ ] Name it `TSW development Render API`.
-- [ ] Give **Write** access to **Checkout Sessions**, **Customer Portal**, and
-      **Subscriptions**. Stripe's current permission screen groups subscription
-      schedule operations under **Subscriptions**; it does not show a separate
-      **Subscription Schedules** row.
-- [ ] Give **Read** access to **Prices**. The one-time setup command reads the
-      Prices so it can catch a wrong amount.
-- [ ] Leave unrelated permissions as **None**.
-- [ ] Click **Create key** and complete Stripe's two-factor check.
-- [ ] Copy the value beginning `rk_test_` immediately. Stripe might not show it
-      again.
-- [ ] Save it as `STRIPE_SECRET_KEY` in the same private note. Never put it in
-      Git, client code, chat, email, analytics, or a screenshot.
-- [ ] Later, if Stripe returns `403`, return to **API keys**, click the key's
-      `⋯` menu, choose **View request logs**, and read which permission Stripe
-      says is missing. Add only that permission and test again.
-
-#### 4. Create the safe sandbox Customer Portal configuration
-
-The app uses one locked-down configuration for normal Portal visits and a
-separate upgrade-only configuration for the explicit League Plus confirmation
-screen. This prevents the normal Portal from jumping around the app's team-count
-and downgrade rules. The provided command makes both for you.
-
-- [ ] On your computer, open `env/server/.env.development`.
-- [ ] Put the sandbox `STRIPE_SECRET_KEY`, all three sandbox `price_...` values,
-      and these local URLs in that file:
-
-```text
-STRIPE_SUCCESS_URL=http://localhost:5173/billing/success
-STRIPE_CANCEL_URL=http://localhost:5173/billing/cancel
-```
-
-- [ ] Make sure `APP_ENV=development` is already in the file.
-- [ ] From the repository root, run:
-
-```bash
-pnpm --filter server stripe:create-portal-config
-```
-
-- [ ] Stop if the command reports a wrong Price, currency, interval, Product, or
-      key mode. Fix the Stripe Product or copied value; do not weaken the check.
-- [ ] Copy both output lines, which look like this:
-
-```text
-STRIPE_PORTAL_CONFIGURATION_ID=bpc_REAL_SANDBOX_VALUE
-STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_REAL_SANDBOX_UPGRADE_VALUE
-```
-
-- [ ] Paste both into `env/server/.env.development` and the private note holding
-      your sandbox values.
-- [ ] Run the command once more. Confirm it prints the same two `bpc_...` values
-      instead of making more configurations.
-
-This Portal lets customers update cards, see invoices, and cancel at the end of
-the paid period. Its normal home page hides plan switching. The app can still
-open Stripe's confirmation page for the one safe League Plus upgrade. The app
-itself schedules a downgrade for the next billing date.
-
-#### 5. Create the local webhook secret with Stripe CLI
-
-This secret is only for your computer. Do not copy it to Render. The Render
-webhook gets a different secret later.
-
-- [ ] Install the Stripe CLI using Stripe's
-      [official installation instructions](https://docs.stripe.com/stripe-cli).
-- [ ] Open a terminal and run `stripe login`.
-- [ ] When Stripe opens in your browser, choose **TSW Development**, check for
-      the sandbox banner, and click **Allow access**.
-- [ ] Return to the repository root in that terminal and run:
-
-```bash
-pnpm --filter server stripe-listen
-```
-
-- [ ] Leave that command running. It forwards Stripe sandbox events to:
-
-```text
-http://localhost:4000/api/v1/billing/webhooks
-```
-
-- [ ] Find the line that says **Your webhook signing secret is** and copy the
-      value beginning `whsec_`.
-- [ ] Open `env/server/.env.development` and add or replace this line:
-
-```text
-STRIPE_WEBHOOK_SECRET=whsec_REAL_VALUE_FROM_STRIPE_CLI
-```
-
-- [ ] Never reuse an older `whsec_...` value and never paste this secret into
-      Git, chat, email, analytics, or a screenshot.
-- [ ] Open a second terminal at the repository root and run `pnpm dev`. If the
-      app was already running when you changed the environment file, restart it.
-- [ ] Keep both `pnpm dev` and `stripe-listen` running while testing payments.
-- [ ] If a later `stripe-listen` run prints a different secret, update
-      `STRIPE_WEBHOOK_SECRET` and restart the app before testing again.
-
-Do not complete a test Checkout without the listener. Stripe might accept the
-test payment, but the app would not receive the signed event that grants or
-removes access.
-
-#### 6. Add the sandbox values to the development Render API
-
-- [ ] Review and commit this branch, then merge it into the repository's `dev`
-      branch so Render can deploy the new billing code.
-- [ ] Wait for both development Render services to deploy successfully.
-- [ ] Sign in to the [Render Dashboard](https://dashboard.render.com/).
-- [ ] Open `tsw-2026-march-api-dev`. Be careful not to open the production API.
-- [ ] Click **Environment** in the left pane.
-- [ ] Confirm `APP_ENV` is `development` and `NODE_ENV` is `production`.
-- [ ] Under **Environment Variables**, click **+ Add Environment Variable** for
-      each of the eight rows below, or use **Add from .env**.
-
-```text
-STRIPE_SECRET_KEY=rk_test_VALUE_FROM_STEP_3
-STRIPE_PRICE_ID_ADDITIONAL_TEAM=price_VALUE_FROM_ADDITIONAL_TEAM
-STRIPE_PRICE_ID_LEAGUE=price_VALUE_FROM_LEAGUE
-STRIPE_PRICE_ID_LEAGUE_PLUS=price_VALUE_FROM_LEAGUE_PLUS
-STRIPE_PORTAL_CONFIGURATION_ID=bpc_VALUE_FROM_STEP_4
-STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_UPGRADE_VALUE_FROM_STEP_4
-STRIPE_SUCCESS_URL=https://YOUR-REAL-DEV-CLIENT/billing/success
-STRIPE_CANCEL_URL=https://YOUR-REAL-DEV-CLIENT/billing/cancel
-```
-
-- [ ] Replace every example value. Do not include quote marks.
-- [ ] Copy the development client origin from the existing `CLIENT_ORIGIN` value.
-      Add `/billing/success` and `/billing/cancel` to make the two URLs.
-- [ ] Do not save yet because the real development webhook secret is created in
-      the next step. Keep Render open in a separate browser tab. The server
-      requires all nine values together.
-
-#### 7. Create the sandbox webhook for the development deployment
-
-- [ ] Return to Stripe and make sure **TSW Development** and its sandbox banner
-      are visible.
-- [ ] Open **Workbench → Webhooks** or use Stripe's
-      [Webhooks page](https://dashboard.stripe.com/webhooks).
-- [ ] Click **Create new destination**.
-- [ ] Select API version `2026-06-24.dahlia`, or a newer generally available
-      version if Stripe clearly labels one as newer.
-- [ ] Choose **Events on your account**. Do not choose connected-account events.
-- [ ] Search for and select all 11 events below:
-
-```text
-checkout.session.completed
-checkout.session.async_payment_succeeded
-checkout.session.async_payment_failed
-checkout.session.expired
-customer.subscription.created
-customer.subscription.updated
-customer.subscription.deleted
-customer.subscription.trial_will_end
-invoice.paid
-invoice.payment_failed
-invoice.finalization_failed
-```
-
-- [ ] Click **Continue**, choose **Webhook**, and click **Continue** again if
-      Stripe shows a second page.
-- [ ] Enter the real development API URL followed by the exact route:
-
-```text
-https://dev-api.thesportyway.com/api/v1/billing/webhooks
-```
-
-- [ ] Enter `TSW development billing webhook` as the destination name.
-- [ ] Enter `Stripe sandbox billing events for dev-api.thesportyway.com` as the
-      description.
-- [ ] Click **Create destination**.
-- [ ] Open the new destination, find **Signing secret**, and click **Reveal**.
-- [ ] Copy the value beginning `whsec_`. This is not the API key and is not the
-      local Stripe CLI secret.
-- [ ] Return to Render and put this value in `STRIPE_WEBHOOK_SECRET`.
-- [ ] Choose **Save, rebuild, and deploy** in Render.
-- [ ] Wait for Render to show a successful deploy.
-- [ ] Open `https://dev-api.thesportyway.com/api/v1/health` and confirm it
-      responds.
-
-#### 8. Verify the development webhook and database
-
-- [ ] Back up the development database using
-      [`mongodb-production-backup.md`](./mongodb-production-backup.md), but use
-      the development `MONGO_URI` and `MONGO_DB_NAME` and name the archive
-      `dev-...archive.gz`, not `prod-...archive.gz`.
-- [ ] In Render, open `tsw-2026-march-api-dev`, click **Settings**, find
-      **General → Instance Type**, and check its value.
-- [ ] If it is **Free**, click **Update**, choose **Starter**, and click **Save
-      Changes**. Render charges for the time the paid instance is active.
-- [ ] Wait for that deploy to succeed. Render does not show **Shell** for Free web
-      services.
-- [ ] Open **Shell** and run:
-
-```bash
-pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js --dry-run
-```
-
-- [ ] Read every count. Stop if it shows an unexpected open Stripe subscription
-      or unexpected Teams or Leagues.
-- [ ] If the dry run is correct, run:
-
-```bash
-pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
-```
-
-- [ ] Make a sandbox Checkout from the deployed development app. This creates a
-      real event shape without moving real money.
-- [ ] In Stripe, open **Workbench → Webhooks**, open the development destination,
-      and select **Event deliveries**.
-- [ ] Confirm the Checkout and subscription deliveries show **Delivered** and
-      HTTP `200`. If they show **Failed**, open the delivery and read the response
-      before doing anything else.
-- [ ] Complete every successful, canceled, failed, expired, duplicate-webhook,
-      bad-signature, upgrade, downgrade, and access check in Parts 4 and 5.
-- [ ] When migration and testing are finished, you may return to **Settings →
-      General → Instance Type**, choose **Free**, and save. Wait for the downgrade
-      deploy to succeed.
-- [ ] Do not continue to live mode until every development check passes.
-
-#### 9. Prepare the live Stripe account
-
-- [ ] In Stripe's account picker, leave **TSW Development** and open the live
-      account. Check that the sandbox banner has disappeared.
-- [ ] If Stripe shows **Activate payments** or asks for account information,
-      complete the business, owner, bank, customer-facing, and identity fields.
-- [ ] Require two-factor authentication for Dashboard access. Prefer a passkey or
-      authenticator app over SMS.
-- [ ] Before taking real payments, decide with a qualified adviser whether and
-      where you must register for sales tax, VAT, or GST. Do not turn on Stripe
-      Tax until the needed registrations are active.
-
-#### 10. Create the three live Products and Prices
-
-- [ ] Open **More → Product catalog** in the live account.
-- [ ] Create **Additional Team**, **League**, and **League Plus** again using the
-      exact fields and amounts in step 2. You may instead open each sandbox
-      Product and use **Copy to live mode** if Stripe shows that button.
-- [ ] Do not add trials to the live Prices.
-- [ ] Open each live Product and copy its new live `price_...` ID. Sandbox and
-      live Price IDs are different even when Stripe copied the Product.
-- [ ] Save the three new IDs beside their matching production variable names.
-- [ ] Archive old Team Pro or season Products only after checking historical
-      subscriptions. Do not delete or repurpose them.
-
-#### 11. Create the live key and configure the live Customer Portal
-
-- [ ] In the live account, open [API keys](https://dashboard.stripe.com/apikeys).
-- [ ] Create a restricted key named `TSW production Render API` with the same
-      permissions used in step 3.
-- [ ] Complete two-factor verification and copy the `rk_live_...` value
-      immediately.
-- [ ] Store it as the production `STRIPE_SECRET_KEY`. Never paste it into the
-      development Render service.
-- [ ] On your computer, make a new ignored file named
-      `env/server/.env.stripe-live.local`. Put only these real values in it:
-
-```text
-APP_ENV=production
-STRIPE_SECRET_KEY=rk_live_REAL_VALUE
-STRIPE_PRICE_ID_ADDITIONAL_TEAM=price_REAL_LIVE_VALUE
-STRIPE_PRICE_ID_LEAGUE=price_REAL_LIVE_VALUE
-STRIPE_PRICE_ID_LEAGUE_PLUS=price_REAL_LIVE_VALUE
-STRIPE_SUCCESS_URL=https://YOUR-REAL-PRODUCTION-CLIENT/billing/success
-```
-
-- [ ] Replace every example. This file is ignored by Git, but still treat it as
-      a secret and never share it.
-- [ ] From the repository root, run:
-
-```bash
-ENV_FILE="$(pwd)/env/server/.env.stripe-live.local" pnpm --filter server stripe:create-portal-config
-```
-
-- [ ] Confirm the command validates the three live Prices and prints new live
-      `STRIPE_PORTAL_CONFIGURATION_ID=bpc_...` and
-      `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=bpc_...` values.
-- [ ] Save both live `bpc_...` values privately. They are different from the
-      sandbox configurations.
-- [ ] Delete `env/server/.env.stripe-live.local` after you have safely added the
-      live values to Render in step 13.
-
-The sandbox Portal configurations do not work in live mode. This step creates
-the matching locked-down and upgrade-only live configurations.
-
-#### 12. Create the live production webhook
-
-- [ ] Stay in the live account and open **Workbench → Webhooks**.
-- [ ] Click **Create new destination**.
-- [ ] Choose the same API version, **Events on your account**, and the same 11
-      event types from step 7.
-- [ ] Choose **Webhook**.
-- [ ] Enter the real production API endpoint:
-
-```text
-https://YOUR-REAL-PRODUCTION-API/api/v1/billing/webhooks
-```
-
-- [ ] Name it `TSW production billing webhook` and click **Create destination**.
-- [ ] Reveal and copy this destination's new `whsec_...` signing secret.
-- [ ] Keep it separate from both the sandbox endpoint secret and the local CLI
-      secret.
-
-#### 13. Add the live values to the production Render API
-
-- [ ] Merge the fully tested `dev` branch into `main` only when you are ready for
-      the controlled production launch window. This version makes `/pricing`
-      public.
-- [ ] In Render, open `tsw-2026-march-api-prod`.
-- [ ] Click **Environment**.
-- [ ] Confirm `APP_ENV=production` and `NODE_ENV=production`.
-- [ ] Set `STRIPE_SECRET_KEY` to the `rk_live_...` key.
-- [ ] Put the three live `price_...` IDs in their three matching Price variables.
-- [ ] Set `STRIPE_PORTAL_CONFIGURATION_ID` to the live `bpc_...` value from step 11. Do not use the sandbox `bpc_...` value.
-- [ ] Set `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` to the second live `bpc_...`
-      value from step 11. Do not use the sandbox value.
-- [ ] Set `STRIPE_WEBHOOK_SECRET` to the production destination's `whsec_...`
-      signing secret.
-- [ ] Set `STRIPE_SUCCESS_URL` and `STRIPE_CANCEL_URL` to the production client
-      URLs.
-- [ ] Recheck every value character by character. Never put `test`, `sandbox`, or
-      a development hostname in a production Stripe value.
-- [ ] Choose **Save, rebuild, and deploy**.
-- [ ] Confirm the production API health endpoint responds after deployment.
-
-#### 14. Protect and migrate production data
-
-- [ ] Make and verify the MongoDB backup described in
-      [`mongodb-production-backup.md`](./mongodb-production-backup.md).
-- [ ] Open the production Render service's **Shell** and run:
-
-```bash
-pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js --dry-run
-```
-
-- [ ] Confirm the dry run shows exactly the three existing production Leagues
-      you expect.
-- [ ] Confirm it shows no unexpected open Stripe subscriptions.
-- [ ] Confirm which existing Team becomes each owner's free Team.
-- [ ] Stop if any name or count is surprising.
-- [ ] Only when the dry run is correct, run:
-
-```bash
-pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
-```
-
-- [ ] Sign in to the app and open all three old Leagues.
-- [ ] Confirm all three say complimentary/grandfathered and can still be edited.
-- [ ] Confirm each existing owner has exactly one manageable free standalone
-      Team.
-
-#### 15. Prove the live path during the controlled Pricing launch
-
-- [ ] Choose a quiet launch window. Deploy the production API and client only
-      after steps 11–14 are complete. Do not create a Stripe Payment Link: it
-      bypasses the app's Team/League metadata and is not a valid test of this
-      integration.
-- [ ] Use a controlled account and a real card to buy one $5 Additional Team.
-- [ ] In Stripe, open **Workbench → Webhooks → production destination → Event
-      deliveries** and confirm the live events are **Delivered** with HTTP `200`.
-- [ ] In the app, confirm the exact paid Team becomes manageable. Check player
-      edits, games, tracking, replay, shot maps, and CSV export.
-- [ ] Open **Manage billing**, update the payment method, view the invoice, and
-      schedule cancellation. Confirm access remains until the paid period ends.
-- [ ] Refund the controlled charge from Stripe if appropriate, but remember that
-      a refund does not automatically cancel a subscription.
-- [ ] Repeat with one League. Confirm the 14-day trial appears and the exact
-      League receives access.
-- [ ] Test League to League Plus and confirm Stripe shows the prorated amount
-      before approval.
-- [ ] Test the ordinary Portal. Confirm it offers cards, invoices, and
-      end-of-period cancellation, but does not offer plan switching. If plan
-      switching appears, stop and roll back the production client.
-- [ ] Visit `/pricing` in a signed-out browser and confirm all four plans and
-      prices are correct.
-- [ ] Watch Stripe **Event deliveries**, Render logs, and the first real
-      subscriptions closely after launch.
-
-### Recommended improvements that are not launch blockers
+## Recommended post-launch improvements
 
 - [ ] After successful live testing, review the restricted key's request logs,
       remove unused permissions, and add a Stripe access policy if Render has a
@@ -1249,18 +1082,15 @@ pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js
 Stripe is **not ready for real customers yet**. The code is ready to be tested,
 but these external blockers remain:
 
-1. The full manual sandbox success, cancellation, failure, access, and capacity
-   checklist has not been completed.
-2. The development changes found during manual testing must be deployed and
-   rechecked.
-3. Live Products, Prices, Portal, Render values, and webhook do not yet exist or
-   have not been verified.
-4. The production database has not been backed up and migrated to preserve the
+1. The sandbox GBP Price/Portal update and final development gate in Step 1 have
+   not been completed.
+2. The live Stripe account, Products, Prices, restricted key, Portals, webhook,
+   and nine Render values do not yet exist or have not been verified.
+3. The production database has not been backed up and migrated to preserve the
    three current Leagues.
-5. No controlled live payment has proved the complete real-money path.
-6. The live tax and registration decision has not been recorded.
+4. No controlled live payment has proved the complete real-money path.
 
-Do not market paid self-service until all six blockers are closed.
+Do not market paid self-service until all four blockers are closed.
 
 ## Official Stripe help
 

@@ -274,9 +274,9 @@ milestones, season awards, and minutes-based milestones.
 ## Billing
 
 Billing is attached to a `Team` or `League`. The capacity plans are `starter`
-(one free standalone Team), `team_extra` ($5/month for each additional
-standalone Team), `league` ($29/month for 1–10 teams), and `league_plus`
-($49/month for 11–24 teams). All paid plans are monthly. League plans receive a
+(one free standalone Team), `team_extra` (£5/month for each additional
+standalone Team), `league` (£29/month for 1–10 teams), and `league_plus`
+(£49/month for 11–24 teams). All paid plans are monthly. League plans receive a
 one-time 14-day trial; additional Teams do not. Every current Team feature is
 available on every Team. Billing controls management capacity, not features.
 

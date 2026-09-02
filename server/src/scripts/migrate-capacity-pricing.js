@@ -2,7 +2,7 @@
 //
 // - The oldest standalone Team for each owner becomes their free writable Team.
 // - Other standalone Teams become paid-capacity Teams. They keep all data and
-//   reads, but require an active $5 subscription for writes.
+//   reads, but require an active £5 subscription for writes.
 // - Every pre-launch League becomes complimentary/grandfathered so the three
 //   production Leagues continue without a Stripe subscription.
 // - Existing Stripe-backed Team/League subscriptions abort the migration. They

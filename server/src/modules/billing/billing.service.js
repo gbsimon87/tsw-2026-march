@@ -174,7 +174,7 @@ function assertTeamManagementAllowed(team) {
   if (!canManageStandaloneTeam(team)) {
     throw new ApiError(
       402,
-      'This additional team needs an active $5/month subscription before it can be changed.'
+      'This additional team needs an active £5/month subscription before it can be changed.'
     );
   }
   return team;

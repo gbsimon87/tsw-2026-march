@@ -95,11 +95,11 @@ async function main() {
       price.type !== 'recurring' ||
       price.recurring?.interval !== 'month' ||
       price.recurring?.interval_count !== 1 ||
-      price.currency !== 'usd' ||
+      price.currency !== 'gbp' ||
       price.unit_amount !== expected.amount
     ) {
       throw new Error(
-        `${expected.envName} must be the active $${expected.amount / 100} USD monthly Price`
+        `${expected.envName} must be the active £${expected.amount / 100} GBP monthly Price`
       );
     }
     if (!productId(price)) throw new Error(`${expected.envName} has no Stripe Product`);

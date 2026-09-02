@@ -77,7 +77,7 @@ const PLANS = Object.freeze({
     intervals: {
       monthly: {
         priceIdEnv: 'STRIPE_PRICE_ID_ADDITIONAL_TEAM',
-        display: '$5/mo per additional team',
+        display: '£5/mo per additional team',
         trialDays: 0,
       },
     },
@@ -102,7 +102,7 @@ const PLANS = Object.freeze({
     intervals: {
       monthly: {
         priceIdEnv: 'STRIPE_PRICE_ID_LEAGUE',
-        display: '$29/mo',
+        display: '£29/mo',
         trialDays: 14,
       },
     },
@@ -126,7 +126,7 @@ const PLANS = Object.freeze({
     intervals: {
       monthly: {
         priceIdEnv: 'STRIPE_PRICE_ID_LEAGUE_PLUS',
-        display: '$49/mo',
+        display: '£49/mo',
         trialDays: 14,
       },
     },

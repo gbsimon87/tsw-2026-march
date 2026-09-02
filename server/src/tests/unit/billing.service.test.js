@@ -915,7 +915,7 @@ describe('createLeagueCheckoutSession development bypass', () => {
 describe('catalog-driven price + trial resolution', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  test('additional teams use the $5 monthly price without a trial', async () => {
+  test('additional teams use the £5 monthly price without a trial', async () => {
     findTeamByIdAndOwner.mockResolvedValue(buildTeam({ _id: 'team-99' }));
     mockCheckoutCreate.mockResolvedValue({
       url: 'https://checkout.stripe.com/c/pay/cs_test_session',

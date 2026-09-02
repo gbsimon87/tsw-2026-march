@@ -50,7 +50,7 @@ const teamSchema = new mongoose.Schema(
     // legacy values at read time; this enum only constrains writes.
     plan: { type: String, enum: ['starter', 'team_extra', 'team_pro'], default: 'starter' },
     // One owned standalone team is free. Every other owned standalone team needs
-    // its own $5/month subscription. Existing rows are assigned deliberately by
+    // its own £5/month subscription. Existing rows are assigned deliberately by
     // migrate-capacity-pricing.js; defaulting new rows to paid avoids accidentally
     // granting a second free slot if creation code is bypassed.
     capacityType: { type: String, enum: ['free', 'paid'], default: 'paid', index: true },

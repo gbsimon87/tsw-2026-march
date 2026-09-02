@@ -37,21 +37,21 @@ const CATALOG = {
       name: 'Additional Team',
       tagline: 'For every standalone team after your first.',
       features: ['All team features included'],
-      intervals: { monthly: { display: '$5/mo per additional team', trialDays: 0 } },
+      intervals: { monthly: { display: '£5/mo per additional team', trialDays: 0 } },
     },
     {
       id: 'league',
       name: 'League',
       tagline: 'For up to 10 teams.',
       features: ['All team features included'],
-      intervals: { monthly: { display: '$29/mo', trialDays: 14 } },
+      intervals: { monthly: { display: '£29/mo', trialDays: 14 } },
     },
     {
       id: 'league_plus',
       name: 'League Plus',
       tagline: 'For 11–24 teams.',
       features: ['Everything in League'],
-      intervals: { monthly: { display: '$49/mo', trialDays: 14 } },
+      intervals: { monthly: { display: '£49/mo', trialDays: 14 } },
     },
   ],
 };
@@ -113,9 +113,9 @@ describe('PricingPage', () => {
     expect(screen.getByText(/^Additional Team$/)).toBeInTheDocument();
     expect(screen.getByText(/^League$/)).toBeInTheDocument();
     expect(screen.getByText(/^League Plus$/)).toBeInTheDocument();
-    expect(screen.getByText('$5/mo per additional team')).toBeInTheDocument();
-    expect(screen.getByText('$29/mo')).toBeInTheDocument();
-    expect(screen.getByText('$49/mo')).toBeInTheDocument();
+    expect(screen.getByText('£5/mo per additional team')).toBeInTheDocument();
+    expect(screen.getByText('£29/mo')).toBeInTheDocument();
+    expect(screen.getByText('£49/mo')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /season/i })).not.toBeInTheDocument();
   });
 

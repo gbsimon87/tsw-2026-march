@@ -197,7 +197,7 @@ These are not content formats, but they affect whether attention can convert.
 
 | Idea                        | Size | Implemented | Notes                                                                                                                                                                                 |
 | --------------------------- | ---- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GBP pricing for UK market   | S    | No          | Current pricing is USD: first Team free, additional Teams $5/month, League $29/month, and League Plus $49/month. Verify the authoritative Stripe currency before changing copy.       |
+| GBP pricing for UK market   | S    | Yes         | Confirmed for the UK launch: first Team free, additional Teams £5/month, League £29/month, and League Plus £49/month. Stripe setup rejects non-GBP Prices.                            |
 | Public launch of `/pricing` | M    | No          | Production currently redirects away. Until the launch decision is made, social CTAs should ask organisers to view the demo or enquire, not “buy now”. See [`stripe.md`](./stripe.md). |
 
 ## Constraints

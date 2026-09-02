@@ -99,7 +99,7 @@ describe('capacity pricing catalog', () => {
       'team_extra',
     ]);
     expect(catalog.find((plan) => plan.id === 'team_extra').intervals.monthly.display).toBe(
-      '$5/mo per additional team'
+      '£5/mo per additional team'
     );
     const serialized = JSON.stringify(catalog);
     expect(serialized).not.toContain('price_');

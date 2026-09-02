@@ -346,7 +346,7 @@ export function PricingPage() {
 
         <PlanCard
           title={plans.team_extra?.name || 'Additional team'}
-          price={plans.team_extra?.intervals?.monthly?.display || '$5/month'}
+          price={plans.team_extra?.intervals?.monthly?.display || '£5/month'}
           description={plans.team_extra?.tagline || 'For each standalone team after your first.'}
           features={plans.team_extra?.features}
         >
@@ -403,7 +403,7 @@ export function PricingPage() {
               title={plan?.name || (planId === 'league' ? 'League' : 'League Plus')}
               price={
                 plan?.intervals?.monthly?.display ||
-                (planId === 'league' ? '$29/month' : '$49/month')
+                (planId === 'league' ? '£29/month' : '£49/month')
               }
               trial="14-day free trial · card required"
               description={
