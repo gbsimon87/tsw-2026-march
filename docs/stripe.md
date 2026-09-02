@@ -724,15 +724,30 @@ Use the **TSW Development** Stripe sandbox only.
 
 Do these tests on **https://dev.thesportyway.com**, not on localhost. Sign in
 with a normal development test account that does not own a paid Team or League.
-If you reset the seeded development database, use the seeded normal user from
-the development seed instructions. Otherwise, register a new test-only account
-with an email address you control. Never use a real customer's account for these
-tests.
+After resetting the seeded development database, sign in with this normal test
+account:
+
+```text
+Email: user2@user2.com
+Password: password
+```
+
+It already owns **Harbor Knights**, which is its first free Team. Use that Team
+for the first-Team check below, then create a new second Team for the £5 Checkout
+test. Do not use `user1@user1.com`; that account owns the seeded League and
+complimentary resources. If the database was not reset, you can instead register
+a new test-only account with an email address you control. Never use a real
+customer's account for these tests.
+
+Resetting MongoDB does not cancel subscriptions in the Stripe sandbox. Cancel
+old sandbox subscriptions separately before changing or archiving their Price
+IDs.
 
 ### Additional Team
 
 1. Sign in with that normal development test account.
-2. Create the first Team. Confirm it is labelled **Free Team** and can be edited.
+2. Open its existing first Team, or create one for a newly registered account.
+   Confirm it is labelled **Free Team** and can be edited.
 3. Create a second Team. Confirm its saved data is visible but management asks
    for the £5 subscription.
 4. Open Pricing and choose the second Team.

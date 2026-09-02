@@ -1046,16 +1046,24 @@ async function upsertSeedUsers() {
   return users;
 }
 
-// This script DROPS the database it connects to. It is a development-only
-// tool, so it refuses to run anywhere that even looks like production rather
-// than trusting whoever set ENV_FILE.
-function assertDevTarget() {
-  const uri = env.MONGO_URI || '';
-  const dbName = env.MONGO_DB_NAME || '';
+// This script clears the entire database it connects to. It is a development-
+// only tool, so it refuses to run anywhere that even looks like production and
+// requires an exact database-name confirmation rather than trusting ENV_FILE.
+function assertDevTarget({
+  nodeEnv = env.NODE_ENV,
+  appEnv = env.APP_ENV,
+  uri = env.MONGO_URI || '',
+  dbName = env.MONGO_DB_NAME || '',
+  confirmedDbName = process.env.SEED_CONFIRM_DB || '',
+} = {}) {
   const redactedUri = uri.replace(/\/\/[^@]*@/, '//***:***@');
 
-  if (env.NODE_ENV === 'production') {
+  if (nodeEnv === 'production') {
     throw new Error(`Refusing to seed: NODE_ENV is production (${redactedUri})`);
+  }
+
+  if (appEnv === 'production') {
+    throw new Error(`Refusing to seed: APP_ENV is production (${redactedUri})`);
   }
 
   // A production database name is the last line of defence if someone points a
@@ -1071,15 +1079,47 @@ function assertDevTarget() {
     );
   }
 
+  if (!confirmedDbName) {
+    throw new Error(
+      'Refusing to seed: SEED_CONFIRM_DB is required and must exactly match MONGO_DB_NAME.'
+    );
+  }
+
+  if (confirmedDbName !== dbName) {
+    throw new Error(
+      `Refusing to seed: SEED_CONFIRM_DB "${confirmedDbName}" does not match MONGO_DB_NAME "${dbName}".`
+    );
+  }
+
   return { redactedUri, dbName };
 }
 
-// A full drop, not a per-model deleteMany: collections belonging to models this
-// script no longer imports would otherwise survive and leave the dev database
-// in a state no code path can produce. autoIndex is on outside production, so
-// Mongoose rebuilds the indexes on the next write.
+// Prefer a full drop so collections belonging to models this script no longer
+// imports cannot survive and leave an impossible dev state. Some restricted
+// Atlas users cannot drop a database, so the fallback clears every collection.
+// autoIndex is on outside production, and indexes are recreated below.
 async function resetSeedData() {
-  await mongoose.connection.dropDatabase();
+  try {
+    await mongoose.connection.dropDatabase();
+  } catch (error) {
+    const dropDatabaseDenied =
+      error?.code === 8000 &&
+      /not allowed.*dropDatabase|dropDatabase.*not allowed/i.test(error.message);
+    if (!dropDatabaseDenied) throw error;
+
+    // Atlas roles commonly allow application reads/writes but deliberately deny
+    // dropDatabase. Clear every ordinary collection instead, preserving indexes
+    // and keeping the same exact-database safeguards enforced above.
+    console.warn('dropDatabase is not permitted; clearing development collections instead...');
+    const collections = await mongoose.connection.db
+      .listCollections({}, { nameOnly: true })
+      .toArray();
+    for (const { name } of collections) {
+      if (!name.startsWith('system.')) {
+        await mongoose.connection.collection(name).deleteMany({});
+      }
+    }
+  }
   // Recreate indexes up front so the first inserts are validated against the
   // real unique constraints (e.g. User.email) instead of silently duplicating.
   await Promise.all(
@@ -1534,6 +1574,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertDevTarget,
   randomInt,
   randomChoice,
   playerNamePool,
