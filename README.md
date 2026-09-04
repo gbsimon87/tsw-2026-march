@@ -13,7 +13,9 @@ Standalone games usually track one team's roster against an opponent label.
 League games can track both teams.
 
 For technical orientation, start with
-[`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md).
+[`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md), or open
+[`docs/codemap/codemap.html`](docs/codemap/codemap.html) in a browser for an
+interactive map of how the modules fit together.
 
 ## Stack
 
@@ -102,15 +104,16 @@ the demo seed in a shared environment.
 
 ## Documentation
 
-| Topic                                     | Reference                                                |
-| ----------------------------------------- | -------------------------------------------------------- |
-| Current architecture and product behavior | [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md) |
-| API endpoints                             | [`docs/api.md`](docs/api.md)                             |
-| League and team permissions               | [`docs/permissions.md`](docs/permissions.md)             |
-| Pricing and entitlements                  | [`docs/pricing.md`](docs/pricing.md)                     |
-| Render deployment                         | [`docs/deployment-render.md`](docs/deployment-render.md) |
-| Security controls                         | [`docs/security.md`](docs/security.md)                   |
-| Product backlog                           | [`docs/ideas.md`](docs/ideas.md)                         |
+| Topic                                     | Reference                                                      |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| Current architecture and product behavior | [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md)       |
+| Interactive architecture map              | [`docs/codemap/`](docs/codemap/) (open `codemap.html` locally) |
+| API endpoints                             | [`docs/api.md`](docs/api.md)                                   |
+| League and team permissions               | [`docs/permissions.md`](docs/permissions.md)                   |
+| Stripe, pricing, and entitlements         | [`docs/stripe.md`](docs/stripe.md)                             |
+| Render deployment                         | [`docs/deployment-render.md`](docs/deployment-render.md)       |
+| Security controls                         | [`docs/security.md`](docs/security.md)                         |
+| Product backlog                           | [`docs/ideas.md`](docs/ideas.md)                               |
 
 Contribution workflow and required checks are in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).

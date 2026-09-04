@@ -1,6 +1,9 @@
 const TITLE_SIZE_CLASSES = {
-  default: 'text-2xl md:text-3xl truncate',
-  hero: 'max-w-2xl text-4xl leading-[1.05] md:text-5xl',
+  // `truncate` ellipsised the page's own identity on narrow screens — a league
+  // called "Metro Spring League" read as "Metro Spring Le…". A page title is
+  // allowed a second line; it is the one string that must never be cut.
+  default: 'text-balance text-2xl md:text-3xl',
+  hero: 'max-w-2xl text-balance text-4xl leading-[1.05] md:text-5xl',
 };
 
 export function DarkPageHeader({

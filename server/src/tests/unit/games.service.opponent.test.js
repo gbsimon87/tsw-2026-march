@@ -23,6 +23,7 @@ jest.mock('../../modules/billing/billing.service', () => ({
     canViewShotMaps: false,
   })),
   isTeamActive: jest.fn(() => true),
+  assertTeamManagementAllowed: jest.fn(),
 }));
 
 jest.mock('../../modules/leagues/leagues.service', () => ({
@@ -30,6 +31,7 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   getLeagueRosterSnapshotForTeam: jest.fn(),
   getLeagueTeamRosterSnapshotForGame: jest.fn(),
   canManageLeagueGame: jest.fn(() => false),
+  canFinalizeLeagueGame: jest.fn(() => false),
   scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 
@@ -214,6 +216,24 @@ describe('games service opponent support', () => {
     const result = await getPublicGame('game-1');
 
     expect(result.game.opponent).toBe('Wolves');
+    expect(result.game.ownerUserId).toBeUndefined();
+    expect(result.canManageGame).toBe(false);
+  });
+
+  test('getPublicGame tells an authenticated owner they can manage the fixture', async () => {
+    findTeamById.mockResolvedValue({ _id: 'team-1', name: 'Team', players: [] });
+    findGameById.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Scheduled Game',
+      status: 'scheduled',
+      events: [],
+    });
+
+    const result = await getPublicGame('game-1', 'user-1');
+
+    expect(result.canManageGame).toBe(true);
     expect(result.game.ownerUserId).toBeUndefined();
   });
 });

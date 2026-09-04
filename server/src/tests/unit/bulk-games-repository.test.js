@@ -4,6 +4,7 @@ const {
   insertManyGames,
   deleteReplaceableLeagueGames,
 } = require('../../modules/games/games.repository');
+const { CURRENT_COURT_LAYOUT_ID } = require('../../modules/shared/courtLayouts');
 
 const Game = mongoose.models.Game;
 
@@ -18,8 +19,30 @@ describe('insertManyGames', () => {
 
     const result = await insertManyGames(docs);
 
-    expect(insertMany).toHaveBeenCalledWith(docs, { ordered: true });
+    const [written, options] = insertMany.mock.calls[0];
+    expect(written.map((doc) => doc.title)).toEqual(['A', 'B']);
+    expect(options).toEqual({ ordered: true });
     expect(result).toBe(docs);
+  });
+
+  it('stamps the current court layout on schedule fixtures, which bypass createGame', async () => {
+    const insertMany = jest.spyOn(Game, 'insertMany').mockResolvedValue([]);
+
+    await insertManyGames([{ title: 'A' }, { title: 'B' }]);
+
+    const [written] = insertMany.mock.calls[0];
+    for (const doc of written) {
+      expect(doc.courtLayoutId).toBe(CURRENT_COURT_LAYOUT_ID);
+    }
+  });
+
+  it('lets an explicit layout stand so a rollback build can create legacy fixtures', async () => {
+    const insertMany = jest.spyOn(Game, 'insertMany').mockResolvedValue([]);
+
+    await insertManyGames([{ title: 'A', courtLayoutId: 'legacy-v1' }]);
+
+    const [written] = insertMany.mock.calls[0];
+    expect(written[0].courtLayoutId).toBe('legacy-v1');
   });
 });
 

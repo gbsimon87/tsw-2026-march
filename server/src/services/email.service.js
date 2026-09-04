@@ -123,10 +123,10 @@ function sendTrialEndingEmail({ to, name, resourceLabel, trialEndsAt, manageUrl 
   sendTemplateEmailAsync({
     to,
     subject: 'Your free trial is ending soon',
-    text: `Hi ${safeName}, your free trial for ${what} ends${when}. Add a payment method to keep your premium features.${cta}`,
+    text: `Hi ${safeName}, your free trial for ${what} ends${when}. Add a payment method to keep managing your league.${cta}`,
     html: `<p>Hi ${escapeHtml(safeName)},</p><p>Your free trial for <strong>${escapeHtml(
       what
-    )}</strong> ends${when}. Add a payment method to keep your premium features.</p>${
+    )}</strong> ends${when}. Add a payment method to keep managing your league.</p>${
       manageUrl ? `<p><a href="${encodeURI(manageUrl)}">Manage subscription</a></p>` : ''
     }`,
     fallbackLabel: 'billing_trial_ending',

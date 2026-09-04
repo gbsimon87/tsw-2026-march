@@ -235,6 +235,10 @@ describe('AdminLeagueSchedulePage', () => {
     renderPage();
 
     expect(await screen.findByText(/no active season/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /go to season settings/i })).toHaveAttribute(
+      'href',
+      '/admin/leagues/league-1?tab=settings#season'
+    );
     expect(screen.queryByRole('button', { name: /suggest pairings/i })).not.toBeInTheDocument();
   });
 

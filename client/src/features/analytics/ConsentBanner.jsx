@@ -86,7 +86,7 @@ export function ConsentBanner() {
       // otherwise float over the banner's buttons, while staying under the
       // mobile menu (z-50) so the banner can never trap someone inside an open
       // menu. The tab bar shares z-40 but never overlaps: bottom-16 clears it.
-      className="fixed inset-x-0 bottom-16 z-[45] border-t border-slate-200 bg-white/95 p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur md:bottom-0 md:p-5"
+      className="t-consent fixed inset-x-0 bottom-16 z-[45] border-t border-slate-200 bg-white/95 p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur md:bottom-0 md:p-5"
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
@@ -116,7 +116,7 @@ export function ConsentBanner() {
           <button
             type="button"
             onClick={() => decide(CONSENT_ACCEPTED)}
-            className="flex-1 rounded-lg border border-slate-900 bg-[#141414] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1B4332] md:flex-none"
+            className="flex-1 rounded-lg border border-slate-900 bg-[#141414] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2a2a2a] md:flex-none"
           >
             Accept
           </button>

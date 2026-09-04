@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import courtImage from '../../../assets/courts/basketball_court_1.png';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
-
-const COURT_ASPECT_RATIO = 420 / 760;
-const ROTATED_COURT_ASPECT_RATIO = 760 / 420;
-const MOBILE_LANDSCAPE_QUERY =
-  '(orientation: landscape) and (max-height: 600px) and (pointer: coarse)';
+import { MOBILE_LANDSCAPE_QUERY } from '../../../lib/mediaQueries';
+import { resolveCourtLayout } from '../court/courtLayouts';
 
 function normalizeFromPointer(event, element, rotate90 = false) {
   const rect = element.getBoundingClientRect();
@@ -38,6 +34,9 @@ export function InteractiveCourtImage({
   rotate90 = false,
   topControls = null,
   flat = false,
+  // The image, its intrinsic box and its calibration must come from one
+  // registry entry. Defaulting to legacy keeps pre-versioning callers correct.
+  layout = resolveCourtLayout(undefined),
 }) {
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
@@ -82,7 +81,9 @@ export function InteractiveCourtImage({
       const rect = element.getBoundingClientRect();
       const availableWidth = rect.width || 1;
       const availableHeight = rect.height || 1;
-      const targetAspect = shouldRotate90 ? ROTATED_COURT_ASPECT_RATIO : COURT_ASPECT_RATIO;
+      const targetAspect = shouldRotate90
+        ? layout.height / layout.width
+        : layout.width / layout.height;
 
       let width = availableWidth;
       let height = width / targetAspect;
@@ -112,7 +113,7 @@ export function InteractiveCourtImage({
     return () => {
       resizeObserver.disconnect();
     };
-  }, [shouldRotate90]);
+  }, [shouldRotate90, layout.width, layout.height]);
 
   const rotatedContentStyle = shouldRotate90
     ? {
@@ -124,7 +125,9 @@ export function InteractiveCourtImage({
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden ${flat ? '' : 'rounded border bg-white p-3'} ${containerClassName}`.trim()}
+      className={`flex h-full min-h-0 flex-col overflow-hidden ${
+        flat ? '' : 'rounded border bg-white p-3 landscape-compact:border-0 landscape-compact:p-0'
+      } ${containerClassName}`.trim()}
     >
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
         {topControls ? (
@@ -154,10 +157,10 @@ export function InteractiveCourtImage({
                 onPointerDown={onSelectPoint}
               >
                 <CloudinaryImage
-                  src={courtImage}
+                  src={layout.image}
                   alt="Basketball court"
-                  width={420}
-                  height={760}
+                  width={layout.width}
+                  height={layout.height}
                   loading="lazy"
                   decoding="async"
                   className={`block h-full w-full select-none ${imageClassName}`.trim()}
@@ -187,7 +190,9 @@ export function InteractiveCourtImage({
           </div>
         </div>
       </div>
-      {helperText ? <p className="mt-2 text-xs text-slate-500">{helperText}</p> : null}
+      {helperText ? (
+        <p className="mt-2 text-xs text-slate-500 landscape-compact:hidden">{helperText}</p>
+      ) : null}
     </div>
   );
 }

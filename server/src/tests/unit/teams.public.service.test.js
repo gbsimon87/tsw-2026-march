@@ -364,6 +364,34 @@ describe('teams public service', () => {
     ]);
   });
 
+  // The standalone public player endpoint serves any team by id with no
+  // public-visibility gate, so it must never expose the claimer's user id —
+  // leagues.service only exposes claimedUserId for public leagues.
+  test('never exposes the claimer user id on the public player endpoint', async () => {
+    findTeamById.mockResolvedValue({
+      _id: 'team-1',
+      name: 'TSW Blue',
+      logo: null,
+      players: [
+        {
+          _id: 'p1',
+          displayName: 'Alex',
+          jerseyNumber: 12,
+          isActive: true,
+          claimedByUserId: 'claimer-1',
+        },
+      ],
+    });
+    listTeams.mockResolvedValue([]);
+    listGamesByTeamId.mockResolvedValue([]);
+
+    const result = await getPublicPlayer('team-1', 'p1');
+
+    expect(result.player.isClaimed).toBe(true);
+    expect(result.player).not.toHaveProperty('claimedUserId');
+    expect(JSON.stringify(result)).not.toContain('claimer-1');
+  });
+
   test('returns player public profile summary and most recent game rows first', async () => {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
@@ -434,6 +462,7 @@ describe('teams public service', () => {
       displayName: 'Alex',
       jerseyNumber: 12,
       position: null,
+      isClaimed: false,
     });
     expect(result.summary).toEqual({
       gamesCount: 2,
@@ -662,7 +691,7 @@ describe('teams public service', () => {
     });
   });
 
-  // Audit H6: highlight clips are a Team Pro feature — gate them on the resolver.
+  // Highlight clips are available to every Team through the resolver.
   function seedPlayerWithClip(teamOverrides = {}) {
     findTeamById.mockResolvedValue({
       _id: 'team-1',
@@ -685,16 +714,16 @@ describe('teams public service', () => {
     ]);
   }
 
-  test('H6: hides highlight clips for a free/lapsed team on the public profile', async () => {
+  test('H6: exposes highlight clips for a free/lapsed team on the public profile', async () => {
     seedPlayerWithClip({ plan: 'starter', subscriptionStatus: 'inactive' });
 
     const result = await getPublicPlayer('team-1', 'p1');
 
-    expect(result.team.entitlements.canViewHighlightClips).toBe(false);
-    expect(result.highlights).toEqual([]);
+    expect(result.team.entitlements.canViewHighlightClips).toBe(true);
+    expect(result.highlights).toHaveLength(1);
   });
 
-  test('H6: exposes highlight clips for an active Team Pro team', async () => {
+  test('H6: still tolerates a legacy active Team Pro record', async () => {
     seedPlayerWithClip({ plan: 'team_pro', subscriptionStatus: 'active' });
 
     const result = await getPublicPlayer('team-1', 'p1');

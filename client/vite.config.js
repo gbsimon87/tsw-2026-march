@@ -9,12 +9,11 @@ export default defineConfig({
       output: {
         // Split heavy, independently-cacheable libraries into their own chunks
         // so they are not bundled into the entry or per-route chunks (OPT-001).
-        // recharts only loads on the (lazy) game detail route; posthog and
-        // stripe-js only where analytics/checkout run.
+        // recharts only loads on the (lazy) game detail route; posthog only
+        // loads where analytics runs. Checkout is hosted by Stripe.
         manualChunks: {
           recharts: ['recharts'],
           posthog: ['posthog-js'],
-          stripe: ['@stripe/stripe-js'],
         },
       },
     },

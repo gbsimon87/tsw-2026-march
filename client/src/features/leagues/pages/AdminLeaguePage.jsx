@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
@@ -102,8 +102,10 @@ const TABS = [
         stroke="currentColor"
         strokeWidth="1.8"
       >
-        <circle cx="8" cy="8" r="2" />
-        <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" />
+        <path d="M2 4.5h12M2 8h12M2 11.5h12" strokeLinecap="round" />
+        <circle cx="11" cy="4.5" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="5.5" cy="8" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="9" cy="11.5" r="1.6" fill="currentColor" stroke="none" />
       </svg>
     ),
   },
@@ -139,12 +141,16 @@ function getLeagueRoleLabel(viewerRole) {
 export function AdminLeaguePage() {
   const { leagueId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [league, setLeague] = useState(null);
   const [copiedGameId, setCopiedGameId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('games');
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(() =>
+    TABS.some((tab) => tab.id === requestedTab) ? requestedTab : 'games'
+  );
   const [leagueNameInput, setLeagueNameInput] = useState('');
   const [isEditingLeagueName, setIsEditingLeagueName] = useState(false);
   const [isUpdatingLeague, setIsUpdatingLeague] = useState(false);
@@ -170,6 +176,8 @@ export function AdminLeaguePage() {
   const [completenessLoading, setCompletenessLoading] = useState(false);
   const [completenessError, setCompletenessError] = useState(null);
   const [defaultGameFormatDraft, setDefaultGameFormatDraft] = useState({ ...DEFAULT_GAME_FORMAT });
+  const [confirmArchiveTeamId, setConfirmArchiveTeamId] = useState('');
+  const [isArchivingTeam, setIsArchivingTeam] = useState(false);
 
   const isOwner = user && league && String(league.ownerUserId) === String(user.id);
   const canEditLeague =
@@ -178,6 +186,18 @@ export function AdminLeaguePage() {
     isOwner;
 
   const canViewManagers = canEditLeague || league?.viewerContext?.viewerRole === 'team_manager';
+  const canArchiveTeams = ['owner', 'league_manager'].includes(league?.viewerContext?.viewerRole);
+
+  useEffect(() => {
+    if (TABS.some((tab) => tab.id === requestedTab)) setActiveTab(requestedTab);
+  }, [requestedTab]);
+
+  function selectTab(tabId) {
+    setActiveTab(tabId);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', tabId);
+    setSearchParams(nextParams, { replace: true });
+  }
 
   function canTrackGame(game) {
     const ctx = league?.viewerContext;
@@ -373,6 +393,30 @@ export function AdminLeaguePage() {
     }
   }
 
+  async function onArchiveTeam(teamId) {
+    setIsArchivingTeam(true);
+    setError('');
+    try {
+      await leaguesApi.archiveTeam(leagueId, teamId);
+      setLeague((current) =>
+        current
+          ? {
+              ...current,
+              teams: (current.teams || []).filter((team) => team.id !== teamId),
+              standings: (current.standings || []).filter(
+                (row) => String(row.teamId) !== String(teamId)
+              ),
+            }
+          : current
+      );
+      setConfirmArchiveTeamId('');
+    } catch (archiveError) {
+      setError(archiveError.message || 'Failed to archive league team');
+    } finally {
+      setIsArchivingTeam(false);
+    }
+  }
+
   async function onRemoveLeagueManager(managerId) {
     setManagerError('');
     try {
@@ -552,7 +596,7 @@ export function AdminLeaguePage() {
   const breadcrumbs = [{ label: 'Admin', href: '/admin' }, { label: league.name }];
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
 
       <section
@@ -779,15 +823,25 @@ export function AdminLeaguePage() {
         </div>
       </section>
 
-      {canEditLeague && league.currentSeason?.id ? (
-        <div className="flex justify-end">
-          <ExportCsvButton
-            label="Export CSV"
-            datasets={LEAGUE_EXPORT_DATASETS}
-            fetcher={(dataset) =>
-              exportApi.getLeagueCsv(leagueId, league.currentSeason.id, dataset)
-            }
-          />
+      {canEditLeague ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          {isOwner ? (
+            <Link
+              to={`/pricing?leagueId=${encodeURIComponent(league.id)}&resourceType=league`}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
+            >
+              Manage plan
+            </Link>
+          ) : null}
+          {league.currentSeason?.id ? (
+            <ExportCsvButton
+              label="Export CSV"
+              datasets={LEAGUE_EXPORT_DATASETS}
+              fetcher={(dataset) =>
+                exportApi.getLeagueCsv(leagueId, league.currentSeason.id, dataset)
+              }
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -813,7 +867,7 @@ export function AdminLeaguePage() {
               aria-selected={activeTab === tab.id}
               aria-controls={`admin-league-tabpanel-${tab.id}`}
               tabIndex={activeTab === tab.id ? 0 : -1}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
                 index < TABS.length - 1 ? 'border-r border-slate-200' : ''
               } ${
@@ -1032,6 +1086,38 @@ export function AdminLeaguePage() {
                 }}
                 className="mt-4"
               />
+              {(league.teams || []).length > 0 ? (
+                <div className="mt-6 border-t border-slate-200 pt-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                    Manage teams
+                  </h3>
+                  <div className="mt-3 divide-y divide-slate-200 rounded-xl border border-slate-200 px-4">
+                    {(league.teams || []).map((team) => (
+                      <div
+                        key={team.id}
+                        className="flex flex-wrap items-center justify-between gap-3 py-3"
+                      >
+                        <Link
+                          to={`/admin/leagues/${encodeURIComponent(league.id)}/teams/${encodeURIComponent(team.id)}`}
+                          className="font-medium text-slate-900 transition hover:text-[#1B4332] hover:underline"
+                        >
+                          {team.name}
+                        </Link>
+                        {canArchiveTeams ? (
+                          <button
+                            type="button"
+                            aria-label={`Archive ${team.name}`}
+                            onClick={() => setConfirmArchiveTeamId(team.id)}
+                            className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+                          >
+                            Archive team
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -1297,7 +1383,7 @@ export function AdminLeaguePage() {
                 <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
               </p>
 
-              <div className="mt-8 border-t border-slate-200 pt-6">
+              <div id="season" className="mt-8 scroll-mt-6 border-t border-slate-200 pt-6">
                 <GameFormatFields
                   value={defaultGameFormatDraft}
                   onChange={setDefaultGameFormatDraft}
@@ -1433,6 +1519,36 @@ export function AdminLeaguePage() {
           ) : null}
         </div>
       </div>
+      <Modal
+        open={Boolean(confirmArchiveTeamId)}
+        onClose={() => setConfirmArchiveTeamId('')}
+        title="Archive this team?"
+        showCloseButton={false}
+        panelClassName="max-w-sm"
+      >
+        <p className="text-sm text-slate-600">
+          The team will stop counting toward this league&apos;s plan limit. Its existing records are
+          kept.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            disabled={isArchivingTeam}
+            onClick={() => setConfirmArchiveTeamId('')}
+            className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700"
+          >
+            Keep team
+          </button>
+          <button
+            type="button"
+            disabled={isArchivingTeam}
+            onClick={() => onArchiveTeam(confirmArchiveTeamId)}
+            className="flex-1 rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {isArchivingTeam ? 'Archiving…' : 'Confirm archive'}
+          </button>
+        </div>
+      </Modal>
       <Modal
         open={Boolean(confirmDeleteGameId)}
         onClose={() => setConfirmDeleteGameId('')}

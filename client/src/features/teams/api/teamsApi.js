@@ -22,6 +22,21 @@ export const teamsApi = {
   getPublicPlayerById(teamId, playerId) {
     return apiClient.get(`/public/teams/${teamId}/players/${playerId}`);
   },
+  getMyPlayerProfiles() {
+    return apiClient.get('/teams/player-profiles/mine');
+  },
+  createPlayerClaimRequest(teamId, playerId) {
+    return apiClient.post(`/teams/${teamId}/players/${playerId}/claim-requests`, {});
+  },
+  listPlayerClaimRequests(teamId) {
+    return apiClient.get(`/teams/${teamId}/player-claim-requests`);
+  },
+  approvePlayerClaim(teamId, requestId) {
+    return apiClient.post(`/teams/${teamId}/player-claim-requests/${requestId}/approve`, {});
+  },
+  rejectPlayerClaim(teamId, requestId) {
+    return apiClient.post(`/teams/${teamId}/player-claim-requests/${requestId}/reject`, {});
+  },
   update(teamId, payload) {
     return apiClient.patch(`/teams/${teamId}`, payload);
   },

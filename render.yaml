@@ -71,13 +71,15 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_ID_TEAM_MONTHLY
+      - key: STRIPE_PRICE_ID_ADDITIONAL_TEAM
         sync: false
-      - key: STRIPE_PRICE_ID_TEAM_SEASON
+      - key: STRIPE_PRICE_ID_LEAGUE
         sync: false
-      - key: STRIPE_PRICE_ID_LEAGUE_MONTHLY
+      - key: STRIPE_PRICE_ID_LEAGUE_PLUS
         sync: false
-      - key: STRIPE_PRICE_ID_LEAGUE_SEASON
+      - key: STRIPE_PORTAL_CONFIGURATION_ID
+        sync: false
+      - key: STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID
         sync: false
       - key: STRIPE_SUCCESS_URL
         sync: false
@@ -126,8 +128,6 @@ services:
         sync: false
       - key: VITE_POSTHOG_HOST
         value: https://eu.i.posthog.com
-      - key: VITE_STRIPE_PUBLISHABLE_KEY
-        sync: false
 
   - type: web
     name: tsw-2026-march-api-dev
@@ -201,13 +201,15 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_ID_TEAM_MONTHLY
+      - key: STRIPE_PRICE_ID_ADDITIONAL_TEAM
         sync: false
-      - key: STRIPE_PRICE_ID_TEAM_SEASON
+      - key: STRIPE_PRICE_ID_LEAGUE
         sync: false
-      - key: STRIPE_PRICE_ID_LEAGUE_MONTHLY
+      - key: STRIPE_PRICE_ID_LEAGUE_PLUS
         sync: false
-      - key: STRIPE_PRICE_ID_LEAGUE_SEASON
+      - key: STRIPE_PORTAL_CONFIGURATION_ID
+        sync: false
+      - key: STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID
         sync: false
       - key: STRIPE_SUCCESS_URL
         sync: false
@@ -256,5 +258,3 @@ services:
         sync: false
       - key: VITE_POSTHOG_HOST
         value: https://eu.i.posthog.com
-      - key: VITE_STRIPE_PUBLISHABLE_KEY
-        sync: false

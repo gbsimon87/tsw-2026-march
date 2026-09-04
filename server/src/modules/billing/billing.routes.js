@@ -38,6 +38,13 @@ billingRouter.post(
   checkoutLimiter,
   asyncHandler(controller.createCustomerPortalSession)
 );
+billingRouter.get('/checkout-status', asyncHandler(controller.getCheckoutStatus));
+billingRouter.post(
+  '/league-plan-change',
+  checkoutLimiter,
+  asyncHandler(controller.changeLeaguePlan)
+);
+billingRouter.post('/free-team', checkoutLimiter, asyncHandler(controller.chooseFreeTeam));
 
 module.exports = {
   billingRouter,

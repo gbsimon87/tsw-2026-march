@@ -82,6 +82,11 @@ export function AuthProvider({ children }) {
         queryClient.setQueryData(AUTH_ME_QUERY_KEY, result.user);
         return result;
       },
+      async updateOnboarding(payload) {
+        const result = await authApi.updateOnboarding(payload);
+        queryClient.setQueryData(AUTH_ME_QUERY_KEY, result.user);
+        return result;
+      },
       async logout() {
         await authApi.logout();
         authRevisionRef.current += 1;

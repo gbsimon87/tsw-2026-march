@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../app/store/AuthContext';
 
 const TABS = [
   {
     id: 'leagues',
-    label: 'My Leagues',
+    label: 'Managed Leagues',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -19,7 +20,7 @@ const TABS = [
   },
   {
     id: 'teams',
-    label: 'One-off Teams',
+    label: 'Managed Teams',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -36,11 +37,9 @@ const TABS = [
     ),
   },
 ];
-import { useAuth } from '../../app/store/AuthContext';
 import { teamsApi } from '../teams/api/teamsApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
-import { DarkPageHeader } from '../../components/DarkPageHeader';
 import { getLeagueHeaderImage } from '../feed/cardImage';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../media/CloudinaryImage';
@@ -74,17 +73,9 @@ export function AdminPage() {
   }, []);
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       <Breadcrumbs crumbs={[{ label: 'Admin' }]} />
-
-      <DarkPageHeader
-        titleAriaLabel="Admin"
-        eyebrow="Dashboard"
-        title="Admin"
-        description="Manage your leagues and non-league teams all in one place."
-      >
-        {user?.name ? <p className="text-sm text-white/60">Welcome back, {user.name}.</p> : null}
-      </DarkPageHeader>
+      <h1 className="sr-only">Admin</h1>
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -121,7 +112,7 @@ export function AdminPage() {
           </p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-xs text-slate-500">One-off Teams</p>
+          <p className="text-xs text-slate-500">Managed Teams</p>
           <p
             className="mt-0.5 text-xl leading-none text-[#F4A300]"
             style={{ fontFamily: "'IBM Plex Mono', monospace" }}
@@ -165,7 +156,7 @@ export function AdminPage() {
                     className="text-lg text-slate-900"
                     style={{ fontFamily: "'Archivo Black', sans-serif" }}
                   >
-                    My Leagues
+                    Managed Leagues
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
                     Manage multiple teams within a single league, including standings, fixtures, and
@@ -247,7 +238,7 @@ export function AdminPage() {
                     className="text-lg text-slate-900"
                     style={{ fontFamily: "'Archivo Black', sans-serif" }}
                   >
-                    One-off Teams
+                    Managed Teams
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
                     Standalone teams managed independently from any league.

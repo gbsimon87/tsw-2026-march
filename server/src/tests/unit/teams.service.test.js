@@ -4,7 +4,17 @@ jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamByIdAndOwner: jest.fn(),
   findTeamById: jest.fn(),
   listTeams: jest.fn(),
+  listTeamsByClaimedPlayerUserId: jest.fn(),
   saveTeam: jest.fn(async (team) => team),
+  createPlayerClaimRequest: jest.fn(),
+  findPendingPlayerClaimRequest: jest.fn(),
+  listPendingPlayerClaimRequests: jest.fn(),
+  findPlayerClaimRequestById: jest.fn(),
+  savePlayerClaimRequest: jest.fn(async (request) => request),
+}));
+
+jest.mock('../../modules/auth/auth.repository', () => ({
+  findUsersByIds: jest.fn(),
 }));
 
 jest.mock('../../modules/games/games.repository', () => ({
@@ -19,7 +29,8 @@ jest.mock('../../modules/games/games.service', () => ({
 jest.mock('../../modules/billing/billing.service', () => ({
   getBillingSummary: jest.fn(() => ({ plan: 'free' })),
   getTeamEntitlements: jest.fn(() => ({ canUseReplay: false })),
-  assertTeamCreationAllowed: jest.fn(() => Promise.resolve()),
+  assertTeamCreationAllowed: jest.fn(() => Promise.resolve({ capacityType: 'free' })),
+  assertTeamManagementAllowed: jest.fn(),
 }));
 
 jest.mock('../../modules/feed/cloudinary.client', () => ({
@@ -42,6 +53,7 @@ function buildTeam(overrides = {}) {
     homeVenue: null,
     players: [],
     plan: 'free',
+    capacityType: 'free',
     createdAt: '2026-03-11T00:00:00.000Z',
     updatedAt: '2026-03-11T00:00:00.000Z',
     ...overrides,
@@ -120,5 +132,55 @@ describe('teams service', () => {
     expect(cloudinary.uploadImageBuffer).toHaveBeenCalled();
     expect(cloudinary.destroyImage).toHaveBeenCalledWith('old-logo');
     expect(result.logo.url).toBe('https://new.example/logo.png');
+  });
+
+  test('creates a pending standalone player claim for an unlinked profile', async () => {
+    const teamId = '507f1f77bcf86cd799439011';
+    const playerId = '507f1f77bcf86cd799439012';
+    repository.findTeamById.mockResolvedValue(
+      buildTeam({
+        players: [{ _id: playerId, displayName: 'Jordan', isActive: true }],
+      })
+    );
+    repository.findPendingPlayerClaimRequest.mockResolvedValue(null);
+    repository.createPlayerClaimRequest.mockResolvedValue({
+      _id: 'request-1',
+      status: 'pending',
+    });
+
+    const result = await teamsService.requestStandalonePlayerClaim('requester-1', teamId, playerId);
+
+    expect(repository.createPlayerClaimRequest).toHaveBeenCalledWith({
+      teamId,
+      playerId,
+      requesterUserId: 'requester-1',
+    });
+    expect(result.status).toBe('pending');
+  });
+
+  test('links the player when the standalone team owner approves a claim', async () => {
+    const player = { _id: 'player-1', displayName: 'Jordan', isActive: true };
+    const team = buildTeam({ players: [player] });
+    const request = {
+      _id: 'request-1',
+      teamId: 'team-1',
+      playerId: 'player-1',
+      requesterUserId: 'requester-1',
+      status: 'pending',
+    };
+    repository.findTeamByIdAndOwner.mockResolvedValue(team);
+    repository.findPlayerClaimRequestById.mockResolvedValue(request);
+
+    const result = await teamsService.reviewStandalonePlayerClaim(
+      'user-1',
+      'team-1',
+      'request-1',
+      'approved'
+    );
+
+    expect(player.claimedByUserId).toBe('requester-1');
+    expect(repository.saveTeam).toHaveBeenCalledWith(team);
+    expect(request.status).toBe('approved');
+    expect(result.status).toBe('approved');
   });
 });

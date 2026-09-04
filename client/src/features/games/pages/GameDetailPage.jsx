@@ -14,12 +14,12 @@ import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 import { StatsTable } from '../../teams/components/StatsTable';
 import { gamesApi } from '../api/gamesApi';
 import { GameDetailHeader } from '../components/GameDetailHeader';
+import { GameMatchupPreview } from '../components/GameMatchupPreview';
 import { GameReplayPanel } from '../components/GameReplayPanel';
 import { GameRecapPanel } from '../components/GameRecapPanel';
 import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { ShareImageButton } from '../../feed/components/ShareImageButton';
-import { LockedFeatureCard } from '../../billing/components/LockedFeatureCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
@@ -145,28 +145,6 @@ function ReplayTabIcon() {
       <path d="M4 4.5v7l6-3.5-6-3.5Z" strokeLinejoin="round" />
       <path d="M12.5 4v8" strokeLinecap="round" />
     </svg>
-  );
-}
-
-function canAccessReplay(team, entitlements) {
-  if (entitlements?.canViewReplay === true) {
-    return true;
-  }
-
-  if (entitlements?.canViewReplay === false) {
-    return false;
-  }
-
-  if (team?.entitlements?.canViewReplay === true) {
-    return true;
-  }
-
-  const plan = team?.billing?.plan;
-  const status = team?.billing?.subscriptionStatus;
-  // Canonical 'team_pro'; legacy 'team'/'pro' tolerated during migration.
-  return (
-    (plan === 'team_pro' || plan === 'team' || plan === 'pro') &&
-    (status === 'active' || status === 'trialing')
   );
 }
 
@@ -313,6 +291,7 @@ export function GameDetailPage() {
     queryKey: ['game', gameId],
     queryFn: () => gamesApi.getById(gameId),
     enabled: Boolean(gameId),
+    refetchInterval: (query) => (query.state.data?.game?.status === 'in_progress' ? 15_000 : false),
   });
 
   useEffect(() => {
@@ -340,11 +319,21 @@ export function GameDetailPage() {
     : undefined;
 
   useDocumentMeta({
-    title: data ? `${data.game?.title || metaMatchupName} — Game Recap` : undefined,
+    title: data
+      ? `${data.game?.title || metaMatchupName} — ${
+          data.game?.status === 'scheduled'
+            ? 'Matchup Preview'
+            : data.game?.status === 'in_progress'
+              ? 'Live Game'
+              : 'Game Recap'
+        }`
+      : undefined,
     description: data
-      ? metaIsDualTeam
-        ? `${metaMatchupName} final: ${metaGameSummary.homePoints || 0}-${metaGameSummary.awayPoints || 0}.`
-        : `${metaMatchupName} final: ${metaGameSummary.teamPoints || 0}-${metaGameSummary.opponentPoints || 0}.`
+      ? data.game?.status === 'scheduled'
+        ? `${metaMatchupName} is scheduled for ${formatGameDate(data.game?.scheduledAt)}.`
+        : metaIsDualTeam
+          ? `${metaMatchupName} ${data.game?.status === 'in_progress' ? 'live' : 'final'}: ${metaGameSummary.homePoints || 0}-${metaGameSummary.awayPoints || 0}.`
+          : `${metaMatchupName} ${data.game?.status === 'in_progress' ? 'live' : 'final'}: ${metaGameSummary.teamPoints || 0}-${metaGameSummary.opponentPoints || 0}.`
       : undefined,
     image: data ? resolveShareImage(metaImage) : undefined,
     url: data ? `${window.location.origin}/games/${gameId}` : undefined,
@@ -360,6 +349,8 @@ export function GameDetailPage() {
 
   const { game, team, boxScore, participants } = data;
   const isDualTeam = game.trackingMode === 'dual_team';
+  const isScheduled = game.status === 'scheduled';
+  const isLive = game.status === 'in_progress' || game.status === 'live';
   const recap = data.recap;
   const aiSummary = data.aiSummary || game.aiSummary || null;
   const playersById = buildPlayersById(data, isDualTeam);
@@ -368,8 +359,6 @@ export function GameDetailPage() {
     opponentPoints: boxScore?.opponentTotals?.points || 0,
     hasOpponentScore: (boxScore?.opponentTotals?.points || 0) > 0,
   };
-  const entitlements = data.teamEntitlements || team.entitlements || {};
-  const canViewReplay = canAccessReplay(team, entitlements);
   const canShareHighlights = Boolean(data.canShareHighlights);
   const sortedEvents = [...game.events].sort((a, b) => {
     const aTime = new Date(a.occurredAt || 0).getTime();
@@ -546,7 +535,10 @@ export function GameDetailPage() {
           />
         </div>
 
-        <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
+        <RecapShotSnapshot
+          shotSnapshot={recap?.shotSnapshot}
+          courtLayoutId={recap?.shotSnapshot?.courtLayoutId || game.courtLayoutId}
+        />
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white">
@@ -595,23 +587,15 @@ export function GameDetailPage() {
     </div>
   );
 
-  const replayContent = canViewReplay ? (
+  const replayContent = (
     <GameReplayPanel
       events={replayEvents}
       players={team.players || []}
       isDualTeam={isDualTeam}
       participants={participants}
       replayFilters={data.replayFilters || ['all']}
+      courtLayoutId={game.courtLayoutId}
     />
-  ) : (
-    <LockedFeatureCard planName="Team Pro" pricingHref="/pricing">
-      <div className="rounded-xl bg-slate-100 p-8 text-center text-slate-400">
-        <p className="text-lg" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
-          Replay
-        </p>
-        <p className="mt-1 text-sm">Event-by-event possession replay</p>
-      </div>
-    </LockedFeatureCard>
   );
 
   function updateSearchParam(name, value) {
@@ -823,7 +807,15 @@ export function GameDetailPage() {
   return (
     <section className="space-y-4">
       {!isPrintMode && leagueBreadcrumbs ? <Breadcrumbs crumbs={leagueBreadcrumbs} /> : null}
-      {!isPrintMode ? (
+      {!isPrintMode && isScheduled ? (
+        <GameMatchupPreview
+          game={game}
+          league={data.league}
+          participants={participants}
+          canManageGame={Boolean(data.canManageGame || game.ownerUserId)}
+        />
+      ) : null}
+      {!isPrintMode && !isScheduled ? (
         <GameDetailHeader
           gameId={game.id}
           game={game}
@@ -833,7 +825,10 @@ export function GameDetailPage() {
           isDualTeam={isDualTeam}
           recap={recap}
           gameSummary={gameSummary}
-          canContinueTracking={Boolean(game.status === 'in_progress' && game.ownerUserId)}
+          // A scheduled fixture is trackable — starting the clock is what makes
+          // it in_progress — so it needs a route into the tracker from here, not
+          // only from the league admin page's Track button.
+          canContinueTracking={Boolean(isLive && (data.canManageGame || game.ownerUserId))}
           actions={
             <>
               <button
@@ -868,9 +863,23 @@ export function GameDetailPage() {
         />
       ) : null}
 
+      {!isPrintMode && isLive ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm"
+        >
+          <span className="inline-flex items-center gap-2 font-semibold text-emerald-800">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+            Live score
+          </span>
+          <span className="text-emerald-700">Updates automatically every 15 seconds</span>
+        </div>
+      ) : null}
+
       {isPrintMode ? printContent : null}
 
-      {!isPrintMode ? (
+      {!isPrintMode && !isScheduled ? (
         <Tabs
           defaultValue="recap"
           onChange={(tab) => trackEvent('game_detail_tab_changed', { game_id: gameId, tab })}

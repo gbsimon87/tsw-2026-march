@@ -2,8 +2,8 @@
 // No DB, no side effects — unit-tested directly. The migration script imports these
 // and applies them over live docs.
 //
-// Canonical targets: Team → starter|team_pro, League → starter|league,
-// User → starter|team_pro. Legacy values ('free'/'pro'/'team') collapse per
+// Canonical targets: Team → starter|team_extra, League → starter|league|league_plus,
+// User → starter. Legacy values ('free'/'pro'/'team') collapse per
 // normalizePlanId (the same tolerance layer the resolver uses).
 
 const { normalizePlanId, planForPriceId } = require('../../modules/billing/plan-catalog');
@@ -45,17 +45,18 @@ function resolveBillingSource(scope, doc) {
   return doc?.billingSource || 'stripe';
 }
 
-// User.plan is a derived cache — deterministic map now; syncOwnerPlan refines it on
-// the next billing event.
-function mapUserPlan(plan) {
-  return normalizePlanId('team', plan); // free→starter, pro→team_pro
+// User.plan no longer carries billing access. Resource-level Team and League
+// state is authoritative, so all legacy user values collapse to starter.
+function mapUserPlan() {
+  return 'starter';
 }
 
-// Best-effort inverse for --rollback (lossy: team_pro could have been 'pro' or
-// 'team'). Requires the pre-tightening (loose) enum to be deployed first — see the
-// migration header.
+// Best-effort inverse for --rollback (lossy: team_extra could have been 'pro' or
+// 'team'). Requires the pre-tightening (loose) enum to be deployed first — see
+// the migration header. team_pro remains for rollback compatibility.
 function rollbackPlan(scope, plan) {
   if (plan === 'starter') return 'free';
+  if (plan === 'team_extra') return scope === 'team' ? 'team' : 'pro';
   if (plan === 'team_pro') return scope === 'team' ? 'team' : 'pro';
   if (plan === 'league') return 'league';
   return plan;

@@ -22,6 +22,9 @@ vi.mock('../api/teamsApi', () => ({
     removeLogo: vi.fn(),
     updatePlayer: vi.fn(),
     removePlayer: vi.fn(),
+    listPlayerClaimRequests: vi.fn(),
+    approvePlayerClaim: vi.fn(),
+    rejectPlayerClaim: vi.fn(),
   },
 }));
 
@@ -38,6 +41,7 @@ function renderPage() {
 describe('EditTeamPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    teamsApi.listPlayerClaimRequests.mockResolvedValue({ requests: [] });
   });
 
   afterEach(() => {
@@ -224,5 +228,42 @@ describe('EditTeamPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Failed to load team/i)).toBeInTheDocument();
     });
+  });
+
+  test('lets the team owner approve a standalone player claim', async () => {
+    const team = {
+      id: 'team-1',
+      name: 'TSW A',
+      logo: null,
+      colors: [],
+      homeVenue: null,
+      players: [
+        { id: 'p1', displayName: 'Jordan', jerseyNumber: 23, position: 'PG', isActive: true },
+      ],
+    };
+    teamsApi.getById.mockResolvedValue({ team });
+    teamsApi.listPlayerClaimRequests.mockResolvedValue({
+      requests: [
+        {
+          id: 'request-1',
+          playerId: 'p1',
+          playerName: 'Jordan',
+          requesterName: 'Jordan Bell',
+        },
+      ],
+    });
+    teamsApi.approvePlayerClaim.mockResolvedValue({
+      request: { id: 'request-1', status: 'approved' },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Jordan Bell')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => {
+      expect(teamsApi.approvePlayerClaim).toHaveBeenCalledWith('team-1', 'request-1');
+    });
+    expect(screen.queryByText('Jordan Bell')).not.toBeInTheDocument();
   });
 });

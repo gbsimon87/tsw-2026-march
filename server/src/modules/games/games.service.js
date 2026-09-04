@@ -23,7 +23,12 @@ const {
   applyEventToPlayerStatLine,
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
-const { getBillingSummary, getLeagueBillingSummary } = require('../billing/billing.service');
+const { LEGACY_COURT_LAYOUT_ID, resolveCourtLayoutId } = require('../shared/courtLayouts');
+const {
+  getBillingSummary,
+  getLeagueBillingSummary,
+  assertTeamManagementAllowed,
+} = require('../billing/billing.service');
 const { resolveForTeam, resolveForLeague } = require('../billing/entitlements.service');
 const { buildGameRecap } = require('./gameRecap.service');
 const { buildPersistedGameSummary } = require('./gameSummaryAi.service');
@@ -47,7 +52,7 @@ const {
   validateSnapshot,
 } = require('../shared/gameClock');
 
-function sanitizeEvent(event) {
+function sanitizeEvent(event, { includePremiumMedia = true } = {}) {
   return {
     id: String(event._id),
     playerId: event.playerId ? String(event.playerId) : null,
@@ -58,7 +63,8 @@ function sanitizeEvent(event) {
     zoneId: event.zoneId ?? null,
     x: event.x ?? null,
     y: event.y ?? null,
-    videoTimestamp: typeof event.videoTimestamp === 'number' ? event.videoTimestamp : null,
+    videoTimestamp:
+      includePremiumMedia && typeof event.videoTimestamp === 'number' ? event.videoTimestamp : null,
     segmentKind: event.segmentKind,
     segmentNumber: event.segmentNumber,
     clockMillisecondsRemaining: event.clockMillisecondsRemaining,
@@ -333,12 +339,14 @@ async function saveGameEventMutation(game) {
 }
 
 function sanitizeGame(game, options = {}) {
+  const includePremiumMedia = options.includePremiumMedia !== false;
   return {
     id: String(game._id),
     ...(options.includeOwnerUserId ? { ownerUserId: String(game.ownerUserId) } : {}),
     teamId: game.teamId ? String(game.teamId) : null,
     gameContext: game.gameContext || 'standalone',
     trackingMode: game.trackingMode || 'one_sided',
+    courtLayoutId: resolveCourtLayoutId(game.courtLayoutId),
     sport: game.sport,
     gameFormat: game.gameFormat?.toObject?.() || game.gameFormat,
     clock: game.clock?.toObject?.() || game.clock,
@@ -355,7 +363,7 @@ function sanitizeGame(game, options = {}) {
     awayParticipant: sanitizeParticipant(game.awayParticipant),
     title: game.title,
     opponent: game.opponent ?? null,
-    videoUrl: game.videoUrl ?? null,
+    videoUrl: includePremiumMedia ? (game.videoUrl ?? null) : null,
     status: game.status,
     startingLineupPlayerIds: Array.isArray(game.startingLineupPlayerIds)
       ? game.startingLineupPlayerIds.map(String)
@@ -377,12 +385,57 @@ function sanitizeGame(game, options = {}) {
       : [],
     scheduledAt: game.scheduledAt ?? null,
     venue: game.venue ?? null,
+    venueAddress: normalizeVenueAddress(game.venueAddress),
     completedAt: game.completedAt ?? null,
     createdAt: game.createdAt,
     updatedAt: game.updatedAt,
-    events: (game.events || []).map(sanitizeEvent),
+    events: (game.events || []).map((event) => sanitizeEvent(event, { includePremiumMedia })),
     aiSummary: sanitizeAiSummary(game.aiSummary),
   };
+}
+
+// Court layout write precondition. The client sends the layout it displayed
+// when it captured x/y; a mismatch means those percentages belong to a
+// different image and must not be stored against this game.
+function assertCourtLayoutPrecondition(game, providedCourtLayoutId, hasCoordinates) {
+  if (!hasCoordinates) {
+    return;
+  }
+
+  const resolved = resolveCourtLayoutId(game.courtLayoutId);
+
+  // Rollout grace: a client from before this feature sends nothing, which is
+  // only safe for a legacy game. Rejecting it for a stamped game is what stops
+  // a cached old client recording legacy clicks into a new-court game.
+  if (!providedCourtLayoutId) {
+    if (resolved === LEGACY_COURT_LAYOUT_ID) {
+      return;
+    }
+
+    throw new ApiError(409, 'This game uses an updated court. Refresh the page and try again.', {
+      courtLayoutId: resolved,
+    });
+  }
+
+  if (providedCourtLayoutId !== resolved) {
+    throw new ApiError(409, 'This game uses an updated court. Refresh the page and try again.', {
+      courtLayoutId: resolved,
+      providedCourtLayoutId,
+    });
+  }
+}
+
+function normalizeVenueAddress(value) {
+  if (!value || typeof value !== 'object') return null;
+  const address = {
+    addressLine1: String(value.addressLine1 || '').trim(),
+    addressLine2: String(value.addressLine2 || '').trim(),
+    city: String(value.city || '').trim(),
+    state: String(value.state || '').trim(),
+    postalCode: String(value.postalCode || '').trim(),
+    country: String(value.country || '').trim(),
+  };
+  return Object.values(address).some(Boolean) ? address : null;
 }
 
 function getTeamPlayers(team, options = {}) {
@@ -700,6 +753,27 @@ async function assertTeamOwnership(userId, teamId) {
   return team;
 }
 
+async function assertGameBillingWriteAllowed(userId, game) {
+  if (game.gameContext === 'league') {
+    const league = await findLeagueById(game.leagueId);
+    if (!league || !resolveForLeague(league).entitlements.canManageLeague) {
+      throw new ApiError(402, 'An active League subscription is required to make changes');
+    }
+    return;
+  }
+
+  const candidateIds = [game.teamId, game.homeTeamId, game.awayTeamId].filter(Boolean);
+  const ownedTeams = [];
+  for (const teamId of candidateIds) {
+    const ownedTeam = await findTeamByIdAndOwner(teamId, userId);
+    if (ownedTeam) {
+      ownedTeams.push(ownedTeam);
+    }
+  }
+  if (ownedTeams.length === 0) throw new ApiError(403, 'Forbidden');
+  for (const team of ownedTeams) assertTeamManagementAllowed(team);
+}
+
 async function canAccessStandaloneDualGame(userId, game) {
   if (String(game.ownerUserId) === String(userId)) {
     return true;
@@ -723,7 +797,7 @@ async function canEditStandaloneDualGame(userId, game) {
   return canAccessStandaloneDualGame(userId, game);
 }
 
-async function assertGameAccess(userId, gameId) {
+async function assertGameAccess(userId, gameId, { requireWritable = false } = {}) {
   if (!mongoose.Types.ObjectId.isValid(gameId)) {
     throw new ApiError(404, 'Game not found');
   }
@@ -738,16 +812,19 @@ async function assertGameAccess(userId, gameId) {
   }
 
   if (String(game.ownerUserId) === String(userId)) {
+    if (requireWritable) await assertGameBillingWriteAllowed(userId, game);
     return game;
   }
 
   if (game.trackingMode === 'dual_team' && game.gameContext === 'standalone') {
     if (await canAccessStandaloneDualGame(userId, game)) {
+      if (requireWritable) await assertGameBillingWriteAllowed(userId, game);
       return game;
     }
   }
 
   if (game.gameContext === 'league' && (await canManageLeagueGame(userId, game))) {
+    if (requireWritable) await assertGameBillingWriteAllowed(userId, game);
     return game;
   }
 
@@ -872,7 +949,7 @@ const ROSTER_EDITABLE_STATUSES = new Set(['in_progress', 'scheduled']);
 // would leave a phantom snapshot entry with no LeaguePlayer behind it, breaking
 // the leaguePlayerId linkage LeaguePlayerStats and public player pages rely on.
 async function addPlayerToGameRoster(userId, gameId, payload) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
 
   if (!ROSTER_EDITABLE_STATUSES.has(game.status)) {
     throw new ApiError(409, 'Cannot add a player to a completed game');
@@ -1121,9 +1198,13 @@ function buildTeamDocFromSnapshot(participant, rosterSnapshot) {
   };
 }
 
-async function resolveDualGameParticipants(game) {
+async function resolveDualGameParticipants(game, rosters = {}) {
   const home = sanitizeParticipant(game.homeParticipant);
   const away = sanitizeParticipant(game.awayParticipant);
+  // A scheduled fixture passes live rosters here (see resolveGameTeamContext).
+  // Defaulting to the frozen snapshots keeps every other caller unchanged.
+  const homeRoster = rosters.home ?? game.homeRosterSnapshot;
+  const awayRoster = rosters.away ?? game.awayRosterSnapshot;
 
   // Backfill slug for league games whose participants predate slug storage
   if (!home.slug && home.leagueTeamId) {
@@ -1138,22 +1219,115 @@ async function resolveDualGameParticipants(game) {
   return {
     home: {
       ...home,
-      teamDoc: buildTeamDocFromSnapshot(home, game.homeRosterSnapshot),
-      players: (game.homeRosterSnapshot || []).map(sanitizePlayer),
+      teamDoc: buildTeamDocFromSnapshot(home, homeRoster),
+      players: (homeRoster || []).map(sanitizePlayer),
     },
     away: {
       ...away,
-      teamDoc: buildTeamDocFromSnapshot(away, game.awayRosterSnapshot),
-      players: (game.awayRosterSnapshot || []).map(sanitizePlayer),
+      teamDoc: buildTeamDocFromSnapshot(away, awayRoster),
+      players: (awayRoster || []).map(sanitizePlayer),
     },
   };
+}
+
+// rosterSnapshotPlayerSchema is declared { _id: true }, so Mongoose mints a fresh
+// _id for every entry each time the array is replaced — and sanitizePlayer exposes
+// _id as the player's id, falling back to leaguePlayerId only when _id is absent.
+// A live read therefore exposes leaguePlayerId while a frozen snapshot exposes the
+// minted _id, so without this a player's id would change at tip-off and orphan a
+// starting lineup saved beforehand. Pinning _id to the LeaguePlayer id keeps one
+// player's id identical across the whole fixture lifecycle.
+function withStableSnapshotIds(entries) {
+  return (entries || []).map((entry) =>
+    entry?.leaguePlayerId ? { ...entry, _id: entry.leaguePlayerId } : entry
+  );
+}
+
+// A scheduled fixture has not been played, so its roster is not history yet: the
+// players shown must be the league team's CURRENT ones. Players added through the
+// admin pages, or through a DIFFERENT fixture, live on the LeagueTeam and never
+// reach this game's snapshot — reading the snapshot made them invisible here,
+// which in turn made re-adding one collide on the duplicate-name rule.
+//
+// Returned rather than written onto the game. resolveGameTeamContext is also
+// reached from write paths that call saveGame, so mutating the document here
+// would freeze the roster weeks before tip-off — the very thing the Schedule
+// Builder leaves empty snapshots to avoid. The freeze happens once, when the
+// clock starts (updateClockForUser).
+async function resolveLiveRostersForScheduledGame(game) {
+  if (!game || game.status !== 'scheduled' || game.gameContext !== 'league') {
+    return {};
+  }
+
+  if (game.trackingMode !== 'dual_team') {
+    return {};
+  }
+
+  const [home, away] = await Promise.all([
+    game.homeLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.homeLeagueTeamId) : [],
+    game.awayLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.awayLeagueTeamId) : [],
+  ]);
+
+  return { home: withStableSnapshotIds(home), away: withStableSnapshotIds(away) };
+}
+
+// Tip-off is where a league fixture's roster stops being live and becomes the
+// record of who played, so later league-roster edits must not rewrite it.
+// Overwrites outright rather than filling only when empty: mid-game adds and
+// pre-match adds leave a PARTIAL snapshot, and repairGameRosterSnapshots skips
+// anything non-empty, so a fill-if-empty freeze would lock in the partial list.
+async function freezeLeagueRosterSnapshots(game) {
+  if (!game || game.gameContext !== 'league') return;
+
+  if (game.trackingMode === 'dual_team') {
+    const [home, away] = await Promise.all([
+      game.homeLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.homeLeagueTeamId) : [],
+      game.awayLeagueTeamId ? getLeagueRosterSnapshotForTeam(game.awayLeagueTeamId) : [],
+    ]);
+    game.homeRosterSnapshot = withStableSnapshotIds(home);
+    game.awayRosterSnapshot = withStableSnapshotIds(away);
+    return;
+  }
+
+  if (game.trackedLeagueTeamId) {
+    game.rosterSnapshot = withStableSnapshotIds(
+      await getLeagueRosterSnapshotForTeam(game.trackedLeagueTeamId)
+    );
+  }
 }
 
 async function resolveGameTeamContext(userId, game) {
   await repairGameRosterSnapshots(game);
 
   if (game.trackingMode === 'dual_team') {
-    const participants = await resolveDualGameParticipants(game);
+    const participants = await resolveDualGameParticipants(
+      game,
+      await resolveLiveRostersForScheduledGame(game)
+    );
+    let leagueContext = null;
+    if (game.gameContext === 'league' && game.leagueId) {
+      leagueContext = await findLeagueById(game.leagueId).catch(() => null);
+      const billing = getLeagueBillingSummary(leagueContext);
+      const entitlements = resolveForLeague(leagueContext).entitlements;
+      for (const participant of [participants.home, participants.away]) {
+        participant.billing = billing;
+        participant.entitlements = entitlements;
+      }
+    } else {
+      const [homeTeam, awayTeam] = await Promise.all([
+        game.homeTeamId ? findTeamById(game.homeTeamId) : null,
+        game.awayTeamId ? findTeamById(game.awayTeamId) : null,
+      ]);
+      const liveBySide = {
+        [TEAM_SIDES.HOME]: homeTeam,
+        [TEAM_SIDES.AWAY]: awayTeam,
+      };
+      for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
+        const liveTeam = liveBySide[side];
+        participants[side].billing = getBillingSummary(liveTeam || {});
+        participants[side].entitlements = resolveForTeam(liveTeam).entitlements;
+      }
+    }
     const viewerSide =
       game.gameContext === 'standalone' && userId
         ? (await findTeamByIdAndOwner(game.homeTeamId, userId))
@@ -1163,21 +1337,14 @@ async function resolveGameTeamContext(userId, game) {
     const primary = participants[viewerSide];
     const secondary =
       participants[viewerSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME];
-    let leagueContext = null;
-    if (game.gameContext === 'league' && game.leagueId) {
-      const leagueDoc = await findLeagueById(game.leagueId).catch(() => null);
-      if (leagueDoc) {
-        leagueContext = { id: String(leagueDoc._id), slug: leagueDoc.slug, name: leagueDoc.name };
-      }
-    }
     return {
       team: {
         id: primary.teamId || primary.leagueTeamId,
         name: primary.displayName,
         logo: primary.logo,
         billing: primary.billing || null,
-        // Read the frozen snapshot; absent keys default to false (T-13). No hard-coded
-        // 'pro' fallback — a missing snapshot must not grant premium views.
+        // Billing snapshots preserve history, but current billing state always
+        // authorizes premium reads so cancellation removes access immediately.
         entitlements: primary.entitlements || {},
         players: primary.players,
       },
@@ -1217,9 +1384,7 @@ async function resolveGameTeamContext(userId, game) {
   }
 
   const team = await assertTeamOwnership(userId || game.ownerUserId, game.teamId);
-  // Audit H7: prefer the entitlements frozen at record time; fall back to live
-  // resolution only for legacy one-sided games created before the snapshot existed.
-  const entitlements = game.entitlementsSnapshot ?? resolveForTeam(team).entitlements;
+  const entitlements = resolveForTeam(team).entitlements;
   return {
     team: {
       id: String(team._id),
@@ -1258,6 +1423,7 @@ async function createGameForUser(userId, payload) {
     if (!canOwnHome && !canOwnAway) {
       throw new ApiError(403, 'Forbidden');
     }
+    assertTeamManagementAllowed(canOwnHome || canOwnAway);
     const game = await createGame({
       ...clockAwareGameFields(payload.gameFormat),
       ownerUserId: userId,
@@ -1272,6 +1438,8 @@ async function createGameForUser(userId, payload) {
       awayRosterSnapshot: buildRosterSnapshotFromStandaloneTeam(awayTeam),
       title: payload.title?.trim() || `${awayTeam.name} at ${homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+      venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+      venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
       status: 'in_progress',
     });
@@ -1339,8 +1507,14 @@ async function createGameForUser(userId, payload) {
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+      venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
-      status: 'in_progress',
+      // A league game starts life as a fixture, not a live game: nothing is in
+      // progress until someone starts the clock, which promotes 'scheduled' →
+      // 'in_progress' (runClockCommand / appendEventForUser below). Creating it
+      // 'in_progress' marked it live with zero events, so it was
+      // indistinguishable from a game actually being played.
+      status: 'scheduled',
     });
 
     return sanitizeGame(game);
@@ -1361,8 +1535,14 @@ async function createGameForUser(userId, payload) {
       title: payload.title?.trim() || `${context.awayTeam.name} at ${context.homeTeam.name}`,
       scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
       venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+      venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
       videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
-      status: 'in_progress',
+      // A league game starts life as a fixture, not a live game: nothing is in
+      // progress until someone starts the clock, which promotes 'scheduled' →
+      // 'in_progress' (runClockCommand / appendEventForUser below). Creating it
+      // 'in_progress' marked it live with zero events, so it was
+      // indistinguishable from a game actually being played.
+      status: 'scheduled',
       rosterSnapshot: context.rosterSnapshot,
     });
 
@@ -1373,6 +1553,7 @@ async function createGameForUser(userId, payload) {
   // gate — a Starter team can create and track games. Starter maxTeams is a
   // config-driven fast-follow (F-02).
   const team = await assertTeamOwnership(userId, payload.teamId);
+  assertTeamManagementAllowed(team);
   const game = await createGame({
     ...clockAwareGameFields(payload.gameFormat),
     ownerUserId: userId,
@@ -1381,10 +1562,11 @@ async function createGameForUser(userId, payload) {
     title: payload.title.trim(),
     opponent: payload.opponent?.trim() ? payload.opponent.trim() : undefined,
     scheduledAt: payload.scheduledAt ? new Date(payload.scheduledAt) : undefined,
+    venue: payload.venue?.trim() ? payload.venue.trim() : undefined,
+    venueAddress: normalizeVenueAddress(payload.venueAddress) || undefined,
     videoUrl: payload.videoUrl?.trim() ? payload.videoUrl.trim() : undefined,
     status: 'in_progress',
-    // Audit H7: freeze entitlements at record time (mirrors the dual-team
-    // participant snapshot) so a later downgrade never retroactively locks this game.
+    // Kept as an audit snapshot only. Current billing state authorizes reads.
     entitlementsSnapshot: resolveForTeam(team).entitlements,
   });
 
@@ -1456,6 +1638,7 @@ async function listGamesForUser(userId, filter = {}) {
       status: game.status,
       scheduledAt: game.scheduledAt ?? null,
       venue: game.venue ?? null,
+      venueAddress: normalizeVenueAddress(game.venueAddress),
       completedAt: game.completedAt ?? null,
       eventCount: (game.events || []).length,
       createdAt: game.createdAt,
@@ -1469,7 +1652,7 @@ async function listGamesForUser(userId, filter = {}) {
 }
 
 async function updateGameForUser(userId, gameId, payload) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
 
   if (payload.title) {
     game.title = payload.title.trim();
@@ -1480,10 +1663,11 @@ async function updateGameForUser(userId, gameId, payload) {
   if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
     game.scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   }
-  // Venue is league-only: standalone games use the team's homeVenue instead, and
-  // nothing in the standalone UI surfaces a per-game location.
-  if (Object.prototype.hasOwnProperty.call(payload, 'venue') && game.gameContext === 'league') {
+  if (Object.prototype.hasOwnProperty.call(payload, 'venue')) {
     game.venue = payload.venue?.trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'venueAddress')) {
+    game.venueAddress = normalizeVenueAddress(payload.venueAddress);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
@@ -1518,7 +1702,10 @@ function buildSlimGameEventDelta(userId, game, context) {
     game.status === 'completed' && game.gameSummary ? game.gameSummary : buildGameSummary(game);
 
   return {
-    game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
+    game: sanitizeGame(game, {
+      includeOwnerUserId: Boolean(userId),
+      includePremiumMedia: Boolean(context.team?.entitlements?.canViewReplay),
+    }),
     lineups:
       game.trackingMode === 'dual_team'
         ? {
@@ -1584,10 +1771,8 @@ async function getGameForUser(userId, gameId) {
 
   const aiSummary = sanitizeAiSummary(game.aiSummary);
 
-  // T-14: light server guard on premium view data. Read the (frozen) entitlement
-  // surface for the tracked team — absent keys default to false — and omit replay
-  // clips / the shot-map snapshot when unentitled, so a scraper can't pull data the
-  // UI hides. Downgrade-safe: for recorded games this reads the frozen snapshot.
+  // Current billing state is the authorization source. Stored snapshots preserve
+  // history but never keep premium reads alive after cancellation or non-payment.
   const viewEntitlements = team?.entitlements || {};
   const highlights = viewEntitlements.canViewReplay
     ? buildGameHighlights(game, buildPlayersByIdMap(game, participants, teamDoc))
@@ -1605,7 +1790,10 @@ async function getGameForUser(userId, gameId) {
 
   return {
     serverTime: responseTime.toISOString(),
-    game: sanitizeGame(game, { includeOwnerUserId: Boolean(userId) }),
+    game: sanitizeGame(game, {
+      includeOwnerUserId: Boolean(userId),
+      includePremiumMedia: Boolean(viewEntitlements.canViewReplay),
+    }),
     team,
     opponentTeam,
     participants: participants
@@ -1671,13 +1859,14 @@ async function getPublicGame(gameId, viewerUserId = null) {
   const highlightEventIds = (result.highlights || []).map((h) => h.eventId).filter(Boolean);
   result.sharedEventIds = await findSharedEventIds(highlightEventIds);
   result.canShareHighlights = false;
+  result.canManageGame = false;
 
   if (viewerUserId) {
     const rawGame = await findGameById(gameId);
     if (rawGame) {
+      result.canManageGame = await canAccessGame(viewerUserId, rawGame);
       result.canShareHighlights =
-        (await canAccessGame(viewerUserId, rawGame)) ||
-        isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
+        result.canManageGame || isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
     }
   }
   return result;
@@ -1719,9 +1908,23 @@ function requireBothLineups(game) {
 }
 
 async function appendEventForUser(userId, gameId, payload, options = {}) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  assertCourtLayoutPrecondition(
+    game,
+    payload.courtLayoutId,
+    typeof payload.x === 'number' || typeof payload.y === 'number'
+  );
   const gameFormat = game.gameFormat;
   const eventSnapshot = payload;
+  const insertBeforeEventId = options.insertBeforeEventId || null;
+
+  if (
+    !insertBeforeEventId &&
+    game.status !== 'completed' &&
+    game.clock?.status === CLOCK_STATUSES.READY
+  ) {
+    throw new ApiError(400, 'Start the game clock before recording an event');
+  }
 
   if (!validateSnapshot(gameFormat, eventSnapshot)) {
     throw new ApiError(400, 'Event period and clock time are invalid for this game');
@@ -1730,7 +1933,6 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   // Tracking is free (T-12): no active-subscription gate on appending events.
 
   const context = await resolveGameTeamContext(userId, game);
-  const insertBeforeEventId = options.insertBeforeEventId || null;
 
   if (
     insertBeforeEventId &&
@@ -1933,7 +2135,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
 }
 
 async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (!['scheduled', 'in_progress'].includes(game.status)) {
     throw new ApiError(
       400,
@@ -1978,7 +2180,7 @@ function requireStartingLineups(game) {
 }
 
 async function updateClockForUser(userId, gameId, command, now = new Date()) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (game.status === 'completed') throw new ApiError(400, 'Cannot operate a completed game clock');
 
   const normalized = normalizeClock(game.clock.toObject?.() || game.clock, now);
@@ -1990,7 +2192,12 @@ async function updateClockForUser(userId, gameId, command, now = new Date()) {
       if (![CLOCK_STATUSES.READY, CLOCK_STATUSES.PAUSED].includes(normalized.status)) {
         throw new ApiError(400, 'Clock cannot be started in its current state');
       }
-      if (game.status === 'scheduled') game.status = 'in_progress';
+      if (game.status === 'scheduled') {
+        game.status = 'in_progress';
+        // Reads were live up to this point; capture the roster now that the game
+        // is being played. Saved by the saveGame below, with the clock change.
+        await freezeLeagueRosterSnapshots(game);
+      }
       game.clock.status = CLOCK_STATUSES.RUNNING;
       game.clock.runningSince = now;
       break;
@@ -2085,7 +2292,7 @@ async function updateClockForUser(userId, gameId, command, now = new Date()) {
 }
 
 async function removeEventForUser(userId, gameId, eventId) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   const event = game.events.id(eventId);
   if (!event) {
     throw new ApiError(404, 'Event not found');
@@ -2114,7 +2321,12 @@ async function removeEventForUser(userId, gameId, eventId) {
 }
 
 async function updateEventForUser(userId, gameId, eventId, patch) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  assertCourtLayoutPrecondition(
+    game,
+    patch.courtLayoutId,
+    typeof patch.x === 'number' || typeof patch.y === 'number'
+  );
   const event = game.events.id(eventId);
   if (!event) {
     throw new ApiError(404, 'Event not found');
@@ -2157,7 +2369,7 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
 }
 
 async function deleteGameForUser(userId, gameId) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
 
   if (game.gameContext === 'league' && String(game.ownerUserId) !== String(userId)) {
     const canManage = await canManageLeagueGame(userId, game);
@@ -2188,7 +2400,7 @@ async function deleteGameForUser(userId, gameId) {
 }
 
 async function finishGameForUser(userId, gameId) {
-  const game = await assertGameAccess(userId, gameId);
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (game.status === 'completed') {
     throw new ApiError(400, 'Game is already completed');
   }

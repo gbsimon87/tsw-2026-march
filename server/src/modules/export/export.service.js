@@ -1,23 +1,8 @@
 const leaguesService = require('../leagues/leagues.service');
-const { resolveForLeague } = require('../billing/entitlements.service');
-const { ApiError } = require('../../utils/apiError');
 const { toCsvSection, joinSections } = require('../../utils/csv');
 
-// CSV is data egress — an org-data entitlement (T-15). Enforced server-side (hard
-// 402) in addition to the existing role gates. The personal my-sporty export stays
-// free (data portability).
-//
-// Audit M10: these two exports are LEAGUE-scoped (standings + league player stats),
-// so they require an active League plan — a Team Pro (team-scoped) plan does not
-// grant access to a league's org data. The message says "League" accordingly; it no
-// longer over-promises "Team Pro". The advertised Team-Pro-scoped CSV export
-// (a team's own season stats) is a separate, unbuilt endpoint — see
-// docs/pricing-manual-actions.md.
-function assertCanExportCsv(league) {
-  if (!resolveForLeague(league).entitlements.canExportCsv) {
-    throw new ApiError(402, 'An active League subscription is required to export league CSV data');
-  }
-}
+// CSV remains available when billing becomes read-only. Existing role checks
+// still protect each League's data; payment controls mutations, not data access.
 
 // --- formatting helpers -----------------------------------------------------
 
@@ -303,7 +288,6 @@ async function buildMySportyCsv(userId) {
 
 async function buildLeagueCsv(userId, leagueId, seasonId, dataset) {
   const { league } = await leaguesService.assertLeagueManagerOrOwner(userId, leagueId);
-  assertCanExportCsv(league);
 
   const [standings, statRows, seasonGames] = await Promise.all([
     leaguesService.getLeagueStandings(leagueId, seasonId),
@@ -330,7 +314,6 @@ async function buildLeagueCsv(userId, leagueId, seasonId, dataset) {
 
 async function buildTeamCsv(userId, leagueId, leagueTeamId, seasonId) {
   const { league } = await leaguesService.assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
-  assertCanExportCsv(league);
 
   const [statRows, seasonGames] = await Promise.all([
     leaguesService.getLeaguePlayerStats(leagueId, seasonId),

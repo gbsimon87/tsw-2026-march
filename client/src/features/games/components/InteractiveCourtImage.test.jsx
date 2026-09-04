@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { InteractiveCourtImage } from './InteractiveCourtImage';
+import { COURT_LAYOUTS } from '../court/courtLayouts';
 
 const originalMatchMedia = window.matchMedia;
 
@@ -87,5 +88,54 @@ describe('InteractiveCourtImage', () => {
         transform: 'translate(-50%, -50%) rotate(90deg)',
       });
     });
+  });
+
+  test('renders the asset and intrinsic box of the layout it is given', () => {
+    render(
+      <InteractiveCourtImage
+        selectedPoint={null}
+        onSelect={vi.fn()}
+        layout={COURT_LAYOUTS['court-v2']}
+      />
+    );
+
+    const image = screen.getByAltText(/Basketball court/i);
+    expect(image.getAttribute('src')).toContain('basketball_court_2');
+    expect(image.getAttribute('width')).toBe(String(COURT_LAYOUTS['court-v2'].width));
+    expect(image.getAttribute('height')).toBe(String(COURT_LAYOUTS['court-v2'].height));
+  });
+
+  test('defaults to the legacy asset when no layout is given', () => {
+    render(<InteractiveCourtImage selectedPoint={null} onSelect={vi.fn()} />);
+
+    const image = screen.getByAltText(/Basketball court/i);
+    expect(image.getAttribute('src')).toContain('basketball_court_1');
+    expect(image.getAttribute('width')).toBe('420');
+    expect(image.getAttribute('height')).toBe('760');
+  });
+
+  // Coordinates are percentages of the rendered box, so the pointer mapping is
+  // deliberately layout-independent - only the image behind it changes.
+  test('normalizes coordinates identically across layouts, rotated and not', () => {
+    for (const layout of Object.values(COURT_LAYOUTS)) {
+      for (const rotate90 of [false, true]) {
+        const onSelect = vi.fn();
+        const { unmount } = render(
+          <InteractiveCourtImage
+            selectedPoint={null}
+            onSelect={onSelect}
+            layout={layout}
+            rotate90={rotate90}
+          />
+        );
+
+        const image = screen.getByTestId('interactive-court-image');
+        setElementRect(image, { width: 200, height: 400 });
+        pointerDown(image, { clientX: 50, clientY: 300 });
+
+        expect(onSelect).toHaveBeenCalledWith(rotate90 ? { x: 75, y: 75 } : { x: 25, y: 75 });
+        unmount();
+      }
+    }
   });
 });

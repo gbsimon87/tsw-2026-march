@@ -99,12 +99,18 @@ export function FeedList({ posts, onDelete, onNearEnd }) {
     );
   }
 
+  // Desktop: a 3-up grid. Cards keep their natural height (items-start) because
+  // the stat cards are designed layouts that can't be cropped to a uniform tile.
   return (
-    <div className="space-y-4">
+    <div
+      data-testid="feed-desktop-grid"
+      className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3"
+    >
       {posts.map((post) => (
         <FeedPostCard key={post.id} post={post} onDelete={onDelete} />
       ))}
-      <div ref={sentinelRef} className="h-px" />
+      {/* col-span-full keeps the sentinel out of the last row's columns. */}
+      <div ref={sentinelRef} data-testid="feed-load-more-sentinel" className="col-span-full h-px" />
     </div>
   );
 }

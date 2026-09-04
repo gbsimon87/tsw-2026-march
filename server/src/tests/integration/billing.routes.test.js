@@ -16,6 +16,9 @@ jest.mock('../../modules/billing/billing.service', () => ({
   createLeagueCheckoutSession: jest.fn(),
   createTeamPortalSession: jest.fn(),
   createLeaguePortalSession: jest.fn(),
+  changeLeaguePlan: jest.fn(),
+  chooseFreeTeam: jest.fn(),
+  getCheckoutStatus: jest.fn(),
   handleWebhookEvent: jest.fn(),
   // legacy aliases
   createCheckoutSession: jest.fn(),
@@ -45,6 +48,38 @@ describe('billing routes', () => {
     jest.clearAllMocks();
   });
 
+  describe('GET /api/v1/billing/checkout-status', () => {
+    test('requires authentication and validates the Checkout Session ID', async () => {
+      const app = createApp();
+      const unauthenticated = await request(app).get(
+        '/api/v1/billing/checkout-status?sessionId=cs_test_abc123'
+      );
+      expect(unauthenticated.statusCode).toBe(401);
+
+      const invalid = await request(app)
+        .get('/api/v1/billing/checkout-status?sessionId=not-a-session')
+        .set('Authorization', authHeader());
+      expect(invalid.statusCode).toBe(400);
+      expect(billingService.getCheckoutStatus).not.toHaveBeenCalled();
+    });
+
+    test('returns only the authenticated owner checkout status', async () => {
+      billingService.getCheckoutStatus.mockResolvedValue({
+        resourceType: 'team',
+        checkoutStatus: 'complete',
+        paymentStatus: 'paid',
+        resource: { id: 'team-1' },
+      });
+      const app = createApp();
+      const res = await request(app)
+        .get('/api/v1/billing/checkout-status?sessionId=cs_test_abc123')
+        .set('Authorization', authHeader('user-1'));
+
+      expect(res.statusCode).toBe(200);
+      expect(billingService.getCheckoutStatus).toHaveBeenCalledWith('user-1', 'cs_test_abc123');
+    });
+  });
+
   // ─── POST /billing/team-checkout ────────────────────────────────────────────
 
   describe('POST /api/v1/billing/team-checkout', () => {
@@ -67,14 +102,12 @@ describe('billing routes', () => {
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/team-checkout', 'attacker-user').send({
         teamId: 'other-users-team',
-        interval: 'monthly',
       });
 
       expect(res.statusCode).toBe(404);
       expect(billingService.createTeamCheckoutSession).toHaveBeenCalledWith(
         'attacker-user',
-        'other-users-team',
-        'monthly'
+        'other-users-team'
       );
     });
 
@@ -87,13 +120,12 @@ describe('billing routes', () => {
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/team-checkout').send({
         teamId: 'team-1',
-        interval: 'monthly',
       });
 
       expect(res.statusCode).toBe(400);
     });
 
-    test('13.4 returns 422 when interval is invalid', async () => {
+    test('13.4 rejects retired interval fields', async () => {
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/team-checkout').send({
         teamId: 'team-1',
@@ -113,7 +145,6 @@ describe('billing routes', () => {
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/team-checkout').send({
         teamId: 'team-1',
-        interval: 'monthly',
       });
 
       expect(res.statusCode).toBe(503);
@@ -127,19 +158,14 @@ describe('billing routes', () => {
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/team-checkout').send({
         teamId: 'team-1',
-        interval: 'season',
       });
 
       expect(res.statusCode).toBe(200);
       expect(res.body.url).toBe('https://checkout.stripe.com/test');
-      expect(billingService.createTeamCheckoutSession).toHaveBeenCalledWith(
-        'user-1',
-        'team-1',
-        'season'
-      );
+      expect(billingService.createTeamCheckoutSession).toHaveBeenCalledWith('user-1', 'team-1');
     });
 
-    test('defaults interval to monthly when omitted', async () => {
+    test('additional-team checkout needs only the team ID', async () => {
       billingService.createTeamCheckoutSession.mockResolvedValue({
         url: 'https://checkout.stripe.com/test',
       });
@@ -147,11 +173,7 @@ describe('billing routes', () => {
       const app = createApp();
       await authedPost(app, '/api/v1/billing/team-checkout').send({ teamId: 'team-1' });
 
-      expect(billingService.createTeamCheckoutSession).toHaveBeenCalledWith(
-        'user-1',
-        'team-1',
-        'monthly'
-      );
+      expect(billingService.createTeamCheckoutSession).toHaveBeenCalledWith('user-1', 'team-1');
     });
   });
 
@@ -163,15 +185,15 @@ describe('billing routes', () => {
       const res = await request(app)
         .post('/api/v1/billing/league-checkout')
         .set('Origin', CSRF_ORIGIN)
-        .send({ interval: 'monthly' });
+        .send({ planId: 'league' });
 
       expect(res.statusCode).toBe(401);
     });
 
-    test('13.7 returns 422 when interval is invalid', async () => {
+    test('13.7 rejects an unknown League plan', async () => {
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/league-checkout').send({
-        interval: 'weekly',
+        planId: 'weekly',
       });
 
       expect(res.statusCode).toBe(400);
@@ -185,15 +207,19 @@ describe('billing routes', () => {
 
       const app = createApp();
       const res = await authedPost(app, '/api/v1/billing/league-checkout').send({
-        interval: 'season',
+        planId: 'league_plus',
       });
 
       expect(res.statusCode).toBe(200);
       expect(res.body.url).toBe('https://checkout.stripe.com/league-test');
-      expect(billingService.createLeagueCheckoutSession).toHaveBeenCalledWith('user-1', 'season');
+      expect(billingService.createLeagueCheckoutSession).toHaveBeenCalledWith(
+        'user-1',
+        'league_plus',
+        undefined
+      );
     });
 
-    test('defaults interval to monthly when omitted', async () => {
+    test('defaults to the League plan when omitted', async () => {
       billingService.createLeagueCheckoutSession.mockResolvedValue({
         url: 'https://checkout.stripe.com/test',
       });
@@ -201,7 +227,60 @@ describe('billing routes', () => {
       const app = createApp();
       await authedPost(app, '/api/v1/billing/league-checkout').send({});
 
-      expect(billingService.createLeagueCheckoutSession).toHaveBeenCalledWith('user-1', 'monthly');
+      expect(billingService.createLeagueCheckoutSession).toHaveBeenCalledWith(
+        'user-1',
+        'league',
+        undefined
+      );
+    });
+
+    test('passes an existing canceled League ID for re-subscription', async () => {
+      billingService.createLeagueCheckoutSession.mockResolvedValue({
+        url: 'https://checkout.stripe.com/league-test',
+      });
+      const app = createApp();
+      await authedPost(app, '/api/v1/billing/league-checkout').send({
+        planId: 'league',
+        leagueId: 'league-canceled',
+      });
+
+      expect(billingService.createLeagueCheckoutSession).toHaveBeenCalledWith(
+        'user-1',
+        'league',
+        'league-canceled'
+      );
+    });
+  });
+
+  describe('capacity and League plan changes', () => {
+    test('switches the one free standalone team', async () => {
+      billingService.chooseFreeTeam.mockResolvedValue({
+        team: { capacityType: 'free', canManage: true },
+      });
+      const app = createApp();
+      const res = await authedPost(app, '/api/v1/billing/free-team').send({ teamId: 'team-2' });
+
+      expect(res.statusCode).toBe(200);
+      expect(billingService.chooseFreeTeam).toHaveBeenCalledWith('user-1', 'team-2');
+    });
+
+    test('passes a League tier change to the owned-resource service', async () => {
+      billingService.changeLeaguePlan.mockResolvedValue({
+        change: 'upgrade',
+        url: 'https://billing.stripe.com/test',
+      });
+      const app = createApp();
+      const res = await authedPost(app, '/api/v1/billing/league-plan-change').send({
+        leagueId: 'league-1',
+        planId: 'league_plus',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(billingService.changeLeaguePlan).toHaveBeenCalledWith(
+        'user-1',
+        'league-1',
+        'league_plus'
+      );
     });
   });
 
@@ -361,7 +440,7 @@ describe('billing routes', () => {
       expect(res.statusCode).toBe(200);
       expect(Array.isArray(res.body.plans)).toBe(true);
       const ids = res.body.plans.map((p) => p.id).sort();
-      expect(ids).toEqual(['league', 'starter', 'team_pro']);
+      expect(ids).toEqual(['league', 'league_plus', 'starter', 'team_extra']);
     });
 
     test('never leaks Stripe price IDs to the client', async () => {

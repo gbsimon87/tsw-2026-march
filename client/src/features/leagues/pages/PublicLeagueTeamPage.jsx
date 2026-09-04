@@ -147,6 +147,7 @@ export function PublicLeagueTeamPage() {
   const [rolePlayer, setRolePlayer] = useState(false);
   const [roleTeamManager, setRoleTeamManager] = useState(false);
   const [requestedLeaguePlayerId, setRequestedLeaguePlayerId] = useState('');
+  const [ownershipConfirmed, setOwnershipConfirmed] = useState(false);
   const [requestStatus, setRequestStatus] = useState('');
   const [requestStatusTone, setRequestStatusTone] = useState('success');
   const [activeTab, setActiveTab] = useState('stats');
@@ -175,6 +176,30 @@ export function PublicLeagueTeamPage() {
       ? `${window.location.origin}/league/${leagueSlug}/teams/${teamSlug}`
       : undefined,
   });
+
+  // An anonymous visitor who fills in the Join form is sent to /login with the
+  // selection stashed under pendingKey; restore it once they come back signed
+  // in, otherwise that write is dead and the key leaks. The ownership
+  // confirmation is deliberately NOT restored — re-ticking it keeps claiming a
+  // profile an explicit act taken while authenticated.
+  useEffect(() => {
+    if (!user || !data?.team) return;
+    const raw = sessionStorage.getItem(pendingKey);
+    if (!raw) return;
+    sessionStorage.removeItem(pendingKey);
+    try {
+      const pending = JSON.parse(raw);
+      setRolePlayer(Boolean(pending?.rolePlayer));
+      setRoleTeamManager(Boolean(pending?.roleTeamManager));
+      setRequestedLeaguePlayerId(
+        typeof pending?.requestedLeaguePlayerId === 'string' ? pending.requestedLeaguePlayerId : ''
+      );
+      setOwnershipConfirmed(false);
+      setActiveTab('join');
+    } catch {
+      // A corrupt payload is not worth surfacing; the form just stays empty.
+    }
+  }, [user, data?.team, pendingKey]);
 
   if (isLoading) {
     return <SportsLoader label="Loading league team" fullPage />;
@@ -241,17 +266,22 @@ export function PublicLeagueTeamPage() {
   async function submitJoinRequest(event) {
     event.preventDefault();
 
+    if (!rolePlayer && !roleTeamManager) {
+      setError('Select at least one role.');
+      return;
+    }
+
+    if (rolePlayer && (!requestedLeaguePlayerId || !ownershipConfirmed)) {
+      setError('Select your roster profile and confirm that it belongs to you.');
+      return;
+    }
+
     if (!user) {
       sessionStorage.setItem(
         pendingKey,
         JSON.stringify({ rolePlayer, roleTeamManager, requestedLeaguePlayerId })
       );
       navigate(`/login?redirectTo=${encodeURIComponent(window.location.pathname)}`);
-      return;
-    }
-
-    if (!rolePlayer && !roleTeamManager) {
-      setError('Select at least one role.');
       return;
     }
 
@@ -267,7 +297,7 @@ export function PublicLeagueTeamPage() {
   const visibleTabs = TABS;
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
 
       {/* Team card header */}
@@ -420,34 +450,68 @@ export function PublicLeagueTeamPage() {
 
           {activeTab === 'join' ? (
             <div>
-              <h2
-                className="text-lg text-slate-900"
-                style={{ fontFamily: "'Archivo Black', sans-serif" }}
-              >
-                Are you on this team?
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Claim your player profile to unlock your personal{' '}
-                <span className="font-medium text-slate-900">My Sporty</span> — your stats, game
-                history, and highlights all in one place.
-              </p>
+              <div className="overflow-hidden rounded-2xl bg-[#1B4332] p-5 text-white">
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#F4A300] text-[#141414]">
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-6 w-6"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="9" cy="7" r="3" />
+                      <path d="M3 19c0-4 2.7-7 6-7s6 3 6 7M18 8v6M15 11h6" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h2 className="text-xl" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
+                      Are you on this team?
+                    </h2>
+                    <p className="mt-1 text-sm text-white/75">
+                      Choose the role that matches how you participate with this team.
+                    </p>
+                  </div>
+                </div>
+              </div>
               <form onSubmit={submitJoinRequest} className="mt-5 space-y-4">
                 <fieldset className="space-y-2">
-                  <legend className="text-sm font-medium text-slate-700">I want to join as</legend>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 transition hover:border-[#F4A300]/60 hover:bg-white">
+                  <legend className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#141414] text-xs text-white">
+                      1
+                    </span>
+                    Choose your role
+                  </legend>
+                  <label
+                    className={`flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 transition ${
+                      joinablePlayers.length === 0
+                        ? 'cursor-not-allowed opacity-60'
+                        : 'cursor-pointer hover:border-[#F4A300]/60 hover:bg-white'
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       aria-label="Player — claim my profile"
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#141414]"
+                      disabled={joinablePlayers.length === 0}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#141414] disabled:cursor-not-allowed"
                       checked={rolePlayer}
-                      onChange={(e) => setRolePlayer(e.target.checked)}
+                      onChange={(e) => {
+                        setRolePlayer(e.target.checked);
+                        if (!e.target.checked) {
+                          setRequestedLeaguePlayerId('');
+                          setOwnershipConfirmed(false);
+                        }
+                      }}
                     />
                     <div>
                       <p className="text-sm font-medium text-slate-900">
                         Player — claim my profile
                       </p>
                       <p className="text-xs text-slate-500">
-                        Link your account to a roster slot and start building your My Sporty profile
+                        {joinablePlayers.length === 0
+                          ? 'No unclaimed player profiles are currently available'
+                          : 'Link your account to a roster slot and start building your My Sporty profile'}
                       </p>
                     </div>
                   </label>
@@ -468,24 +532,56 @@ export function PublicLeagueTeamPage() {
                   </label>
                 </fieldset>
                 {rolePlayer ? (
-                  <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-slate-700">
-                      Which roster slot is yours?
-                    </span>
-                    <select
-                      required
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F4A300]/30"
-                      value={requestedLeaguePlayerId}
-                      onChange={(event) => setRequestedLeaguePlayerId(event.target.value)}
-                    >
-                      <option value="">Select your name</option>
-                      {joinablePlayers.map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="space-y-4 rounded-xl border border-slate-200 p-4">
+                    <label className="block">
+                      <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#141414] text-xs text-white">
+                          2
+                        </span>
+                        Select your roster profile
+                      </span>
+                      <select
+                        required
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F4A300]/30"
+                        value={requestedLeaguePlayerId}
+                        onChange={(event) => {
+                          setRequestedLeaguePlayerId(event.target.value);
+                          setOwnershipConfirmed(false);
+                        }}
+                      >
+                        <option value="">Select your name</option>
+                        {joinablePlayers.map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-200 text-xs">
+                          3
+                        </span>
+                        Confirm this profile is yours
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-amber-800">
+                        Team managers review every request. Requesting someone else’s profile may
+                        result in rejection or removal of the link.
+                      </p>
+                      <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-amber-950">
+                        <input
+                          type="checkbox"
+                          required
+                          aria-label="I confirm this is my player profile"
+                          checked={ownershipConfirmed}
+                          onChange={(event) => setOwnershipConfirmed(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-amber-400 accent-[#141414]"
+                        />
+                        <span>I confirm that the selected player profile belongs to me.</span>
+                      </label>
+                    </div>
+                  </div>
                 ) : null}
                 {error ? <p className="text-sm text-red-600">{error}</p> : null}
                 {requestStatus ? (
@@ -497,7 +593,11 @@ export function PublicLeagueTeamPage() {
                 ) : null}
                 <button
                   type="submit"
-                  className="rounded-xl bg-[#141414] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
+                  disabled={
+                    (!rolePlayer && !roleTeamManager) ||
+                    (rolePlayer && (!requestedLeaguePlayerId || !ownershipConfirmed))
+                  }
+                  className="rounded-xl bg-[#141414] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4332] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Submit Request
                 </button>

@@ -118,7 +118,7 @@ describe('AppRouter', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/home');
   });
 
-  test('renders pricing page in development so league checkout is reachable', async () => {
+  test('renders the public pricing route so checkout is reachable', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' }, isLoading: false });
 
     renderWithProviders(
@@ -129,7 +129,9 @@ describe('AppRouter', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Track for free\. Upgrade for the extras\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Teams track for free\. Leagues pay to run the competition\./i)
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByTestId('location')).toHaveTextContent('/pricing');

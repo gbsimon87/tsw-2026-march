@@ -9,6 +9,20 @@ import {
   YAxis,
 } from 'recharts';
 
+// Chart palette.
+//
+// Validated with the dataviz skill's six-checks validator
+// (`validate_palette.js "#C77F00,#1F6FB2" --mode light`): lightness band PASS,
+// chroma floor PASS, CVD separation PASS (protan ΔE 24.2 · tritan 25.8),
+// normal-vision floor PASS (29.9), contrast vs surface PASS. Slot order is
+// fixed — home is always slot 1, away always slot 2 — so filtering a series
+// never repaints the other one.
+//
+// `#38bdf8` (the previous away colour) failed contrast against the chart
+// surface at 2.09:1.
+const SERIES_HOME = '#C77F00';
+const SERIES_AWAY = '#1F6FB2';
+
 const POINT_VALUES = {
   FT_MADE: 1,
   FG2_MADE: 2,
@@ -82,7 +96,7 @@ export function ScoringTimelineChart({
   return (
     <div className="mt-2 h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={series} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+        <LineChart data={series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis
             dataKey="play"
@@ -95,7 +109,7 @@ export function ScoringTimelineChart({
           <Line
             type="stepAfter"
             dataKey={teamKey}
-            stroke="#0f172a"
+            stroke={SERIES_HOME}
             strokeWidth={2}
             dot={false}
             isAnimationActive={false}
@@ -103,7 +117,7 @@ export function ScoringTimelineChart({
           <Line
             type="stepAfter"
             dataKey={opponentKey}
-            stroke="#38bdf8"
+            stroke={SERIES_AWAY}
             strokeWidth={2}
             dot={false}
             isAnimationActive={false}

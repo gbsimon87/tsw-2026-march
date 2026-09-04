@@ -34,6 +34,9 @@ export const leaguesApi = {
   updateTeam(leagueId, leagueTeamId, payload) {
     return apiClient.patch(`/leagues/${leagueId}/teams/${leagueTeamId}`, payload);
   },
+  archiveTeam(leagueId, leagueTeamId) {
+    return apiClient.post(`/leagues/${leagueId}/teams/${leagueTeamId}/archive`);
+  },
   uploadLogo(leagueId, formData) {
     return apiClient.postFormData(`/leagues/${leagueId}/logo`, formData);
   },

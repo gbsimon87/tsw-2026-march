@@ -435,17 +435,15 @@ describe('GameTrackPage', () => {
     expect(await screen.findByText('Admin destination')).toBeInTheDocument();
   });
 
-  test('blocks full-screen tracking until the starting five is set', async () => {
+  test('shows lineup setup before any tracking controls for a new one-sided game', async () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeInTheDocument();
+      expect(screen.getByText(/Set TSW Team Starting Lineup/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
-
-    expect(screen.getByText(/Set a starting lineup before tracking/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Fullscreen Tracking/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Fullscreen/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Court' })).not.toBeInTheDocument();
   });
 
   test('inserts a quick stat before a selected recent event', async () => {
@@ -508,6 +506,151 @@ describe('GameTrackPage', () => {
     expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     expect(screen.getByText(/Starting five set/i)).toBeInTheDocument();
     expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
+    expect(screen.queryByText('Starting Lineup')).not.toBeInTheDocument();
+  });
+
+  test('does not render the game title above the score header', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Court' })).toBeInTheDocument();
+    expect(screen.queryByText('Dev Scrimmage')).not.toBeInTheDocument();
+    expect(screen.getByText('Opponent')).toHaveClass('text-right');
+    expect(screen.getByText('Opponent').nextElementSibling).toHaveClass('text-right');
+  });
+
+  test('does not reopen first-time lineup setup after a starting lineup was saved', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: [],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Court' })).toBeInTheDocument();
+    expect(screen.queryByText(/Set TSW Team Starting Lineup/i)).not.toBeInTheDocument();
+  });
+
+  test('waits for the entry clock pause before saving a quickly tapped free throw', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    let pauseResolved = false;
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+    apiMocks.updateClock.mockImplementation(async (gameId, command) => {
+      if (command.action === 'pause') {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        pauseResolved = true;
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              status: 'paused',
+              runningSince: null,
+            },
+          },
+        };
+      }
+
+      return currentResponse;
+    });
+    apiMocks.appendEvent.mockImplementation((gameId, payload) => {
+      expect(pauseResolved).toBe(true);
+      currentResponse = {
+        ...currentResponse,
+        game: {
+          ...currentResponse.game,
+          events: [
+            ...currentResponse.game.events,
+            {
+              id: 'event-1',
+              ...payload,
+            },
+          ],
+        },
+      };
+      return Promise.resolve({
+        game: currentResponse.game,
+        boxScore: currentResponse.boxScore,
+        gameSummary: currentResponse.gameSummary,
+      });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+    pointerDown(getActiveCourt(), { clientX: 250, clientY: 800 });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    const freeThrowButton = within(getEventPicker()).getByRole('button', { name: 'FT+' });
+    expect(freeThrowButton).toBeEnabled();
+    fireEvent.click(freeThrowButton);
+
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(apiMocks.appendEvent).toHaveBeenCalledWith(
+        'game-1',
+        expect.objectContaining({ playerId: 'player-1', statType: 'FT_MADE' })
+      );
+    });
+  });
+
+  test('blocks new events until the game clock has started', async () => {
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+    });
+
+    renderPage();
+    pointerDown(await screen.findByTestId('interactive-court-image'), {
+      clientX: 250,
+      clientY: 800,
+    });
+
+    expect(screen.getByText(/start the game clock before recording an event/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /close event picker/i })).not.toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
   });
 
   test('warns before starting a game with a short lineup and allows continuing', async () => {
@@ -575,7 +718,12 @@ describe('GameTrackPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
     fireEvent.click(screen.getByRole('button', { name: 'Go back to lineup' }));
 
-    expect(screen.queryByText('Start with fewer than five players?')).not.toBeInTheDocument();
+    // The dialog stays mounted for the length of its exit animation before it
+    // leaves the tree, so this waits for the removal rather than asserting on
+    // the same tick as the click.
+    await waitFor(() =>
+      expect(screen.queryByText('Start with fewer than five players?')).not.toBeInTheDocument()
+    );
     expect(screen.getByText('Starting Lineup')).toBeInTheDocument();
   });
 
@@ -751,7 +899,43 @@ describe('GameTrackPage', () => {
     expect(screen.queryByText(/Set .* Starting Lineup/i)).not.toBeInTheDocument();
   });
 
-  test('shows only on-court players for assist follow-up and includes No Assist', async () => {
+  test('centres the clock from tablet width and right-aligns the away score block', async () => {
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    currentResponse.game = {
+      ...currentResponse.game,
+      gameFormat: {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      },
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    };
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+
+    const awayButton = await screen.findByRole('button', { name: 'Select Away Squad' });
+    expect(awayButton).toHaveClass('md:col-start-3', 'text-right');
+    // LiveScore renders the value as an sr-only node plus animated digits, so
+    // the alignment lives on the wrapping <p>.
+    expect(within(awayButton).getByText('0', { selector: '.sr-only' }).closest('p')).toHaveClass(
+      'text-right'
+    );
+
+    const clockContainer = screen.getByLabelText('Game clock').closest('section').parentElement;
+    expect(clockContainer).toHaveClass('md:col-start-2', 'md:row-start-1');
+    expect(screen.getByTestId('game-track-score-header')).toHaveClass(
+      'md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'
+    );
+  });
+
+  test('shows only on-court players for assist follow-up and includes Unassisted', async () => {
     currentResponse = createResponse({
       game: {
         currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
@@ -808,7 +992,7 @@ describe('GameTrackPage', () => {
     expect(
       within(overlay).getByRole('button', { name: playerButtonName('Evan') })
     ).toBeInTheDocument();
-    expect(within(overlay).getByRole('button', { name: /No Assist/i })).toBeInTheDocument();
+    expect(within(overlay).getByRole('button', { name: /Unassisted/i })).toBeInTheDocument();
   });
 
   test('shows all five on-court players for rebound follow-up and logs opponent rebound', async () => {
@@ -899,7 +1083,10 @@ describe('GameTrackPage', () => {
       toJSON: () => ({}),
     });
 
-    pointerDown(court, { clientX: 250, clientY: 800 });
+    // The court opens in the landscape view, so a pointer position maps to
+    // stored coordinates as x = y%, y = 100 - x%. These clientX/clientY values
+    // are the rotated equivalent of the centre-paint tap this test asserts.
+    pointerDown(court, { clientX: 74.45, clientY: 470 });
     await waitForEventPicker();
     await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
@@ -914,7 +1101,7 @@ describe('GameTrackPage', () => {
 
     const updatedCourt = getActiveCourt();
     updatedCourt.getBoundingClientRect = court.getBoundingClientRect;
-    pointerDown(updatedCourt, { clientX: 250, clientY: 800 });
+    pointerDown(updatedCourt, { clientX: 74.45, clientY: 470 });
     await waitForEventPicker();
     await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: '+2' }));
@@ -927,7 +1114,9 @@ describe('GameTrackPage', () => {
     });
 
     const quickStatPayload = apiMocks.appendEvent.mock.calls[0][1];
-    expect(quickStatPayload).toEqual(expect.objectContaining({ x: 50, y: 85.11, zoneId: 'PAINT' }));
+    expect(quickStatPayload).toEqual(
+      expect.objectContaining({ x: 50, y: 85.11, zoneId: 'PAINT', courtLayoutId: 'legacy-v1' })
+    );
   });
 
   test('updates on-court and bench lists after a substitution', async () => {
@@ -966,7 +1155,7 @@ describe('GameTrackPage', () => {
     expect(screen.getByText(/On Bench/i)).toBeInTheDocument();
   });
 
-  test('renders the score summary and tracking quick actions', async () => {
+  test('renders the score and tracking quick actions without the extra stats strip', async () => {
     currentResponse = createResponse({
       game: {
         currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
@@ -1049,8 +1238,8 @@ describe('GameTrackPage', () => {
     expect(within(overlay).getByRole('button', { name: 'TOV' })).toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'FOUL' })).toBeInTheDocument();
     expect(within(overlay).getByRole('button', { name: 'DREB' })).toBeInTheDocument();
-    expect(screen.getAllByText('66.7%').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('50.0%').length).toBeGreaterThan(0);
+    expect(screen.queryByText('66.7%')).not.toBeInTheDocument();
+    expect(screen.queryByText('50.0%')).not.toBeInTheDocument();
     expect(screen.getAllByText('24').length).toBeGreaterThan(0);
     expect(screen.getAllByText('18').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Opponent').length).toBeGreaterThan(0);
@@ -1071,18 +1260,24 @@ describe('GameTrackPage', () => {
       expect(screen.getByRole('button', { name: /More/i })).toBeInTheDocument();
     });
 
-    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
+    // The tracker opens in the landscape view.
+    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
 
     fireEvent.click(screen.getByRole('button', { name: /More/i }));
     fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
 
-    expect(screen.getByText(/Currently horizontal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Currently vertical/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Court' }));
-    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
+    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
 
     fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
-    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
+    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
+
+    // ...and back again, so the toggle is proven in both directions.
+    fireEvent.click(screen.getByRole('button', { name: /More/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
+    expect(screen.getByText(/Currently horizontal/i)).toBeInTheDocument();
   });
 
   function makeMatchMediaStub(isDesktop, { onListener } = {}) {
@@ -1254,6 +1449,27 @@ describe('GameTrackPage', () => {
       expect(payload.videoTimestamp).toBeUndefined();
     } finally {
       window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  test('mobile video-first flow shows lineup setup before video and hides it after saving', async () => {
+    const restoreMatchMedia = stubMatchMedia(false);
+    try {
+      currentResponse = createResponse({
+        game: { videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      });
+
+      renderPage();
+
+      expect(await screen.findByText('Starting Lineup')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Track Stat/i })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText(/Select Alex for the starting lineup/i));
+      fireEvent.click(screen.getByRole('button', { name: 'Save Lineup' }));
+
+      expect(await screen.findByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
+      expect(screen.queryByText('Starting Lineup')).not.toBeInTheDocument();
+    } finally {
+      restoreMatchMedia();
     }
   });
 
@@ -1640,5 +1856,193 @@ describe('GameTrackPage', () => {
     } finally {
       restoreMatchMedia();
     }
+  });
+});
+
+describe('GameTrackPage empty league roster', () => {
+  // Reproduces a schedule-built fixture: league, dual-team, scheduled, both
+  // rosters empty, viewer allowed to manage the roster. The lineup step should
+  // offer a way to add a player without leaving the tracker.
+  function emptyLeagueResponse(overrides = {}) {
+    return {
+      game: {
+        id: 'game-1',
+        title: 'Dorset Storm Men I at Bournemouth Bears',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        status: 'scheduled',
+        events: [],
+        homeLeagueTeamId: 'lt-home',
+        awayLeagueTeamId: 'lt-away',
+        startingLineupPlayerIds: [],
+        currentLineupPlayerIds: [],
+        homeCurrentLineupPlayerIds: [],
+        awayCurrentLineupPlayerIds: [],
+      },
+      team: { id: 'lt-home', name: 'Bournemouth Bears', players: [] },
+      participants: {
+        home: { displayName: 'Bournemouth Bears', slug: 'bournemouth-bears', players: [] },
+        away: { displayName: 'Dorset Storm Men I', slug: 'dorset-storm-men-i', players: [] },
+      },
+      lineups: {
+        home: { startingPlayerIds: [], currentPlayerIds: [] },
+        away: { startingPlayerIds: [], currentPlayerIds: [] },
+      },
+      league: {
+        id: 'l-1',
+        slug: 'dorset-basketball-association',
+        name: 'Dorset Basketball Association',
+      },
+      canManageRoster: true,
+      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+      ...overrides,
+    };
+  }
+
+  test('offers Add player when the roster is empty and the viewer can manage it', async () => {
+    apiMocks.getById.mockResolvedValue(emptyLeagueResponse());
+
+    renderPage();
+
+    expect(await screen.findByText('No players found on this roster.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Add player' })).toBeInTheDocument();
+  });
+
+  // Reaching this page for a league game already requires league owner, active
+  // league manager, or manager of one of the two teams — the same set
+  // canManageGameRoster allows. So the roster flag can only ever produce a false
+  // negative here, stranding someone who is allowed to add players. Never send
+  // them off to another page to do it.
+  test('still offers Add player on a league game when the roster flag is false', async () => {
+    apiMocks.getById.mockResolvedValue(emptyLeagueResponse({ canManageRoster: false }));
+
+    renderPage();
+
+    expect(await screen.findByText('No players found on this roster.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Add player' })).toBeInTheDocument();
+    // No detour to a public league page or an admin page.
+    expect(screen.queryByRole('link', { name: /add players/i })).not.toBeInTheDocument();
+  });
+
+  test('a standalone game with no permission gets prose, not a button', async () => {
+    apiMocks.getById.mockResolvedValue(
+      emptyLeagueResponse({
+        canManageRoster: false,
+        game: {
+          id: 'game-1',
+          title: 'Scrimmage',
+          gameContext: 'standalone',
+          trackingMode: 'one_sided',
+          status: 'scheduled',
+          events: [],
+          teamId: 'team-1',
+          startingLineupPlayerIds: [],
+          currentLineupPlayerIds: [],
+        },
+        participants: null,
+        lineups: null,
+      })
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('No players found on this roster.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Add player' })).not.toBeInTheDocument();
+  });
+});
+
+describe('GameTrackPage short lineup return path', () => {
+  function shortLineupResponse() {
+    return {
+      game: {
+        id: 'game-1',
+        title: 'Dorset Storm Men I at Bournemouth Bears',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        status: 'scheduled',
+        events: [],
+        homeLeagueTeamId: 'lt-home',
+        awayLeagueTeamId: 'lt-away',
+        startingLineupPlayerIds: [],
+        currentLineupPlayerIds: [],
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'ready',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: null,
+        },
+      },
+      team: { id: 'lt-home', name: 'Bournemouth Bears', players: [] },
+      participants: {
+        home: {
+          displayName: 'Bournemouth Bears',
+          slug: 'bournemouth-bears',
+          players: [{ id: 'h1', displayName: 'Marc', isActive: true }],
+        },
+        away: {
+          displayName: 'Dorset Storm Men I',
+          slug: 'dorset-storm-men-i',
+          players: [{ id: 'a1', displayName: 'Sam', isActive: true }],
+        },
+      },
+      lineups: {
+        home: { startingPlayerIds: ['h1'], currentPlayerIds: ['h1'] },
+        away: { startingPlayerIds: ['a1'], currentPlayerIds: ['a1'] },
+      },
+      league: { id: 'l-1', slug: 'dorset-basketball-association', name: 'Dorset BA' },
+      canManageRoster: true,
+      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+    };
+  }
+
+  // The modal offers "Go back to lineup"; it used to just switch to the court
+  // tab, where the only way to add another player sits below the court image.
+  // It must reopen the lineup step, where adding players is the point.
+  test('Go back to lineup reopens the lineup step, not the court tab', async () => {
+    apiMocks.getById.mockResolvedValue(shortLineupResponse());
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
+    expect(await screen.findByText('Start with fewer than five players?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go back to lineup' }));
+
+    // The lineup step replaces the tracking shell, so the court is not rendered.
+    await waitFor(() => {
+      expect(screen.queryByTestId('interactive-court-image')).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: '+ Add player' })).toBeInTheDocument();
+    // Clock never started.
+    expect(apiMocks.updateClock).not.toHaveBeenCalled();
+  });
+
+  // The reopened step has only Save Lineup and Add player, so without an exit a
+  // user who changed their mind is stuck in it until they save something.
+  test('the reopened lineup step can be left without saving', async () => {
+    apiMocks.getById.mockResolvedValue(shortLineupResponse());
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start game' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Go back to lineup' }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('interactive-court-image')).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to game' }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('interactive-court-image').length).toBeGreaterThan(0);
+    });
+    expect(apiMocks.setLineup).not.toHaveBeenCalled();
   });
 });
