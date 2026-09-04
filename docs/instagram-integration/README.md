@@ -3,7 +3,8 @@
 This folder is the living record for TSW's Instagram publishing integration. Update it whenever
 the implementation, Meta configuration, operational process, or delivery status changes.
 
-**Status:** operator connection flow implemented; awaiting Meta setup and live account test
+**Status:** Meta development app configured and first test-account OAuth connection completed;
+publishing workflow not yet implemented
 **Started:** 19 August 2026  
 **Branch:** `feat/instagram-publishing`, based on `dev`
 
@@ -49,12 +50,12 @@ post approval, durable delivery state, and a safe test-publish workflow are not.
 
 ### Next implementation slice
 
-- [ ] Create the Meta developer app and configure Instagram Login redirect URLs.
+- [x] Create the Meta developer app and configure Instagram Login redirect URLs.
 - [x] Implement OAuth connection and callback endpoints with one-time state validation.
 - [x] Store access tokens encrypted at rest; record expiry and account metadata.
 - [x] Add a platform-operator permission separate from league and team roles.
 - [x] Add an authenticated operator UI for connection status, verification, and disconnect.
-- [ ] Configure a Meta test app/account and complete the first real OAuth connection.
+- [x] Configure a Meta test app/account and complete the first real OAuth connection.
 - [ ] Add token refresh/expiry monitoring and encryption-key rotation operations.
 
 ### Publishing and approval slice
@@ -100,3 +101,7 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
   one-time state, long-lived token exchange, encrypted database storage, status/verify/disconnect
   endpoints, admin UI, operator utility, tests, and deployment placeholders. No publish endpoint
   was added.
+- **4 September 2026:** configured the Meta development app and test professional account, granted
+  the development operator, and completed the first OAuth connection, server-side verification,
+  disconnect, and reconnect cycle through the deployed TSW development application. Publishing
+  remains disabled.

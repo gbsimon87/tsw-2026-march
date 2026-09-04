@@ -1,6 +1,23 @@
 # Instagram Platform Knowledge
 
-Last checked against Meta's official Instagram API workspace on **23 August 2026**.
+Last checked against Meta's official Instagram API workspace and the deployed development OAuth
+flow on **4 September 2026**.
+
+## Development OAuth Validation — 4 September 2026
+
+- Meta app type: Business, using Instagram API with Instagram Login.
+- Graph API version: `v26.0`.
+- OAuth callback: `https://dev-api.thesportyway.com/api/v1/social/instagram/oauth/callback`.
+- TSW development operator login: `instagram@gmail.com`.
+- Test professional account role invitation accepted.
+- OAuth completed successfully and the operator screen reported the account as connected.
+- Server-side verification succeeded, and disconnect followed by reconnect completed successfully.
+- Meta's dashboard token generator returned no visible token after login; this was not a blocker
+  because TSW's OAuth flow obtained, exchanged, encrypted, and stored its own credential.
+- Webhooks were not configured, and the Meta app remained in Development mode.
+
+No Instagram username, external account ID, access token, app secret, or encryption key is recorded
+in this repository.
 
 ## Chosen API Path
 
