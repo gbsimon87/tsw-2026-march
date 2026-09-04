@@ -9,6 +9,8 @@ const mockEnv = {
   INSTAGRAM_GRAPH_API_VERSION: 'v23.0',
   INSTAGRAM_TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
   INSTAGRAM_TOKEN_KEY_VERSION: 'v1',
+  INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY: undefined,
+  INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION: undefined,
   INSTAGRAM_REQUEST_TIMEOUT_MS: 1000,
 };
 
@@ -19,12 +21,17 @@ const mockRepository = {
   findConnection: jest.fn(),
   updateConnectionVerification: jest.fn(),
   revokeConnection: jest.fn(),
+  claimTokenRefresh: jest.fn(),
+  completeTokenRefresh: jest.fn(),
+  failTokenRefresh: jest.fn(),
+  rotateConnectionToken: jest.fn(),
 };
 
 jest.mock('../../config/env', () => ({ env: mockEnv }));
 jest.mock('../../modules/social/instagram/instagram.repository', () => mockRepository);
 
 const service = require('../../modules/social/instagram/instagram.oauth.service');
+const { encryptSecret } = require('../../utils/crypto');
 
 function jsonResponse(payload, { status = 200 } = {}) {
   return {
@@ -47,6 +54,11 @@ function rawJsonResponse(rawBody, { status = 200 } = {}) {
 describe('Instagram OAuth service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRepository.failTokenRefresh.mockResolvedValue(null);
+    mockEnv.INSTAGRAM_TOKEN_ENCRYPTION_KEY = 'ab'.repeat(32);
+    mockEnv.INSTAGRAM_TOKEN_KEY_VERSION = 'v1';
+    mockEnv.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY = undefined;
+    mockEnv.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION = undefined;
   });
 
   test('creates a scoped authorization URL and persists only a state hash', async () => {
@@ -174,5 +186,98 @@ describe('Instagram OAuth service', () => {
     expect(result.configured).toBe(true);
     expect(result.connection.username).toBe('tsw_test');
     expect(JSON.stringify(result)).not.toContain('encrypted-secret');
+  });
+
+  test('refreshes an eligible token and records its new expiry without exposing it', async () => {
+    const now = new Date('2026-09-04T12:00:00.000Z');
+    const encryptedAccessToken = encryptSecret(
+      'current-long-lived-token',
+      mockEnv.INSTAGRAM_TOKEN_ENCRYPTION_KEY,
+      { associatedData: 'instagram-access-token:v1' }
+    );
+    mockRepository.claimTokenRefresh.mockResolvedValue({
+      _id: 'connection-1',
+      status: 'connected',
+      externalAccountId: '17841400000000000',
+      username: 'tsw_test',
+      encryptedAccessToken,
+      tokenKeyVersion: 'v1',
+      tokenObtainedAt: new Date('2026-09-02T12:00:00.000Z'),
+      tokenExpiresAt: new Date('2026-10-20T12:00:00.000Z'),
+      connectedAt: new Date('2026-09-02T12:00:00.000Z'),
+      lastVerifiedAt: now,
+    });
+    mockRepository.completeTokenRefresh.mockImplementation(async (input) => ({
+      _id: 'connection-1',
+      status: 'connected',
+      externalAccountId: '17841400000000000',
+      username: 'tsw_test',
+      connectedAt: new Date('2026-09-02T12:00:00.000Z'),
+      lastVerifiedAt: now,
+      lastTokenRefreshedAt: now,
+      ...input,
+    }));
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ access_token: 'replacement-long-lived-token', expires_in: 5184000 })
+      );
+
+    const result = await service.refreshStoredToken({ userId: 'operator-1', fetchImpl, now });
+
+    const refreshUrl = fetchImpl.mock.calls[0][0];
+    expect(refreshUrl.pathname).toBe('/refresh_access_token');
+    expect(refreshUrl.searchParams.get('grant_type')).toBe('ig_refresh_token');
+    expect(refreshUrl.searchParams.get('access_token')).toBe('current-long-lived-token');
+    const saved = mockRepository.completeTokenRefresh.mock.calls[0][0];
+    expect(saved.userId).toBe('operator-1');
+    expect(saved.encryptedAccessToken).not.toContain('replacement-long-lived-token');
+    expect(saved.tokenExpiresAt.toISOString()).toBe('2026-11-03T12:00:00.000Z');
+    expect(result.lastTokenRefreshedAt).toEqual(now);
+    expect(JSON.stringify(result)).not.toContain('replacement-long-lived-token');
+    expect(mockRepository.failTokenRefresh).not.toHaveBeenCalled();
+  });
+
+  test('rejects a token refresh before the token is 24 hours old and records the attempt', async () => {
+    const now = new Date('2026-09-04T12:00:00.000Z');
+    mockRepository.claimTokenRefresh.mockResolvedValue({
+      status: 'connected',
+      tokenObtainedAt: new Date('2026-09-04T00:00:00.000Z'),
+      tokenExpiresAt: new Date('2026-11-01T00:00:00.000Z'),
+    });
+
+    await expect(service.refreshStoredToken({ fetchImpl: jest.fn(), now })).rejects.toMatchObject({
+      statusCode: 409,
+      details: { reason: 'INSTAGRAM_TOKEN_TOO_NEW' },
+    });
+    expect(mockRepository.failTokenRefresh).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'INSTAGRAM_TOKEN_TOO_NEW', now })
+    );
+  });
+
+  test('rotates a token from the configured previous encryption key', async () => {
+    const previousKey = 'cd'.repeat(32);
+    mockEnv.INSTAGRAM_TOKEN_KEY_VERSION = 'v2';
+    mockEnv.INSTAGRAM_TOKEN_ENCRYPTION_KEY = 'ef'.repeat(32);
+    mockEnv.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION = 'v1';
+    mockEnv.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY = previousKey;
+    const encryptedAccessToken = encryptSecret('stored-token', previousKey, {
+      associatedData: 'instagram-access-token:v1',
+    });
+    mockRepository.findConnection.mockResolvedValue({
+      status: 'connected',
+      encryptedAccessToken,
+      tokenKeyVersion: 'v1',
+    });
+    mockRepository.rotateConnectionToken.mockResolvedValue({ tokenKeyVersion: 'v2' });
+
+    await expect(service.rotateStoredTokenEncryption()).resolves.toEqual({
+      rotated: true,
+      keyVersion: 'v2',
+    });
+    const rotated = mockRepository.rotateConnectionToken.mock.calls[0][0];
+    expect(rotated.expectedKeyVersion).toBe('v1');
+    expect(rotated.encryptedAccessToken).not.toContain('stored-token');
+    expect(rotated.encryptedAccessToken).not.toBe(encryptedAccessToken);
   });
 });

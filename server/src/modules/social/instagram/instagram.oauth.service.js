@@ -7,6 +7,9 @@ const repository = require('./instagram.repository');
 const INSTAGRAM_SCOPES = ['instagram_business_basic', 'instagram_business_content_publish'];
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_AAD_PREFIX = 'instagram-access-token';
+const TOKEN_REFRESH_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+const TOKEN_REFRESH_LEASE_MS = 2 * 60 * 1000;
+const TOKEN_EXPIRY_WARNING_MS = 14 * 24 * 60 * 60 * 1000;
 
 function isInstagramOAuthConfigured(config = env) {
   return Boolean(
@@ -29,6 +32,44 @@ function tokenAssociatedData(keyVersion = env.INSTAGRAM_TOKEN_KEY_VERSION) {
   return `${TOKEN_AAD_PREFIX}:${keyVersion}`;
 }
 
+function encryptionKeyForVersion(keyVersion) {
+  if (keyVersion === env.INSTAGRAM_TOKEN_KEY_VERSION) {
+    return env.INSTAGRAM_TOKEN_ENCRYPTION_KEY;
+  }
+  if (keyVersion === env.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION) {
+    return env.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY;
+  }
+  return null;
+}
+
+function tokenHealth(connection, now = new Date()) {
+  const expiresAt = connection?.tokenExpiresAt ? new Date(connection.tokenExpiresAt) : null;
+  const obtainedAt = connection?.tokenObtainedAt || connection?.connectedAt;
+  const obtainedDate = obtainedAt ? new Date(obtainedAt) : null;
+  const validExpiry = expiresAt && Number.isFinite(expiresAt.getTime());
+  const validObtainedAt = obtainedDate && Number.isFinite(obtainedDate.getTime());
+
+  let status = 'unknown';
+  if (validExpiry) {
+    if (expiresAt <= now) status = 'expired';
+    else if (expiresAt.getTime() - now.getTime() <= TOKEN_EXPIRY_WARNING_MS) status = 'expiring';
+    else status = 'healthy';
+  }
+
+  return {
+    status,
+    canRefresh:
+      status !== 'expired' &&
+      validObtainedAt &&
+      now.getTime() - obtainedDate.getTime() >= TOKEN_REFRESH_MIN_AGE_MS,
+    lastRefreshFailed: Boolean(
+      connection?.lastTokenRefreshFailureAt &&
+      (!connection.lastTokenRefreshedAt ||
+        new Date(connection.lastTokenRefreshFailureAt) > new Date(connection.lastTokenRefreshedAt))
+    ),
+  };
+}
+
 function firstDataObject(payload) {
   if (Array.isArray(payload?.data)) return payload.data[0] || {};
   return payload;
@@ -45,7 +86,7 @@ function normalizeGrantedScopes(value) {
   return [];
 }
 
-function serializeConnection(connection) {
+function serializeConnection(connection, { now = new Date() } = {}) {
   if (!connection || connection.status !== 'connected') return null;
   return {
     id: String(connection._id),
@@ -54,6 +95,12 @@ function serializeConnection(connection) {
     accountType: connection.accountType || null,
     grantedScopes: connection.grantedScopes || [],
     tokenExpiresAt: connection.tokenExpiresAt || null,
+    tokenHealth: tokenHealth(connection, now),
+    lastTokenRefreshedAt: connection.lastTokenRefreshedAt || null,
+    lastTokenRefreshAttemptAt: connection.lastTokenRefreshAttemptAt || null,
+    lastTokenRefreshFailureAt: connection.lastTokenRefreshFailureAt || null,
+    tokenKeyVersion: connection.tokenKeyVersion,
+    tokenKeyRotatedAt: connection.tokenKeyRotatedAt || null,
     connectedAt: connection.connectedAt,
     lastVerifiedAt: connection.lastVerifiedAt,
   };
@@ -218,6 +265,7 @@ async function completeAuthorization({ code, state, userId, sessionId, fetchImpl
       Number.isFinite(expiresIn) && expiresIn > 0
         ? new Date(now.getTime() + expiresIn * 1000)
         : null,
+    tokenObtainedAt: now,
     grantedScopes: grantedScopes.filter((scope) => INSTAGRAM_SCOPES.includes(scope)),
     connectedByUserId: userId,
     connectedAt: now,
@@ -241,17 +289,16 @@ async function verifyStoredConnection({ fetchImpl = global.fetch } = {}) {
   if (!connection || connection.status !== 'connected' || !connection.encryptedAccessToken) {
     throw new ApiError(404, 'No connected Instagram account');
   }
-  if (connection.tokenKeyVersion !== env.INSTAGRAM_TOKEN_KEY_VERSION) {
+  const encryptionKey = encryptionKeyForVersion(connection.tokenKeyVersion);
+  if (!encryptionKey) {
     throw new ApiError(503, 'Instagram token key version requires rotation');
   }
 
   let accessToken;
   try {
-    accessToken = decryptSecret(
-      connection.encryptedAccessToken,
-      env.INSTAGRAM_TOKEN_ENCRYPTION_KEY,
-      { associatedData: tokenAssociatedData(connection.tokenKeyVersion) }
-    );
+    accessToken = decryptSecret(connection.encryptedAccessToken, encryptionKey, {
+      associatedData: tokenAssociatedData(connection.tokenKeyVersion),
+    });
   } catch {
     throw new ApiError(503, 'Instagram credential could not be decrypted');
   }
@@ -272,6 +319,132 @@ async function verifyStoredConnection({ fetchImpl = global.fetch } = {}) {
   return serializeConnection(updated);
 }
 
+async function refreshStoredToken({ userId, fetchImpl = global.fetch, now = new Date() } = {}) {
+  assertConfigured();
+  const leaseId = randomToken();
+  const connection = await repository.claimTokenRefresh({
+    leaseId,
+    userId,
+    now,
+    leaseUntil: new Date(now.getTime() + TOKEN_REFRESH_LEASE_MS),
+  });
+  if (!connection) {
+    throw new ApiError(
+      409,
+      'Instagram token refresh is already running or no account is connected'
+    );
+  }
+
+  try {
+    const health = tokenHealth(connection, now);
+    if (health.status === 'expired') {
+      throw new ApiError(409, 'Instagram token has expired; reconnect the account', {
+        reason: 'INSTAGRAM_TOKEN_EXPIRED',
+      });
+    }
+    if (!health.canRefresh) {
+      throw new ApiError(409, 'Instagram token is too new to refresh; try again after 24 hours', {
+        reason: 'INSTAGRAM_TOKEN_TOO_NEW',
+      });
+    }
+
+    const encryptionKey = encryptionKeyForVersion(connection.tokenKeyVersion);
+    if (!encryptionKey) {
+      throw new ApiError(503, 'Instagram token key version requires rotation', {
+        reason: 'INSTAGRAM_TOKEN_KEY_MISMATCH',
+      });
+    }
+
+    let accessToken;
+    try {
+      accessToken = decryptSecret(connection.encryptedAccessToken, encryptionKey, {
+        associatedData: tokenAssociatedData(connection.tokenKeyVersion),
+      });
+    } catch {
+      throw new ApiError(503, 'Instagram credential could not be decrypted', {
+        reason: 'INSTAGRAM_TOKEN_DECRYPTION_FAILED',
+      });
+    }
+
+    // Meta requires the credential in this endpoint's query string. Do not log,
+    // return, or attach this URL to an error.
+    const url = new URL('/refresh_access_token', env.INSTAGRAM_GRAPH_API_BASE_URL);
+    url.searchParams.set('grant_type', 'ig_refresh_token');
+    url.searchParams.set('access_token', accessToken);
+    const refreshed = firstDataObject(await requestJson(url, { method: 'GET' }, fetchImpl));
+    const expiresIn = Number(refreshed.expires_in);
+    if (!refreshed.access_token || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+      throw new ApiError(502, 'Instagram token refresh response was incomplete', {
+        reason: 'INSTAGRAM_TOKEN_REFRESH_INVALID_RESPONSE',
+      });
+    }
+
+    const updated = await repository.completeTokenRefresh({
+      leaseId,
+      encryptedAccessToken: encryptSecret(
+        refreshed.access_token,
+        env.INSTAGRAM_TOKEN_ENCRYPTION_KEY,
+        { associatedData: tokenAssociatedData(env.INSTAGRAM_TOKEN_KEY_VERSION) }
+      ),
+      tokenKeyVersion: env.INSTAGRAM_TOKEN_KEY_VERSION,
+      tokenExpiresAt: new Date(now.getTime() + expiresIn * 1000),
+      userId,
+      now,
+    });
+    if (!updated) throw new ApiError(409, 'Instagram token refresh lease expired; try again');
+    return serializeConnection(updated, { now });
+  } catch (error) {
+    await repository
+      .failTokenRefresh({
+        leaseId,
+        errorCode: error.details?.reason || 'INSTAGRAM_TOKEN_REFRESH_FAILED',
+        now,
+      })
+      .catch(() => {});
+    throw error;
+  }
+}
+
+async function rotateStoredTokenEncryption({ now = new Date() } = {}) {
+  assertConfigured();
+  const connection = await repository.findConnection({ includeToken: true });
+  if (!connection || connection.status !== 'connected' || !connection.encryptedAccessToken) {
+    throw new ApiError(404, 'No connected Instagram account');
+  }
+  if (connection.tokenKeyVersion === env.INSTAGRAM_TOKEN_KEY_VERSION) {
+    return { rotated: false, keyVersion: env.INSTAGRAM_TOKEN_KEY_VERSION };
+  }
+  if (
+    connection.tokenKeyVersion !== env.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION ||
+    !env.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY
+  ) {
+    throw new ApiError(503, 'Previous Instagram token encryption key is not configured');
+  }
+
+  let accessToken;
+  try {
+    accessToken = decryptSecret(
+      connection.encryptedAccessToken,
+      env.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY,
+      { associatedData: tokenAssociatedData(connection.tokenKeyVersion) }
+    );
+  } catch {
+    throw new ApiError(503, 'Instagram credential could not be decrypted with the previous key');
+  }
+
+  const updated = await repository.rotateConnectionToken({
+    expectedEncryptedAccessToken: connection.encryptedAccessToken,
+    expectedKeyVersion: connection.tokenKeyVersion,
+    encryptedAccessToken: encryptSecret(accessToken, env.INSTAGRAM_TOKEN_ENCRYPTION_KEY, {
+      associatedData: tokenAssociatedData(env.INSTAGRAM_TOKEN_KEY_VERSION),
+    }),
+    tokenKeyVersion: env.INSTAGRAM_TOKEN_KEY_VERSION,
+    now,
+  });
+  if (!updated) throw new ApiError(409, 'Instagram credential changed during key rotation');
+  return { rotated: true, keyVersion: env.INSTAGRAM_TOKEN_KEY_VERSION };
+}
+
 async function disconnect(userId) {
   const connection = await repository.revokeConnection({ userId });
   return { disconnected: Boolean(connection) };
@@ -285,6 +458,8 @@ module.exports = {
   disconnect,
   getStatus,
   isInstagramOAuthConfigured,
+  refreshStoredToken,
+  rotateStoredTokenEncryption,
   serializeConnection,
   verifyStoredConnection,
 };

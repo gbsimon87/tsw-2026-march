@@ -58,6 +58,13 @@ The long-lived-token exchange requires the short-lived token in its query string
 platform-contract exception to TSW's normal bearer-header rule; the exchange URL is never logged,
 returned, or attached to an error. Normal Graph calls continue to use `Authorization: Bearer`.
 
+An unexpired long-lived token can be renewed through
+`GET https://graph.instagram.com/refresh_access_token` with
+`grant_type=ig_refresh_token` and the current long-lived token. Meta returns a replacement token
+and `expires_in`; TSW encrypts the replacement before atomically updating the connection. The
+operator control is disabled until the stored token is at least 24 hours old, and an expired token
+requires OAuth reconnection.
+
 ## Publishing Flow
 
 For a configured Instagram professional account ID:
@@ -101,6 +108,7 @@ in the private test account here when the OAuth and end-to-end test slices are c
 
 - [Meta Instagram API workspace](https://www.postman.com/meta/instagram/overview)
 - [Instagram API with Instagram Login collection](https://www.postman.com/meta/instagram/folder/6raa77c/instagram-api-with-instagram-login)
+- [Refresh access token reference](https://developers.facebook.com/docs/instagram-platform/reference/refresh_access_token)
 - [Create and publish media guide](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api?entity=request-23987686-894be833-d0b6-4877-859e-c61ae6474d64)
 - [Create a Reel container](https://www.postman.com/meta/instagram/request/23987686-8d93f052-4c50-4cef-b23e-57732bf370f3)
 - [Get container status](https://www.postman.com/meta/instagram/request/munmruq/get-ig-container-status)

@@ -26,9 +26,11 @@ The implementation currently provides:
 - a read-only bootstrap connection verification command;
 - unit coverage for request construction, polling, errors, and configuration validation;
 - a separate `platform_operator` permission and grant/revoke command;
-- operator-only OAuth start, callback, status, verification, and disconnect endpoints;
+- operator-only OAuth start, callback, status, verification, token-refresh, and disconnect
+  endpoints;
 - one-time OAuth state bound to the initiating user and session;
-- encrypted database storage for one official Instagram connection; and
+- encrypted database storage for one official Instagram connection;
+- token-expiry health, refresh auditing, and a controlled encryption-key rotation command; and
 - an operator screen at `/admin/social/instagram`.
 
 There is intentionally no HTTP publishing endpoint yet. Account connection is now available, but
@@ -56,7 +58,7 @@ post approval, durable delivery state, and a safe test-publish workflow are not.
 - [x] Add a platform-operator permission separate from league and team roles.
 - [x] Add an authenticated operator UI for connection status, verification, and disconnect.
 - [x] Configure a Meta test app/account and complete the first real OAuth connection.
-- [ ] Add token refresh/expiry monitoring and encryption-key rotation operations.
+- [x] Add token refresh/expiry monitoring and encryption-key rotation operations.
 
 ### Publishing and approval slice
 
@@ -105,3 +107,6 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
   the development operator, and completed the first OAuth connection, server-side verification,
   disconnect, and reconnect cycle through the deployed TSW development application. Publishing
   remains disabled.
+- **4 September 2026:** added token-health warnings, an operator-triggered long-lived-token refresh
+  with concurrency protection and audit timestamps, plus a controlled encryption-key rotation
+  command. No publishing endpoint was added.

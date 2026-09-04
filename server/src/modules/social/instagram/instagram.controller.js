@@ -55,6 +55,12 @@ async function verify(_req, res) {
   res.status(200).json({ connection: await oauthService.verifyStoredConnection() });
 }
 
+async function refreshToken(req, res) {
+  res.status(200).json({
+    connection: await oauthService.refreshStoredToken({ userId: req.auth.userId }),
+  });
+}
+
 async function disconnect(req, res) {
   res.status(200).json(await oauthService.disconnect(req.auth.userId));
 }
@@ -62,6 +68,7 @@ async function disconnect(req, res) {
 module.exports = {
   disconnect,
   oauthCallback,
+  refreshToken,
   startOAuth,
   status,
   verify,

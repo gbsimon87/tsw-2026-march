@@ -30,11 +30,12 @@ is not connected to a social-post model, approval workflow, publishing route, or
 | `server/src/modules/social/instagram/instagram.client.js`        | Account verification, image/Reel container creation, readiness polling, publication, and error normalisation. |
 | `server/src/scripts/verify-instagram-connection.js`              | Read-only check of the configured account; prints no credential.                                              |
 | `server/src/tests/unit/instagram.client.test.js`                 | Contract-level unit tests using a mocked network boundary.                                                    |
-| `server/src/modules/social/instagram/instagram.oauth.service.js` | One-time OAuth state, code/token exchange, account verification, encryption, and safe connection projection.  |
+| `server/src/modules/social/instagram/instagram.oauth.service.js` | OAuth exchange, account verification, encrypted token refresh/health, and key rotation.                       |
 | `server/src/modules/social/instagram/instagram.repository.js`    | Single Instagram connection and expiring one-time OAuth state persistence.                                    |
-| `server/src/modules/social/instagram/instagram.routes.js`        | Operator-only status, connect, callback, verify, and disconnect API.                                          |
-| `client/src/features/social/pages/InstagramConnectionPage.jsx`   | Operator connection and verification screen; it exposes no credential or publish action.                      |
+| `server/src/modules/social/instagram/instagram.routes.js`        | Operator-only status, connect, callback, verify, refresh, and disconnect API.                                 |
+| `client/src/features/social/pages/InstagramConnectionPage.jsx`   | Operator connection, token-health, refresh, and verification screen; no credential or publish action.         |
 | `server/src/scripts/ensure-instagram-indexes.js`                 | Additive production setup for single-account uniqueness and OAuth-state uniqueness/expiry indexes.            |
+| `server/src/scripts/rotate-instagram-token-key.js`               | Compare-and-set re-encryption of the stored credential during a controlled key rotation.                      |
 
 ## Target Domain Model
 
@@ -48,7 +49,13 @@ The current `InstagramConnection` holds the single official publishing account:
 
 The access token is encrypted with AES-256-GCM. The configured key version is authenticated as
 associated data, which detects ciphertext or key-version tampering. The API never serialises the
-encrypted value to the browser. Key rotation remains an operational follow-up before production.
+encrypted value to the browser. A temporary previous-key pair permits controlled re-encryption;
+the compare-and-set update prevents overwriting a credential changed concurrently.
+
+Long-lived tokens expose an operator-visible health state (`healthy`, `expiring`, `expired`, or
+`unknown`). An operator can refresh an eligible unexpired token after it is 24 hours old. A short
+database lease prevents two instances from refreshing it concurrently, and successful or failed
+attempts leave timestamps and a non-secret error classification.
 
 A future `SocialPost` should be the durable source of truth for every delivery attempt:
 
@@ -75,7 +82,8 @@ stored container/media state; it must not blindly create and publish a second co
 ## Security and Authorisation
 
 - Never send a platform access token to the browser.
-- Never place a token in a URL, log entry, analytics event, exception detail, or committed file.
+- Never place a token in a log entry, analytics event, exception detail, or committed file. Meta's
+  exchange and refresh endpoints require a token query parameter; never log or expose those URLs.
 - Store production tokens encrypted at rest with a managed key and support rotation.
 - Validate OAuth `state`, use exact redirect URLs, and attach the callback to the initiating
   operator session.

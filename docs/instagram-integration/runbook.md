@@ -21,7 +21,7 @@ INSTAGRAM_GRAPH_API_BASE_URL=https://graph.instagram.com
 INSTAGRAM_GRAPH_API_VERSION=vN.N
 INSTAGRAM_APP_ID=replace-with-instagram-app-id
 INSTAGRAM_APP_SECRET=replace-in-secret-manager
-INSTAGRAM_OAUTH_REDIRECT_URL=http://localhost:4000/api/v1/social/instagram/oauth/callback
+INSTAGRAM_OAUTH_REDIRECT_URL=https://dev-api.thesportyway.com/api/v1/social/instagram/oauth/callback
 INSTAGRAM_TOKEN_ENCRYPTION_KEY=replace-with-64-hex-character-key
 INSTAGRAM_TOKEN_KEY_VERSION=v1
 INSTAGRAM_REQUEST_TIMEOUT_MS=10000
@@ -43,7 +43,18 @@ The index command is additive and is required once per deployed database because
 disables Mongoose automatic index creation.
 
 After signing in again, open `/admin/social/instagram`. The page can connect, show safe account
-metadata, re-verify the credential, reconnect, and disconnect. It cannot publish.
+metadata and token health, refresh an eligible token, re-verify the credential, reconnect, and
+disconnect. It cannot publish.
+
+## Token Health and Refresh
+
+The operator screen warns when the stored long-lived token has 14 days or fewer remaining. Use
+**Refresh access token** before it expires. Meta only permits renewal of an unexpired long-lived
+token, and TSW keeps the control disabled until the token is at least 24 hours old. A successful
+refresh stores only the encrypted replacement token and updates the expiry and audit timestamps.
+
+If the token has expired, use **Reconnect account** instead. A failed refresh is recorded without
+storing token material or Meta's raw response.
 
 See [`manual-actions.md`](./manual-actions.md) for the complete ordered setup and test checklist.
 
@@ -126,14 +137,36 @@ The unit tests use a mocked network boundary and do not publish or require crede
 | Rate limited/transient error         | Honour retryability, use capped backoff with jitter, and inspect account/app limits.                         |
 | Publish returned but UI is uncertain | Reconcile using stored container/media data before attempting another publication.                           |
 
-## Token Rotation or Revocation
+## Token Encryption-Key Rotation
+
+Keep publishing disabled while rotating the application encryption key:
+
+1. In the deployment secret store, copy the existing key and version temporarily into
+   `INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY` and `INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION`.
+2. Generate a new key with `openssl rand -hex 32`, set it as
+   `INSTAGRAM_TOKEN_ENCRYPTION_KEY`, and increment `INSTAGRAM_TOKEN_KEY_VERSION` in configuration.
+3. Deploy those values together. The server can still read the old ciphertext via the temporary
+   previous-key pair.
+4. In the API service shell, run:
+
+   ```bash
+   pnpm --filter server instagram:rotate-key
+   ```
+
+5. Verify the command reports the new key version, then use **Verify connection** and refresh the
+   page.
+6. Remove both temporary previous-key variables and redeploy. Retain the old secret only in the
+   approved recovery store according to the project's secret-retention policy.
+
+The command is idempotent and never prints the token. Do not pass encryption keys as command-line
+arguments or commit them to `render.yaml`.
+
+## Token Revocation
 
 1. Disable publishing in the affected environment.
 2. Use the operator UI to disconnect; this erases the locally stored credential.
 3. Revoke TSW access in Meta/Instagram as well. Local disconnect does not call Meta revocation.
 4. Verify logs and error stores contain no token material.
 5. Reconnect through OAuth and confirm the intended account identity.
-6. If rotating the encryption key, retain the old key until every stored token has been
-   re-encrypted. The automated rotation operation is not implemented yet.
-7. Re-enable publishing only after the future approval workflow is ready and reconcile any post
+6. Re-enable publishing only after the future approval workflow is ready and reconcile any post
    left in an ambiguous delivery state.

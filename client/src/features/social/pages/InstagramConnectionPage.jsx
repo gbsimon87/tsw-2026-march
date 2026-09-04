@@ -23,6 +23,7 @@ export function InstagramConnectionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [action, setAction] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const oauthMessage = OAUTH_MESSAGES[searchParams.get('oauth')] || null;
 
   async function loadStatus() {
@@ -65,6 +66,21 @@ export function InstagramConnectionPage() {
     }
   }
 
+  async function refreshToken() {
+    setAction('refresh');
+    setError('');
+    setNotice('');
+    try {
+      const result = await instagramApi.refreshToken();
+      setStatus((current) => ({ ...current, connection: result.connection }));
+      setNotice('Instagram access token refreshed successfully.');
+    } catch (refreshError) {
+      setError(refreshError.message || 'Instagram token refresh failed');
+    } finally {
+      setAction('');
+    }
+  }
+
   async function disconnect() {
     if (!window.confirm('Disconnect this Instagram account from TSW?')) return;
     setAction('disconnect');
@@ -80,6 +96,11 @@ export function InstagramConnectionPage() {
   }
 
   const connection = status?.connection;
+  const tokenHealth = connection?.tokenHealth;
+  const tokenExpired = tokenHealth?.status === 'expired';
+  const refreshDisabledReason = tokenExpired
+    ? 'An expired token cannot be refreshed. Reconnect the Instagram account.'
+    : 'A long-lived token can be refreshed after it is 24 hours old.';
 
   return (
     <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
@@ -113,6 +134,12 @@ export function InstagramConnectionPage() {
         </p>
       ) : null}
 
+      {notice ? (
+        <p className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {notice}
+        </p>
+      ) : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
         {isLoading ? (
           <p className="text-sm text-slate-600">Loading Instagram status…</p>
@@ -138,12 +165,38 @@ export function InstagramConnectionPage() {
                   {connection.accountType || 'Professional account'} · ID {connection.accountId}
                 </p>
               </div>
-              <span className="w-fit rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                Verified
+              <span
+                className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                  tokenExpired ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                }`}
+              >
+                {tokenExpired ? 'Reconnect required' : 'Verified'}
               </span>
             </div>
 
-            <dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
+            {tokenExpired ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                This access token has expired. Reconnect the Instagram account before publishing.
+              </p>
+            ) : tokenHealth?.status === 'expiring' ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                This access token expires within 14 days. Refresh it now to keep the connection
+                active.
+              </p>
+            ) : tokenHealth?.status === 'unknown' ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Instagram did not provide a token expiry. Reconnect the account before enabling
+                publishing.
+              </p>
+            ) : null}
+
+            {tokenHealth?.lastRefreshFailed ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                The most recent token refresh failed. Verify the connection and try again.
+              </p>
+            ) : null}
+
+            <dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-slate-500">Last verified</dt>
                 <dd className="mt-1 font-medium text-slate-900">
@@ -156,6 +209,14 @@ export function InstagramConnectionPage() {
                   {formatDate(connection.tokenExpiresAt)}
                 </dd>
               </div>
+              <div>
+                <dt className="text-slate-500">Last token refresh</dt>
+                <dd className="mt-1 font-medium text-slate-900">
+                  {connection.lastTokenRefreshedAt
+                    ? formatDate(connection.lastTokenRefreshedAt)
+                    : 'Not refreshed yet'}
+                </dd>
+              </div>
             </dl>
 
             <div className="flex flex-wrap gap-3">
@@ -166,6 +227,15 @@ export function InstagramConnectionPage() {
                 className="rounded-lg bg-[#141414] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {action === 'verify' ? 'Verifying…' : 'Verify connection'}
+              </button>
+              <button
+                type="button"
+                onClick={refreshToken}
+                disabled={Boolean(action) || !tokenHealth?.canRefresh}
+                title={tokenHealth?.canRefresh ? undefined : refreshDisabledReason}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+              >
+                {action === 'refresh' ? 'Refreshing…' : 'Refresh access token'}
               </button>
               <button
                 type="button"

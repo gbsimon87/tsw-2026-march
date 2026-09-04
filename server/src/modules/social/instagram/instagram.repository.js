@@ -9,6 +9,24 @@ const instagramConnectionSchema = new mongoose.Schema(
     encryptedAccessToken: { type: String, default: null, select: false },
     tokenKeyVersion: { type: String, required: true },
     tokenExpiresAt: { type: Date, default: null },
+    tokenObtainedAt: { type: Date, default: null },
+    lastTokenRefreshedAt: { type: Date, default: null },
+    lastTokenRefreshedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    lastTokenRefreshAttemptAt: { type: Date, default: null },
+    lastTokenRefreshAttemptedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    lastTokenRefreshFailureAt: { type: Date, default: null },
+    lastTokenRefreshErrorCode: { type: String, default: null },
+    tokenRefreshLeaseId: { type: String, default: null, select: false },
+    tokenRefreshLeaseUntil: { type: Date, default: null, select: false },
+    tokenKeyRotatedAt: { type: Date, default: null },
     grantedScopes: { type: [String], default: [] },
     status: { type: String, enum: ['connected', 'revoked'], default: 'connected' },
     connectedByUserId: {
@@ -73,6 +91,17 @@ async function upsertConnection(input) {
         revokedByUserId: null,
         revokedAt: null,
       },
+      $unset: {
+        lastTokenRefreshedAt: 1,
+        lastTokenRefreshedByUserId: 1,
+        lastTokenRefreshAttemptAt: 1,
+        lastTokenRefreshAttemptedByUserId: 1,
+        lastTokenRefreshFailureAt: 1,
+        lastTokenRefreshErrorCode: 1,
+        tokenRefreshLeaseId: 1,
+        tokenRefreshLeaseUntil: 1,
+        tokenKeyRotatedAt: 1,
+      },
     },
     { upsert: true, new: true, runValidators: true }
   );
@@ -109,13 +138,100 @@ async function updateConnectionVerification({ username, accountType, now = new D
   );
 }
 
+async function claimTokenRefresh({ leaseId, userId, now = new Date(), leaseUntil }) {
+  return InstagramConnection.findOneAndUpdate(
+    {
+      platform: 'instagram',
+      status: 'connected',
+      $or: [
+        { tokenRefreshLeaseUntil: null },
+        { tokenRefreshLeaseUntil: { $exists: false } },
+        { tokenRefreshLeaseUntil: { $lte: now } },
+      ],
+    },
+    {
+      $set: {
+        lastTokenRefreshAttemptAt: now,
+        lastTokenRefreshAttemptedByUserId: userId,
+        tokenRefreshLeaseId: leaseId,
+        tokenRefreshLeaseUntil: leaseUntil,
+      },
+    },
+    { new: true, runValidators: true }
+  ).select('+encryptedAccessToken +tokenRefreshLeaseId +tokenRefreshLeaseUntil');
+}
+
+async function completeTokenRefresh({
+  leaseId,
+  encryptedAccessToken,
+  tokenKeyVersion,
+  tokenExpiresAt,
+  userId,
+  now = new Date(),
+}) {
+  return InstagramConnection.findOneAndUpdate(
+    { platform: 'instagram', status: 'connected', tokenRefreshLeaseId: leaseId },
+    {
+      $set: {
+        encryptedAccessToken,
+        tokenKeyVersion,
+        tokenExpiresAt,
+        tokenObtainedAt: now,
+        lastTokenRefreshedAt: now,
+        lastTokenRefreshedByUserId: userId,
+      },
+      $unset: {
+        lastTokenRefreshFailureAt: 1,
+        lastTokenRefreshErrorCode: 1,
+        tokenRefreshLeaseId: 1,
+        tokenRefreshLeaseUntil: 1,
+      },
+    },
+    { new: true, runValidators: true }
+  );
+}
+
+async function failTokenRefresh({ leaseId, errorCode, now = new Date() }) {
+  return InstagramConnection.findOneAndUpdate(
+    { platform: 'instagram', status: 'connected', tokenRefreshLeaseId: leaseId },
+    {
+      $set: { lastTokenRefreshFailureAt: now, lastTokenRefreshErrorCode: errorCode },
+      $unset: { tokenRefreshLeaseId: 1, tokenRefreshLeaseUntil: 1 },
+    },
+    { new: true, runValidators: true }
+  );
+}
+
+async function rotateConnectionToken({
+  expectedEncryptedAccessToken,
+  expectedKeyVersion,
+  encryptedAccessToken,
+  tokenKeyVersion,
+  now = new Date(),
+}) {
+  return InstagramConnection.findOneAndUpdate(
+    {
+      platform: 'instagram',
+      status: 'connected',
+      encryptedAccessToken: expectedEncryptedAccessToken,
+      tokenKeyVersion: expectedKeyVersion,
+    },
+    { $set: { encryptedAccessToken, tokenKeyVersion, tokenKeyRotatedAt: now } },
+    { new: true, runValidators: true }
+  );
+}
+
 module.exports = {
   InstagramConnection,
   InstagramOAuthState,
+  claimTokenRefresh,
+  completeTokenRefresh,
   consumeOAuthState,
   createOAuthState,
+  failTokenRefresh,
   findConnection,
   revokeConnection,
+  rotateConnectionToken,
   updateConnectionVerification,
   upsertConnection,
 };

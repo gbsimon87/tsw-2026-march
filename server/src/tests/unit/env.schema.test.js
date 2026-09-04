@@ -292,4 +292,25 @@ describe('env schema — Instagram OAuth', () => {
     );
     expect(result.success).toBe(false);
   });
+
+  test('requires previous encryption key and version together during rotation', () => {
+    const missingVersion = envSchema.safeParse(
+      baseEnv({ INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY: 'cd'.repeat(32) })
+    );
+    const missingKey = envSchema.safeParse(baseEnv({ INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION: 'v1' }));
+    expect(missingVersion.success).toBe(false);
+    expect(missingKey.success).toBe(false);
+  });
+
+  test('requires current and previous key versions to differ', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        INSTAGRAM_TOKEN_KEY_VERSION: 'v2',
+        INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION: 'v2',
+        INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY: 'cd'.repeat(32),
+      })
+    );
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain('must differ');
+  });
 });

@@ -74,6 +74,13 @@ const baseEnvSchema = z.object({
     .regex(/^[a-fA-F0-9]{64}$/)
     .optional(),
   INSTAGRAM_TOKEN_KEY_VERSION: z.string().min(1).default('v1'),
+  // Temporary previous key pair used only during an explicit credential
+  // rotation. Remove both values after the rotation command succeeds.
+  INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[a-fA-F0-9]{64}$/)
+    .optional(),
+  INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION: z.string().min(1).optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID_ADDITIONAL_TEAM: z.string().optional(),
@@ -266,6 +273,30 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
         });
       }
     }
+  }
+
+  const hasPreviousInstagramKey = Boolean(data.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY);
+  const hasPreviousInstagramVersion = Boolean(data.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION);
+  if (hasPreviousInstagramKey !== hasPreviousInstagramVersion) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [
+        hasPreviousInstagramKey
+          ? 'INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION'
+          : 'INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY',
+      ],
+      message: 'Both previous Instagram token key values are required during key rotation',
+    });
+  }
+  if (
+    hasPreviousInstagramVersion &&
+    data.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION === data.INSTAGRAM_TOKEN_KEY_VERSION
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION'],
+      message: 'Previous and current Instagram token key versions must differ',
+    });
   }
 });
 

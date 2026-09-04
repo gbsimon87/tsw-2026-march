@@ -77,3 +77,17 @@ key-rotation process should replace the single application key before broader pr
 OAuth configuration uses its own disabled-by-default flag. A successful connection only stores and
 verifies account access; there is still no HTTP publish action. The existing bootstrap publishing
 configuration remains isolated until durable post approval and delivery state are implemented.
+
+## ADR-010: Refresh explicitly and rotate keys with a transition pair
+
+**Status:** accepted on 4 September 2026.
+
+The operator screen shows token health and provides an explicit refresh action for an eligible
+unexpired long-lived token. Refresh uses a short database lease to prevent concurrent replacement
+and records the operator and outcome timestamps. Automated scheduling can be added later when the
+application has a durable job runner.
+
+Encryption-key rotation temporarily configures the old key/version alongside the new current
+pair. An idempotent command decrypts with the old key and uses compare-and-set to persist ciphertext
+under the new version. The temporary pair is removed after verification; secrets never appear in
+command arguments or committed configuration.

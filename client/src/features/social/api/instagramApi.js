@@ -10,6 +10,9 @@ export const instagramApi = {
   verify() {
     return apiClient.post('/social/instagram/verify');
   },
+  refreshToken() {
+    return apiClient.post('/social/instagram/token/refresh');
+  },
   disconnect() {
     return apiClient.delete('/social/instagram/connection');
   },
