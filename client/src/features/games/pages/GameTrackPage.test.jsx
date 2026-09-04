@@ -1083,7 +1083,10 @@ describe('GameTrackPage', () => {
       toJSON: () => ({}),
     });
 
-    pointerDown(court, { clientX: 250, clientY: 800 });
+    // The court opens in the landscape view, so a pointer position maps to
+    // stored coordinates as x = y%, y = 100 - x%. These clientX/clientY values
+    // are the rotated equivalent of the centre-paint tap this test asserts.
+    pointerDown(court, { clientX: 74.45, clientY: 470 });
     await waitForEventPicker();
     await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
@@ -1098,7 +1101,7 @@ describe('GameTrackPage', () => {
 
     const updatedCourt = getActiveCourt();
     updatedCourt.getBoundingClientRect = court.getBoundingClientRect;
-    pointerDown(updatedCourt, { clientX: 250, clientY: 800 });
+    pointerDown(updatedCourt, { clientX: 74.45, clientY: 470 });
     await waitForEventPicker();
     await selectPickerPlayer('Alex');
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: '+2' }));
@@ -1111,7 +1114,9 @@ describe('GameTrackPage', () => {
     });
 
     const quickStatPayload = apiMocks.appendEvent.mock.calls[0][1];
-    expect(quickStatPayload).toEqual(expect.objectContaining({ x: 50, y: 85.11, zoneId: 'PAINT' }));
+    expect(quickStatPayload).toEqual(
+      expect.objectContaining({ x: 50, y: 85.11, zoneId: 'PAINT', courtLayoutId: 'legacy-v1' })
+    );
   });
 
   test('updates on-court and bench lists after a substitution', async () => {
@@ -1255,18 +1260,24 @@ describe('GameTrackPage', () => {
       expect(screen.getByRole('button', { name: /More/i })).toBeInTheDocument();
     });
 
-    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
+    // The tracker opens in the landscape view.
+    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
 
     fireEvent.click(screen.getByRole('button', { name: /More/i }));
     fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
 
-    expect(screen.getByText(/Currently horizontal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Currently vertical/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Court' }));
-    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
+    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
 
     fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
-    expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
+    expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
+
+    // ...and back again, so the toggle is proven in both directions.
+    fireEvent.click(screen.getByRole('button', { name: /More/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
+    expect(screen.getByText(/Currently horizontal/i)).toBeInTheDocument();
   });
 
   function makeMatchMediaStub(isDesktop, { onListener } = {}) {

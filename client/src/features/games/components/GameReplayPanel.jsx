@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import courtImage from '../../../assets/courts/basketball_court_1.png';
 import { StatsTable } from '../../teams/components/StatsTable';
 import gameConstants from '../constants';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { useCourtLayout } from '../court/useCourtLayout';
 
 const { STAT_LABELS, ZONE_LABELS } = gameConstants;
 
@@ -158,7 +158,9 @@ export function GameReplayPanel({
   isDualTeam = false,
   participants = null,
   replayFilters = ['all'],
+  courtLayoutId,
 }) {
+  const layout = useCourtLayout(courtLayoutId);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const replayEvents = useMemo(() => {
     const allEvents = events || [];
@@ -321,10 +323,10 @@ export function GameReplayPanel({
             data-testid="replay-shot-map"
           >
             <CloudinaryImage
-              src={courtImage}
+              src={layout.image}
               alt="Replay court"
-              width={420}
-              height={760}
+              width={layout.width}
+              height={layout.height}
               loading="lazy"
               decoding="async"
               className="block w-full"

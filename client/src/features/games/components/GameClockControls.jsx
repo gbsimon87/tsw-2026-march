@@ -67,15 +67,15 @@ export function GameClockControls({
 
   return (
     <section
-      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-950 px-3 py-3 text-white shadow-lg sm:min-w-[15rem] sm:px-4"
+      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-950 px-3 py-3 text-white shadow-lg sm:min-w-[15rem] sm:px-4 landscape-compact:flex-row landscape-compact:gap-3 landscape-compact:px-2 landscape-compact:py-1.5"
       aria-label="Game clock controls"
     >
-      <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3">
+      <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3 landscape-compact:w-auto landscape-compact:shrink-0 landscape-compact:gap-2">
         <span className="rounded-md bg-white/10 px-2 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-200">
           {segmentLabel(game.gameFormat, clock.segmentKind, clock.segmentNumber)}
         </span>
         <span
-          className="justify-self-center font-mono text-3xl font-black leading-none tracking-tight tabular-nums sm:text-[2.75rem]"
+          className="justify-self-center font-mono text-3xl font-black leading-none tracking-tight tabular-nums sm:text-[2.75rem] landscape-compact:text-2xl"
           aria-label="Game clock"
         >
           {formatClock(remaining)}
@@ -88,13 +88,13 @@ export function GameClockControls({
           {statusLabel}
         </span>
       </div>
-      <div className="flex w-full flex-wrap justify-center gap-2 border-t border-white/10 pt-2">
+      <div className="flex w-full flex-wrap justify-center gap-2 border-t border-white/10 pt-2 landscape-compact:w-auto landscape-compact:flex-nowrap landscape-compact:border-l landscape-compact:border-t-0 landscape-compact:pl-3 landscape-compact:pt-0">
         {clock.status === 'running' ? (
           <button
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'pause' })}
-            className="min-h-9 flex-1 rounded-lg bg-[#F4A300] px-3 py-2 text-xs font-black text-[#141414] transition-colors hover:bg-[#ffb524] disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg landscape-compact:flex-none bg-[#F4A300] px-3 py-2 text-xs font-black text-[#141414] transition-colors hover:bg-[#ffb524] disabled:opacity-50"
           >
             Pause
           </button>
@@ -103,7 +103,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'start' })}
-            className="min-h-9 flex-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg landscape-compact:flex-none bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             {clock.segmentNumber === 1 &&
             clock.segmentKind === 'regulation' &&
@@ -116,7 +116,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'next_segment' })}
-            className="min-h-9 flex-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg landscape-compact:flex-none bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             Next period
           </button>
@@ -125,7 +125,7 @@ export function GameClockControls({
             type="button"
             disabled={disabled}
             onClick={() => onCommand({ action: 'start_overtime' })}
-            className="min-h-9 flex-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
+            className="min-h-9 flex-1 rounded-lg landscape-compact:flex-none bg-[#1B4332] px-3 py-2 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             Start overtime
           </button>

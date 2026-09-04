@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { COURT_LAYOUT_IDS } = require('../shared/courtLayouts');
 const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../shared/stats.constants');
 const { paginationQueryShape } = require('../shared/pagination.validation');
 
@@ -205,17 +206,25 @@ const baseEventSchema = z.object({
   ...videoTimestampField,
 });
 
+// The layout the client actually displayed when it captured x/y. It is a write
+// precondition, never a selection: the server compares it with the game's own
+// stamp and refuses a mismatch. Games are stamped server-side at creation, so
+// this is intentionally absent from createGameSchema/updateGameSchema.
+const courtLayoutPreconditionSchema = z.enum(COURT_LAYOUT_IDS).optional();
+
 const appendTrackedShotEventSchema = baseEventSchema.extend({
   statType: trackedShotStatTypeSchema,
   zoneId: zoneIdSchema,
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100),
+  courtLayoutId: courtLayoutPreconditionSchema,
 });
 
 const courtFieldsSchema = {
   zoneId: zoneIdSchema.optional(),
   x: z.number().min(0).max(100).optional(),
   y: z.number().min(0).max(100).optional(),
+  courtLayoutId: courtLayoutPreconditionSchema,
 };
 
 const appendNonShotEventSchema = baseEventSchema.extend({
@@ -259,6 +268,7 @@ const updateEventSchema = z
     zoneId: zoneIdSchema.optional(),
     x: z.number().min(0).max(100).optional(),
     y: z.number().min(0).max(100).optional(),
+    courtLayoutId: courtLayoutPreconditionSchema,
     videoTimestamp: z.number().min(0).nullable().optional(),
     segmentKind: z.enum(['regulation', 'overtime']).optional(),
     segmentNumber: z.number().int().min(1).optional(),

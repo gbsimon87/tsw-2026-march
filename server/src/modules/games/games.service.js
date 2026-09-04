@@ -23,6 +23,7 @@ const {
   applyEventToPlayerStatLine,
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
+const { LEGACY_COURT_LAYOUT_ID, resolveCourtLayoutId } = require('../shared/courtLayouts');
 const {
   getBillingSummary,
   getLeagueBillingSummary,
@@ -345,6 +346,7 @@ function sanitizeGame(game, options = {}) {
     teamId: game.teamId ? String(game.teamId) : null,
     gameContext: game.gameContext || 'standalone',
     trackingMode: game.trackingMode || 'one_sided',
+    courtLayoutId: resolveCourtLayoutId(game.courtLayoutId),
     sport: game.sport,
     gameFormat: game.gameFormat?.toObject?.() || game.gameFormat,
     clock: game.clock?.toObject?.() || game.clock,
@@ -390,6 +392,37 @@ function sanitizeGame(game, options = {}) {
     events: (game.events || []).map((event) => sanitizeEvent(event, { includePremiumMedia })),
     aiSummary: sanitizeAiSummary(game.aiSummary),
   };
+}
+
+// Court layout write precondition. The client sends the layout it displayed
+// when it captured x/y; a mismatch means those percentages belong to a
+// different image and must not be stored against this game.
+function assertCourtLayoutPrecondition(game, providedCourtLayoutId, hasCoordinates) {
+  if (!hasCoordinates) {
+    return;
+  }
+
+  const resolved = resolveCourtLayoutId(game.courtLayoutId);
+
+  // Rollout grace: a client from before this feature sends nothing, which is
+  // only safe for a legacy game. Rejecting it for a stamped game is what stops
+  // a cached old client recording legacy clicks into a new-court game.
+  if (!providedCourtLayoutId) {
+    if (resolved === LEGACY_COURT_LAYOUT_ID) {
+      return;
+    }
+
+    throw new ApiError(409, 'This game uses an updated court. Refresh the page and try again.', {
+      courtLayoutId: resolved,
+    });
+  }
+
+  if (providedCourtLayoutId !== resolved) {
+    throw new ApiError(409, 'This game uses an updated court. Refresh the page and try again.', {
+      courtLayoutId: resolved,
+      providedCourtLayoutId,
+    });
+  }
 }
 
 function normalizeVenueAddress(value) {
@@ -1876,6 +1909,11 @@ function requireBothLineups(game) {
 
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  assertCourtLayoutPrecondition(
+    game,
+    payload.courtLayoutId,
+    typeof payload.x === 'number' || typeof payload.y === 'number'
+  );
   const gameFormat = game.gameFormat;
   const eventSnapshot = payload;
   const insertBeforeEventId = options.insertBeforeEventId || null;
@@ -2284,6 +2322,11 @@ async function removeEventForUser(userId, gameId, eventId) {
 
 async function updateEventForUser(userId, gameId, eventId, patch) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  assertCourtLayoutPrecondition(
+    game,
+    patch.courtLayoutId,
+    typeof patch.x === 'number' || typeof patch.y === 'number'
+  );
   const event = game.events.id(eventId);
   if (!event) {
     throw new ApiError(404, 'Event not found');

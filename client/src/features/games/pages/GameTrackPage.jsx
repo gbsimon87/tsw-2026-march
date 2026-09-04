@@ -16,7 +16,7 @@ import {
   buildShotStatType,
   inferCourtSelection,
 } from '../court/courtInference';
-import { DEFAULT_COURT_IMAGE_CALIBRATION } from '../court/courtImageCalibration';
+import { useCourtLayout } from '../court/useCourtLayout';
 import gameConstants from '../constants';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
@@ -340,7 +340,7 @@ export function GameTrackPage() {
     [TEAM_SIDES.AWAY]: createEmptySideState(),
     oneSided: createEmptySideState(),
   });
-  const [courtOrientation, setCourtOrientation] = useState('vertical');
+  const [courtOrientation, setCourtOrientation] = useState('horizontal');
   const [isDesktopLayout, setIsDesktopLayout] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
   );
@@ -365,6 +365,10 @@ export function GameTrackPage() {
   const entryClockTransitionRef = useRef(Promise.resolve());
   const clockOperatedThisMountRef = useRef(false);
   const rotateCourt = courtOrientation === 'horizontal';
+  // Resolved once from the game's immutable stamp, then used for BOTH the
+  // rendered image and the click inference. Splitting those would let a
+  // correct-looking court be read with another layout's calibration.
+  const courtLayout = useCourtLayout(data?.game?.courtLayoutId);
 
   useEffect(() => {
     function onMessage(event) {
@@ -764,9 +768,16 @@ export function GameTrackPage() {
       entryClockSnapshotRef.current ||
       (data?.game?.clock ? clockSnapshot(data.game, Date.now() + serverOffsetMilliseconds) : {});
     const withClock = { ...withTimestamp, ...snapshot };
+    // Write precondition for coordinate-bearing events only: the server
+    // compares it with the game's own stamp and rejects a mismatch, so a stale
+    // tab cannot record clicks captured on a different court image.
+    const withLayout =
+      typeof withClock.x === 'number' || typeof withClock.y === 'number'
+        ? { ...withClock, courtLayoutId: courtLayout.id }
+        : withClock;
     const isOpponentAggregate = String(payload.statType || '').startsWith('OPP_');
-    if (!isDualTeam || isOpponentAggregate) return withClock;
-    return { teamSide: activeSide, ...withClock };
+    if (!isDualTeam || isOpponentAggregate) return withLayout;
+    return { teamSide: activeSide, ...withLayout };
   }
 
   async function submitEvent(payload, { insertBeforeId = '' } = {}) {
@@ -848,7 +859,7 @@ export function GameTrackPage() {
       return;
     }
 
-    const inferred = inferCourtSelection(point.x, point.y, DEFAULT_COURT_IMAGE_CALIBRATION);
+    const inferred = inferCourtSelection(point.x, point.y, courtLayout.calibration);
     setSelectedShot(inferred);
     setPendingFollowUpPrompt(null);
     setLastTappedHoop(inferred.nearestHoop);
@@ -1152,7 +1163,7 @@ export function GameTrackPage() {
     const inferred = buildFreeThrowPayload(
       selectedShot?.nearestHoop || lastTappedHoop,
       outcome,
-      DEFAULT_COURT_IMAGE_CALIBRATION
+      courtLayout.calibration
     );
     const payload = buildEventPayload({
       playerId: currentSideState.selectedPlayerId,
@@ -1346,6 +1357,9 @@ export function GameTrackPage() {
     if (editingEvent.zoneId) patch.zoneId = editingEvent.zoneId;
     if (editingEvent.x !== '') patch.x = Number(editingEvent.x);
     if (editingEvent.y !== '') patch.y = Number(editingEvent.y);
+    if (patch.x !== undefined || patch.y !== undefined) {
+      patch.courtLayoutId = courtLayout.id;
+    }
     patch.segmentKind = editingEvent.segmentKind;
     patch.segmentNumber = Number(editingEvent.segmentNumber);
     patch.clockMillisecondsRemaining = Number(editingEvent.clockMillisecondsRemaining);
@@ -2222,7 +2236,7 @@ export function GameTrackPage() {
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
-              <div className="shrink-0 grid grid-cols-4 gap-1 border-b border-slate-200 p-1.5">
+              <div className="shrink-0 grid grid-cols-4 gap-1 border-b border-slate-200 p-1.5 landscape-compact:p-1">
                 {[
                   {
                     id: 'court',
@@ -2295,7 +2309,7 @@ export function GameTrackPage() {
                     onClick={() => setActivePanel(tab.id)}
                     aria-label={tab.label}
                     aria-pressed={activePanel === tab.id}
-                    className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${
+                    className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors landscape-compact:flex-row landscape-compact:justify-center landscape-compact:gap-1.5 landscape-compact:py-1.5 ${
                       activePanel === tab.id
                         ? 'bg-[#141414] text-white'
                         : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
@@ -2376,7 +2390,7 @@ export function GameTrackPage() {
                     mobile watch view (which is the persistent layer above). Hidden entirely
                     while the mobile watch view is showing. */}
                 <div
-                  className={`min-h-0 flex-1 overflow-y-auto p-4 ${
+                  className={`min-h-0 flex-1 overflow-y-auto p-4 landscape-compact:p-2 ${
                     isMobileVideoWatchView ? 'hidden' : ''
                   }`}
                 >
@@ -2384,11 +2398,12 @@ export function GameTrackPage() {
                   game.videoUrl &&
                   !isDesktopLayout &&
                   isMobileEntryMode ? (
-                    <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex min-h-0 flex-1 flex-col landscape-compact:flex-row landscape-compact:items-start landscape-compact:gap-1.5">
                       <button
                         type="button"
                         onClick={() => setIsMobileEntryMode(false)}
-                        className="mb-2 flex shrink-0 items-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        aria-label="Back to Video"
+                        className="mb-2 flex shrink-0 items-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 landscape-compact:mb-0 landscape-compact:shrink-0 landscape-compact:gap-0 landscape-compact:px-2 landscape-compact:py-1"
                       >
                         <svg
                           viewBox="0 0 20 20"
@@ -2399,9 +2414,9 @@ export function GameTrackPage() {
                         >
                           <path d="M12 15l-5-5 5-5" />
                         </svg>
-                        Back to Video
+                        <span className="landscape-compact:sr-only">Back to Video</span>
                       </button>
-                      <div className="space-y-4">
+                      <div className="space-y-4 landscape-compact:min-w-0 landscape-compact:flex-1">
                         {insertBeforeEventId ? (
                           <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
                             <p className="text-xs font-medium text-[#7a5200]">
@@ -2423,9 +2438,10 @@ export function GameTrackPage() {
                           <div className="relative">
                             <InteractiveCourtImage
                               onSelect={onCourtSelect}
-                              containerClassName="min-h-[26rem]"
-                              courtClassName="min-h-[22rem]"
+                              containerClassName="min-h-[26rem] landscape-compact:h-[max(11rem,calc(100dvh_-_6.5rem))] landscape-compact:min-h-[11rem]"
+                              courtClassName="min-h-[22rem] landscape-compact:min-h-0"
                               rotate90={rotateCourt}
+                              layout={courtLayout}
                             />
                             {eventPicker}
                           </div>
@@ -2466,9 +2482,10 @@ export function GameTrackPage() {
                         <div className="relative">
                           <InteractiveCourtImage
                             onSelect={onCourtSelect}
-                            containerClassName="mx-auto min-h-[26rem] w-full max-w-[calc(min(78vw,26rem))] sm:h-[min(64vh,40rem)] sm:min-h-[26rem] sm:max-w-[calc(min(64vh,40rem)*0.5526)]"
-                            courtClassName="min-h-[22rem]"
+                            containerClassName="mx-auto min-h-[26rem] w-full max-w-[calc(min(78vw,26rem))] sm:h-[min(64vh,40rem)] sm:min-h-[26rem] sm:max-w-[calc(min(64vh,40rem)*0.5526)] landscape-compact:h-[max(11rem,calc(100dvh_-_6.5rem))] landscape-compact:min-h-[11rem] landscape-compact:max-w-none"
+                            courtClassName="min-h-[22rem] landscape-compact:min-h-0"
                             rotate90={rotateCourt}
+                            layout={courtLayout}
                           />
                           {eventPicker}
                         </div>
@@ -3617,6 +3634,7 @@ export function GameTrackPage() {
                 helperText=""
                 flat
                 rotate90={rotateCourt}
+                layout={courtLayout}
               />
               {eventPicker}
             </div>

@@ -1809,3 +1809,187 @@ describe('computeGameFinalScore (OPT-008)', () => {
     });
   });
 });
+
+describe('court layout compatibility contract', () => {
+  const teamPlayers = buildPlayers([{ _id: 'p1', displayName: 'Alex', isActive: true }]);
+
+  function buildTrackableGame(overrides = {}) {
+    return {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
+      teamId: 'team-1',
+      rosterSnapshot: [],
+      events: buildEvents([]),
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  const SHOT = {
+    ...EVENT_CLOCK,
+    playerId: 'p1',
+    statType: STAT_TYPES.FG2_MADE,
+    zoneId: 'PAINT',
+    x: 50,
+    y: 20,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    findTeamById.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+  });
+
+  test('serializes a document with no courtLayoutId as legacy, so production games keep their court', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Game',
+      status: 'in_progress',
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    });
+
+    const result = await createGameForUser('user-1', { teamId: 'team-1', title: 'Game' });
+
+    expect(result.courtLayoutId).toBe('legacy-v1');
+  });
+
+  test('serializes a stamped document as its own layout', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Game',
+      status: 'in_progress',
+      courtLayoutId: 'court-v2',
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    });
+
+    const result = await createGameForUser('user-1', { teamId: 'team-1', title: 'Game' });
+
+    expect(result.courtLayoutId).toBe('court-v2');
+  });
+
+  test('rejects coordinates captured on a different court than the game was stamped with', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', { ...SHOT, courtLayoutId: 'legacy-v1' })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'This game uses an updated court. Refresh the page and try again.',
+    });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  // A cached pre-feature client sends no precondition at all. Allowing that for
+  // a stamped game is exactly the hole the handshake exists to close.
+  test('rejects an absent precondition on a stamped game and tells the user to refresh', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(appendEventForUser('user-1', 'game-1', SHOT)).rejects.toMatchObject({
+      statusCode: 409,
+      details: { courtLayoutId: 'court-v2' },
+    });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  test('allows an absent precondition on a legacy game so old clients keep working', async () => {
+    const game = buildTrackableGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(appendEventForUser('user-1', 'game-1', SHOT)).resolves.toHaveProperty('game');
+  });
+
+  test('accepts a matching precondition on a stamped game', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', { ...SHOT, courtLayoutId: 'court-v2' })
+    ).resolves.toHaveProperty('game');
+  });
+
+  // Only coordinates are layout-dependent, so a stat carrying none must not be
+  // blocked by a missing precondition.
+  test('does not gate a coordinate-free event on the precondition', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'p1',
+        statType: STAT_TYPES.AST,
+      })
+    ).resolves.toHaveProperty('game');
+  });
+
+  test('rejects a coordinate edit made against the wrong court', async () => {
+    const game = buildTrackableGame({
+      courtLayoutId: 'court-v2',
+      events: buildEvents([
+        {
+          _id: 'event-1',
+          playerId: 'p1',
+          statType: STAT_TYPES.FG2_MADE,
+          zoneId: 'PAINT',
+          x: 50,
+          y: 20,
+          ...EVENT_CLOCK,
+        },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      updateEventForUser('user-1', 'game-1', 'event-1', { x: 40, courtLayoutId: 'legacy-v1' })
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  test('leaves a non-coordinate edit alone', async () => {
+    const game = buildTrackableGame({
+      courtLayoutId: 'court-v2',
+      events: buildEvents([
+        {
+          _id: 'event-1',
+          playerId: 'p1',
+          statType: STAT_TYPES.FG2_MADE,
+          zoneId: 'PAINT',
+          x: 50,
+          y: 20,
+          ...EVENT_CLOCK,
+        },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      updateEventForUser('user-1', 'game-1', 'event-1', { playerId: 'p1' })
+    ).resolves.toBeDefined();
+  });
+});

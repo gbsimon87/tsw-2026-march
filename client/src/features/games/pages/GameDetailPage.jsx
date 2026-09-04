@@ -535,7 +535,10 @@ export function GameDetailPage() {
           />
         </div>
 
-        <RecapShotSnapshot shotSnapshot={recap?.shotSnapshot} />
+        <RecapShotSnapshot
+          shotSnapshot={recap?.shotSnapshot}
+          courtLayoutId={recap?.shotSnapshot?.courtLayoutId || game.courtLayoutId}
+        />
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white">
@@ -591,6 +594,7 @@ export function GameDetailPage() {
       isDualTeam={isDualTeam}
       participants={participants}
       replayFilters={data.replayFilters || ['all']}
+      courtLayoutId={game.courtLayoutId}
     />
   );
 

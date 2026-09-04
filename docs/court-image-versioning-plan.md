@@ -1,7 +1,7 @@
 # Court image versioning implementation plan
 
-**Feature status:** Design complete; implementation not started  
-**Last updated:** 2026-08-23  
+**Feature status:** Implemented; pending visual QA and staged rollout  
+**Last updated:** 2026-09-04  
 **Scope:** Tracking court, completed-game shot snapshot, and game replay
 
 ## Goal
@@ -115,17 +115,17 @@ or overwriting it is not.
 
 ### Phase 0 — prepare and calibrate the new asset
 
-- [ ] Add the new court under `client/src/assets/courts/` as a new file; do not replace
+- [x] Add the new court under `client/src/assets/courts/` as a new file; do not replace
       `basketball_court_1.png` in place.
-- [ ] Record the new image's exact intrinsic dimensions and orientation.
-- [ ] Confirm whether the image includes transparent padding, a border, labels, or
+- [x] Record the new image's exact intrinsic dimensions and orientation.
+- [x] Confirm whether the image includes transparent padding, a border, labels, or
       decoration outside the playable court.
-- [ ] Measure `courtRect.left`, `top`, `width`, and `height` as percentages of the full
+- [x] Measure `courtRect.left`, `top`, `width`, and `height` as percentages of the full
       image.
-- [ ] Tune the three-point and corner thresholds by clicking representative points on
+- [x] Tune the three-point and corner thresholds by clicking representative points on
       the visible lines. Do not copy the legacy calibration unless the geometry is proven
       identical.
-- [ ] Update [`client/src/assets/courts/README.md`](../client/src/assets/courts/README.md)
+- [x] Update [`client/src/assets/courts/README.md`](../client/src/assets/courts/README.md)
       so it documents every supported layout accurately. The legacy PNG is actually
       `442x829`, the live component forces a `420x760` ratio, and the README currently
       calls `500x940` canonical. Preserve the current rendered legacy ratio unless visual
@@ -136,26 +136,26 @@ stable. Changing either after events are recorded creates another layout version
 
 ### Phase 1 — add the persisted compatibility contract
 
-- [ ] Add `courtLayoutId` to `gameSchema` with an enum containing `legacy-v1` and
+- [x] Add `courtLayoutId` to `gameSchema` with an enum containing `legacy-v1` and
       `court-v2`, leaving the schema default unset or `null`.
-- [ ] Explicitly write `court-v2` in every `createGameForUser` branch and in any bulk
+- [x] Explicitly write `court-v2` in every `createGameForUser` branch and in any bulk
       fixture creation path. The schedule builder currently uses `insertManyGames` from
       `leagues.service.js`, so it needs an explicit stamp too.
-- [ ] Return the resolved value from `sanitizeGame`:
+- [x] Return the resolved value from `sanitizeGame`:
       `game.courtLayoutId || 'legacy-v1'`.
-- [ ] Include the resolved layout ID wherever recap data is consumed. Prefer adding it
+- [x] Include the resolved layout ID wherever recap data is consumed. Prefer adding it
       to `shotSnapshot` as `courtLayoutId`, so the snapshot is self-describing even when
       used separately from the full game response.
-- [ ] Do not expose `courtLayoutId` in `createGameSchema` or `updateGameSchema`; layout
+- [x] Do not expose `courtLayoutId` in `createGameSchema` or `updateGameSchema`; layout
       selection is a server-owned integrity decision.
-- [ ] Use `courtLayoutId` as a write precondition for coordinate-bearing append,
+- [x] Use `courtLayoutId` as a write precondition for coordinate-bearing append,
       insert, and coordinate-edit requests. The client sends the layout it displayed; the
       server compares it with the game's resolved layout and returns `409 Conflict` on a
       mismatch. The precondition does not need to be duplicated on each stored event.
-- [ ] During rollout, permit an absent precondition only for `legacy-v1` games. Reject
+- [x] During rollout, permit an absent precondition only for `legacy-v1` games. Reject
       an absent value for `court-v2`, which prevents a cached old client from recording v1
       clicks into a newly stamped v2 game. The error should tell the user to refresh.
-- [ ] Add a repository/service test proving that a legacy document without the field
+- [x] Add a repository/service test proving that a legacy document without the field
       serializes as `legacy-v1` and a new game is persisted as `court-v2`.
 
 If league schedule creation bypasses `createGameForUser`, it must stamp `court-v2` too.
@@ -163,19 +163,19 @@ Use a shared server constant/helper so creation paths cannot drift.
 
 ### Phase 2 — make tracking layout-aware
 
-- [ ] Replace the module-level old-image import in `InteractiveCourtImage` with a
+- [x] Replace the module-level old-image import in `InteractiveCourtImage` with a
       required/resolved layout prop.
-- [ ] Derive the displayed aspect ratio and Cloudinary width/height from the selected
+- [x] Derive the displayed aspect ratio and Cloudinary width/height from the selected
       layout instead of the hard-coded `420 / 760` constants.
-- [ ] In `GameTrackPage`, resolve the layout from `data.game.courtLayoutId` once and
+- [x] In `GameTrackPage`, resolve the layout from `data.game.courtLayoutId` once and
       pass that same object to both `InteractiveCourtImage` and `inferCourtSelection`.
-- [ ] Send the resolved layout ID as the write precondition on every request that can
+- [x] Send the resolved layout ID as the write precondition on every request that can
       create or modify coordinates.
-- [ ] Pass the layout calibration to `buildFreeThrowPayload` as well as normal shot
+- [x] Pass the layout calibration to `buildFreeThrowPayload` as well as normal shot
       inference.
-- [ ] Keep stored `x/y` semantics unchanged for each game: they remain normalized
+- [x] Keep stored `x/y` semantics unchanged for each game: they remain normalized
       percentages of that game's versioned image. Do not transform legacy event values.
-- [ ] Ensure insert/edit flows on old completed games use the game's `legacy-v1`
+- [x] Ensure insert/edit flows on old completed games use the game's `legacy-v1`
       contract rather than the global current layout.
 
 The image, dimensions, and calibration must always come from the same resolved registry
@@ -184,29 +184,29 @@ paired with the wrong inference rules.
 
 ### Phase 3 — make history layout-aware
 
-- [ ] Add a layout prop to `RecapShotSnapshot` and render the snapshot's resolved
+- [x] Add a layout prop to `RecapShotSnapshot` and render the snapshot's resolved
       asset/dimensions.
-- [ ] Add a layout prop to `GameReplayPanel` and render the full game's resolved
+- [x] Add a layout prop to `GameReplayPanel` and render the full game's resolved
       asset/dimensions.
-- [ ] Keep marker placement as `left: event.x%` / `top: event.y%`; no conversion is
+- [x] Keep marker placement as `left: event.x%` / `top: event.y%`; no conversion is
       needed because the matching versioned image is selected.
-- [ ] Confirm the full game detail response supplies the same layout ID to recap and
+- [x] Confirm the full game detail response supplies the same layout ID to recap and
       replay.
-- [ ] Make unknown IDs observable (client error reporting or analytics) while still
+- [x] Make unknown IDs observable (client error reporting or analytics) while still
       rendering with the safe legacy fallback.
 
 ### Phase 4 — test and release
 
-- [ ] Unit-test layout resolution: absent/unknown -> `legacy-v1`, `court-v2` -> v2.
-- [ ] Parameterize calibration tests so both layouts cover north/south paint, corner
+- [x] Unit-test layout resolution: absent/unknown -> `legacy-v1`, `court-v2` -> v2.
+- [x] Parameterize calibration tests so both layouts cover north/south paint, corner
       three, wing three, top of key, backcourt, and free-throw positions.
-- [ ] Extend `InteractiveCourtImage` tests for each aspect ratio and rotated mobile
+- [x] Extend `InteractiveCourtImage` tests for each aspect ratio and rotated mobile
       coordinate normalization.
-- [ ] Add recap and replay tests proving a legacy game loads the old asset and a new
+- [x] Add recap and replay tests proving a legacy game loads the old asset and a new
       game loads the new asset with markers at the saved percentages.
-- [ ] Add an integration test that creates a new game, records a click, reloads it,
+- [x] Add an integration test that creates a new game, records a click, reloads it,
       and sees the marker at the same visible location.
-- [ ] Add a compatibility fixture with no `courtLayoutId` to represent a production
+- [x] Add a compatibility fixture with no `courtLayoutId` to represent a production
       game created before this feature.
 - [ ] Visually test portrait, rotated landscape mobile, desktop, recap, and replay for
       both versions.
@@ -215,7 +215,7 @@ paired with the wrong inference rules.
       enforcement, and the switch that stamps new games as `court-v2`. Keep the client
       deployment backward compatible so its extra precondition is ignored or accepted by
       the first-stage server.
-- [ ] Verify that a deliberately simulated cached v1 client cannot append coordinates
+- [x] Verify that a deliberately simulated cached v1 client cannot append coordinates
       to a `court-v2` game and receives the refresh-required conflict response.
 - [ ] After deployment, query a sample of newly created games to confirm they contain
       `court-v2`, and open at least one legacy completed game to verify the old shot map.
@@ -254,16 +254,61 @@ this plan protects their original display locations without rewriting them.
 
 ## Status tracker
 
-| Workstream                | Status           | Exit condition                                                   |
-| ------------------------- | ---------------- | ---------------------------------------------------------------- |
-| Current-state audit       | Complete         | Tracking, persistence, recap, and replay dependencies identified |
-| Compatibility design      | Complete         | Immutable game-level layout version and legacy fallback agreed   |
-| New asset and calibration | Blocked on asset | Final image is present and measured                              |
-| Server persistence/API    | Not started      | New games stamped; legacy games resolve safely                   |
-| Tracking UI               | Not started      | v2 click, inference, rotation, and reload verified               |
-| Recap and replay          | Not started      | Each game renders its matching versioned image                   |
-| Automated and visual QA   | Not started      | Acceptance criteria pass for legacy and v2 fixtures              |
-| Production rollout        | Not started      | Server/client deployed and sample audit completed                |
+| Workstream                | Status      | Exit condition                                                   |
+| ------------------------- | ----------- | ---------------------------------------------------------------- |
+| Current-state audit       | Complete    | Tracking, persistence, recap, and replay dependencies identified |
+| Compatibility design      | Complete    | Immutable game-level layout version and legacy fallback agreed   |
+| New asset and calibration | Complete    | `basketball_court_2.png` shipped at 820x1708 and measured        |
+| Server persistence/API    | Complete    | New games stamped; legacy games resolve safely                   |
+| Tracking UI               | Complete    | v2 click, inference, rotation, and reload verified               |
+| Recap and replay          | Complete    | Each game renders its matching versioned image                   |
+| Automated and visual QA   | Automated   | Unit/component coverage in place; visual pass outstanding        |
+| Production rollout        | Not started | Server/client deployed and sample audit completed                |
 
 Update this table and the phase checkboxes in the same pull request as each implementation
 step so this file remains the source of truth for feature status.
+
+## Implementation notes (2026-09-04)
+
+Three things diverged from the design above and are worth recording.
+
+**The source art was landscape and non-regulation.** It shipped as a 1496x820
+screenshot whose court rect was 0.607 wide-to-long against the regulation 0.532.
+Because the whole coordinate model is portrait (`courtGeometry.js` maps `x` to
+the 50ft width and `y` to the 94ft length, north hoop top), and because
+`RecapShotSnapshot`/`GameReplayPanel` have no rotation support, the asset was
+stretched on its length axis to 1708x820 and then rotated to a portrait
+820x1708. The stretch is what makes the painted arc a circle in feet-space, so
+it is a correctness requirement, not a cosmetic one; its side effect is that the
+decorative circles are now slightly oval. It was re-encoded to grayscale, taking
+it from 367K to 108K.
+
+**The calibration shape needed a fourth knob.** The painted 3PT line is a clean
+circle (r = 19.37ft, mean residual 0.19ft over 638 edge points) but it is centred
+8.68ft from the baseline rather than on the hoop — 3.43ft past the model's 5.25ft
+hoop. No value of `threePointRadiusFeet` fits a circle centred somewhere else:
+the true boundary distance from the hoop ranges 16.8ft to 22.8ft by angle. So
+`threePointCenterLocalYFeet` was added to the calibration and to
+`inferCourtSelection`, defaulting to `0` — legacy classification is byte
+identical. Acceptance criterion 4 is not reachable without it.
+
+**Stamping lives at the repository choke points.** Rather than four service
+branches plus the schedule builder, `createGame` and `insertManyGames` apply
+`{ courtLayoutId: CURRENT_COURT_LAYOUT_ID, ...input }`. That is drift-proof by
+construction and still lets a test or a rollback build pass an explicit id. The
+schema keeps no default, as designed.
+
+Also changed, outside the plan's scope and easy to revert: `GameTrackPage` now
+opens in the landscape view (`courtOrientation` initial state) because that is
+the preferred view. The Rotate Court control still switches both ways. Two
+existing tracker tests encoded the old vertical default and were updated.
+
+### Still outstanding
+
+- Visual pass across portrait, rotated landscape mobile, desktop, recap, and
+  replay for both layouts.
+- The two-stage deploy and the post-deploy sample audit.
+- Optional: a re-export of the court art drawn at 50:94 would remove the oval
+  circles; only the measured numbers in `COURT_V2_CALIBRATION` would change.
+- Optional database backfill; unnecessary for correctness, since absence
+  resolves to `legacy-v1`.

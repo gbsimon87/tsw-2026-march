@@ -4,6 +4,7 @@ import {
   CORNER_THREE_X_FEET,
   FREE_THROW_LINE_LOCAL_Y_FEET,
   LANE_HALF_WIDTH_FEET,
+  THREE_POINT_CENTER_LOCAL_Y_FEET,
   THREE_POINT_RADIUS_FEET,
   freeThrowSpotForHoopSide,
   nearestHoop,
@@ -24,11 +25,14 @@ function inferZone(localX, localY, isThreePoint, thresholds) {
     return localX < 0 ? 'CORNER_LEFT_3' : 'CORNER_RIGHT_3';
   }
 
-  if (Math.abs(localY - FREE_THROW_LINE_LOCAL_Y_FEET) <= 1.25 && absX <= LANE_HALF_WIDTH_FEET) {
+  if (
+    Math.abs(localY - thresholds.freeThrowLineLocalYFeet) <= 1.25 &&
+    absX <= thresholds.laneHalfWidthFeet
+  ) {
     return 'FREE_THROW_LINE';
   }
 
-  if (localY <= 19 && absX <= LANE_HALF_WIDTH_FEET) {
+  if (localY <= 19 && absX <= thresholds.laneHalfWidthFeet) {
     return 'PAINT';
   }
 
@@ -53,14 +57,23 @@ export function inferCourtSelection(rawX, rawY, calibration) {
   const pointFeet = normalizedToFeet(courtPoint);
   const hoop = nearestHoop(pointFeet);
   const { localX, localY } = toLocalCourt(pointFeet, hoop);
-  const distance = Math.sqrt(localX * localX + localY * localY);
 
   const thresholds = {
     threePointRadiusFeet: calibration?.inference?.threePointRadiusFeet ?? THREE_POINT_RADIUS_FEET,
     cornerThreeMaxLocalYFeet:
       calibration?.inference?.cornerThreeMaxLocalYFeet ?? CORNER_THREE_MAX_LOCAL_Y_FEET,
     cornerThreeXFeet: calibration?.inference?.cornerThreeXFeet ?? CORNER_THREE_X_FEET,
+    threePointCenterLocalYFeet:
+      calibration?.inference?.threePointCenterLocalYFeet ?? THREE_POINT_CENTER_LOCAL_Y_FEET,
+    laneHalfWidthFeet: calibration?.inference?.laneHalfWidthFeet ?? LANE_HALF_WIDTH_FEET,
+    freeThrowLineLocalYFeet:
+      calibration?.inference?.freeThrowLineLocalYFeet ?? FREE_THROW_LINE_LOCAL_Y_FEET,
   };
+
+  // Distance is measured from the layout's arc centre, not the hoop. Legacy
+  // layouts pass 0 here, so their classification is unchanged.
+  const arcLocalY = localY - thresholds.threePointCenterLocalYFeet;
+  const distance = Math.sqrt(localX * localX + arcLocalY * arcLocalY);
 
   const cornerThree =
     localY <= thresholds.cornerThreeMaxLocalYFeet &&
@@ -87,7 +100,10 @@ export function buildShotStatType(shotFamily, outcome) {
 
 export function buildFreeThrowPayload(hoopSide, outcome, calibration) {
   const side = hoopSide === 'north' ? 'north' : 'south';
-  const courtSpot = freeThrowSpotForHoopSide(side);
+  const courtSpot = freeThrowSpotForHoopSide(
+    side,
+    calibration?.inference?.freeThrowLineLocalYFeet ?? FREE_THROW_LINE_LOCAL_Y_FEET
+  );
   const spot = courtToImage(courtSpot, calibration);
 
   return {

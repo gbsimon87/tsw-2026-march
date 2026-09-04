@@ -5,6 +5,24 @@ import { LiveScore } from './LiveScore';
 
 const { TEAM_SIDES } = gameConstants;
 
+// A landscape phone is short and wide, so the header uses the same single-row
+// three-column shape `md` already gets - regardless of width - and trims the
+// type and padding that only pay for themselves in portrait.
+const HEADER_GRID_CLASS =
+  'grid grid-cols-2 border-b border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] landscape-compact:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]';
+const SCORE_CELL_CLASS =
+  'px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 landscape-compact:gap-1.5 landscape-compact:px-2 landscape-compact:py-1';
+const LOGO_CLASS =
+  'h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover sm:h-9 sm:w-9 landscape-compact:h-6 landscape-compact:w-6';
+const TEAM_LABEL_CLASS =
+  'truncate text-[11px] font-semibold sm:text-xs landscape-compact:text-[10px]';
+const SCORE_CLASS =
+  'text-2xl font-black sm:text-3xl landscape-compact:text-xl landscape-compact:leading-tight';
+// Row 2 on a portrait phone, but the middle column of one row everywhere the
+// width allows it - which in landscape is always.
+const CLOCK_CELL_CLASS =
+  'col-span-2 col-start-1 row-start-2 border-t border-slate-200 bg-slate-950 p-2 md:col-span-1 md:col-start-2 md:row-start-1 md:border-x md:border-t-0 md:p-0 landscape-compact:col-span-1 landscape-compact:col-start-2 landscape-compact:row-start-1 landscape-compact:border-x landscape-compact:border-t-0 landscape-compact:p-0';
+
 export function GameTrackScoreHeader({
   gameSummary,
   activeSide,
@@ -16,10 +34,7 @@ export function GameTrackScoreHeader({
 }) {
   if (isDualTeam) {
     return (
-      <div
-        className="grid grid-cols-2 border-b border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
-        data-testid="game-track-score-header"
-      >
+      <div className={HEADER_GRID_CLASS} data-testid="game-track-score-header">
         {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
           const isActive = activeSide === side;
           const participant = participantsBySide[side];
@@ -34,7 +49,7 @@ export function GameTrackScoreHeader({
               onClick={() => onChangeActiveSide(side)}
               aria-label={`Select ${sideLabel}`}
               aria-pressed={isActive}
-              className={`flex min-w-0 items-center gap-2 px-3 py-3 transition sm:gap-3 sm:px-4 sm:py-4 ${
+              className={`flex min-w-0 items-center gap-2 transition ${SCORE_CELL_CLASS} ${
                 side === TEAM_SIDES.HOME
                   ? 'col-start-1 row-start-1 justify-start border-r border-slate-200 md:border-r-0'
                   : 'col-start-2 row-start-1 justify-end text-right md:col-start-3'
@@ -51,15 +66,15 @@ export function GameTrackScoreHeader({
                     decoding="async"
                     srcSetWidths={[36, 72, 108]}
                     sizes="36px"
-                    className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover sm:h-9 sm:w-9"
+                    className={LOGO_CLASS}
                   />
                   <div className="min-w-0 text-left">
                     <p
-                      className={`truncate text-[11px] font-semibold sm:text-xs ${isActive ? 'text-white/70' : 'text-slate-500'}`}
+                      className={`${TEAM_LABEL_CLASS} ${isActive ? 'text-white/70' : 'text-slate-500'}`}
                     >
                       {sideLabel}
                     </p>
-                    <p className="text-2xl font-black sm:text-3xl">
+                    <p className={SCORE_CLASS}>
                       <LiveScore value={points} />
                     </p>
                   </div>
@@ -68,11 +83,11 @@ export function GameTrackScoreHeader({
                 <>
                   <div className="min-w-0 text-right">
                     <p
-                      className={`truncate text-[11px] font-semibold sm:text-xs ${isActive ? 'text-white/70' : 'text-slate-500'}`}
+                      className={`${TEAM_LABEL_CLASS} ${isActive ? 'text-white/70' : 'text-slate-500'}`}
                     >
                       {sideLabel}
                     </p>
-                    <p className="text-right text-2xl font-black sm:text-3xl">
+                    <p className={`text-right ${SCORE_CLASS}`}>
                       <LiveScore value={points} />
                     </p>
                   </div>
@@ -85,28 +100,23 @@ export function GameTrackScoreHeader({
                     decoding="async"
                     srcSetWidths={[36, 72, 108]}
                     sizes="36px"
-                    className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover sm:h-9 sm:w-9"
+                    className={LOGO_CLASS}
                   />
                 </>
               )}
             </button>
           );
         })}
-        {clockControls ? (
-          <div className="col-span-2 col-start-1 row-start-2 border-t border-slate-200 bg-slate-950 p-2 md:col-span-1 md:col-start-2 md:row-start-1 md:border-x md:border-t-0 md:p-0">
-            {clockControls}
-          </div>
-        ) : null}
+        {clockControls ? <div className={CLOCK_CELL_CLASS}>{clockControls}</div> : null}
       </div>
     );
   }
 
   return (
-    <div
-      className="grid grid-cols-2 border-b border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
-      data-testid="game-track-score-header"
-    >
-      <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 border-r border-slate-200 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:border-r-0">
+    <div className={HEADER_GRID_CLASS} data-testid="game-track-score-header">
+      <div
+        className={`col-start-1 row-start-1 flex min-w-0 items-center gap-2 border-r border-slate-200 md:border-r-0 ${SCORE_CELL_CLASS}`}
+      >
         <CloudinaryImage
           src={team?.logo?.url || teamPlaceholder}
           alt={team?.name || 'Team'}
@@ -116,32 +126,26 @@ export function GameTrackScoreHeader({
           decoding="async"
           srcSetWidths={[36, 72, 108]}
           sizes="36px"
-          className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white object-cover sm:h-9 sm:w-9"
+          className={LOGO_CLASS}
         />
         <div className="min-w-0 text-left">
-          <p className="truncate text-[11px] font-semibold text-slate-500 sm:text-xs">
-            {team?.name || 'Team'}
-          </p>
-          <p className="text-2xl font-black text-slate-900 sm:text-3xl">
+          <p className={`${TEAM_LABEL_CLASS} text-slate-500`}>{team?.name || 'Team'}</p>
+          <p className={`${SCORE_CLASS} text-slate-900`}>
             <LiveScore value={gameSummary.teamPoints} />
           </p>
         </div>
       </div>
 
-      <div className="col-start-2 row-start-1 flex min-w-0 flex-col items-end justify-center px-3 py-3 text-right sm:px-4 sm:py-4 md:col-start-3">
-        <p className="w-full truncate text-right text-[11px] font-semibold text-slate-500 sm:text-xs">
-          Opponent
-        </p>
-        <p className="w-full text-right text-2xl font-black text-slate-900 sm:text-3xl">
+      <div
+        className={`col-start-2 row-start-1 flex min-w-0 flex-col items-end justify-center text-right md:col-start-3 ${SCORE_CELL_CLASS}`}
+      >
+        <p className={`w-full text-right ${TEAM_LABEL_CLASS} text-slate-500`}>Opponent</p>
+        <p className={`w-full text-right ${SCORE_CLASS} text-slate-900`}>
           <LiveScore value={gameSummary.opponentPoints} />
         </p>
       </div>
 
-      {clockControls ? (
-        <div className="col-span-2 col-start-1 row-start-2 border-t border-slate-200 bg-slate-950 p-2 md:col-span-1 md:col-start-2 md:row-start-1 md:border-x md:border-t-0 md:p-0">
-          {clockControls}
-        </div>
-      ) : null}
+      {clockControls ? <div className={CLOCK_CELL_CLASS}>{clockControls}</div> : null}
     </div>
   );
 }
