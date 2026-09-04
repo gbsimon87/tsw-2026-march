@@ -102,8 +102,10 @@ const TABS = [
         stroke="currentColor"
         strokeWidth="1.8"
       >
-        <circle cx="8" cy="8" r="2" />
-        <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4" />
+        <path d="M2 4.5h12M2 8h12M2 11.5h12" strokeLinecap="round" />
+        <circle cx="11" cy="4.5" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="5.5" cy="8" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="9" cy="11.5" r="1.6" fill="currentColor" stroke="none" />
       </svg>
     ),
   },

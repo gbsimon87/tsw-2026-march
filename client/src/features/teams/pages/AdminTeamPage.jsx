@@ -91,6 +91,13 @@ export function AdminTeamPage() {
   const teamName = team.name || 'Unnamed Team';
   const activePlayerCount = (team.players || []).filter((player) => player.isActive).length;
   const breadcrumbs = [{ label: 'Admin', href: '/admin' }, { label: teamName }];
+  // Same approach as the New League button on AdminPage: a team that still needs
+  // its own subscription goes to pricing rather than into the game form, which
+  // could only end in a 402 the user has no way to act on.
+  const needsSubscription = team.billing?.canManage === false;
+  const newGameHref = needsSubscription
+    ? `/pricing?teamId=${encodeURIComponent(teamId)}#additional-team`
+    : `/games/new?teamId=${teamId}`;
 
   return (
     <main className="space-y-6">
@@ -153,7 +160,7 @@ export function AdminTeamPage() {
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Link
-          to={`/games/new?teamId=${teamId}`}
+          to={newGameHref}
           className="flex items-center gap-3 rounded-xl border border-[#141414] bg-[#141414] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2a2a2a]"
         >
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12">
@@ -168,7 +175,7 @@ export function AdminTeamPage() {
               <path d="M5 12h14" />
             </svg>
           </span>
-          <span>New Game</span>
+          <span>{needsSubscription ? 'Subscribe to Track' : 'New Game'}</span>
         </Link>
         <Link
           to={`/teams/${teamId}/edit`}
@@ -222,10 +229,12 @@ export function AdminTeamPage() {
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
             <p className="text-base font-semibold text-slate-900">No games yet</p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">
-              Tracking takes a name and a tap. The box score builds itself as you go.
+              {needsSubscription
+                ? `${teamName} is an additional team, so it needs its own £5/month subscription before you can track games with it.`
+                : 'Tracking takes a name and a tap. The box score builds itself as you go.'}
             </p>
-            <Link to={`/games/new?teamId=${teamId}`} className={`${primaryButtonClass} mt-5`}>
-              Track your first game
+            <Link to={newGameHref} className={`${primaryButtonClass} mt-5`}>
+              {needsSubscription ? 'See pricing' : 'Track your first game'}
             </Link>
           </div>
         ) : (

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { BillingSuccessPage } from './BillingSuccessPage';
@@ -166,5 +166,28 @@ describe('BillingSuccessPage', () => {
       'href',
       '/admin/leagues/new'
     );
+  });
+
+  test('re-runs the billing check when the user clicks Check again', async () => {
+    teamsApiMocks.list.mockRejectedValueOnce(new Error('Network down')).mockResolvedValueOnce({
+      teams: [
+        {
+          id: 'team-1',
+          name: 'TSW A',
+          billing: { plan: 'team', subscriptionStatus: 'active' },
+        },
+      ],
+    });
+
+    renderSuccessPage();
+
+    expect(await screen.findByText(/Could not confirm access yet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Check again/i }));
+
+    expect(
+      await screen.findByText(/TSW A is now on the additional-team plan/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Check again/i })).not.toBeInTheDocument();
   });
 });

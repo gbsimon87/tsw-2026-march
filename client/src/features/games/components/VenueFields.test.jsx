@@ -37,9 +37,32 @@ describe('normalizeVenueDetails', () => {
   it('matches emptyVenueDetails for no input', () => {
     expect(normalizeVenueDetails(undefined)).toEqual(emptyVenueDetails());
   });
+
+  it('coerces null address parts to strings', () => {
+    // The API sends null for address parts that were never filled in.
+    const { address } = normalizeVenueDetails({
+      venue: 'Northgate Arena',
+      venueAddress: { addressLine1: '221 Northgate Street', addressLine2: null, city: 'Leeds' },
+    });
+
+    expect(address.addressLine2).toBe('');
+    expect(Object.values(address).every((part) => typeof part === 'string')).toBe(true);
+  });
 });
 
 describe('buildReusableVenues', () => {
+  it('does not throw on games whose address parts are null', () => {
+    const games = [
+      {
+        venue: 'Northgate Arena',
+        venueAddress: { addressLine1: '221 Northgate Street', addressLine2: null, city: 'Leeds' },
+      },
+    ];
+
+    expect(() => buildReusableVenues(games)).not.toThrow();
+    expect(buildReusableVenues(games)).toHaveLength(1);
+  });
+
   it('collects distinct venues from past games', () => {
     const venues = buildReusableVenues([
       { venue: 'Central Court', venueAddress: { city: 'London' } },

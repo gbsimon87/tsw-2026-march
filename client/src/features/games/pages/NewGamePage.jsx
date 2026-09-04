@@ -22,6 +22,13 @@ import {
 } from '../components/VenueFields';
 import { DEFAULT_GAME_FORMAT } from '../gameClock';
 
+// A team past the free slot can't be used until it has its own subscription, and
+// the server says so with a 402. The message alone left coaches with nowhere to
+// go, so point them at the deep link the pricing page already understands.
+function teamPricingHref(teamId) {
+  return `/pricing?teamId=${encodeURIComponent(teamId)}#additional-team`;
+}
+
 export function NewGamePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -41,6 +48,7 @@ export function NewGamePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [errorPricingHref, setErrorPricingHref] = useState('');
   const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
   const [venueDetails, setVenueDetails] = useState(emptyVenueDetails);
   const [pastGames, setPastGames] = useState([]);
@@ -95,6 +103,7 @@ export function NewGamePage() {
   async function onSubmit(event) {
     event.preventDefault();
     setError('');
+    setErrorPricingHref('');
     setTitleError('');
 
     // Game Title is the only required field on this form, and it used to be the
@@ -139,6 +148,9 @@ export function NewGamePage() {
       navigate(`/games/${response.game.id}/track`);
     } catch (submitError) {
       setError(submitError.message || 'Failed to create game');
+      if (submitError.status === 402 && teamId) {
+        setErrorPricingHref(teamPricingHref(teamId));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -172,6 +184,7 @@ export function NewGamePage() {
   const backTo = teamId ? `/admin/teams/${teamId}` : '/admin';
 
   const selectedTeam = teams.find((team) => team.id === teamId);
+  const teamNeedsSubscription = selectedTeam?.billing?.canManage === false;
   const reusableVenues = buildReusableVenues([
     ...(selectedTeam?.homeVenue?.arenaName
       ? [{ name: selectedTeam.homeVenue.arenaName, address: selectedTeam.homeVenue }]
@@ -195,9 +208,17 @@ export function NewGamePage() {
       >
         <div aria-live="assertive" role="alert">
           {error ? (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </p>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p>{error}</p>
+              {errorPricingHref ? (
+                <Link
+                  to={errorPricingHref}
+                  className="mt-1 inline-block font-semibold text-red-800 underline underline-offset-2"
+                >
+                  Go to pricing to subscribe this team
+                </Link>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -220,6 +241,19 @@ export function NewGamePage() {
               ))}
             </select>
           </label>
+
+          {teamNeedsSubscription ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {selectedTeam.name} needs an active £5/month subscription before you can track games
+              with it.{' '}
+              <Link
+                to={teamPricingHref(selectedTeam.id)}
+                className="font-semibold underline underline-offset-2"
+              >
+                View pricing
+              </Link>
+            </p>
+          ) : null}
 
           <div>
             <label htmlFor="game-title" className={labelClass}>
@@ -395,7 +429,11 @@ export function NewGamePage() {
         </section>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center">
-          <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
+          <button
+            type="submit"
+            disabled={isSubmitting || teamNeedsSubscription}
+            className={primaryButtonClass}
+          >
             {isSubmitting ? 'Creating…' : 'Create and start tracking'}
           </button>
           <Link to={backTo} className={secondaryButtonClass}>

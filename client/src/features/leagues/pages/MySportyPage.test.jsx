@@ -50,13 +50,13 @@ describe('MySportyPage', () => {
     expect(screen.getByText(/request to link it to your account/i)).toBeInTheDocument();
   });
 
-  test('shows approved profiles from one-off teams', async () => {
+  test('shows approved profiles from managed teams', async () => {
     teamsApi.getMyPlayerProfiles.mockResolvedValue({
       profiles: [
         {
           id: 'standalone:team-1:player-1',
           displayName: 'Jamie Rivera',
-          memberRoleLabel: 'One-off team',
+          memberRoleLabel: 'managed team',
           profileHref: '/teams/team-1/players/player-1',
           team: { id: 'team-1', name: 'Sunday Ballers', logo: null },
           summary: { gamesCount: 2, pointsPerGame: 8, reboundsPerGame: 4, assistsPerGame: 3 },
@@ -67,7 +67,7 @@ describe('MySportyPage', () => {
     renderPage();
 
     expect(await screen.findByText('Sunday Ballers')).toBeInTheDocument();
-    expect(screen.getByText('One-off team')).toBeInTheDocument();
+    expect(screen.getByText('managed team')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Jamie Rivera/i })).toHaveAttribute(
       'href',
       '/teams/team-1/players/player-1'

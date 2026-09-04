@@ -777,7 +777,7 @@ async function getMyStandalonePlayerProfiles(userId) {
         displayName: player.displayName,
         jerseyNumber: player.jerseyNumber ?? null,
         position: normalizePlayerPosition(player.position),
-        memberRoleLabel: 'One-off team',
+        memberRoleLabel: 'Managed team',
         profileHref: `/teams/${team._id}/players/${player._id}`,
         team: {
           id: String(team._id),

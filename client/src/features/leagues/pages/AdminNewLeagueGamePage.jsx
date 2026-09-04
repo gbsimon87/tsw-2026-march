@@ -46,12 +46,17 @@ function TeamAvatar({ team, size = 'md' }) {
 }
 
 function SideToggle({ value, onChange, homeLabel = 'Home', awayLabel = 'Away' }) {
+  // The labels carry team names on this page, so each half has to be able to
+  // shrink (min-w-0) and clip (truncate) rather than widen the toggle.
+  const buttonClass =
+    'min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-sm font-semibold transition-all';
   return (
     <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1">
       <button
         type="button"
         onClick={() => onChange('home')}
-        className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+        title={homeLabel}
+        className={`${buttonClass} ${
           value === 'home'
             ? 'bg-white text-slate-900 shadow-sm'
             : 'text-slate-500 hover:text-slate-700'
@@ -62,7 +67,8 @@ function SideToggle({ value, onChange, homeLabel = 'Home', awayLabel = 'Away' })
       <button
         type="button"
         onClick={() => onChange('away')}
-        className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+        title={awayLabel}
+        className={`${buttonClass} ${
           value === 'away'
             ? 'bg-white text-slate-900 shadow-sm'
             : 'text-slate-500 hover:text-slate-700'
@@ -174,7 +180,10 @@ function TeamPickerModal({ open, onClose, teams, selectedId, disabledId, onSelec
 
 function TeamPickerButton({ label, team, onClick, hasRosterWarning }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    // min-w-0: as a grid/flex child this would otherwise take an automatic
+    // minimum size from the button's max-content width, so a long team name
+    // grew the column past the card instead of letting `truncate` engage.
+    <div className="flex min-w-0 flex-col gap-1.5">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       <button
         type="button"
@@ -233,7 +242,7 @@ function InlineTeamCreator({ label, name, onNameChange, onCreate, isSubmitting }
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <label
         htmlFor={`inline-${label.toLowerCase().replace(/\s+/g, '-')}`}
         className="text-xs font-semibold uppercase tracking-wide text-slate-400"
@@ -472,13 +481,13 @@ export function AdminNewLeagueGamePage() {
                   />
                 </>
               ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Your Team
                   </p>
-                  <div className="flex items-center gap-3 rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3 rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3">
                     <TeamAvatar team={managedTeams[0]} />
-                    <span className="font-semibold text-indigo-900">
+                    <span className="truncate font-semibold text-indigo-900">
                       {managedTeams[0]?.name || '—'}
                     </span>
                   </div>

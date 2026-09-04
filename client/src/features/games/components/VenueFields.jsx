@@ -12,12 +12,23 @@ export function emptyVenueDetails() {
 }
 
 export function normalizeVenueDetails(value) {
+  // The API returns null for address parts that were never filled in (an
+  // unset addressLine2 on every league game, for instance). Spreading those
+  // straight over EMPTY_ADDRESS kept the nulls, and every consumer here calls
+  // .trim() on the parts — so one null crashed buildReusableVenues and took
+  // the calling page's whole load effect down with it. Coerce to strings, and
+  // only keep the fields the form knows about.
+  const rawAddress = value?.address || value?.venueAddress || {};
+  const address = Object.fromEntries(
+    Object.keys(EMPTY_ADDRESS).map((field) => [
+      field,
+      typeof rawAddress[field] === 'string' ? rawAddress[field] : '',
+    ])
+  );
+  const rawName = value?.name || value?.venue || '';
   return {
-    name: value?.name || value?.venue || '',
-    address: {
-      ...EMPTY_ADDRESS,
-      ...(value?.address || value?.venueAddress || {}),
-    },
+    name: typeof rawName === 'string' ? rawName : '',
+    address,
   };
 }
 

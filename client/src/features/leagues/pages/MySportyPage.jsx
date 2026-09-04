@@ -214,7 +214,7 @@ export function MySportyPage() {
             <p className="text-base font-semibold text-slate-900">No player profiles yet</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
               A profile appears here once a league manager or team owner approves the link to your
-              account — from a league team or a one-off team. In the meantime you can track your own
+              account — from a league team or a managed team. In the meantime you can track your own
               team.
             </p>
             <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">

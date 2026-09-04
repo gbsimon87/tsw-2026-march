@@ -231,7 +231,7 @@ const seededLeagueBlueprint = {
 // Venues are reused across fixtures so the "use a previous venue" picker on the
 // game-creation screens has real options, and carry addresses so public game
 // pages can render a map link.
-// Extra one-off teams owned by the league manager, so that account exercises
+// Extra managed teams owned by the league manager, so that account exercises
 // both League admin and standalone-team management.
 const ownerExtraTeamNames = ['Riverside Rockets', 'Old Town Saints'];
 
@@ -1272,7 +1272,7 @@ async function seedLeagueForUser(userEntry) {
 }
 
 // Standalone player claiming: a user asks to be linked to a roster slot on a
-// one-off team and the team owner approves it. Seeding both an approved link
+// managed team and the team owner approves it. Seeding both an approved link
 // and a pending request means My Sporty has a one-off profile to show and the
 // Edit Team page has a request queue to act on, without anyone having to click
 // through the flow first.
@@ -1469,7 +1469,7 @@ async function main() {
       (entry) => entry.email === seededLeagueBlueprint.ownerEmail
     );
 
-    // The league owner also runs one-off teams outside the league, so the Admin
+    // The league owner also runs managed teams outside the league, so the Admin
     // page shows both halves of the product for the account a developer signs
     // in with. These get the same full roster + completed-game treatment as
     // every other seeded team.
@@ -1543,7 +1543,7 @@ async function main() {
     console.log(`  Password: ${seedConfig.password}`);
     console.log('');
     console.log(`  Manages:  ${seededLeagueBlueprint.name} (${leagueTeamCount} teams)`);
-    console.log(`  Plus:     ${ownerExtraTeamNames.join(', ')} (one-off teams)`);
+    console.log(`  Plus:     ${ownerExtraTeamNames.join(', ')} (managed teams)`);
     console.log('='.repeat(64));
     console.log('');
 

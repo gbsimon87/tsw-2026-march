@@ -36,7 +36,7 @@ describe('AdminPage', () => {
       screen.queryByText('Manage your leagues and non-league teams all in one place.')
     ).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Admin' })).toHaveClass('sr-only');
-    expect(screen.getByRole('button', { name: 'My Leagues' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'One-off Teams' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Managed Leagues' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Managed Teams' })).toBeInTheDocument();
   });
 });

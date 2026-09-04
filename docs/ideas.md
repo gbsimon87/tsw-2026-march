@@ -90,7 +90,7 @@ before the next begins.
 ### Large
 
 - [x] Add standalone-player account claiming and then let My Sporty show linked
-      profiles from one-off teams as well as league teams.
+      profiles from managed teams as well as league teams.
 - [x] Add reusable venue selection to game creation alongside the existing
       free-text venue entry.
   - [x] Let users select a venue previously used by the league or team, or add a

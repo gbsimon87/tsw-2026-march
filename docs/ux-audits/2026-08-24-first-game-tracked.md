@@ -46,12 +46,12 @@ recorded inline.
 | 5   | Submit 3-char password                                                | 4             | **`String must contain at least 8 character(s)`** — a raw Zod string.                                                                           |
 | 6   | Submit valid                                                          | 5             | Signed in, dropped on `/pulse`. No welcome, no next step, no account confirmation.                                                              |
 | 7   | `My Sporty` (guess: "my stuff")                                       | 6             | **Dead end.** Claimed-league-profiles only. Empty state has _zero_ actions.                                                                     |
-| 8   | `Admin` (guess 2)                                                     | 7             | Lands on the **My Leagues** tab. Coach has no league. Primary content: "No leagues yet."                                                        |
-| 9   | `One-off Teams` tab                                                   | 8             | Jargon. Coach thinks "my team", not "one-off team".                                                                                             |
+| 8   | `Admin` (guess 2)                                                     | 7             | Lands on the **Managed Leagues** tab. Coach has no league. Primary content: "No leagues yet."                                                   |
+| 9   | `Managed Teams` tab                                                   | 8             | Jargon. Coach thinks "my team", not "managed team".                                                                                             |
 | 10  | `Create your first team →`                                            | 9             | Reached `/teams/new`.                                                                                                                           |
 | 11  | Fill 1 required + 5 roster rows                                       | 9             | 1,300px form; 11 of 12 fields optional, including a full postal address.                                                                        |
 | 12  | `Create Team`                                                         | 10            | **Redirected to `/pricing`.** No success confirmation. **No link to the team just created.** The free column's only button is "View The Pulse". |
-| 13  | `Admin` → `One-off Teams` again                                       | 12            | Tab **resets to My Leagues** on every visit.                                                                                                    |
+| 13  | `Admin` → `Managed Teams` again                                       | 12            | Tab **resets to Managed Leagues** on every visit.                                                                                               |
 | 14  | Team card                                                             | 13            | Reached the team. First sight of the thing built at step 11.                                                                                    |
 | 15  | `New Game`                                                            | 14            | Good, clear primary.                                                                                                                            |
 | 16  | `Create and Start Tracking`                                           | 15            | Native tooltip — **`Game Title` is required but unmarked**, while every other field says "(optional)".                                          |
@@ -106,8 +106,8 @@ Every one of these is a software defect, not a wording preference.
 
 | ID  | Finding                                                                                 |
 | --- | --------------------------------------------------------------------------------------- |
-| F1  | Admin always opens on My Leagues, ignoring what the user actually owns                  |
-| F2  | "One-off Teams" is internal jargon in the primary IA                                    |
+| F1  | Admin always opens on Managed Leagues, ignoring what the user actually owns             |
+| F2  | "Managed Teams" is internal jargon in the primary IA                                    |
 | F3  | `Add Player` leaves focus on the button; the new row's field is not focused             |
 | F4  | Create Team demands a full postal address before its one required field's payoff        |
 | F5  | Error banner insertion shifts the whole form down 58px; no `role="alert"`               |
@@ -139,7 +139,7 @@ Every one of these is a software defect, not a wording preference.
 **Should the first-run journey exist in this shape at all?**
 
 No. The current shape makes a coach navigate an _organisational_ hierarchy —
-league vs. one-off team, Admin vs. My Sporty — before they can do the one thing the product
+league vs. managed team, Admin vs. My Sporty — before they can do the one thing the product
 is for. The IA is modelled on TSW's data model, not on the coach's job.
 
 The proposal: **`/admin` becomes a single "Your basketball" surface** with no tabs. Leagues

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 const TABS = [
   {
     id: 'leagues',
-    label: 'My Leagues',
+    label: 'Managed Leagues',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -19,7 +19,7 @@ const TABS = [
   },
   {
     id: 'teams',
-    label: 'One-off Teams',
+    label: 'Managed Teams',
     icon: (
       <svg
         viewBox="0 0 16 16"
@@ -92,7 +92,7 @@ export function AdminPage() {
           </p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-xs text-slate-500">One-off Teams</p>
+          <p className="text-xs text-slate-500">Managed Teams</p>
           <p
             className="mt-0.5 text-xl leading-none text-[#F4A300]"
             style={{ fontFamily: "'IBM Plex Mono', monospace" }}
@@ -136,7 +136,7 @@ export function AdminPage() {
                     className="text-lg text-slate-900"
                     style={{ fontFamily: "'Archivo Black', sans-serif" }}
                   >
-                    My Leagues
+                    Managed Leagues
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
                     Manage multiple teams within a single league, including standings, fixtures, and
@@ -218,7 +218,7 @@ export function AdminPage() {
                     className="text-lg text-slate-900"
                     style={{ fontFamily: "'Archivo Black', sans-serif" }}
                   >
-                    One-off Teams
+                    Managed Teams
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
                     Standalone teams managed independently from any league.

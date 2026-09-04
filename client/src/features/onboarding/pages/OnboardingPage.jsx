@@ -27,9 +27,9 @@ const ROLE_OPTIONS = [
   {
     id: 'team_manager',
     marker: 'OT',
-    title: 'One-off team manager',
+    title: 'Managed team manager',
     description: 'I run an independent team outside a league.',
-    actionTitle: 'Create your one-off team',
+    actionTitle: 'Create your managed team',
     actionDescription: 'Add the team, its colours, venue, and roster in one guided form.',
     actionLabel: 'Create a team',
     actionHref: '/teams/new?redirectTo=%2Fonboarding%3Fstep%3Dprofiles',
@@ -38,7 +38,7 @@ const ROLE_OPTIONS = [
     id: 'player',
     marker: 'P',
     title: 'Player',
-    description: 'I play for a league team, a one-off team, or both.',
+    description: 'I play for a league team, a managed team, or both.',
     actionTitle: 'Find and connect your player profiles',
     actionDescription:
       'Search all players, open each matching profile, and request to link it to your account.',

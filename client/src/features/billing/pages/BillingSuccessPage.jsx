@@ -8,6 +8,10 @@ import { billingApi } from '../api/billingApi';
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 const MAX_POLL_ATTEMPTS = 5;
 const POLL_DELAY_MS = 1500;
+const primaryActionClass =
+  'rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60';
+const secondaryActionClass =
+  'rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50';
 const ATTENTION_STATUSES = new Set([
   'past_due',
   'canceled',
@@ -29,6 +33,10 @@ export function BillingSuccessPage() {
   const [attemptCount, setAttemptCount] = useState(0);
   const [trialEnd, setTrialEnd] = useState(null);
   const [needsLeagueSetup, setNeedsLeagueSetup] = useState(false);
+  // Bumping this re-runs the polling effect. A webhook that is merely slow (or a
+  // local run with no `stripe listen` forwarding) used to leave the page frozen
+  // on the last attempt count with no way back except a full reload.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const resourceType = searchParams.get('resourceType') || 'team';
   const teamId = searchParams.get('teamId') || '';
@@ -167,7 +175,14 @@ export function BillingSuccessPage() {
       isActive = false;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [teamId, isLeague, sessionId]);
+  }, [teamId, isLeague, sessionId, retryNonce]);
+
+  function checkAgain() {
+    setError('');
+    setAttemptCount(0);
+    setStatus('checking');
+    setRetryNonce((current) => current + 1);
+  }
 
   const trialEndLabel = useMemo(() => {
     if (!trialEnd) return null;
@@ -232,6 +247,10 @@ export function BillingSuccessPage() {
   }, [status, isLeague, leagueSetup, needsLeagueSetup, targetLabel, trialEndLabel, error]);
 
   const pricingHref = teamId ? `/pricing?teamId=${encodeURIComponent(teamId)}` : '/pricing';
+  const isChecking = status === 'checking';
+  // Offered while billing has not resolved either way — including during the
+  // first pass, so the control does not appear and vanish mid-retry.
+  const canCheckAgain = isChecking || status === 'pending' || status === 'error';
 
   return (
     <main className="mx-auto max-w-2xl space-y-6">
@@ -242,25 +261,29 @@ export function BillingSuccessPage() {
       </PageHeader>
 
       <div className="flex flex-wrap gap-3">
-        {body.cta ? (
-          <Link
-            to={body.cta.to}
-            className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+        {canCheckAgain ? (
+          <button
+            type="button"
+            onClick={checkAgain}
+            disabled={isChecking}
+            className={primaryActionClass}
           >
+            {isChecking ? 'Checking…' : 'Check again'}
+          </button>
+        ) : null}
+        {body.cta ? (
+          <Link to={body.cta.to} className={primaryActionClass}>
             {body.cta.label}
           </Link>
         ) : (
           <Link
             to={pricingHref}
-            className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+            className={canCheckAgain ? secondaryActionClass : primaryActionClass}
           >
             Back to Pricing
           </Link>
         )}
-        <Link
-          to="/dashboard"
-          className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
-        >
+        <Link to="/dashboard" className={secondaryActionClass}>
           Go to Dashboard
         </Link>
       </div>

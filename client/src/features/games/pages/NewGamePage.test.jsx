@@ -196,4 +196,50 @@ describe('NewGamePage', () => {
       ])
     );
   });
+
+  test('links an unsubscribed team to pricing instead of letting the create fail', async () => {
+    teamsApi.list.mockResolvedValue({
+      teams: [{ id: 't1', name: 'Team One', billing: { canManage: false } }],
+    });
+    gamesApi.list.mockResolvedValue({ games: [] });
+
+    render(
+      <MemoryRouter>
+        <NewGamePage />
+      </MemoryRouter>
+    );
+
+    const link = await screen.findByRole('link', { name: /View pricing/i });
+    expect(link).toHaveAttribute('href', '/pricing?teamId=t1#additional-team');
+    expect(screen.getByRole('button', { name: /Create and Start Tracking/i })).toBeDisabled();
+  });
+
+  test('offers a pricing link when the server rejects the create with 402', async () => {
+    teamsApi.list.mockResolvedValue({ teams: [{ id: 't1', name: 'Team One' }] });
+    gamesApi.list.mockResolvedValue({ games: [] });
+    const paymentRequired = new Error(
+      'This additional team needs an active £5/month subscription before it can be changed.'
+    );
+    paymentRequired.status = 402;
+    gamesApi.create.mockRejectedValue(paymentRequired);
+
+    render(
+      <MemoryRouter>
+        <NewGamePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Create Game/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/vs Wildcats — March 12/i), {
+      target: { value: 'Friday Night' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Create and Start Tracking/i }));
+
+    const link = await screen.findByRole('link', { name: /Go to pricing to subscribe this team/i });
+    expect(link).toHaveAttribute('href', '/pricing?teamId=t1#additional-team');
+    expect(screen.getByText(/needs an active £5\/month subscription/i)).toBeInTheDocument();
+  });
 });
