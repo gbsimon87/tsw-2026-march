@@ -144,16 +144,29 @@ function buildLeagueTeamParticipant(side, team, { billingSnapshot, entitlementsS
   };
 }
 
-const VALID_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'canceled']);
+const VALID_SUBSCRIPTION_STATUSES = new Set([
+  'active',
+  'trialing',
+  'past_due',
+  'canceled',
+  'incomplete',
+  'incomplete_expired',
+  'unpaid',
+  'paused',
+]);
 
 function normalizeLeagueBilling(league) {
   return {
     plan: league.plan || 'free',
+    managedByStripe: !league.billingSource || league.billingSource === 'stripe',
     subscriptionStatus: VALID_SUBSCRIPTION_STATUSES.has(league.subscriptionStatus)
       ? league.subscriptionStatus
       : 'inactive',
     cancelAtPeriodEnd: Boolean(league.cancelAtPeriodEnd),
     currentPeriodEnd: league.currentPeriodEnd ?? null,
+    trialEnd: league.trialEnd ?? null,
+    scheduledPlan: league.scheduledPlan ?? null,
+    scheduledPlanAt: league.scheduledPlanAt ?? null,
   };
 }
 
@@ -378,6 +391,10 @@ function ensureLeagueEditable(league) {
   if (league.status === 'archived') {
     throw new ApiError(400, 'League is archived');
   }
+  const { resolveForLeague } = require('../billing/entitlements.service');
+  if (!resolveForLeague(league).entitlements.canManageLeague) {
+    throw new ApiError(402, 'An active League subscription is required to make changes');
+  }
 }
 
 // Scope: ONLY new league game creation and new join requests are gated by
@@ -457,10 +474,7 @@ async function getActiveSeasonForLeague(leagueId) {
 
 async function createSeasonForLeague(userId, leagueId, payload) {
   const league = await assertLeagueOwner(userId, leagueId);
-  const { resolveForLeague } = require('../billing/entitlements.service');
-  if (!resolveForLeague(league).entitlements.canManageLeague) {
-    throw new ApiError(402, 'An active League subscription is required to start a new season');
-  }
+  ensureLeagueEditable(league);
   if (league.currentSeasonId) {
     const current = await findSeasonById(league.currentSeasonId);
     if (current && current.status === 'active') {
@@ -485,7 +499,8 @@ async function createSeasonForLeague(userId, leagueId, payload) {
 }
 
 async function completeSeasonForUser(userId, leagueId, seasonId) {
-  await assertLeagueOwner(userId, leagueId);
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
   const season = await findSeasonByIdAndLeague(seasonId, leagueId);
   if (!season) {
     throw new ApiError(404, 'Season not found');
@@ -835,17 +850,14 @@ async function updateLeagueForUser(userId, leagueId, payload) {
 
 async function archiveLeagueForUser(userId, leagueId) {
   const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
   league.status = 'archived';
   await saveLeague(league);
   return sanitizeLeague(league);
 }
 
 async function createLeagueTeamForLeague(userId, leagueId, payload) {
-  const { resolveForLeague } = require('../billing/entitlements.service');
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
-  if (!resolveForLeague(league).entitlements.canManageLeague) {
-    throw new ApiError(402, 'An active League subscription is required to add teams');
-  }
   ensureLeagueEditable(league);
 
   const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
@@ -854,6 +866,19 @@ async function createLeagueTeamForLeague(userId, leagueId, payload) {
   }
 
   const existingTeams = await listLeagueTeams(league._id);
+  if (league.billingSource === 'stripe') {
+    const { getPlan } = require('../billing/plan-catalog');
+    const maxLeagueTeams = getPlan(league.plan)?.limits?.maxLeagueTeams || 0;
+    const activeTeamCount = existingTeams.filter((team) => team.status !== 'archived').length;
+    if (maxLeagueTeams > 0 && activeTeamCount >= maxLeagueTeams) {
+      throw new ApiError(
+        402,
+        maxLeagueTeams === 10
+          ? 'Upgrade this League to League Plus before adding team 11'
+          : 'League Plus supports up to 24 teams. Contact us for a larger organisation.'
+      );
+    }
+  }
   if (existingTeams.some((team) => normalizeName(team.name) === normalizeName(payload.name))) {
     throw new ApiError(409, 'League team name is already in use');
   }
@@ -1081,6 +1106,7 @@ function buildLeaguePlayerGameRows(games, leagueTeamId, leaguePlayerId, teamsByI
 
     gameRows.push({
       gameId: String(game.id || game._id),
+      seasonId: game.seasonId ? String(game.seasonId) : null,
       title: game.title,
       scheduledAt: game.scheduledAt ?? null,
       completedAt: game.completedAt ?? null,
@@ -1292,15 +1318,15 @@ async function getPublicLeaguePlayerBySlug(
 
   // Deliberately unscoped (all games ever, not just the current season) — this
   // is a player CAREER profile page, not a current-season standings view.
-  const [games, allTeams, usersById] = await Promise.all([
+  const [games, allTeams, usersById, seasons] = await Promise.all([
     listLeagueGamesByLeagueId(league._id),
     listLeagueTeams(league._id),
     buildUsersMap([player.claimedByUserId]),
+    listSeasonsByLeague(league._id),
   ]);
   const teamsById = new Map(allTeams.map((t) => [String(t._id), t]));
   const gameRows = buildLeaguePlayerGameRows(games, team._id, player._id, teamsById);
-  // Audit H6: highlight clips are gated (Team Pro, bundled into League) — a
-  // free/lapsed league exposes no clips on its public player profiles.
+  // All current team features are included for League teams.
   const { resolveForLeague } = require('../billing/entitlements.service');
   const highlights = resolveForLeague(league).entitlements.canViewHighlightClips
     ? buildLeaguePlayerHighlights(games, team._id, player._id)
@@ -1329,6 +1355,7 @@ async function getPublicLeaguePlayerBySlug(
     player: sanitizedPlayer,
     summary: buildLeaguePlayerSummary(gameRows),
     games: gameRows,
+    seasons: (seasons || []).map(sanitizeSeason),
     highlights,
     sharedEventIds,
     milestones: await getMilestoneSummaryForLeaguePlayer(league._id, player),
@@ -1492,6 +1519,7 @@ async function removeLeagueTeamLogo(userId, leagueId, leagueTeamId) {
 
 async function uploadLeagueLogo(userId, leagueId, file) {
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+  ensureLeagueEditable(league);
 
   if (!isCloudinaryConfigured()) {
     throw new ApiError(503, 'Image upload is not configured');
@@ -1526,6 +1554,7 @@ async function uploadLeagueLogo(userId, leagueId, file) {
 
 async function removeLeagueLogo(userId, leagueId) {
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+  ensureLeagueEditable(league);
   const previousLogo = league.logo;
   league.logo = null;
   await saveLeague(league);
@@ -1995,6 +2024,8 @@ function createLeagueGameRow(game, teamsById) {
     trackingMode: game.trackingMode || 'one_sided',
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
+    venue: game.venue ?? null,
+    venueAddress: game.venueAddress?.toObject?.() || game.venueAddress || null,
     completedAt: game.completedAt ?? null,
     homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
     awayLeagueTeamId: game.awayLeagueTeamId ? String(game.awayLeagueTeamId) : null,
@@ -2571,6 +2602,7 @@ async function getLeagueContextForGame(userId, payload, options = {}) {
   }
 
   const league = await assertLeagueExists(payload.leagueId);
+  ensureLeagueEditable(league);
   const isOwner = String(league.ownerUserId) === String(userId);
 
   const leagueMgrRecord = isOwner ? null : await findActiveLeagueManager(payload.leagueId, userId);
@@ -2684,7 +2716,8 @@ async function removeLeagueManagerById(userId, leagueId, managerId) {
   if (!mongoose.Types.ObjectId.isValid(managerId)) {
     throw new ApiError(404, 'League manager not found');
   }
-  await assertLeagueOwner(userId, leagueId);
+  const league = await assertLeagueOwner(userId, leagueId);
+  ensureLeagueEditable(league);
   const record = await findLeagueManagerById(managerId);
   if (!record || String(record.leagueId) !== String(leagueId) || record.status !== 'active') {
     throw new ApiError(404, 'League manager not found');

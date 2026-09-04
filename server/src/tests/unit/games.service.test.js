@@ -40,6 +40,7 @@ jest.mock('../../modules/billing/billing.service', () => ({
     currentPeriodEnd: null,
   })),
   isTeamActive: jest.fn(() => true),
+  assertTeamManagementAllowed: jest.fn(),
 }));
 
 jest.mock('../../modules/games/gameRecap.service', () => ({
@@ -117,6 +118,19 @@ const {
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 const { autoPublishForFinalizedGame } = require('../../modules/feed/feed.service');
 const { env } = require('../../config/env');
+const { findLeagueById } = require('../../modules/leagues/leagues.repository');
+
+beforeEach(() => {
+  // Most tests in this file exercise game behaviour rather than billing. Give
+  // their League fixtures the same non-Stripe access used by grandfathered
+  // production Leagues; billing-specific tests override this explicitly.
+  findLeagueById.mockResolvedValue({
+    _id: 'league-1',
+    plan: 'league_plus',
+    subscriptionStatus: 'inactive',
+    billingSource: 'comp',
+  });
+});
 
 const GAME_FORMAT = {
   regulationSegmentType: 'quarter',
@@ -388,6 +402,39 @@ describe('games service create game', () => {
     });
 
     expect(result).toHaveProperty('game');
+  });
+
+  test('rejects a new event before the game clock has started', async () => {
+    const game = {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
+      teamId: 'team-1',
+      events: buildEvents([]),
+      status: 'in_progress',
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+    };
+    findGameById.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'p1',
+        statType: STAT_TYPES.FG2_MADE,
+      })
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Start the game clock before recording an event',
+    });
+    expect(saveGame).not.toHaveBeenCalled();
   });
 
   test('persists a trimmed YouTube video URL', async () => {
@@ -955,6 +1002,8 @@ describe('games service league tie guard (OPT-024)', () => {
       leagueId: null,
       homeLeagueTeamId: null,
       awayLeagueTeamId: null,
+      homeTeamId: 'team-home',
+      awayTeamId: 'team-away',
       homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
       awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
       events: [
@@ -964,6 +1013,11 @@ describe('games service league tie guard (OPT-024)', () => {
     });
 
     findGameById.mockResolvedValue(game);
+    findTeamByIdAndOwner.mockResolvedValue({
+      _id: 'team-home',
+      ownerUserId: 'user-1',
+      capacityType: 'free',
+    });
     saveGame.mockResolvedValue(game);
 
     await expect(finishGameForUser('user-1', 'game-1')).resolves.toBeDefined();
@@ -1057,7 +1111,7 @@ describe('games service frozen box score (OPT-012)', () => {
     expect(result.team.entitlements.canViewShotMaps).toBe(true);
   });
 
-  test('T-13: a lapsed/free league game loses premium views (downgrade safety)', async () => {
+  test('a read-only League still exposes all team viewing features', async () => {
     getLeagueTeamRosterSnapshotForGame.mockResolvedValue({
       league: {
         _id: 'league-1',
@@ -1085,12 +1139,11 @@ describe('games service frozen box score (OPT-012)', () => {
     findGameById.mockResolvedValue(game);
 
     const result = await getGameForUser('user-1', 'game-1');
-    expect(result.team.entitlements.canViewReplay).toBe(false);
-    expect(result.team.entitlements.canViewShotMaps).toBe(false);
+    expect(result.team.entitlements.canViewReplay).toBe(true);
+    expect(result.team.entitlements.canViewShotMaps).toBe(true);
   });
 
-  test('H7: a one-sided standalone game uses its frozen snapshot, not live resolve', async () => {
-    // Team has since lapsed to starter, but the game was recorded while Pro.
+  test('a lapsed additional team keeps historical media access', async () => {
     findTeamByIdAndOwner.mockResolvedValue({
       _id: 'team-1',
       name: 'TSW Blue',
@@ -1105,7 +1158,8 @@ describe('games service frozen box score (OPT-012)', () => {
       trackingMode: 'one_sided',
       teamId: 'team-1',
       status: 'completed',
-      events: [],
+      videoUrl: 'https://www.youtube.com/watch?v=abc123',
+      events: [{ ...HIGHLIGHT_EVENT, playerId: null }],
       entitlementsSnapshot: { canViewReplay: true, canViewShotMaps: true },
       createdAt: new Date('2026-03-12T00:00:00.000Z'),
       updatedAt: new Date('2026-03-12T00:00:00.000Z'),
@@ -1115,6 +1169,8 @@ describe('games service frozen box score (OPT-012)', () => {
     const result = await getGameForUser('user-1', 'game-1');
     expect(result.team.entitlements.canViewReplay).toBe(true);
     expect(result.team.entitlements.canViewShotMaps).toBe(true);
+    expect(result.game.videoUrl).toBe('https://www.youtube.com/watch?v=abc123');
+    expect(result.game.events[0].videoTimestamp).toBe(HIGHLIGHT_EVENT.videoTimestamp);
   });
 
   test('H7: a legacy one-sided game with no snapshot falls back to live resolve', async () => {
@@ -1140,7 +1196,7 @@ describe('games service frozen box score (OPT-012)', () => {
     findGameById.mockResolvedValue(game);
 
     const result = await getGameForUser('user-1', 'game-1');
-    expect(result.team.entitlements.canViewReplay).toBe(false);
+    expect(result.team.entitlements.canViewReplay).toBe(true);
   });
 
   // A qualifying replay clip: a made shot by a rostered player with a video timestamp.
@@ -1152,7 +1208,7 @@ describe('games service frozen box score (OPT-012)', () => {
     videoTimestamp: 12,
   };
 
-  test('T-14: omits replay highlights and shot snapshot when not entitled (frozen snapshot)', async () => {
+  test('old frozen snapshots cannot remove now-free replay and shot views', async () => {
     buildGameRecap.mockReturnValue({
       statusLabel: 'Final',
       shotSnapshot: { made: 1, missed: 0, events: [] },
@@ -1178,11 +1234,17 @@ describe('games service frozen box score (OPT-012)', () => {
     findGameById.mockResolvedValue(game);
 
     const result = await getGameForUser('user-1', 'game-1');
-    expect(result.highlights).toEqual([]);
-    expect(result.recap.shotSnapshot).toBeNull();
+    expect(result.highlights).toHaveLength(1);
+    expect(result.recap.shotSnapshot).not.toBeNull();
   });
 
   test('T-14: includes replay highlights and shot snapshot when entitled', async () => {
+    findLeagueById.mockResolvedValue({
+      _id: 'league-1',
+      plan: 'league',
+      subscriptionStatus: 'active',
+      billingSource: 'stripe',
+    });
     buildGameRecap.mockReturnValue({
       statusLabel: 'Final',
       shotSnapshot: { made: 1, missed: 0, events: [] },
@@ -1197,7 +1259,7 @@ describe('games service frozen box score (OPT-012)', () => {
     findGameById.mockResolvedValue(game);
 
     const result = await getGameForUser('user-1', 'game-1');
-    // Entitled (snapshot canViewReplay/canViewShotMaps:true) → both present.
+    // Current active League billing grants both surfaces.
     expect(result.highlights.length).toBeGreaterThan(0);
     expect(result.recap.shotSnapshot).toEqual(expect.any(Object));
   });
@@ -1745,5 +1807,189 @@ describe('computeGameFinalScore (OPT-008)', () => {
       home: 0,
       away: 0,
     });
+  });
+});
+
+describe('court layout compatibility contract', () => {
+  const teamPlayers = buildPlayers([{ _id: 'p1', displayName: 'Alex', isActive: true }]);
+
+  function buildTrackableGame(overrides = {}) {
+    return {
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
+      teamId: 'team-1',
+      rosterSnapshot: [],
+      events: buildEvents([]),
+      status: 'in_progress',
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  const SHOT = {
+    ...EVENT_CLOCK,
+    playerId: 'p1',
+    statType: STAT_TYPES.FG2_MADE,
+    zoneId: 'PAINT',
+    x: 50,
+    y: 20,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    findTeamById.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: teamPlayers });
+  });
+
+  test('serializes a document with no courtLayoutId as legacy, so production games keep their court', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Game',
+      status: 'in_progress',
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    });
+
+    const result = await createGameForUser('user-1', { teamId: 'team-1', title: 'Game' });
+
+    expect(result.courtLayoutId).toBe('legacy-v1');
+  });
+
+  test('serializes a stamped document as its own layout', async () => {
+    findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', players: buildPlayers([]) });
+    createGame.mockResolvedValue({
+      _id: 'game-1',
+      ownerUserId: 'user-1',
+      teamId: 'team-1',
+      title: 'Game',
+      status: 'in_progress',
+      courtLayoutId: 'court-v2',
+      events: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+    });
+
+    const result = await createGameForUser('user-1', { teamId: 'team-1', title: 'Game' });
+
+    expect(result.courtLayoutId).toBe('court-v2');
+  });
+
+  test('rejects coordinates captured on a different court than the game was stamped with', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', { ...SHOT, courtLayoutId: 'legacy-v1' })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'This game uses an updated court. Refresh the page and try again.',
+    });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  // A cached pre-feature client sends no precondition at all. Allowing that for
+  // a stamped game is exactly the hole the handshake exists to close.
+  test('rejects an absent precondition on a stamped game and tells the user to refresh', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(appendEventForUser('user-1', 'game-1', SHOT)).rejects.toMatchObject({
+      statusCode: 409,
+      details: { courtLayoutId: 'court-v2' },
+    });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  test('allows an absent precondition on a legacy game so old clients keep working', async () => {
+    const game = buildTrackableGame();
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(appendEventForUser('user-1', 'game-1', SHOT)).resolves.toHaveProperty('game');
+  });
+
+  test('accepts a matching precondition on a stamped game', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', { ...SHOT, courtLayoutId: 'court-v2' })
+    ).resolves.toHaveProperty('game');
+  });
+
+  // Only coordinates are layout-dependent, so a stat carrying none must not be
+  // blocked by a missing precondition.
+  test('does not gate a coordinate-free event on the precondition', async () => {
+    const game = buildTrackableGame({ courtLayoutId: 'court-v2' });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'p1',
+        statType: STAT_TYPES.AST,
+      })
+    ).resolves.toHaveProperty('game');
+  });
+
+  test('rejects a coordinate edit made against the wrong court', async () => {
+    const game = buildTrackableGame({
+      courtLayoutId: 'court-v2',
+      events: buildEvents([
+        {
+          _id: 'event-1',
+          playerId: 'p1',
+          statType: STAT_TYPES.FG2_MADE,
+          zoneId: 'PAINT',
+          x: 50,
+          y: 20,
+          ...EVENT_CLOCK,
+        },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      updateEventForUser('user-1', 'game-1', 'event-1', { x: 40, courtLayoutId: 'legacy-v1' })
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(saveGame).not.toHaveBeenCalled();
+  });
+
+  test('leaves a non-coordinate edit alone', async () => {
+    const game = buildTrackableGame({
+      courtLayoutId: 'court-v2',
+      events: buildEvents([
+        {
+          _id: 'event-1',
+          playerId: 'p1',
+          statType: STAT_TYPES.FG2_MADE,
+          zoneId: 'PAINT',
+          x: 50,
+          y: 20,
+          ...EVENT_CLOCK,
+        },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await expect(
+      updateEventForUser('user-1', 'game-1', 'event-1', { playerId: 'p1' })
+    ).resolves.toBeDefined();
   });
 });

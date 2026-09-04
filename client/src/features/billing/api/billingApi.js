@@ -5,13 +5,22 @@ export const billingApi = {
   getCatalog() {
     return apiClient.get('/billing/catalog');
   },
-  createTeamCheckoutSession(teamId, interval = 'monthly') {
-    return apiClient.post('/billing/team-checkout', { teamId, interval });
+  createTeamCheckoutSession(teamId) {
+    return apiClient.post('/billing/team-checkout', { teamId });
   },
-  createLeagueCheckoutSession(interval = 'monthly') {
-    return apiClient.post('/billing/league-checkout', { interval });
+  createLeagueCheckoutSession(planId = 'league', leagueId) {
+    return apiClient.post('/billing/league-checkout', { planId, leagueId });
   },
   createCustomerPortalSession({ teamId, leagueId } = {}) {
     return apiClient.post('/billing/customer-portal', { teamId, leagueId });
+  },
+  getCheckoutStatus(sessionId) {
+    return apiClient.get(`/billing/checkout-status?sessionId=${encodeURIComponent(sessionId)}`);
+  },
+  changeLeaguePlan(leagueId, planId) {
+    return apiClient.post('/billing/league-plan-change', { leagueId, planId });
+  },
+  chooseFreeTeam(teamId) {
+    return apiClient.post('/billing/free-team', { teamId });
   },
 };

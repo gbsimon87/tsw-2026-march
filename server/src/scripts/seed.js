@@ -1,7 +1,13 @@
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { connectDb } = require('../config/db');
+const { env } = require('../config/env');
 const { SHOT_ZONE_IDS, STAT_TYPES, TEAM_SIDES } = require('../modules/shared/stats.constants');
+const {
+  DEFAULT_GAME_FORMAT,
+  SEGMENT_KINDS,
+  regulationSegmentCount,
+} = require('../modules/shared/gameClock');
 
 require('../modules/auth/auth.repository');
 require('../modules/teams/teams.repository');
@@ -26,6 +32,7 @@ const Season = mongoose.model('Season');
 const LeagueStandings = mongoose.model('LeagueStandings');
 const LeaguePlayerStats = mongoose.model('LeaguePlayerStats');
 const LeagueDataIssueDismissal = mongoose.model('LeagueDataIssueDismissal');
+const PlayerClaimRequest = mongoose.model('PlayerClaimRequest');
 
 const seedConfig = {
   userCount: Number(process.env.SEED_USER_COUNT || 10),
@@ -196,11 +203,70 @@ const seededLeagueBlueprint = {
   slug: 'metro-spring-league',
   seasonLabel: '2026 Spring',
   ownerEmail: 'user1@user1.com',
-  // The first four teams play the round-robin below. "Late Entry FC" is added
-  // deliberately under-rostered and without games so the Data health panel has
-  // a real roster_too_small / no_appearances target (see DATA_HEALTH_FIXTURES).
-  teamNames: ['City Ballers', 'Coastal Heat', 'Skyline Elite', 'Valley Storm', 'Late Entry FC'],
+  // Six competitive teams playing a double round-robin. Six (not four) is what
+  // makes the schedule produce 10 completed games per team, which is the
+  // minimum that makes Season Trends meaningful — it compares the last five
+  // games against the previous five.
+  competitiveTeamNames: [
+    'City Ballers',
+    'Coastal Heat',
+    'Skyline Elite',
+    'Valley Storm',
+    'Harbor Current',
+    'Ironside Union',
+  ],
+  // Deliberately-imperfect teams that exist so the Data Health panel has real
+  // targets. Kept separate from the competitive teams above so the league a
+  // developer actually browses is complete: full rosters, full stats.
+  fixtureTeamNames: {
+    // Plays a real schedule, but carries one late signing who never appears in
+    // a box score — the only no_appearances target in the seed (that check
+    // requires the team to have played, so an unplayed team cannot provide it).
+    lateSigning: 'Northgate Athletic',
+    // Under-rostered and never plays: the roster_too_small target.
+    shortRoster: 'Late Entry FC',
+  },
 };
+
+// Venues are reused across fixtures so the "use a previous venue" picker on the
+// game-creation screens has real options, and carry addresses so public game
+// pages can render a map link.
+// Extra managed teams owned by the league manager, so that account exercises
+// both League admin and standalone-team management.
+const ownerExtraTeamNames = ['Riverside Rockets', 'Old Town Saints'];
+
+const seededVenues = [
+  {
+    name: 'Central Court',
+    address: {
+      addressLine1: '18 Sportsway',
+      city: 'Manchester',
+      state: 'Greater Manchester',
+      postalCode: 'M1 4WX',
+      country: 'United Kingdom',
+    },
+  },
+  {
+    name: 'Riverside Gym',
+    address: {
+      addressLine1: '4 Quay Road',
+      city: 'Salford',
+      state: 'Greater Manchester',
+      postalCode: 'M50 3AZ',
+      country: 'United Kingdom',
+    },
+  },
+  {
+    name: 'Northgate Arena',
+    address: {
+      addressLine1: '221 Northgate Street',
+      city: 'Leeds',
+      state: 'West Yorkshire',
+      postalCode: 'LS2 8LX',
+      country: 'United Kingdom',
+    },
+  },
+];
 
 // Data Health (docs/data-completeness.md) needs each severity tier represented in
 // dev data, otherwise the tab renders only cosmetic Low warnings and the HIGH
@@ -299,38 +365,77 @@ function buildFallbackPlayerName(index) {
   return cycle > 0 ? `${firstName} ${lastName} ${cycle + 1}` : `${firstName} ${lastName}`;
 }
 
+// Onboarding gates where a user lands after signing in, so seeded accounts
+// need a deliberate state. Most are 'completed' (sign in and go straight to the
+// product); the last two are left mid-flow so the onboarding journey itself is
+// testable without registering a throwaway account every time.
+function buildSeedOnboarding(index, isLeagueOwner) {
+  if (isLeagueOwner) {
+    return {
+      status: 'completed',
+      roles: ['league_manager', 'team_manager'],
+      completedSteps: ['roles', 'profiles'],
+    };
+  }
+
+  if (index === seedConfig.userCount - 1) {
+    // A brand-new account: signing in lands on role selection.
+    return { status: 'not_started', roles: [], completedSteps: [] };
+  }
+
+  if (index === seedConfig.userCount - 2) {
+    // Picked roles, never finished: resumes at the create/connect step and
+    // keeps the "Finish setup" nav link visible.
+    return { status: 'in_progress', roles: ['player'], completedSteps: ['roles'] };
+  }
+
+  return {
+    status: 'completed',
+    roles: index % 3 === 0 ? ['team_manager'] : index % 3 === 1 ? ['player'] : ['fan'],
+    completedSteps: ['roles', 'profiles'],
+  };
+}
+
 function createSeedUsers() {
   return Array.from({ length: seedConfig.userCount }, (_, index) => {
     const number = index + 1;
-    // Canonical plan ids (Phase 6): 'team_pro' / 'starter'.
-    const plan = index % 2 === 0 ? 'team_pro' : 'starter';
     const identity = seedIdentityBlueprints[index];
+    const email = `user${number}@user${number}.com`;
 
     return {
-      email: `user${number}@user${number}.com`,
+      email,
       name: identity?.userName || buildFallbackUserName(index - seedIdentityBlueprints.length),
       teamName: identity?.teamName || buildFallbackTeamName(index - seedIdentityBlueprints.length),
-      plan,
+      plan: 'starter',
+      onboarding: buildSeedOnboarding(index, email === seededLeagueBlueprint.ownerEmail),
     };
   });
 }
 
-function buildSeedBillingProfile(seedUser, index) {
-  if (seedUser.plan === 'team_pro') {
-    return {
-      plan: 'team_pro',
-      subscriptionStatus: 'active',
-      stripeCustomerId: `cus_seed_${index + 1}`,
-      stripeSubscriptionId: `sub_seed_${index + 1}`,
-      stripePriceId: process.env.STRIPE_PRICE_ID_TEAM_MONTHLY || 'price_seed_team_pro_monthly',
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      cancelAtPeriodEnd: false,
-      billingEmail: seedUser.email,
-    };
-  }
+// Only one standalone team per owner may be capacityType 'free' — the Team
+// schema enforces it with a partial unique index. Additional owned teams are
+// paid slots; granting them as 'comp' keeps them fully entitled in dev without
+// inventing a Stripe subscription.
+function buildSeedPaidTeamProfile(seedUser) {
+  return {
+    plan: 'team_pro',
+    capacityType: 'paid',
+    billingSource: 'comp',
+    subscriptionStatus: 'active',
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    stripePriceId: null,
+    currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    cancelAtPeriodEnd: false,
+    billingEmail: seedUser.email,
+  };
+}
 
+function buildSeedBillingProfile(seedUser) {
   return {
     plan: 'starter',
+    capacityType: 'free',
+    billingSource: 'comp',
     subscriptionStatus: 'inactive',
     stripeCustomerId: null,
     stripeSubscriptionId: null,
@@ -385,6 +490,34 @@ function createOpponentEvent(statType, occurredAt) {
   };
 }
 
+// The event subschema requires a clock snapshot per event (segmentKind,
+// segmentNumber, clockMillisecondsRemaining) since the configurable game clock
+// landed. Seeded events carry no real clock, so spread them evenly across
+// regulation: event i of n sits at the matching point of segment
+// floor(i/n * segments), counting the segment clock down as it goes. Call this
+// on the FINAL sorted event list — for dual-team games the two sides are merged
+// first, so stamping per side would leave the merged clock non-monotonic.
+function stampClockSnapshots(events, format = DEFAULT_GAME_FORMAT) {
+  const total = events.length;
+  if (total === 0) return events;
+
+  const segments = regulationSegmentCount(format);
+  const segmentMs = format.regulationSegmentDurationSeconds * 1000;
+
+  return events.map((event, index) => {
+    const position = (index / total) * segments;
+    const segmentIndex = Math.min(segments - 1, Math.floor(position));
+    const elapsedFraction = position - segmentIndex;
+
+    return {
+      ...event,
+      segmentKind: SEGMENT_KINDS.REGULATION,
+      segmentNumber: segmentIndex + 1,
+      clockMillisecondsRemaining: Math.round(segmentMs * (1 - elapsedFraction)),
+    };
+  });
+}
+
 function buildPlayerBlueprints(teamIndex, options = {}) {
   const rosterSize = options.playersPerTeam || seedConfig.playersPerTeam;
   const names = [];
@@ -409,6 +542,38 @@ function buildPlayerBlueprints(teamIndex, options = {}) {
     jerseyNumber: index + 1,
     isActive: true,
   }));
+}
+
+// Every game event carries a clock snapshot (segmentKind / segmentNumber /
+// clockMillisecondsRemaining) — all three are required by the event schema.
+// Seeded events have no real clock, so spread them evenly across regulation
+// segments with a descending clock inside each one; this satisfies
+// gameClock.validateSnapshot for the default 4x10:00 format.
+function assignClockSnapshots(events, format = DEFAULT_GAME_FORMAT) {
+  if (events.length === 0) {
+    return events;
+  }
+
+  const segmentCount = regulationSegmentCount(format);
+  const segmentMilliseconds = format.regulationSegmentDurationSeconds * 1000;
+  const perSegment = Math.ceil(events.length / segmentCount);
+
+  return events.map((event, index) => {
+    const segmentIndex = Math.min(segmentCount - 1, Math.floor(index / perSegment));
+    const indexInSegment = index - segmentIndex * perSegment;
+    const countInSegment = Math.min(perSegment, events.length - segmentIndex * perSegment);
+    const elapsedFraction = countInSegment <= 1 ? 0.5 : indexInSegment / countInSegment;
+
+    return {
+      ...event,
+      segmentKind: SEGMENT_KINDS.REGULATION,
+      segmentNumber: segmentIndex + 1,
+      clockMillisecondsRemaining: Math.max(
+        0,
+        Math.round(segmentMilliseconds * (1 - elapsedFraction))
+      ),
+    };
+  });
 }
 
 function buildGameEvents(players, scheduledAt) {
@@ -572,7 +737,9 @@ function buildGameEvents(players, scheduledAt) {
     events.push(createOpponentEvent(STAT_TYPES.OPP_REB, nextOccurredAt()));
   }
 
-  return events.sort((eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt));
+  return assignClockSnapshots(
+    events.sort((eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt))
+  );
 }
 
 function buildGameDocs(userId, team) {
@@ -603,7 +770,7 @@ function buildGameDocs(userId, team) {
       status: 'completed',
       scheduledAt,
       completedAt,
-      events: buildGameEvents(players, scheduledAt),
+      events: stampClockSnapshots(buildGameEvents(players, scheduledAt)),
     };
   });
 }
@@ -645,14 +812,15 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
   const startDate = new Date(today);
   startDate.setMonth(startDate.getMonth() - 3);
 
-  const matchups = [
-    [0, 1],
-    [2, 3],
-    [0, 2],
-    [1, 3],
-    [0, 3],
-    [1, 2],
-  ];
+  // Double round-robin: every team hosts every other team once and visits them
+  // once, so each team finishes with 2*(n-1) completed games and an even split
+  // of home and away fixtures for the standings to be worth reading.
+  const matchups = [];
+  for (let home = 0; home < leagueTeamsWithPlayers.length; home += 1) {
+    for (let away = 0; away < leagueTeamsWithPlayers.length; away += 1) {
+      if (home !== away) matchups.push([home, away]);
+    }
+  }
 
   const completedGames = matchups.map(([homeIndex, awayIndex], gameIndex) => {
     const home = leagueTeamsWithPlayers[homeIndex];
@@ -660,21 +828,25 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
     const scheduledAt = new Date(startDate.getTime() + gameIndex * 5 * 24 * 60 * 60 * 1000);
     scheduledAt.setHours(18 + (gameIndex % 3), gameIndex % 2 === 0 ? 0 : 30, 0, 0);
     const completedAt = new Date(scheduledAt.getTime() + 2 * 60 * 60 * 1000);
-    // The last player on each roster is a late signing who joined AFTER these
-    // games were played, so they are absent from the historical roster snapshot
-    // and get no stats row — the real-world shape the no_appearances check looks
-    // for. (LeaguePlayerStats is built from the snapshot, not from events, so
-    // merely withholding events would still produce a gamesCount for them.)
-    const homeRosterSnapshot = buildLeagueRosterSnapshot(home.players.slice(0, -1));
-    const awayRosterSnapshot = buildLeagueRosterSnapshot(away.players.slice(0, -1));
+    // The whole roster is snapshotted AND given events, so every player on a
+    // competitive team has a populated stat line. `excludeFromBoxScore` marks
+    // the one deliberate exception (the late-signing fixture team), where the
+    // last player is left out of the snapshot entirely — LeaguePlayerStats is
+    // built from the snapshot, so withholding only events would still give them
+    // a gamesCount and defeat the no_appearances check.
+    const homePlaying = home.excludeFromBoxScore ? home.players.slice(0, -1) : home.players;
+    const awayPlaying = away.excludeFromBoxScore ? away.players.slice(0, -1) : away.players;
+    const homeRosterSnapshot = buildLeagueRosterSnapshot(homePlaying);
+    const awayRosterSnapshot = buildLeagueRosterSnapshot(awayPlaying);
     const homeEvents = attachTeamSide(
-      buildLeagueGameEvents(homeRosterSnapshot.slice(0, 8), scheduledAt),
+      buildLeagueGameEvents(homeRosterSnapshot, scheduledAt),
       TEAM_SIDES.HOME
     );
     const awayEvents = attachTeamSide(
-      buildLeagueGameEvents(awayRosterSnapshot.slice(0, 8), scheduledAt),
+      buildLeagueGameEvents(awayRosterSnapshot, scheduledAt),
       TEAM_SIDES.AWAY
     );
+    const venue = seededVenues[gameIndex % seededVenues.length];
 
     return {
       ownerUserId,
@@ -711,6 +883,8 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
       status: 'completed',
       scheduledAt,
       completedAt,
+      venue: venue.name,
+      venueAddress: venue.address,
       rosterSnapshot: homeRosterSnapshot,
       homeRosterSnapshot,
       awayRosterSnapshot,
@@ -720,8 +894,10 @@ function buildSeedLeagueGames(ownerUserId, league, leagueTeamsWithPlayers) {
       homeCurrentLineupPlayerIds: homeRosterSnapshot.slice(0, 5).map((player) => player._id),
       awayStartingLineupPlayerIds: awayRosterSnapshot.slice(0, 5).map((player) => player._id),
       awayCurrentLineupPlayerIds: awayRosterSnapshot.slice(0, 5).map((player) => player._id),
-      events: [...homeEvents, ...awayEvents].sort(
-        (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+      events: stampClockSnapshots(
+        [...homeEvents, ...awayEvents].sort(
+          (eventA, eventB) => new Date(eventA.occurredAt) - new Date(eventB.occurredAt)
+        )
       ),
     };
   });
@@ -752,6 +928,9 @@ function buildDataHealthGames(ownerUserId, league, leagueTeamsWithPlayers) {
   }
 
   function baseGame(home, away, { status, scheduledAt, venue = null, completedAt = null }) {
+    const venueAddress = venue
+      ? (seededVenues.find((option) => option.name === venue)?.address ?? null)
+      : null;
     const homeRosterSnapshot = buildLeagueRosterSnapshot(home.players);
     const awayRosterSnapshot = buildLeagueRosterSnapshot(away.players);
 
@@ -771,6 +950,7 @@ function buildDataHealthGames(ownerUserId, league, leagueTeamsWithPlayers) {
       scheduledAt,
       completedAt,
       venue,
+      venueAddress,
       rosterSnapshot: homeRosterSnapshot,
       homeRosterSnapshot,
       awayRosterSnapshot,
@@ -839,6 +1019,7 @@ async function upsertSeedUsers() {
         emailVerifiedAt: new Date(),
         roles: ['user'],
         plan: seedUser.plan,
+        onboarding: seedUser.onboarding,
         // User.league* fields removed (Phase 6 / T-25): league billing lives on the
         // League doc; user-level league plan is resolver-derived, never stored.
       });
@@ -850,6 +1031,7 @@ async function upsertSeedUsers() {
       user.emailVerifiedAt = user.emailVerifiedAt || new Date();
       user.roles = ['user'];
       user.plan = seedUser.plan;
+      user.onboarding = seedUser.onboarding;
       await user.save();
     }
 
@@ -864,27 +1046,102 @@ async function upsertSeedUsers() {
   return users;
 }
 
+// This script clears the entire database it connects to. It is a development-
+// only tool, so it refuses to run anywhere that even looks like production and
+// requires an exact database-name confirmation rather than trusting ENV_FILE.
+function assertDevTarget({
+  nodeEnv = env.NODE_ENV,
+  appEnv = env.APP_ENV,
+  uri = env.MONGO_URI || '',
+  dbName = env.MONGO_DB_NAME || '',
+  confirmedDbName = process.env.SEED_CONFIRM_DB || '',
+} = {}) {
+  const redactedUri = uri.replace(/\/\/[^@]*@/, '//***:***@');
+
+  if (nodeEnv === 'production') {
+    throw new Error(`Refusing to seed: NODE_ENV is production (${redactedUri})`);
+  }
+
+  if (appEnv === 'production') {
+    throw new Error(`Refusing to seed: APP_ENV is production (${redactedUri})`);
+  }
+
+  // A production database name is the last line of defence if someone points a
+  // development ENV_FILE at a live cluster.
+  if (/prod/i.test(dbName)) {
+    throw new Error(`Refusing to seed: database name looks like production (${dbName})`);
+  }
+
+  if (!/dev|test|local/i.test(dbName)) {
+    throw new Error(
+      `Refusing to seed: database name "${dbName}" is not recognisably a dev/test database. ` +
+        'Rename it or set MONGO_DB_NAME explicitly before seeding.'
+    );
+  }
+
+  if (!confirmedDbName) {
+    throw new Error(
+      'Refusing to seed: SEED_CONFIRM_DB is required and must exactly match MONGO_DB_NAME.'
+    );
+  }
+
+  if (confirmedDbName !== dbName) {
+    throw new Error(
+      `Refusing to seed: SEED_CONFIRM_DB "${confirmedDbName}" does not match MONGO_DB_NAME "${dbName}".`
+    );
+  }
+
+  return { redactedUri, dbName };
+}
+
+// Prefer a full drop so collections belonging to models this script no longer
+// imports cannot survive and leave an impossible dev state. Some restricted
+// Atlas users cannot drop a database, so the fallback clears every collection.
+// autoIndex is on outside production, and indexes are recreated below.
 async function resetSeedData() {
-  await Promise.all([
-    Post.deleteMany({}),
-    Game.deleteMany({}),
-    LeagueJoinRequest.deleteMany({}),
-    LeagueTeamMember.deleteMany({}),
-    LeaguePlayer.deleteMany({}),
-    LeagueTeam.deleteMany({}),
-    // Season + the materialized aggregates and Data Health dismissals that hang
-    // off it. Leaving these behind would orphan them against deleted leagues and
-    // let a stale dismissal silently hide a freshly seeded issue.
-    Season.deleteMany({}),
-    LeagueStandings.deleteMany({}),
-    LeaguePlayerStats.deleteMany({}),
-    LeagueDataIssueDismissal.deleteMany({}),
-    League.deleteMany({}),
-    Team.deleteMany({}),
-    Session.deleteMany({}),
-    AuthToken.deleteMany({}),
-    User.deleteMany({}),
-  ]);
+  try {
+    await mongoose.connection.dropDatabase();
+  } catch (error) {
+    const dropDatabaseDenied =
+      error?.code === 8000 &&
+      /not allowed.*dropDatabase|dropDatabase.*not allowed/i.test(error.message);
+    if (!dropDatabaseDenied) throw error;
+
+    // Atlas roles commonly allow application reads/writes but deliberately deny
+    // dropDatabase. Clear every ordinary collection instead, preserving indexes
+    // and keeping the same exact-database safeguards enforced above.
+    console.warn('dropDatabase is not permitted; clearing development collections instead...');
+    const collections = await mongoose.connection.db
+      .listCollections({}, { nameOnly: true })
+      .toArray();
+    for (const { name } of collections) {
+      if (!name.startsWith('system.')) {
+        await mongoose.connection.collection(name).deleteMany({});
+      }
+    }
+  }
+  // Recreate indexes up front so the first inserts are validated against the
+  // real unique constraints (e.g. User.email) instead of silently duplicating.
+  await Promise.all(
+    [
+      User,
+      Session,
+      AuthToken,
+      Team,
+      PlayerClaimRequest,
+      Game,
+      Post,
+      League,
+      LeagueTeam,
+      LeaguePlayer,
+      LeagueTeamMember,
+      LeagueJoinRequest,
+      Season,
+      LeagueStandings,
+      LeaguePlayerStats,
+      LeagueDataIssueDismissal,
+    ].map((model) => model.createIndexes())
+  );
 }
 
 async function seedLeagueForUser(userEntry) {
@@ -898,9 +1155,7 @@ async function seedLeagueForUser(userEntry) {
     isPublic: true,
     plan: 'league',
     subscriptionStatus: 'active',
-    stripeCustomerId: 'cus_seed_league_1',
-    stripeSubscriptionId: 'sub_seed_league_1',
-    stripePriceId: process.env.STRIPE_PRICE_ID_LEAGUE_MONTHLY || 'price_seed_league_monthly',
+    billingSource: 'comp',
     currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     cancelAtPeriodEnd: false,
   });
@@ -924,26 +1179,37 @@ async function seedLeagueForUser(userEntry) {
   let leagueEventCount = 0;
   const leagueTeamsWithPlayers = [];
 
-  for (const [index, teamName] of seededLeagueBlueprint.teamNames.entries()) {
-    // The last team is the deliberately-incomplete one (see
-    // DATA_HEALTH_FIXTURES): no logo, a short roster, and no games.
-    const isDataHealthTeam = index === seededLeagueBlueprint.teamNames.length - 1;
+  // Competitive teams first (they play the round-robin), then the two Data
+  // Health fixture teams. Order matters: buildSeedLeagueGames schedules over
+  // the competitive slice, and the fixture games address the rest by name.
+  const teamPlan = [
+    ...seededLeagueBlueprint.competitiveTeamNames.map((name) => ({
+      name,
+      kind: 'competitive',
+    })),
+    { name: seededLeagueBlueprint.fixtureTeamNames.lateSigning, kind: 'lateSigning' },
+    { name: seededLeagueBlueprint.fixtureTeamNames.shortRoster, kind: 'shortRoster' },
+  ];
 
+  for (const [index, plan] of teamPlan.entries()) {
     const leagueTeam = await LeagueTeam.create({
       leagueId: league._id,
-      name: teamName,
+      name: plan.name,
       slug: `${seededLeagueBlueprint.slug}-${index + 1}`,
       colors: ['#0f172a', '#38bdf8'],
       status: 'active',
     });
 
-    // Playing teams get one extra player beyond the 8 that game events cover
-    // (buildLeagueGameEvents uses rosterSnapshot.slice(0, 8)). That last player
-    // is a genuine late signing who never appears in a box score — the target
-    // for the no_appearances check.
-    const rosterSize = isDataHealthTeam
-      ? DATA_HEALTH_FIXTURES.shortRosterSize
-      : seedConfig.leaguePlayersPerTeam + 1;
+    // Competitive teams carry a full roster and every one of those players
+    // records stats. The lateSigning fixture team carries one extra player who
+    // is held out of every box score; the shortRoster team is deliberately
+    // below the minimum and never plays.
+    const rosterSize =
+      plan.kind === 'shortRoster'
+        ? DATA_HEALTH_FIXTURES.shortRosterSize
+        : plan.kind === 'lateSigning'
+          ? seedConfig.leaguePlayersPerTeam + 1
+          : seedConfig.leaguePlayersPerTeam;
 
     const roster = buildPlayerBlueprints(100 + index, {
       playersPerTeam: rosterSize,
@@ -951,9 +1217,10 @@ async function seedLeagueForUser(userEntry) {
       leagueId: league._id,
       leagueTeamId: leagueTeam._id,
       displayName: player.displayName,
-      // LOW — missing_jersey: one player per playing team has no number, so the
-      // check has a target without making the whole roster look broken.
-      jerseyNumber: !isDataHealthTeam && playerIndex === 0 ? null : player.jerseyNumber,
+      // LOW — missing_jersey: one player on the lateSigning fixture team has no
+      // number. Competitive rosters are left complete so a developer browsing
+      // the league does not see avoidable warnings on every team.
+      jerseyNumber: plan.kind === 'lateSigning' && playerIndex === 0 ? null : player.jerseyNumber,
       position: null,
       isActive: true,
       claimedByUserId: null,
@@ -963,17 +1230,24 @@ async function seedLeagueForUser(userEntry) {
     leagueTeamsWithPlayers.push({
       team: leagueTeam,
       players,
+      kind: plan.kind,
+      // Consumed by buildSeedLeagueGames: hold the last player out of the
+      // snapshot so no_appearances has exactly one target.
+      excludeFromBoxScore: plan.kind === 'lateSigning',
     });
     leagueTeamCount += 1;
     leaguePlayerCount += roster.length;
   }
 
+  // Everything except the deliberately under-rostered team plays the schedule.
+  // The lateSigning fixture team has to play, because the no_appearances check
+  // only fires for a team that has completed a game.
+  const playingTeams = leagueTeamsWithPlayers.filter((entry) => entry.kind !== 'shortRoster');
   const leagueGames = await Game.insertMany(
-    // Only the first four teams play; the last is the under-rostered team that
-    // deliberately has no games (so no_appearances stays a team-level signal).
-    buildSeedLeagueGames(userEntry.user._id, league, leagueTeamsWithPlayers.slice(0, 4)).map(
-      (game) => ({ ...game, seasonId: season._id })
-    ),
+    buildSeedLeagueGames(userEntry.user._id, league, playingTeams).map((game) => ({
+      ...game,
+      seasonId: season._id,
+    })),
     { ordered: true }
   );
   leagueGameCount += leagueGames.length;
@@ -994,6 +1268,58 @@ async function seedLeagueForUser(userEntry) {
     leaguePlayerCount,
     leagueGameCount,
     leagueEventCount,
+  };
+}
+
+// Standalone player claiming: a user asks to be linked to a roster slot on a
+// managed team and the team owner approves it. Seeding both an approved link
+// and a pending request means My Sporty has a one-off profile to show and the
+// Edit Team page has a request queue to act on, without anyone having to click
+// through the flow first.
+async function seedStandalonePlayerClaims(seededUsers, seededFeedEntries) {
+  const owner = seededFeedEntries.find(
+    (entry) => entry.email === seededLeagueBlueprint.ownerEmail && entry.team
+  );
+  if (!owner) return { approved: 0, pending: 0 };
+
+  // Two different accounts so the approved and pending states are visibly
+  // distinct, and neither is the owner (an owner claiming their own roster slot
+  // is a different, uninteresting case).
+  const [claimant, requester] = seededUsers.filter(
+    (entry) => entry.email !== seededLeagueBlueprint.ownerEmail
+  );
+  if (!claimant || !requester) return { approved: 0, pending: 0 };
+
+  const team = await Team.findById(owner.team._id);
+  const [approvedPlayer, pendingPlayer] = team.players;
+  if (!approvedPlayer || !pendingPlayer) return { approved: 0, pending: 0 };
+
+  approvedPlayer.claimedByUserId = claimant.user._id;
+  await team.save();
+
+  await PlayerClaimRequest.create([
+    {
+      teamId: team._id,
+      playerId: approvedPlayer._id,
+      requesterUserId: claimant.user._id,
+      status: 'approved',
+      reviewedByUserId: owner.user._id,
+      reviewedAt: new Date(),
+    },
+    {
+      teamId: team._id,
+      playerId: pendingPlayer._id,
+      requesterUserId: requester.user._id,
+      status: 'pending',
+    },
+  ]);
+
+  return {
+    approved: 1,
+    pending: 1,
+    teamName: team.name,
+    claimantEmail: claimant.email,
+    requesterEmail: requester.email,
   };
 }
 
@@ -1088,9 +1414,15 @@ function buildSeedPosts(entries) {
 }
 
 async function main() {
+  // Checked before connecting, so a misconfigured target never even opens a
+  // connection to something it might drop.
+  const target = assertDevTarget();
+
   await connectDb();
 
   try {
+    console.log(`Seeding ${target.dbName} at ${target.redactedUri}`);
+    console.log('Dropping existing database...');
     await resetSeedData();
     const seededUsers = await upsertSeedUsers();
 
@@ -1136,6 +1468,36 @@ async function main() {
     const primaryLeagueOwner = seededUsers.find(
       (entry) => entry.email === seededLeagueBlueprint.ownerEmail
     );
+
+    // The league owner also runs managed teams outside the league, so the Admin
+    // page shows both halves of the product for the account a developer signs
+    // in with. These get the same full roster + completed-game treatment as
+    // every other seeded team.
+    if (primaryLeagueOwner) {
+      for (const [extraIndex, extraTeamName] of ownerExtraTeamNames.entries()) {
+        const extraTeam = await Team.create({
+          ownerUserId: primaryLeagueOwner.user._id,
+          name: extraTeamName,
+          ...buildSeedPaidTeamProfile(primaryLeagueOwner),
+          homeVenue: {
+            arenaName: seededVenues[extraIndex % seededVenues.length].name,
+            ...seededVenues[extraIndex % seededVenues.length].address,
+          },
+          players: buildPlayerBlueprints(200 + extraIndex),
+        });
+
+        const extraGames = await Game.insertMany(
+          buildGameDocs(primaryLeagueOwner.user._id, extraTeam),
+          { ordered: true }
+        );
+
+        seededFeedEntries.push({ ...primaryLeagueOwner, team: extraTeam, games: extraGames });
+        teamCount += 1;
+        playerCount += extraTeam.players.length;
+        gameCount += extraGames.length;
+        eventCount += extraGames.reduce((total, game) => total + game.events.length, 0);
+      }
+    }
     if (primaryLeagueOwner) {
       const seededLeague = await seedLeagueForUser(primaryLeagueOwner);
       leagueCount += 1;
@@ -1144,6 +1506,8 @@ async function main() {
       leagueGameCount += seededLeague.leagueGameCount;
       leagueEventCount += seededLeague.leagueEventCount;
     }
+
+    const claimSummary = await seedStandalonePlayerClaims(seededUsers, seededFeedEntries);
 
     const seededPosts = buildSeedPosts(seededFeedEntries);
     await Post.insertMany(seededPosts.posts, { ordered: true });
@@ -1161,9 +1525,8 @@ async function main() {
     console.log(
       `Seeded League Owner: ${seededLeagueBlueprint.ownerEmail} (league premium, ${seedConfig.leaguePlayersPerTeam} players per league team)`
     );
-    console.log(`Starter Teams: ${seededUsers.filter((entry) => entry.plan === 'starter').length}`);
     console.log(
-      `Team Pro Teams: ${seededUsers.filter((entry) => entry.plan === 'team_pro').length}`
+      `Standalone Teams: ${teamCount} (${seededUsers.length} free, ${ownerExtraTeamNames.length} comped paid capacity)`
     );
     console.log(`Players: ${playerCount}`);
     console.log(`Games: ${gameCount}`);
@@ -1173,9 +1536,29 @@ async function main() {
     console.log(`Game Card Posts: ${postTypeCounts.gameCardCount}`);
     console.log(`Player Card Posts: ${postTypeCounts.playerCardCount}`);
     console.log(`Team Card Posts: ${postTypeCounts.teamCardCount}`);
-    console.log('Logins:');
+    console.log('');
+    console.log('='.repeat(64));
+    console.log('SIGN IN WITH');
+    console.log(`  Email:    ${seededLeagueBlueprint.ownerEmail}`);
+    console.log(`  Password: ${seedConfig.password}`);
+    console.log('');
+    console.log(`  Manages:  ${seededLeagueBlueprint.name} (${leagueTeamCount} teams)`);
+    console.log(`  Plus:     ${ownerExtraTeamNames.join(', ')} (managed teams)`);
+    console.log('='.repeat(64));
+    console.log('');
+
+    if (claimSummary.pending) {
+      console.log(
+        `Player claims on ${claimSummary.teamName}: 1 approved (${claimSummary.claimantEmail}), ` +
+          `1 pending review (${claimSummary.requesterEmail})`
+      );
+    }
+
+    console.log('All logins (password is the same for every account):');
     for (const entry of seededUsers) {
-      console.log(`- ${entry.email} (${entry.plan})`);
+      const state = entry.user.onboarding?.status || 'completed';
+      const note = state === 'completed' ? '' : `  [onboarding: ${state}]`;
+      console.log(`- ${entry.email} (${entry.plan})${note}`);
     }
   } finally {
     await mongoose.disconnect();
@@ -1191,6 +1574,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertDevTarget,
   randomInt,
   randomChoice,
   playerNamePool,
@@ -1201,4 +1585,5 @@ module.exports = {
   buildLeagueRosterSnapshot,
   buildLeagueGameEvents,
   attachTeamSide,
+  stampClockSnapshots,
 };

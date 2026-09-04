@@ -45,6 +45,71 @@ turning this file into a release log.
 - standalone-player account claiming and unified-profile support;
 - email or SMS game reminders and results.
 
+## Product Experience Queue
+
+Ordered from the smallest, most isolated changes to the broadest product and
+data-model work. Complete these one at a time so each change can be validated
+before the next begins.
+
+### Extra Small
+
+- [x] Remove the dark banner from the Admin page; the surrounding navigation
+      already makes the page context clear.
+- [x] Prevent the **Scheduled At** field from overflowing on game-creation
+      screens.
+- [x] Keep all three team-colour controls on one line on the Create Team page.
+
+### Small
+
+- [x] Simplify Discover so its primary content is visible immediately.
+  - [x] Remove the top banner.
+  - [x] Keep the Leagues, Teams, and Players tabs fixed at the top while the
+        user scrolls.
+  - [x] Within each tab, show only its search input and result cards.
+- [x] Improve the default icons and fallback treatments for teams and players.
+- [x] When a league has exactly two teams, let the game creator swap which team
+      is home and which is away.
+- [x] In My Sporty, explain that users can request to link a player profile and
+      link to Discover with the Players tab selected.
+
+### Medium
+
+- [x] Improve the public team page's Join tab.
+  - [x] Make the content more visual.
+  - [x] Add safeguards that discourage users from claiming a profile that is
+        not theirs.
+- [x] Let users sort a player's statistics by season and by category on public
+      player-profile pages.
+- [x] On a brand-new league with no teams, let the user create the home and away
+      teams directly from the league game-creation screen.
+- [x] Show a matchup preview on the game-details page before a scheduled game
+      has occurred.
+  - [x] For an in-progress game, consider showing the current score as a live
+        game tracker.
+
+### Large
+
+- [x] Add standalone-player account claiming and then let My Sporty show linked
+      profiles from managed teams as well as league teams.
+- [x] Add reusable venue selection to game creation alongside the existing
+      free-text venue entry.
+  - [x] Let users select a venue previously used by the league or team, or add a
+        new venue.
+  - [x] Store venue addresses so public game pages can provide a reference map.
+- [x] Preserve an anonymous user's attempted follow action for a league, team,
+      or player through authentication; after login, complete the follow and
+      return the user to the relevant page.
+- [x] Design a role-aware onboarding flow instead of dropping every new user on
+      the Pulse.
+  - [x] Support league managers, managers of league teams, managers of one-off
+        teams, and players.
+  - [x] Support casual users who only browse and follow: they get no
+        create/connect obligations and land on the Pulse.
+  - [x] Help each user create or connect all relevant profiles during setup.
+  - [x] Break the work into separately deliverable stages before implementation:
+        role selection; tailored create/connect actions; persisted completion
+        and an appropriate Admin or My Sporty handoff.
+
 ## Social Media And Marketing
 
 Product work that makes the low-friction campaign in
@@ -130,10 +195,10 @@ These apply to every new asset, not just the first three items.
 
 These are not content formats, but they affect whether attention can convert.
 
-| Idea                        | Size | Implemented | Notes                                                                                                                                                                                                                 |
-| --------------------------- | ---- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GBP pricing for UK market   | S    | No          | Display copy is USD (`$9/mo`, `$79/yr`, `$29/mo`, `$199/season`). Verify the authoritative Stripe price currency before changing copy.                                                                                |
-| Public launch of `/pricing` | M    | No          | Production currently redirects away. Until the launch decision is made, social CTAs should ask organisers to view the demo or enquire, not “buy now”. See [`pricing-manual-actions.md`](./pricing-manual-actions.md). |
+| Idea                        | Size | Implemented | Notes                                                                                                                                                                                 |
+| --------------------------- | ---- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GBP pricing for UK market   | S    | Yes         | Confirmed for the UK launch: first Team free, additional Teams £5/month, League £29/month, and League Plus £49/month. Stripe setup rejects non-GBP Prices.                            |
+| Public launch of `/pricing` | M    | No          | Production currently redirects away. Until the launch decision is made, social CTAs should ask organisers to view the demo or enquire, not “buy now”. See [`stripe.md`](./stripe.md). |
 
 ## Constraints
 

@@ -45,9 +45,10 @@ describe('NewTeamPage', () => {
 
     renderPage();
 
-    fireEvent.change(screen.getByLabelText(/Team Name/i), {
+    fireEvent.change(screen.getByLabelText('Team Name'), {
       target: { value: 'TSW Blue' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /Logo, colours and home venue/i }));
     fireEvent.change(screen.getByLabelText(/Arena Name/i), {
       target: { value: 'Main Gym' },
     });
@@ -66,14 +67,14 @@ describe('NewTeamPage', () => {
     fireEvent.change(screen.getByLabelText(/Country/i), {
       target: { value: 'Canada' },
     });
-    fireEvent.change(screen.getByPlaceholderText(/Player Name/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Player name/i), {
       target: { value: 'Jordan' },
     });
     fireEvent.change(screen.getByRole('combobox'), {
       target: { value: 'PG' },
     });
 
-    const colorInputs = screen.getAllByDisplayValue('#000000');
+    const colorInputs = screen.getAllByDisplayValue('#f4a300');
     fireEvent.change(colorInputs[0], {
       target: { value: '#112233' },
     });
@@ -97,15 +98,36 @@ describe('NewTeamPage', () => {
       });
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/pricing?teamId=team-1');
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/teams/team-1', {
+      state: { createdTeamName: 'TSW Blue' },
+    });
+  });
+
+  test('keeps all team colour controls in one row', () => {
+    renderPage();
+
+    // The colour slots live behind the "Logo, colours and home venue" disclosure.
+    fireEvent.click(screen.getByRole('button', { name: /Logo, colours and home venue/i }));
+
+    // grid-cols-3 with no sm: prefix — all three stay on one line at every width.
+    expect(screen.getByTestId('team-colour-grid')).toHaveClass('grid-cols-3');
+    const slots = screen.getAllByLabelText(/^Colour \d$/i);
+    expect(slots).toHaveLength(3);
+
+    // A Clear control only appears once a slot holds a colour, and it names its
+    // slot so three of them are distinguishable.
+    expect(screen.queryByRole('button', { name: 'Clear colour 1' })).not.toBeInTheDocument();
+    fireEvent.change(slots[0], { target: { value: '#123456' } });
+    expect(screen.getByRole('button', { name: 'Clear colour 1' })).toBeInTheDocument();
   });
 
   test('shows friendly inline errors when venue details are incomplete', async () => {
     renderPage();
 
-    fireEvent.change(screen.getByLabelText(/Team Name/i), {
+    fireEvent.change(screen.getByLabelText('Team Name'), {
       target: { value: 'TSW Blue' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /Logo, colours and home venue/i }));
     fireEvent.change(screen.getByLabelText(/Arena Name/i), {
       target: { value: 'Main Gym' },
     });

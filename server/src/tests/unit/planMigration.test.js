@@ -11,9 +11,9 @@ const {
 } = require('../../scripts/lib/planMigration');
 
 describe('planMigration.resolveTargetPlan (deterministic map)', () => {
-  it('maps legacy team plans to team_pro / starter', () => {
-    expect(resolveTargetPlan('team', { plan: 'pro' })).toBe('team_pro');
-    expect(resolveTargetPlan('team', { plan: 'team' })).toBe('team_pro');
+  it('maps legacy team plans to team_extra / starter', () => {
+    expect(resolveTargetPlan('team', { plan: 'pro' })).toBe('team_extra');
+    expect(resolveTargetPlan('team', { plan: 'team' })).toBe('team_extra');
     expect(resolveTargetPlan('team', { plan: 'free' })).toBe('starter');
     expect(resolveTargetPlan('team', { plan: undefined })).toBe('starter');
   });
@@ -25,7 +25,7 @@ describe('planMigration.resolveTargetPlan (deterministic map)', () => {
   });
 
   it('is idempotent on already-canonical values', () => {
-    expect(resolveTargetPlan('team', { plan: 'team_pro' })).toBe('team_pro');
+    expect(resolveTargetPlan('team', { plan: 'team_pro' })).toBe('team_extra');
     expect(resolveTargetPlan('team', { plan: 'starter' })).toBe('starter');
     expect(resolveTargetPlan('league', { plan: 'league' })).toBe('league');
   });
@@ -50,10 +50,10 @@ describe('planMigration.isWeballLeague / resolveBillingSource', () => {
 });
 
 describe('planMigration.mapUserPlan', () => {
-  it('maps pro→team_pro and free→starter', () => {
-    expect(mapUserPlan('pro')).toBe('team_pro');
+  it('maps every legacy user billing cache to starter', () => {
+    expect(mapUserPlan('pro')).toBe('starter');
     expect(mapUserPlan('free')).toBe('starter');
-    expect(mapUserPlan('team_pro')).toBe('team_pro');
+    expect(mapUserPlan('team_pro')).toBe('starter');
   });
 });
 
@@ -61,6 +61,7 @@ describe('planMigration.rollbackPlan (lossy inverse)', () => {
   it('restores a representative legacy value per scope', () => {
     expect(rollbackPlan('team', 'starter')).toBe('free');
     expect(rollbackPlan('team', 'team_pro')).toBe('team');
+    expect(rollbackPlan('team', 'team_extra')).toBe('team');
     expect(rollbackPlan('league', 'team_pro')).toBe('pro');
     expect(rollbackPlan('league', 'league')).toBe('league');
   });

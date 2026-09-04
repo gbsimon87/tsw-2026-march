@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { teamsApi } from '../api/teamsApi';
 import { gamesApi } from '../../games/api/gamesApi';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
@@ -7,6 +7,8 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { BillingStatusPill } from '../../billing/components/BillingStatusPill';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { SuccessBanner } from '../../../components/ui/SuccessBanner';
+import { primaryButtonClass } from '../../../components/ui/formStyles';
 
 function parseGameDate(game) {
   const rawDate =
@@ -43,6 +45,10 @@ function getGameStatus(game) {
 export function AdminTeamPage() {
   const { teamId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set by NewTeamPage on a successful create, so arriving here confirms the
+  // team exists instead of leaving the user to infer it.
+  const [createdTeamName, setCreatedTeamName] = useState(location.state?.createdTeamName || '');
   const [team, setTeam] = useState(null);
   const [games, setGames] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,10 +91,25 @@ export function AdminTeamPage() {
   const teamName = team.name || 'Unnamed Team';
   const activePlayerCount = (team.players || []).filter((player) => player.isActive).length;
   const breadcrumbs = [{ label: 'Admin', href: '/admin' }, { label: teamName }];
+  // Same approach as the New League button on AdminPage: a team that still needs
+  // its own subscription goes to pricing rather than into the game form, which
+  // could only end in a 402 the user has no way to act on.
+  const needsSubscription = team.billing?.canManage === false;
+  const newGameHref = needsSubscription
+    ? `/pricing?teamId=${encodeURIComponent(teamId)}#additional-team`
+    : `/games/new?teamId=${teamId}`;
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       <Breadcrumbs crumbs={breadcrumbs} />
+
+      {createdTeamName ? (
+        <SuccessBanner
+          headline={`${createdTeamName} is ready.`}
+          body="Track a game whenever you like — live stats and box scores are free on every plan."
+          onDismiss={() => setCreatedTeamName('')}
+        />
+      ) : null}
 
       <section
         aria-label={teamName}
@@ -116,7 +137,7 @@ export function AdminTeamPage() {
           />
           <div className="min-w-0">
             <h1
-              className="truncate text-xl text-white md:text-2xl"
+              className="text-balance text-xl text-white md:text-2xl"
               style={{ fontFamily: "'Archivo Black', sans-serif" }}
             >
               {teamName}
@@ -139,8 +160,8 @@ export function AdminTeamPage() {
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Link
-          to="/games/new"
-          className="flex items-center gap-3 rounded-xl border border-[#141414] bg-[#141414] px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1B4332]"
+          to={newGameHref}
+          className="flex items-center gap-3 rounded-xl border border-[#141414] bg-[#141414] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2a2a2a]"
         >
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12">
             <svg
@@ -154,7 +175,7 @@ export function AdminTeamPage() {
               <path d="M5 12h14" />
             </svg>
           </span>
-          <span>New Game</span>
+          <span>{needsSubscription ? 'Subscribe to Track' : 'New Game'}</span>
         </Link>
         <Link
           to={`/teams/${teamId}/edit`}
@@ -205,7 +226,17 @@ export function AdminTeamPage() {
           Every game tracked for this team, most recent first.
         </p>
         {games.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-600">No games recorded yet.</p>
+          <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+            <p className="text-base font-semibold text-slate-900">No games yet</p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">
+              {needsSubscription
+                ? `${teamName} is an additional team, so it needs its own £5/month subscription before you can track games with it.`
+                : 'Tracking takes a name and a tap. The box score builds itself as you go.'}
+            </p>
+            <Link to={newGameHref} className={`${primaryButtonClass} mt-5`}>
+              {needsSubscription ? 'See pricing' : 'Track your first game'}
+            </Link>
+          </div>
         ) : (
           <div className="mt-3 divide-y divide-slate-100">
             {[...games]

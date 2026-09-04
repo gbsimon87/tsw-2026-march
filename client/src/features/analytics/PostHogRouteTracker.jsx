@@ -54,10 +54,10 @@ function getRoutePattern(pathname) {
 
 function getSafeUserProperties(user) {
   return {
-    // Audit M7: the server sends canonical plan ids ('starter'/'team_pro') and no
+    // The user-level plan is only a legacy analytics cache and now stays Starter; no
     // longer serializes user.leagueBilling (dropped in T-25), so the old
     // leaguePlan/leagueSubscriptionStatus props reported 'free' for every user.
-    // Drop them and use the canonical fallback.
+    // billing access is inferred from this field.
     plan: user.plan || 'starter',
     roles: user.roles || [],
     emailVerified: Boolean(user.emailVerified),

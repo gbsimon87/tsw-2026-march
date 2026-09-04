@@ -8,6 +8,30 @@ jest.mock('../../modules/games/games.repository', () => ({
   saveGameSummary: jest.fn(),
 }));
 
+jest.mock('../../modules/teams/teams.repository', () => ({
+  findTeamByIdAndOwner: jest.fn(async (_teamId, userId) => ({
+    _id: '507f1f77bcf86cd799439016',
+    ownerUserId: userId,
+    capacityType: 'free',
+  })),
+  findTeamById: jest.fn(),
+}));
+
+jest.mock('../../modules/leagues/leagues.repository', () => ({
+  findLeagueById: jest.fn(async () => ({
+    _id: '507f1f77bcf86cd799439013',
+    plan: 'league_plus',
+    subscriptionStatus: 'inactive',
+    billingSource: 'comp',
+  })),
+}));
+
+jest.mock('../../modules/billing/billing.service', () => ({
+  getBillingSummary: jest.fn(() => ({})),
+  getLeagueBillingSummary: jest.fn(() => ({})),
+  assertTeamManagementAllowed: jest.fn(),
+}));
+
 jest.mock('../../modules/leagues/leagues.service', () => ({
   addPlayerToLeagueTeam: jest.fn(),
   getLeagueContextForGame: jest.fn(),
@@ -65,6 +89,7 @@ function standaloneDualGame(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  saveGame.mockImplementation(async (game) => game);
   // Shaped like the real sanitizeLeaguePlayer output (leagues.service.js:174).
   leaguesService.addPlayerToLeagueTeam.mockResolvedValue({
     id: 'lp-1',

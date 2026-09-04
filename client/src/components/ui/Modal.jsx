@@ -1,9 +1,19 @@
-import { useEffect, useId, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+
+function readMs(name, fallback) {
+  if (typeof window === 'undefined') return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 export function Modal({
   open,
   onClose,
   title,
+  // A dialog with no visible title still needs an accessible name, so callers
+  // that omit `title` must pass one here.
+  ariaLabel = 'Dialog',
   children,
   panelClassName = '',
   showCloseButton = true,
@@ -11,6 +21,36 @@ export function Modal({
 }) {
   const titleId = useId();
   const closeButtonRef = useRef(null);
+  const panelRef = useRef(null);
+  // `open` flips instantly; `isMounted` lags behind it on close so the exit
+  // animation has time to run before the panel leaves the tree.
+  const [isMounted, setIsMounted] = useState(open);
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setIsMounted(true);
+      setIsClosing(false);
+      return undefined;
+    }
+
+    if (!isMounted) {
+      return undefined;
+    }
+
+    setIsClosing(true);
+    const timer = window.setTimeout(
+      () => {
+        setIsMounted(false);
+        // Without this the next open would start from the closing scale instead
+        // of the resting pre-open one.
+        setIsClosing(false);
+      },
+      readMs('--modal-close-dur', 150)
+    );
+
+    return () => window.clearTimeout(timer);
+  }, [open, isMounted]);
 
   useEffect(() => {
     if (!open) {
@@ -35,13 +75,17 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) {
+  const requestClose = useCallback(() => onClose(), [onClose]);
+
+  if (!isMounted) {
     return null;
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm"
+      className={`t-modal-backdrop fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm ${
+        isClosing ? 'is-closing pointer-events-none' : ''
+      }`}
       style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
     >
       <button
@@ -49,7 +93,7 @@ export function Modal({
         aria-label="Close dialog"
         tabIndex={-1}
         className="fixed inset-0 h-full w-full cursor-default"
-        onClick={onClose}
+        onClick={requestClose}
       />
       <div
         className={`flex min-h-full justify-center ${
@@ -57,10 +101,14 @@ export function Modal({
         }`}
       >
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="true"
+          aria-label={title ? undefined : ariaLabel}
           aria-labelledby={title ? titleId : undefined}
-          className={`relative w-full overflow-hidden bg-white shadow-2xl ${
+          className={`t-modal relative w-full overflow-hidden bg-white shadow-2xl ${
+            isClosing ? 'is-closing' : ''
+          } ${
             mobileEdgeToEdge
               ? 'max-h-[100dvh] max-w-none rounded-none sm:max-h-[90vh] sm:max-w-2xl sm:rounded-3xl'
               : 'max-h-[90vh] max-w-2xl rounded-3xl'
@@ -72,7 +120,7 @@ export function Modal({
               type="button"
               aria-label="Close dialog"
               className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-400"
-              onClick={onClose}
+              onClick={requestClose}
             >
               <svg
                 viewBox="0 0 20 20"

@@ -1,11 +1,13 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { PublicLeagueTeamPage } from './PublicLeagueTeamPage';
 import { leaguesApi } from '../api/leaguesApi';
 
+const authState = { user: null };
+
 vi.mock('../../../app/store/AuthContext', () => ({
-  useAuth: () => ({ user: null }),
+  useAuth: () => authState,
 }));
 
 vi.mock('../api/leaguesApi', () => ({
@@ -69,6 +71,8 @@ function renderPage() {
 describe('PublicLeagueTeamPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authState.user = null;
+    sessionStorage.clear();
     leaguesApi.getPublicTeam.mockResolvedValue(response);
   });
 
@@ -82,5 +86,112 @@ describe('PublicLeagueTeamPage', () => {
     expect(loss).toHaveTextContent('L');
     expect(win.compareDocumentPosition(loss)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(leaguesApi.getPublicTeam).toHaveBeenCalledWith('metro-league', 'falcons');
+  });
+
+  test('requires users to confirm a player profile is theirs before requesting it', async () => {
+    leaguesApi.getPublicTeam.mockResolvedValue({
+      ...response,
+      team: {
+        ...response.team,
+        roster: [
+          {
+            id: 'player-1',
+            displayName: 'Jamie Rivera',
+            isClaimed: false,
+            isActive: true,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Player — claim my profile' }));
+
+    const submitButton = screen.getByRole('button', { name: 'Submit Request' });
+    expect(screen.getByText(/team managers review every request/i)).toBeInTheDocument();
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'player-1' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I confirm this is my player profile' }));
+
+    expect(submitButton).toBeEnabled();
+  });
+
+  test('does not offer a player claim when no unclaimed roster profiles exist', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Player — claim my profile' })).toBeDisabled();
+    expect(
+      screen.getByText(/no unclaimed player profiles are currently available/i)
+    ).toBeInTheDocument();
+  });
+
+  test('stashes an anonymous join attempt and sends the visitor to log in', async () => {
+    leaguesApi.getPublicTeam.mockResolvedValue({
+      ...response,
+      team: {
+        ...response.team,
+        roster: [{ id: 'player-1', displayName: 'Jamie Rivera', isClaimed: false, isActive: true }],
+      },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Player — claim my profile' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'player-1' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I confirm this is my player profile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Request' }));
+
+    expect(JSON.parse(sessionStorage.getItem('join_pending_metro-league_falcons'))).toEqual({
+      rolePlayer: true,
+      roleTeamManager: false,
+      requestedLeaguePlayerId: 'player-1',
+    });
+    expect(leaguesApi.createJoinRequest).not.toHaveBeenCalled();
+  });
+
+  // Regression: the pending payload used to be written and never read, so the
+  // visitor came back from login to an empty form.
+  test('restores a stashed join attempt after the visitor signs in', async () => {
+    authState.user = { id: 'user-1', name: 'Jamie' };
+    sessionStorage.setItem(
+      'join_pending_metro-league_falcons',
+      JSON.stringify({
+        rolePlayer: true,
+        roleTeamManager: true,
+        requestedLeaguePlayerId: 'player-1',
+      })
+    );
+    leaguesApi.getPublicTeam.mockResolvedValue({
+      ...response,
+      team: {
+        ...response.team,
+        roster: [{ id: 'player-1', displayName: 'Jamie Rivera', isClaimed: false, isActive: true }],
+      },
+    });
+
+    renderPage();
+
+    // Lands straight on the Join tab with the selection restored.
+    expect(
+      await screen.findByRole('checkbox', { name: 'Player — claim my profile' })
+    ).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Team Manager' })).toBeChecked();
+    expect(screen.getByRole('combobox')).toHaveValue('player-1');
+
+    // The ownership confirmation is not restored, so the claim stays an
+    // explicit post-login act and Submit remains closed until re-ticked.
+    expect(
+      screen.getByRole('checkbox', { name: 'I confirm this is my player profile' })
+    ).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Submit Request' })).toBeDisabled();
+
+    // The key is consumed, not left to leak.
+    expect(sessionStorage.getItem('join_pending_metro-league_falcons')).toBeNull();
   });
 });

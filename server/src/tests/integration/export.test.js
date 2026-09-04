@@ -241,7 +241,7 @@ describe('export routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
-    test('402 when the league lacks canExportCsv (free/inactive) — T-15', async () => {
+    test('keeps CSV exports available when League management is read-only', async () => {
       leaguesService.assertLeagueManagerOrOwner.mockResolvedValue({
         league: { name: 'Free League', plan: 'free', subscriptionStatus: 'inactive' },
         role: 'owner',
@@ -251,7 +251,7 @@ describe('export routes', () => {
         .get(`/api/v1/export/leagues/${LEAGUE_ID}/season/${SEASON_ID}`)
         .set('Authorization', bearer());
 
-      expect(res.statusCode).toBe(402);
+      expect(res.statusCode).toBe(200);
     });
   });
 
@@ -318,7 +318,7 @@ describe('export routes', () => {
       expect(res.statusCode).toBe(403);
     });
 
-    test('402 when the league lacks canExportCsv (free/inactive) — T-15', async () => {
+    test('keeps team CSV exports available when League management is read-only', async () => {
       leaguesService.assertTeamManagerOrOwner.mockResolvedValue({
         league: { name: 'Free League', plan: 'free', subscriptionStatus: 'inactive' },
         role: 'manager',
@@ -328,7 +328,7 @@ describe('export routes', () => {
         .get(`/api/v1/export/leagues/${LEAGUE_ID}/teams/${TEAM_ID}/season/${SEASON_ID}`)
         .set('Authorization', bearer());
 
-      expect(res.statusCode).toBe(402);
+      expect(res.statusCode).toBe(200);
     });
   });
 });

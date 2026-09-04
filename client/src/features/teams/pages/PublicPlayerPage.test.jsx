@@ -21,6 +21,7 @@ const feedApiMocks = vi.hoisted(() => ({
 vi.mock('../api/teamsApi', () => ({
   teamsApi: {
     getPublicPlayerById: vi.fn(),
+    createPlayerClaimRequest: vi.fn(),
   },
 }));
 
@@ -50,6 +51,9 @@ describe('PublicPlayerPage', () => {
     feedApiMocks.listShareablePlayers.mockResolvedValue({ players: [] });
     feedApiMocks.listShareableTeams.mockResolvedValue({ teams: [] });
     feedApiMocks.createPlayerCardPost.mockResolvedValue({ post: { id: 'post-1' } });
+    teamsApi.createPlayerClaimRequest.mockResolvedValue({
+      request: { id: 'request-1', status: 'pending' },
+    });
   });
 
   afterEach(() => {
@@ -187,7 +191,7 @@ describe('PublicPlayerPage', () => {
     );
     expect(screen.getByText('Totals')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Totals' })).not.toBeInTheDocument();
-    expect(screen.getByText('Season')).toBeInTheDocument();
+    expect(screen.getAllByText('Season').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('6/8')).toBeInTheDocument();
     expect(screen.getByText('8/12')).toBeInTheDocument();
     expect(screen.getByText('1/5')).toBeInTheDocument();
@@ -280,7 +284,53 @@ describe('PublicPlayerPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Player' })).toHaveClass('bg-slate-900');
-    expect(screen.getByRole('combobox')).toHaveValue('p1');
+    expect(screen.getByRole('combobox', { name: 'player-name' })).toHaveValue('p1');
+  });
+
+  test('filters the profile totals and game log by season and stat category', async () => {
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null, colors: [] },
+      player: {
+        id: 'p1',
+        displayName: 'Alex Carter',
+        jerseyNumber: null,
+        position: null,
+        image: null,
+      },
+      games: [
+        {
+          gameId: 'new-game',
+          opponent: 'New Opponent',
+          date: '2026-03-12T00:00:00.000Z',
+          stats: { points: 10, reb: 4, ast: 2, stl: 1 },
+        },
+        {
+          gameId: 'old-game',
+          opponent: 'Old Opponent',
+          date: '2025-03-12T00:00:00.000Z',
+          stats: { points: 20, reb: 8, ast: 6, stl: 3 },
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('New Opponent')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Season' }), {
+      target: { value: 'year:2025' },
+    });
+
+    expect(screen.queryByText('New Opponent')).not.toBeInTheDocument();
+    expect(screen.getByText('Old Opponent')).toBeInTheDocument();
+    expect(screen.getByText('1 game in this view')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'defense' },
+    });
+
+    expect(screen.queryByRole('button', { name: /FT/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /STL/i })).toBeInTheDocument();
+    expect(screen.getByText('SPG')).toBeInTheDocument();
   });
 
   test('redirects logged-out users to login when posting to The Pulse', async () => {
@@ -317,5 +367,33 @@ describe('PublicPlayerPage', () => {
     expect(await screen.findByRole('button', { name: 'Share to The Pulse' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Share to The Pulse' }));
     expect(await screen.findByText('Login Page')).toBeInTheDocument();
+  });
+
+  test('requires confirmation before requesting a standalone player profile', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'TSW Varsity', logo: null, colors: [] },
+      player: {
+        id: 'p1',
+        displayName: 'Alex Carter',
+        jerseyNumber: 12,
+        position: 'PG',
+        image: null,
+        isClaimed: false,
+      },
+      games: [],
+    });
+
+    renderPage();
+
+    const claimButton = await screen.findByRole('button', { name: 'Request this profile' });
+    expect(claimButton).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(claimButton);
+
+    await waitFor(() => {
+      expect(teamsApi.createPlayerClaimRequest).toHaveBeenCalledWith('team-1', 'p1');
+    });
+    expect(screen.getByText(/Request sent to the team owner/i)).toBeInTheDocument();
   });
 });

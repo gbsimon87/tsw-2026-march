@@ -210,12 +210,18 @@ access; team export also permits that team's manager.
 
 ```text
 GET  /billing/catalog                               public
+GET  /billing/checkout-status                       authenticated owner only
 POST /billing/team-checkout
 POST /billing/league-checkout
 POST /billing/customer-portal
+POST /billing/league-plan-change
+POST /billing/free-team
 POST /billing/checkout-session                      legacy alias
 POST /billing/webhooks                              public, Stripe-signed raw body
 ```
 
-Checkout interval is `monthly` or `season`. Stripe webhooks, not checkout
-redirects, update billing state. See [`pricing.md`](./pricing.md).
+`team-checkout` accepts `{ teamId }`. `league-checkout` accepts `{ planId,
+leagueId? }`, where `planId` is `league` or `league_plus`.
+`league-plan-change` accepts `{ leagueId, planId }`. `free-team` accepts `{
+teamId }`. All paid plans are monthly. Stripe webhooks, not checkout redirects,
+update billing state. See [`stripe.md`](./stripe.md).

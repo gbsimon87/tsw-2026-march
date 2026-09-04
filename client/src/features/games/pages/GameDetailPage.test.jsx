@@ -423,6 +423,7 @@ describe('GameDetailPage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Replay' }));
     expect(screen.getByText('Event 1 of 4')).toBeInTheDocument();
+    expect(screen.getByTestId('replay-shot-map')).toHaveClass('max-w-[280px]');
     expect(screen.getAllByTestId('replay-marker')).toHaveLength(1);
     expect(screen.getByTestId('replay-box-score')).toBeInTheDocument();
     expect(screen.getByText('Alex')).toBeInTheDocument();
@@ -534,7 +535,7 @@ describe('GameDetailPage', () => {
     );
   });
 
-  test('locks replay for non-pro teams', async () => {
+  test('shows replay to free teams', async () => {
     apiMocks.getById.mockResolvedValue({
       game: {
         id: 'game-2',
@@ -613,8 +614,8 @@ describe('GameDetailPage', () => {
 
     expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
-    expect(screen.getByText(/Upgrade to the Team Pro plan to unlock this/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to .* to unlock this/i)).not.toBeInTheDocument();
+    expect(screen.getByText('No coordinate-based events recorded for replay.')).toBeInTheDocument();
   });
 
   test('replays dual-team games with side filters and side-specific box scores', async () => {
@@ -754,7 +755,7 @@ describe('GameDetailPage', () => {
     expect(screen.queryByTestId('replay-box-score-home')).not.toBeInTheDocument();
   });
 
-  test('keeps replay locked for a pro user viewing a free team game', async () => {
+  test('shows replay for a legacy pro user viewing a free team game', async () => {
     authMocks.useAuth.mockReturnValue({
       user: {
         id: 'user-1',
@@ -841,8 +842,8 @@ describe('GameDetailPage', () => {
 
     expect((await screen.findAllByRole('tab', { name: 'Replay' })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('tab', { name: 'Replay' })[0]);
-    expect(screen.getByText(/Upgrade to the Team Pro plan to unlock this/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('replay-box-score')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to .* to unlock this/i)).not.toBeInTheDocument();
+    expect(screen.getByText('No coordinate-based events recorded for replay.')).toBeInTheDocument();
   });
 
   test('renders a saved AI summary in the recap panel while keeping the game video visible', async () => {
@@ -1231,6 +1232,13 @@ describe('GameDetailPage', () => {
         trackingMode: 'dual_team',
         ownerUserId: 'user-1',
         scheduledAt: '2026-09-14T19:15:00.000Z',
+        venue: 'Central Sports Hall',
+        venueAddress: {
+          addressLine1: '10 Court Road',
+          city: 'Bournemouth',
+          postalCode: 'BH1 1AA',
+          country: 'UK',
+        },
         createdAt: '2026-08-23T00:00:00.000Z',
         events: [],
       },
@@ -1247,8 +1255,16 @@ describe('GameDetailPage', () => {
         name: 'Dorset Basketball Association',
       },
       participants: {
-        home: { displayName: 'BG Suns 1', slug: 'bg-suns-1' },
-        away: { displayName: 'Bournemouth Bears', slug: 'bournemouth-bears' },
+        home: {
+          displayName: 'BG Suns 1',
+          slug: 'bg-suns-1',
+          players: [{ id: 'home-1', displayName: 'Home Player' }],
+        },
+        away: {
+          displayName: 'Bournemouth Bears',
+          slug: 'bournemouth-bears',
+          players: [{ id: 'away-1', displayName: 'Away Player' }],
+        },
       },
       boxScore: null,
       recap: null,
@@ -1265,6 +1281,60 @@ describe('GameDetailPage', () => {
     expect(await screen.findByRole('link', { name: 'Start Tracking' })).toHaveAttribute(
       'href',
       '/games/game-1/track'
+    );
+    expect(screen.getByText('Matchup preview')).toBeInTheDocument();
+    expect(screen.getByText('Central Sports Hall')).toBeInTheDocument();
+    expect(screen.getByText('10 Court Road, Bournemouth, BH1 1AA, UK')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View map' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('google.com/maps/search')
+    );
+    expect(screen.getAllByText('1 rostered player')).toHaveLength(2);
+    expect(screen.queryByRole('tab', { name: 'Recap' })).not.toBeInTheDocument();
+  });
+
+  test('shows an auto-updating live score for an in-progress game', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'live-game',
+        title: 'Falcons at Wolves',
+        status: 'in_progress',
+        gameContext: 'league',
+        trackingMode: 'dual_team',
+        ownerUserId: 'user-1',
+        createdAt: '2026-09-14T18:00:00.000Z',
+        events: [],
+      },
+      team: { id: 'home', name: 'Wolves', players: [], entitlements: {} },
+      league: { id: 'league-1', slug: 'city-league', name: 'City League' },
+      participants: {
+        home: { displayName: 'Wolves', slug: 'wolves', players: [] },
+        away: { displayName: 'Falcons', slug: 'falcons', players: [] },
+      },
+      boxScore: {
+        home: { players: [], totals: { points: 31 } },
+        away: { players: [], totals: { points: 27 } },
+      },
+      gameSummary: { homePoints: 31, awayPoints: 27 },
+      recap: null,
+    });
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/games/live-game']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Live score')).toBeInTheDocument();
+    expect(screen.getByText('Updates automatically every 15 seconds')).toBeInTheDocument();
+    expect(screen.getAllByText('31').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('27').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Continue Tracking' })).toHaveAttribute(
+      'href',
+      '/games/live-game/track'
     );
   });
 });

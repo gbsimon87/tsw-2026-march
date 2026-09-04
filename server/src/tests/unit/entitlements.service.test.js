@@ -1,6 +1,6 @@
 // Central entitlement resolver. Replaces the scattered isTeamActive/isLeagueActive
 // checks and the dead auth.service league path.
-// See docs/pricing.md.
+// See docs/stripe.md.
 
 jest.mock('../../config/env', () => ({ env: {} }));
 
@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe('resolveEntitlements (pure core)', () => {
-  it('active Stripe team_pro grants team premium features', () => {
+  it('active additional-team subscription grants team features', () => {
     const r = resolveEntitlements({
       scope: 'team',
       plan: 'team_pro',
@@ -40,7 +40,7 @@ describe('resolveEntitlements (pure core)', () => {
       billingSource: 'stripe',
     });
     expect(r.active).toBe(true);
-    expect(r.planId).toBe('team_pro');
+    expect(r.planId).toBe('team_extra');
     expect(r.entitlements.canViewReplay).toBe(true);
     expect(r.entitlements.canExportCsv).toBe(true);
   });
@@ -56,7 +56,7 @@ describe('resolveEntitlements (pure core)', () => {
     expect(r.entitlements.canViewReplay).toBe(true);
   });
 
-  it('past_due team_pro falls back to starter entitlements (free core stays)', () => {
+  it('past_due additional team keeps free features but loses paid management state', () => {
     const r = resolveEntitlements({
       scope: 'team',
       plan: 'team_pro',
@@ -64,11 +64,11 @@ describe('resolveEntitlements (pure core)', () => {
       billingSource: 'stripe',
     });
     expect(r.active).toBe(false);
-    expect(r.entitlements.canViewReplay).toBe(false);
+    expect(r.entitlements.canViewReplay).toBe(true);
     expect(r.entitlements.canTrackStats).toBe(true); // free core
   });
 
-  it('active league grants management AND bundled team_pro features', () => {
+  it('active league grants management and all bundled team features', () => {
     const r = resolveEntitlements({
       scope: 'league',
       plan: 'league',
@@ -119,7 +119,7 @@ describe('resolveEntitlements (pure core)', () => {
       subscriptionStatus: 'active',
       billingSource: 'stripe',
     });
-    expect(team.planId).toBe('team_pro');
+    expect(team.planId).toBe('team_extra');
     expect(team.entitlements.canViewReplay).toBe(true);
 
     const league = resolveEntitlements({
@@ -160,7 +160,7 @@ describe('resolveForLeagueTeam (cascade via parent league)', () => {
   it('grants the parent league entitlements to a league team', async () => {
     findLeagueById.mockResolvedValue({ plan: 'league', subscriptionStatus: 'active' });
     const r = await resolveForLeagueTeam({ leagueId: 'L1' });
-    expect(r.entitlements.canRichPlayerProfiles).toBe(true);
+    expect(r.entitlements.canRichPlayerProfiles).toBe(false);
     expect(r.entitlements.canViewReplay).toBe(true);
   });
 
@@ -181,14 +181,14 @@ describe('resolveForLeagueTeam (cascade via parent league)', () => {
 });
 
 describe('resolveForUser (aggregate, from owned resources)', () => {
-  it('is team_pro when the user owns any active team', async () => {
+  it('keeps the legacy user cache at starter when the user owns an active team', async () => {
     listTeamsByOwner.mockResolvedValue([
       { plan: 'starter', subscriptionStatus: 'inactive' },
       { plan: 'team_pro', subscriptionStatus: 'active' },
     ]);
     findLeaguesByOwner.mockResolvedValue([]);
     const r = await resolveForUser('u1');
-    expect(r.plan).toBe('team_pro');
+    expect(r.plan).toBe('starter');
     expect(r.hasActiveTeam).toBe(true);
   });
 

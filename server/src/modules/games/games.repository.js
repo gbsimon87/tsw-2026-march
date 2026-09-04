@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { STAT_TYPES, SHOT_ZONE_IDS, TEAM_SIDES } = require('../shared/stats.constants');
 const { applyIdCursor } = require('../../utils/pagination');
 const { SPORTS, DEFAULT_GAME_FORMAT, createReadyClock } = require('../shared/gameClock');
+const { COURT_LAYOUT_IDS, CURRENT_COURT_LAYOUT_ID } = require('../shared/courtLayouts');
 
 const gameFormatSchema = new mongoose.Schema(
   {
@@ -58,6 +59,18 @@ const participantSchema = new mongoose.Schema(
     colors: { type: [String], default: [] },
     billingSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
     entitlementsSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
+const venueAddressSchema = new mongoose.Schema(
+  {
+    addressLine1: { type: String, trim: true, maxlength: 160, default: null },
+    addressLine2: { type: String, trim: true, maxlength: 160, default: null },
+    city: { type: String, trim: true, maxlength: 100, default: null },
+    state: { type: String, trim: true, maxlength: 100, default: null },
+    postalCode: { type: String, trim: true, maxlength: 32, default: null },
+    country: { type: String, trim: true, maxlength: 100, default: null },
   },
   { _id: false }
 );
@@ -178,6 +191,11 @@ const gameSchema = new mongoose.Schema(
       index: true,
     },
     sport: { type: String, enum: [SPORTS.BASKETBALL], default: SPORTS.BASKETBALL, required: true },
+    // Which court image this game's event x/y percentages belong to. No schema
+    // default on purpose - an absent value means the game predates versioning
+    // and must render on the original court. Stamped at creation and never
+    // changed afterwards; completing or reopening a game must not move it.
+    courtLayoutId: { type: String, enum: COURT_LAYOUT_IDS, required: false },
     gameFormat: {
       type: gameFormatSchema,
       default: () => ({ ...DEFAULT_GAME_FORMAT }),
@@ -250,9 +268,10 @@ const gameSchema = new mongoose.Schema(
     awayCurrentLineupPlayerIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     scheduledAt: { type: Date },
     // Schedule Builder: free-text location for a fixture. Venue entities (with
-    // capacity, double-booking checks and a map) are a separate future feature;
-    // this is deliberately just a label.
+    // Venue remains a reusable display label. The optional address supports a
+    // public map link; capacity and double-booking rules remain out of scope.
     venue: { type: String, trim: true, maxlength: 120 },
+    venueAddress: { type: venueAddressSchema, default: null },
     completedAt: { type: Date },
     rosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
     homeRosterSnapshot: { type: [rosterSnapshotPlayerSchema], default: [] },
@@ -312,7 +331,10 @@ gameSchema.index({ awayLeagueTeamId: 1, createdAt: -1 });
 const Game = mongoose.models.Game || mongoose.model('Game', gameSchema);
 
 async function createGame(input) {
-  return Game.create(input);
+  // Stamped here rather than in each service branch so no creation path can
+  // drift into producing an unstamped (and therefore legacy) new game. Tests
+  // and a rollback build can still pass an explicit id.
+  return Game.create({ courtLayoutId: CURRENT_COURT_LAYOUT_ID, ...input });
 }
 
 async function listGamesByOwner(ownerUserId, filter = {}) {
@@ -420,6 +442,7 @@ async function listLeagueGamesForCompleteness(leagueId, seasonId) {
       status: 1,
       scheduledAt: 1,
       venue: 1,
+      venueAddress: 1,
       trackingMode: 1,
       homeLeagueTeamId: 1,
       awayLeagueTeamId: 1,
@@ -517,7 +540,11 @@ async function saveGameSummary(gameId, lockId, summary) {
 // so the whole batch fails together rather than leaving a half-built schedule —
 // the endpoint contract is all-or-nothing.
 async function insertManyGames(docs) {
-  return Game.insertMany(docs, { ordered: true });
+  // Schedule Builder fixtures bypass createGame, so they need the same stamp.
+  return Game.insertMany(
+    docs.map((doc) => ({ courtLayoutId: CURRENT_COURT_LAYOUT_ID, ...doc })),
+    { ordered: true }
+  );
 }
 
 // Schedule Builder: only a future fixture that nobody has started is safe to

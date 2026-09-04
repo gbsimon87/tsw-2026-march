@@ -2,7 +2,10 @@ const { ApiError } = require('../../utils/apiError');
 const {
   teamCheckoutSchema,
   leagueCheckoutSchema,
+  leaguePlanChangeSchema,
+  chooseFreeTeamSchema,
   customerPortalSchema,
+  checkoutStatusSchema,
 } = require('./billing.validation');
 const billingService = require('./billing.service');
 const { getDisplayCatalog } = require('./plan-catalog');
@@ -25,29 +28,25 @@ function requireAuthUserId(req) {
 async function createCheckoutSession(req, res) {
   const userId = requireAuthUserId(req);
   const payload = teamCheckoutSchema.parse(req.body);
-  const result = await billingService.createTeamCheckoutSession(
-    userId,
-    payload.teamId,
-    payload.interval
-  );
+  const result = await billingService.createTeamCheckoutSession(userId, payload.teamId);
   res.status(200).json(result);
 }
 
 async function createTeamCheckoutSession(req, res) {
   const userId = requireAuthUserId(req);
   const payload = teamCheckoutSchema.parse(req.body);
-  const result = await billingService.createTeamCheckoutSession(
-    userId,
-    payload.teamId,
-    payload.interval
-  );
+  const result = await billingService.createTeamCheckoutSession(userId, payload.teamId);
   res.status(200).json(result);
 }
 
 async function createLeagueCheckoutSession(req, res) {
   const userId = requireAuthUserId(req);
   const payload = leagueCheckoutSchema.parse(req.body);
-  const result = await billingService.createLeagueCheckoutSession(userId, payload.interval);
+  const result = await billingService.createLeagueCheckoutSession(
+    userId,
+    payload.planId,
+    payload.leagueId
+  );
   res.status(200).json(result);
 }
 
@@ -65,6 +64,27 @@ async function createCustomerPortalSession(req, res) {
   res.status(200).json(result);
 }
 
+async function getCheckoutStatus(req, res) {
+  const userId = requireAuthUserId(req);
+  const { sessionId } = checkoutStatusSchema.parse(req.query);
+  const result = await billingService.getCheckoutStatus(userId, sessionId);
+  res.status(200).json(result);
+}
+
+async function changeLeaguePlan(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = leaguePlanChangeSchema.parse(req.body);
+  const result = await billingService.changeLeaguePlan(userId, payload.leagueId, payload.planId);
+  res.status(200).json(result);
+}
+
+async function chooseFreeTeam(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = chooseFreeTeamSchema.parse(req.body);
+  const result = await billingService.chooseFreeTeam(userId, payload.teamId);
+  res.status(200).json(result);
+}
+
 async function handleWebhook(req, res) {
   const signature = req.headers['stripe-signature'];
   if (!signature) throw new ApiError(400, 'Missing stripe-signature header');
@@ -79,5 +99,8 @@ module.exports = {
   createTeamCheckoutSession,
   createLeagueCheckoutSession,
   createCustomerPortalSession,
+  getCheckoutStatus,
+  changeLeaguePlan,
+  chooseFreeTeam,
   handleWebhook,
 };

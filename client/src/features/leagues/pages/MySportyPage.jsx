@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { leaguesApi } from '../api/leaguesApi';
 import { authApi } from '../../auth/api/authApi';
@@ -8,6 +9,8 @@ import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { ProfileCard } from '../../players/components/ProfileCard';
 import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
+import { primaryButtonClass, secondaryButtonClass } from '../../../components/ui/formStyles';
+import { teamsApi } from '../../teams/api/teamsApi';
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
@@ -25,10 +28,21 @@ export function MySportyPage() {
     error: queryError,
   } = useQuery({
     queryKey: ['myProfiles'],
-    queryFn: () => leaguesApi.getMyProfiles(),
+    queryFn: async () => {
+      const [leagueResult, standaloneResult] = await Promise.all([
+        leaguesApi.getMyProfiles(),
+        teamsApi.getMyPlayerProfiles(),
+      ]);
+      return {
+        leagueProfiles: leagueResult.profiles || [],
+        standaloneProfiles: standaloneResult.profiles || [],
+      };
+    },
   });
 
-  const profiles = data?.profiles || [];
+  const leagueProfiles = data?.leagueProfiles || [];
+  const standaloneProfiles = data?.standaloneProfiles || [];
+  const profiles = [...leagueProfiles, ...standaloneProfiles];
   const error = isError ? queryError?.message || 'Failed to load profiles' : '';
 
   async function handleAvatarChange(event) {
@@ -57,7 +71,7 @@ export function MySportyPage() {
   }
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
+    <main className="space-y-6">
       {/* Player card header */}
       <section
         aria-label="My Sporty"
@@ -140,12 +154,12 @@ export function MySportyPage() {
               My Account
             </p>
             <h1
-              className="mt-2 truncate text-3xl leading-none text-white md:text-4xl"
+              className="mt-2 text-balance text-3xl leading-tight text-white md:text-4xl"
               style={{ fontFamily: "'Archivo Black', sans-serif" }}
             >
               {user?.name || 'My Sporty'}
             </h1>
-            <p className="mt-3 text-white/60">Claimed league profiles for your account.</p>
+            <p className="mt-3 text-white/60">Player profiles linked to your account.</p>
             {avatarError ? <p className="mt-2 text-sm text-[#F4A300]">{avatarError}</p> : null}
           </div>
         </div>
@@ -161,10 +175,10 @@ export function MySportyPage() {
               className="mt-1 text-2xl text-slate-900"
               style={{ fontFamily: "'Archivo Black', sans-serif" }}
             >
-              League Profiles
+              Player Profiles
             </h2>
           </div>
-          {profiles.length > 0 ? (
+          {leagueProfiles.length > 0 ? (
             <ExportCsvButton
               fetcher={() => exportApi.getMySportyCsv()}
               label="Export my stats (CSV)"
@@ -172,16 +186,46 @@ export function MySportyPage() {
           ) : null}
         </header>
 
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border border-[#F4A300]/30 bg-[#F4A300]/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Can’t see your player profile?</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Find it in Discover, open the player page, and request to link it to your account.
+            </p>
+          </div>
+          <Link
+            to="/home?tab=players"
+            className="shrink-0 self-start rounded-lg bg-[#141414] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1B4332] sm:self-auto"
+          >
+            Find my profile
+          </Link>
+        </div>
+
         {error ? (
           <p className="mt-4 text-sm text-red-600">{error}</p>
         ) : profiles.length === 0 ? (
-          <p
+          // This empty state used to explain what it would one day contain and
+          // offer nothing to do — the first dead end a new account hits. The
+          // two things a new user actually wants from here are now present.
+          <div
             role="status"
-            className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-4 text-sm text-slate-600"
+            className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-5 py-8 text-center"
           >
-            You have no claimed league profiles yet. When a league manager links your account to a
-            player slot, it will appear here.
-          </p>
+            <p className="text-base font-semibold text-slate-900">No player profiles yet</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
+              A profile appears here once a league manager or team owner approves the link to your
+              account — from a league team or a managed team. In the meantime you can track your own
+              team.
+            </p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link to="/admin" className={primaryButtonClass}>
+                Set up your team
+              </Link>
+              <Link to="/home?tab=players" className={secondaryButtonClass}>
+                Find your profile
+              </Link>
+            </div>
+          </div>
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {profiles.map((profile) => (

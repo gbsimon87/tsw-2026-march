@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test } from 'vitest';
 import { AppLayout } from './AppLayout';
@@ -45,5 +45,16 @@ describe('AppLayout shell width', () => {
     // PrivacyPage and ContactPage render a nested <main> with `-m-4 p-4` to
     // bleed their background past this gutter. Changing it breaks them.
     expect(screen.getByRole('main')).toHaveClass('p-4');
+  });
+
+  test('links Pricing from both desktop and mobile navigation', () => {
+    renderShell();
+
+    expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/pricing');
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle navigation menu' }));
+
+    const pricingLinks = screen.getAllByRole('link', { name: 'Pricing' });
+    expect(pricingLinks).toHaveLength(2);
+    expect(pricingLinks.every((link) => link.getAttribute('href') === '/pricing')).toBe(true);
   });
 });

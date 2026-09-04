@@ -16,6 +16,9 @@ export const authApi = {
   me() {
     return apiClient.get('/auth/me');
   },
+  updateOnboarding(payload) {
+    return apiClient.patch('/auth/onboarding', payload);
+  },
   requestVerification(payload) {
     return apiClient.post('/auth/request-verification', payload);
   },

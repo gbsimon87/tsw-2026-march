@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
 import { NotFoundPage } from '../../pages/NotFoundPage';
-import { env } from '../../lib/env';
 import { SportsLoader } from '../../components/SportsLoader';
 import { FeedPage } from '../../features/feed/pages/FeedPage';
 import { useAuth } from '../store/AuthContext';
@@ -142,6 +141,11 @@ const MySportyPage = lazy(() =>
 const FollowingPage = lazy(() =>
   import('../../features/follows/pages/FollowingPage').then((m) => ({ default: m.FollowingPage }))
 );
+const OnboardingPage = lazy(() =>
+  import('../../features/onboarding/pages/OnboardingPage').then((m) => ({
+    default: m.OnboardingPage,
+  }))
+);
 const AboutPage = lazy(() =>
   import('../../pages/AboutPage').then((m) => ({ default: m.AboutPage }))
 );
@@ -203,12 +207,7 @@ export function AppRouter() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route
-            path="/pricing"
-            element={
-              env.appEnv === 'production' ? <Navigate to="/pulse" replace /> : <PricingPage />
-            }
-          />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/billing/success" element={<BillingSuccessPage />} />
           <Route path="/billing/cancel" element={<BillingCancelPage />} />
           <Route path="/league/:leagueSlug" element={<PublicLeaguePage />} />
@@ -343,6 +342,14 @@ export function AppRouter() {
             element={
               <ProtectedRoute>
                 <MySportyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <OnboardingPage />
               </ProtectedRoute>
             }
           />

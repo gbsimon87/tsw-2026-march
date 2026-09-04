@@ -53,9 +53,14 @@ describe('HomePage', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Featured Leagues' })).toBeInTheDocument();
-    });
+    expect(
+      screen.queryByText('Live leagues. Real stats. Every possession.')
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Discover' })).toHaveClass('sr-only');
+    expect(screen.getByRole('tablist', { name: 'Discover categories' })).toHaveClass('sticky');
+    expect(screen.getByTestId('discover-search-bar')).toHaveClass('sticky', 'top-14', 'sm:top-12');
+
+    await screen.findByPlaceholderText('Search leagues');
 
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
       'href',
@@ -64,9 +69,8 @@ describe('HomePage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Teams' }));
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
-    });
+    await screen.findByPlaceholderText('Search teams');
+    expect(screen.getByTestId('discover-search-bar')).toHaveClass('sticky', 'top-14', 'sm:top-12');
     expect(screen.getByRole('link', { name: /TSW Blue/ })).toHaveAttribute('href', '/teams/team-1');
   });
 
@@ -89,6 +93,22 @@ describe('HomePage', () => {
     await waitFor(() => {
       expect(screen.getByText(/No public teams yet/i)).toBeInTheDocument();
     });
+  });
+
+  test('opens the Discover tab requested in the URL', async () => {
+    teamsApi.listPublic.mockResolvedValue({
+      teams: [{ id: 'team-1', name: 'TSW Blue', logo: null }],
+    });
+    leaguesApi.listPublic.mockResolvedValue({ leagues: [] });
+
+    render(
+      <MemoryRouter initialEntries={['/home?tab=teams']}>
+        <HomePage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('tab', { name: 'Teams' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByPlaceholderText('Search teams')).toBeInTheDocument();
   });
 
   test('filters leagues and teams by search input', async () => {
@@ -122,9 +142,7 @@ describe('HomePage', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Featured Leagues' })).toBeInTheDocument();
-    });
+    await screen.findByPlaceholderText('Search leagues');
 
     fireEvent.change(screen.getByPlaceholderText('Search leagues'), {
       target: { value: 'winter' },
@@ -135,9 +153,7 @@ describe('HomePage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Teams' }));
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Featured Teams' })).toBeInTheDocument();
-    });
+    await screen.findByPlaceholderText('Search teams');
 
     fireEvent.change(screen.getByPlaceholderText('Search teams'), {
       target: { value: 'nonexistent' },

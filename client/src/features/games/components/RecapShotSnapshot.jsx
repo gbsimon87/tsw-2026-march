@@ -1,12 +1,15 @@
-import courtImage from '../../../assets/courts/basketball_court_1.png';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { useCourtLayout } from '../court/useCourtLayout';
 
 function isMade(statType) {
   return statType.endsWith('_MADE');
 }
 
-export function RecapShotSnapshot({ shotSnapshot }) {
+// The snapshot carries its own layout id so it renders correctly even when
+// used apart from the full game response.
+export function RecapShotSnapshot({ shotSnapshot, courtLayoutId = shotSnapshot?.courtLayoutId }) {
   const events = shotSnapshot?.events || [];
+  const layout = useCourtLayout(courtLayoutId);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -31,10 +34,10 @@ export function RecapShotSnapshot({ shotSnapshot }) {
           data-testid="recap-shot-snapshot"
         >
           <CloudinaryImage
-            src={courtImage}
+            src={layout.image}
             alt="Game recap court"
-            width={420}
-            height={760}
+            width={layout.width}
+            height={layout.height}
             loading="lazy"
             decoding="async"
             className="block w-full"

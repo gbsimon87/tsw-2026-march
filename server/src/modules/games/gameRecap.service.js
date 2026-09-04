@@ -1,4 +1,5 @@
 const { summarizeEvents, summarizeEventsBySide } = require('../shared/statSummary');
+const { resolveCourtLayoutId } = require('../shared/courtLayouts');
 
 const MOMENT_PRIORITY = {
   OPP_FG3_MADE: 5,
@@ -86,7 +87,7 @@ function buildKeyMoments(events, playersById) {
     }));
 }
 
-function buildShotSnapshot(events, playersById) {
+function buildShotSnapshot(events, playersById, courtLayoutId) {
   const shotEvents = (events || []).filter(
     (event) =>
       (event.statType === 'FG2_MADE' ||
@@ -98,6 +99,9 @@ function buildShotSnapshot(events, playersById) {
   );
 
   return {
+    // Carried on the snapshot itself so a consumer holding only the snapshot
+    // still knows which court its percentages belong to.
+    courtLayoutId: resolveCourtLayoutId(courtLayoutId),
     made: shotEvents.filter((event) => event.statType.endsWith('_MADE')).length,
     missed: shotEvents.filter((event) => event.statType.endsWith('_MISS')).length,
     events: shotEvents.map((event) => ({
@@ -189,7 +193,7 @@ function buildGameRecap(game, team, boxScore) {
         foul: boxScore?.home?.totals?.foul || 0,
       },
       keyMoments: buildKeyMoments(game?.events || [], playersById),
-      shotSnapshot: buildShotSnapshot(game?.events || [], playersById),
+      shotSnapshot: buildShotSnapshot(game?.events || [], playersById, game?.courtLayoutId),
     };
   }
 
@@ -224,7 +228,7 @@ function buildGameRecap(game, team, boxScore) {
       foul: boxScore?.teamTotals?.foul || 0,
     },
     keyMoments: buildKeyMoments(game?.events || [], playersById),
-    shotSnapshot: buildShotSnapshot(game?.events || [], playersById),
+    shotSnapshot: buildShotSnapshot(game?.events || [], playersById, game?.courtLayoutId),
   };
 }
 

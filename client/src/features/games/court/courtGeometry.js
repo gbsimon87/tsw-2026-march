@@ -5,6 +5,10 @@ export const SVG_HEIGHT = 940;
 export const HOOP_OFFSET_FROM_BASELINE_FEET = 5.25;
 export const HOOP_X_FEET = COURT_WIDTH_FEET / 2;
 export const THREE_POINT_RADIUS_FEET = 23.75;
+// Regulation courts centre the 3PT arc on the hoop itself. Versioned court art
+// need not: basketball_court_2.png paints a semicircle centred 3.43ft past the
+// hoop, so a layout can shift the arc centre without moving the hoop model.
+export const THREE_POINT_CENTER_LOCAL_Y_FEET = 0;
 export const CORNER_THREE_X_FEET = 22;
 export const CORNER_THREE_MAX_LOCAL_Y_FEET = 14;
 export const LANE_HALF_WIDTH_FEET = 8;
@@ -82,7 +86,10 @@ export function toLocalCourt(pointFeet, hoop) {
   };
 }
 
-export function freeThrowSpotForHoopSide(side) {
-  const yFeet = side === 'north' ? 19 : COURT_LENGTH_FEET - 19;
+// localYFeet is measured from the hoop, so the caller can place the marker on
+// a layout whose painted free-throw stripe is not at the regulation 19ft.
+export function freeThrowSpotForHoopSide(side, localYFeet = FREE_THROW_LINE_LOCAL_Y_FEET) {
+  const distanceFromBaseline = HOOP_OFFSET_FROM_BASELINE_FEET + localYFeet;
+  const yFeet = side === 'north' ? distanceFromBaseline : COURT_LENGTH_FEET - distanceFromBaseline;
   return feetToNormalized(HOOP_X_FEET, yFeet);
 }
