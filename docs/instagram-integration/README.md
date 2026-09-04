@@ -3,8 +3,9 @@
 This folder is the living record for TSW's Instagram publishing integration. Update it whenever
 the implementation, Meta configuration, operational process, or delivery status changes.
 
-**Status:** Meta development app configured and first test-account OAuth connection completed;
-publishing workflow not yet implemented
+**Status:** test-account OAuth, demo game-card approval, and guarded one-shot delivery are
+implemented; delivery remains disabled by default
+
 **Started:** 19 August 2026  
 **Branch:** `feat/instagram-publishing`, based on `dev`
 
@@ -31,10 +32,11 @@ The implementation currently provides:
 - one-time OAuth state bound to the initiating user and session;
 - encrypted database storage for one official Instagram connection;
 - token-expiry health, refresh auditing, and a controlled encryption-key rotation command; and
-- an operator screen at `/admin/social/instagram`.
+- an operator screen at `/admin/social/instagram` with a durable demo game-card review queue; and
+- a separately gated, one-shot delivery worker with durable retries and ambiguous-outcome handling.
 
-There is intentionally no HTTP publishing endpoint yet. Account connection is now available, but
-post approval, durable delivery state, and a safe test-publish workflow are not.
+There is no direct HTTP publishing endpoint. Operators can queue an approved demo post only when
+delivery is explicitly enabled; a separate command claims and processes queued records.
 
 ## Delivery Tracker
 
@@ -62,10 +64,12 @@ post approval, durable delivery state, and a safe test-publish workflow are not.
 
 ### Publishing and approval slice
 
-- [ ] Add a social-post record with approval, scheduling, attempts, and platform result state.
-- [ ] Connect approved share exports to durable, publicly accessible HTTPS asset URLs.
-- [ ] Add an authenticated operator UI for preview, consent checks, caption editing, and approval.
-- [ ] Add an idempotent background publishing job with retry/backoff and reconciliation.
+- [x] Add the first social-post record and audited approval states. Scheduling, attempts, and
+      platform result state remain for the delivery slice.
+- [x] Upload the exact reviewed demo game-card export to a durable public HTTPS asset URL.
+- [x] Add an authenticated operator UI for preview, demo/rights checks, caption entry, and approval.
+- [x] Add a guarded one-shot publishing worker with durable claim, retry/backoff, and conservative
+      reconciliation state. A recurring scheduler remains future work.
 - [ ] Exercise a private test account end to end, including token expiry and rejected media.
 
 ### Later or explicitly deferred
@@ -110,3 +114,9 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
 - **4 September 2026:** added token-health warnings, an operator-triggered long-lived-token refresh
   with concurrency protection and audit timestamps, plus a controlled encryption-key rotation
   command. No publishing endpoint was added.
+- **4 September 2026:** added the first durable `InstagramSocialPost` approval workflow for a
+  manually exported 4:5 demo game-card image. The uploaded bytes and reviewed content are bound by
+  SHA-256 digests; approval still cannot publish.
+- **5 September 2026:** added explicit delivery queueing and a one-shot worker using the encrypted
+  OAuth credential. Pre-publish failures retry durably; uncertain publish outcomes stop in
+  `reconciliation_required` rather than risking duplication.

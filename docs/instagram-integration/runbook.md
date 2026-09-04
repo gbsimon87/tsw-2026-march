@@ -61,8 +61,8 @@ See [`manual-actions.md`](./manual-actions.md) for the complete ordered setup an
 ## Legacy Bootstrap Configuration
 
 The API client foundation also temporarily accepts one server-side connection from environment
-variables. It is used only by the command-line verification script and future internal client
-calls; it is separate from the OAuth connection UI:
+variables. It is used only by the legacy command-line verification script; guarded delivery uses
+the encrypted OAuth connection instead:
 
 ```dotenv
 INSTAGRAM_PUBLISHING_ENABLED=false
@@ -104,11 +104,50 @@ To verify the OAuth-backed connection, use **Verify connection** on
 `/admin/social/instagram`. That reads and decrypts the database credential only on the server and
 returns account metadata, never the token.
 
+## Create and Approve the First Demo Post
+
+This workflow records approval but cannot publish:
+
+1. Create or locate a labelled demo `game_card` post in The Pulse.
+2. Use **Share as image** to export its 4:5 PNG.
+3. Open `/admin/social/instagram` and select that source game card.
+4. Upload the exact exported PNG, enter the final test caption and optional HTTPS attribution URL,
+   then confirm both demo-content and publication-rights declarations.
+5. Create the draft and inspect the uploaded image and caption in the review queue.
+6. Choose **Mark ready for review**, inspect it again, then choose
+   **Approve exact image and caption**.
+
+The server stores the image on Cloudinary, hashes its bytes, and binds the hash and reviewed fields
+into an approval digest. To correct anything, cancel the record and create a new draft. An approved
+record remains inert until it is explicitly queued with delivery enabled.
+
+## Guarded Demo Delivery
+
+Keep `INSTAGRAM_PUBLISHING_ENABLED=false` while creating and approving the post. For the controlled
+test only:
+
+1. Confirm the connected account is the designated non-production professional account.
+2. Recheck the approved image, caption, and declaration.
+3. Set `INSTAGRAM_PUBLISHING_ENABLED=true` in the development API environment and deploy it.
+4. Use **Queue guarded test publish** on exactly the approved record to test.
+5. In the development API Render Shell, run:
+
+   ```bash
+   pnpm --filter server instagram:publish-pending
+   ```
+
+6. Refresh `/admin/social/instagram` and confirm `Published` plus the media ID/permalink.
+7. Set `INSTAGRAM_PUBLISHING_ENABLED=false` again and redeploy after the controlled test.
+
+The command claims at most ten due posts. Transient failures before publication receive bounded
+backoff and can be processed by a later command run. `reconciliation_required` must be investigated
+against the Instagram account; do not requeue or invoke `media_publish` blindly.
+
 ## Local Automated Checks
 
 ```bash
-pnpm --filter server test -- instagram.client.test.js instagram.oauth.service.test.js platform-operator.middleware.test.js crypto.test.js env.schema.test.js
-pnpm --filter client test -- InstagramConnectionPage.test.jsx
+pnpm --filter server test -- instagram.client.test.js instagram.oauth.service.test.js instagram.social-post.service.test.js instagram.social-post.repository.schema.test.js instagram.delivery.service.test.js platform-operator.middleware.test.js crypto.test.js env.schema.test.js
+pnpm --filter client test -- InstagramConnectionPage.test.jsx InstagramSocialPostPanel.test.jsx
 pnpm --filter server lint
 pnpm --filter client lint
 ```
@@ -168,5 +207,5 @@ arguments or commit them to `render.yaml`.
 3. Revoke TSW access in Meta/Instagram as well. Local disconnect does not call Meta revocation.
 4. Verify logs and error stores contain no token material.
 5. Reconnect through OAuth and confirm the intended account identity.
-6. Re-enable publishing only after the future approval workflow is ready and reconcile any post
+6. Re-enable publishing only after reconnecting, verifying the account, and reconciling any post
    left in an ambiguous delivery state.

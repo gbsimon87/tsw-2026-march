@@ -55,6 +55,8 @@ services:
         value: 8000
       - key: INSTAGRAM_OAUTH_ENABLED
         value: false
+      - key: INSTAGRAM_PUBLISHING_ENABLED
+        value: false
       - key: INSTAGRAM_GRAPH_API_VERSION
         sync: false
       - key: INSTAGRAM_APP_ID
@@ -185,6 +187,8 @@ services:
         value: 8000
       - key: INSTAGRAM_OAUTH_ENABLED
         value: true
+      - key: INSTAGRAM_PUBLISHING_ENABLED
+        value: false
       - key: INSTAGRAM_GRAPH_API_VERSION
         sync: false
       - key: INSTAGRAM_APP_ID

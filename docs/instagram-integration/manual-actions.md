@@ -47,8 +47,9 @@ INSTAGRAM_TOKEN_KEY_VERSION=v1
 INSTAGRAM_PUBLISHING_ENABLED=false
 ```
 
-Keep `INSTAGRAM_PUBLISHING_ENABLED=false`; this milestone does not need it. Secret values belong in
-the Render environment and must not be added to `render.yaml` or committed environment files.
+Keep `INSTAGRAM_PUBLISHING_ENABLED=false` through connection, draft creation, and approval. Enable
+it only for the controlled delivery test in step 6. Secret values belong in the Render environment
+and must not be added to `render.yaml` or committed environment files.
 
 ## 4. Grant your TSW user operator access
 
@@ -58,6 +59,9 @@ disables automatic Mongoose index creation:
 ```bash
 pnpm --filter server instagram:ensure-indexes
 ```
+
+Run this command again after deploying the social-post/delivery code, even if it was run for the
+earlier connection milestone; the newer deployment adds the delivery-claim index.
 
 Then grant the operator role. The TSW user must already exist:
 
@@ -91,9 +95,21 @@ Completed on 4 September 2026: connection, server-side verification, disconnect,
 succeeded through the deployed development application. The non-secret result is recorded in
 `platform-knowledge.md`.
 
+## 6. Run the first guarded demo delivery
+
+- [ ] Deploy the social-post and delivery code to development.
+- [ ] Run `pnpm --filter server instagram:ensure-indexes` in the development API Render Shell.
+- [ ] Create, review, and approve exactly one labelled demo game-card post.
+- [ ] Confirm the connected Instagram account is the designated test professional account.
+- [ ] Set `INSTAGRAM_PUBLISHING_ENABLED=true` on the development API and redeploy.
+- [ ] Queue that approved record from `/admin/social/instagram`.
+- [ ] Run `pnpm --filter server instagram:publish-pending` in the development API Render Shell.
+- [ ] Verify the post and recorded permalink, then set `INSTAGRAM_PUBLISHING_ENABLED=false` and
+      redeploy.
+
 ## Not Yet Safe to Do
 
 - Do not connect the production Instagram account until the test account succeeds.
-- Do not enable live publishing or attempt a real post through ad hoc API calls.
+- Do not enable delivery except for the ordered, guarded development test above.
 - Do not grant `platform_operator` to league or team administrators who do not operate TSW's
   company social account.

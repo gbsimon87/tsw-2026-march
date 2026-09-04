@@ -36,9 +36,9 @@ const baseEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_GAME_SUMMARY_MODEL: z.string().default('gpt-5.4-mini'),
   OPENAI_GAME_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
-  // Instagram publishing (docs/instagram-integration/): single-account
-  // bootstrap configuration. Disabled by default; OAuth-backed connection
-  // storage will replace the raw token once the approval UI exists.
+  // Instagram publishing (docs/instagram-integration/). Disabled by default.
+  // Guarded delivery uses the encrypted OAuth connection; the raw account ID
+  // and token remain supported only by the legacy verification client.
   INSTAGRAM_PUBLISHING_ENABLED: z
     .string()
     .optional()
@@ -252,14 +252,16 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
   }
 
   if (data.INSTAGRAM_PUBLISHING_ENABLED) {
-    for (const key of REQUIRED_INSTAGRAM_CONFIG) {
-      if (!data[key]) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [key],
-          message: `${key} is required when INSTAGRAM_PUBLISHING_ENABLED is true`,
-        });
-      }
+    const hasLegacyCredential = REQUIRED_INSTAGRAM_CONFIG.every((key) => data[key]);
+    const hasOAuthCredential =
+      data.INSTAGRAM_OAUTH_ENABLED && REQUIRED_INSTAGRAM_OAUTH_CONFIG.every((key) => data[key]);
+    if (!hasLegacyCredential && !hasOAuthCredential) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['INSTAGRAM_PUBLISHING_ENABLED'],
+        message:
+          'INSTAGRAM_PUBLISHING_ENABLED requires either the complete OAuth configuration or legacy Instagram credentials',
+      });
     }
   }
 

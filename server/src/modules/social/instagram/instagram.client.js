@@ -306,6 +306,17 @@ class InstagramClient {
     return assertIdentifier(payload.id, 'mediaId');
   }
 
+  async getPublishedMedia(mediaId) {
+    const id = assertIdentifier(mediaId, 'mediaId');
+    const payload = await this.request('GET', id, {
+      query: { fields: 'id,permalink' },
+    });
+    return {
+      id: payload.id || id,
+      permalink: payload.permalink || null,
+    };
+  }
+
   async publishImage(input, waitOptions) {
     const containerId = await this.createImageContainer(input);
     await this.waitForContainer(containerId, waitOptions);

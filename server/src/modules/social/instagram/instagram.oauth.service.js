@@ -279,6 +279,7 @@ async function getStatus() {
   const connection = await repository.findConnection();
   return {
     configured: isInstagramOAuthConfigured(),
+    publishingEnabled: env.INSTAGRAM_PUBLISHING_ENABLED,
     connection: serializeConnection(connection),
   };
 }
@@ -317,6 +318,43 @@ async function verifyStoredConnection({ fetchImpl = global.fetch } = {}) {
     accountType: account.accountType || connection.accountType,
   });
   return serializeConnection(updated);
+}
+
+async function createStoredInstagramClient({ fetchImpl = global.fetch, now = new Date() } = {}) {
+  assertConfigured();
+  const connection = await repository.findConnection({ includeToken: true });
+  if (!connection || connection.status !== 'connected' || !connection.encryptedAccessToken) {
+    throw new ApiError(404, 'No connected Instagram account');
+  }
+  if (tokenHealth(connection, now).status === 'expired') {
+    throw new ApiError(409, 'Instagram token has expired; reconnect the account');
+  }
+  if (!connection.grantedScopes?.includes('instagram_business_content_publish')) {
+    throw new ApiError(409, 'Instagram connection is missing the publishing permission');
+  }
+  const encryptionKey = encryptionKeyForVersion(connection.tokenKeyVersion);
+  if (!encryptionKey) throw new ApiError(503, 'Instagram token key version requires rotation');
+
+  let accessToken;
+  try {
+    accessToken = decryptSecret(connection.encryptedAccessToken, encryptionKey, {
+      associatedData: tokenAssociatedData(connection.tokenKeyVersion),
+    });
+  } catch {
+    throw new ApiError(503, 'Instagram credential could not be decrypted');
+  }
+
+  return {
+    connection,
+    client: new InstagramClient({
+      accessToken,
+      apiVersion: env.INSTAGRAM_GRAPH_API_VERSION,
+      instagramUserId: connection.externalAccountId,
+      baseUrl: env.INSTAGRAM_GRAPH_API_BASE_URL,
+      timeoutMs: env.INSTAGRAM_REQUEST_TIMEOUT_MS,
+      fetchImpl,
+    }),
+  };
 }
 
 async function refreshStoredToken({ userId, fetchImpl = global.fetch, now = new Date() } = {}) {
@@ -455,6 +493,7 @@ module.exports = {
   cancelAuthorization,
   completeAuthorization,
   createAuthorization,
+  createStoredInstagramClient,
   disconnect,
   getStatus,
   isInstagramOAuthConfigured,

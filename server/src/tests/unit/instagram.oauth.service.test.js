@@ -12,6 +12,7 @@ const mockEnv = {
   INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY: undefined,
   INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION: undefined,
   INSTAGRAM_REQUEST_TIMEOUT_MS: 1000,
+  INSTAGRAM_PUBLISHING_ENABLED: false,
 };
 
 const mockRepository = {
@@ -59,6 +60,7 @@ describe('Instagram OAuth service', () => {
     mockEnv.INSTAGRAM_TOKEN_KEY_VERSION = 'v1';
     mockEnv.INSTAGRAM_TOKEN_PREVIOUS_ENCRYPTION_KEY = undefined;
     mockEnv.INSTAGRAM_TOKEN_PREVIOUS_KEY_VERSION = undefined;
+    mockEnv.INSTAGRAM_PUBLISHING_ENABLED = false;
   });
 
   test('creates a scoped authorization URL and persists only a state hash', async () => {
@@ -184,8 +186,32 @@ describe('Instagram OAuth service', () => {
 
     const result = await service.getStatus();
     expect(result.configured).toBe(true);
+    expect(result.publishingEnabled).toBe(false);
     expect(result.connection.username).toBe('tsw_test');
     expect(JSON.stringify(result)).not.toContain('encrypted-secret');
+  });
+
+  test('creates an internal publishing client from the encrypted OAuth credential', async () => {
+    const now = new Date('2026-09-05T00:00:00.000Z');
+    mockRepository.findConnection.mockResolvedValue({
+      _id: 'connection-1',
+      status: 'connected',
+      externalAccountId: '17841400000000000',
+      username: 'tsw_test',
+      encryptedAccessToken: encryptSecret('stored-token', mockEnv.INSTAGRAM_TOKEN_ENCRYPTION_KEY, {
+        associatedData: 'instagram-access-token:v1',
+      }),
+      tokenKeyVersion: 'v1',
+      tokenExpiresAt: new Date('2026-10-05T00:00:00.000Z'),
+      grantedScopes: service.INSTAGRAM_SCOPES,
+    });
+
+    const result = await service.createStoredInstagramClient({ now });
+
+    expect(mockRepository.findConnection).toHaveBeenCalledWith({ includeToken: true });
+    expect(result.connection._id).toBe('connection-1');
+    expect(result.client.instagramUserId).toBe('17841400000000000');
+    expect(result.client.accessToken).toBe('stored-token');
   });
 
   test('refreshes an eligible token and records its new expiry without exposing it', async () => {

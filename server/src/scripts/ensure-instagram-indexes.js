@@ -9,12 +9,16 @@ const {
   InstagramConnection,
   InstagramOAuthState,
 } = require('../modules/social/instagram/instagram.repository');
+const {
+  InstagramSocialPost,
+} = require('../modules/social/instagram/instagram.social-post.repository');
 
 async function main() {
   await connectDb();
   await InstagramConnection.createIndexes();
   await InstagramOAuthState.createIndexes();
-  console.log('Instagram connection indexes are present.');
+  await InstagramSocialPost.createIndexes();
+  console.log('Instagram connection and social-post indexes are present.');
   await mongoose.disconnect();
 }
 

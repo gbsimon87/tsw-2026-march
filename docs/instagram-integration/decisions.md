@@ -91,3 +91,28 @@ Encryption-key rotation temporarily configures the old key/version alongside the
 pair. An idempotent command decrypts with the old key and uses compare-and-set to persist ciphertext
 under the new version. The temporary pair is removed after verification; secrets never appear in
 command arguments or committed configuration.
+
+## ADR-011: Begin approval with uploaded demo game-card exports
+
+**Status:** accepted on 4 September 2026.
+
+The first `InstagramSocialPost` accepts only a PNG/JPEG 4:5 export tied to an existing Pulse
+game-card post. The operator must declare that it is labelled demo content and confirm TSW's rights
+to every visible element. The server uploads the exact file to Cloudinary and binds its SHA-256,
+caption, source, destination connection, attribution, and declaration into the approval digest.
+
+Draft content is immutable. Corrections require cancellation and a new draft, avoiding approval
+invalidation complexity before delivery exists. This slice adds no publish endpoint; approval is
+safe to exercise while `INSTAGRAM_PUBLISHING_ENABLED=false`.
+
+## ADR-012: Separate queueing from a conservative one-shot delivery worker
+
+**Status:** accepted on 5 September 2026.
+
+There is no direct publish HTTP route. A platform operator may explicitly queue an approved demo
+post only while `INSTAGRAM_PUBLISHING_ENABLED=true`; the separate `instagram:publish-pending`
+command claims due records with a database lease and uses the encrypted OAuth credential.
+
+Failures before `media_publish` use bounded durable retry and reuse a stored container. Once the
+worker enters `publishing`, an error or expired lease becomes `reconciliation_required` and is not
+retried automatically, because the remote post may exist even if the response was lost.

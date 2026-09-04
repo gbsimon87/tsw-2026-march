@@ -1,6 +1,8 @@
 const { env } = require('../../../config/env');
 const { logger } = require('../../../config/logger');
 const oauthService = require('./instagram.oauth.service');
+const socialPostService = require('./instagram.social-post.service');
+const { socialPostIdSchema } = require('./instagram.social-post.validation');
 
 function clientRedirectUrl(result) {
   const [clientOrigin] = env.CLIENT_ORIGIN.split(',');
@@ -65,8 +67,63 @@ async function disconnect(req, res) {
   res.status(200).json(await oauthService.disconnect(req.auth.userId));
 }
 
+async function listSocialPosts(_req, res) {
+  res.status(200).json({ posts: await socialPostService.listSocialPosts() });
+}
+
+async function createSocialPost(req, res) {
+  const post = await socialPostService.createDraft({
+    userId: req.auth.userId,
+    input: req.body,
+    file: req.file,
+  });
+  res.status(201).json({ post });
+}
+
+async function markSocialPostReady(req, res) {
+  const { postId } = socialPostIdSchema.parse(req.params);
+  const post = await socialPostService.markReadyForReview({
+    postId,
+    userId: req.auth.userId,
+  });
+  res.status(200).json({ post });
+}
+
+async function approveSocialPost(req, res) {
+  const { postId } = socialPostIdSchema.parse(req.params);
+  const post = await socialPostService.approveSocialPost({
+    postId,
+    userId: req.auth.userId,
+  });
+  res.status(200).json({ post });
+}
+
+async function cancelSocialPost(req, res) {
+  const { postId } = socialPostIdSchema.parse(req.params);
+  const post = await socialPostService.cancelSocialPost({
+    postId,
+    userId: req.auth.userId,
+  });
+  res.status(200).json({ post });
+}
+
+async function queueSocialPost(req, res) {
+  const { postId } = socialPostIdSchema.parse(req.params);
+  const post = await socialPostService.queueSocialPost({
+    postId,
+    userId: req.auth.userId,
+  });
+  res.status(200).json({ post });
+}
+
 module.exports = {
   disconnect,
+  approveSocialPost,
+  cancelSocialPost,
+  createSocialPost,
+  listSocialPosts,
+  markSocialPostReady,
+  queueSocialPost,
   oauthCallback,
   refreshToken,
   startOAuth,

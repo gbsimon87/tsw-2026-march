@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { DarkPageHeader } from '../../../components/DarkPageHeader';
 import { instagramApi } from '../api/instagramApi';
+import { InstagramSocialPostPanel } from '../components/InstagramSocialPostPanel';
 
 const OAUTH_MESSAGES = {
   connected: { tone: 'green', text: 'Instagram connected and verified successfully.' },
@@ -111,7 +112,7 @@ export function InstagramConnectionPage() {
         eyebrow="Social publishing"
         title="Instagram connection"
         titleAriaLabel="Instagram connection"
-        description="Connect and verify the official TSW professional account. This screen does not publish content."
+        description="Connect the official TSW professional account and manage the guarded demo publishing workflow."
       />
 
       {oauthMessage ? (
@@ -274,11 +275,16 @@ export function InstagramConnectionPage() {
         )}
       </section>
 
+      {connection ? (
+        <InstagramSocialPostPanel publishingEnabled={status?.publishingEnabled === true} />
+      ) : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
         <h2 className="font-semibold text-slate-900">Current safety boundary</h2>
         <p className="mt-2">
           Only platform operators can access this page. Connecting the account does not enable
-          automatic or live publishing; post approval and test publishing are the next milestone.
+          automatic publishing. An approved post must be queued explicitly, and the guarded worker
+          runs separately with publishing enabled.
         </p>
       </section>
     </main>

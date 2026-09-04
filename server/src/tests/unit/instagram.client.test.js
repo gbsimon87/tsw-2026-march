@@ -109,6 +109,23 @@ describe('InstagramClient', () => {
     expect(form.get('share_to_feed')).toBe('false');
   });
 
+  test('reads the permalink after publication without exposing the token in the URL', async () => {
+    const fetchImpl = jest.fn(async () =>
+      jsonResponse({ id: 'media_1', permalink: 'https://www.instagram.com/p/demo/' })
+    );
+    const client = createClient({ fetchImpl });
+
+    await expect(client.getPublishedMedia('media_1')).resolves.toEqual({
+      id: 'media_1',
+      permalink: 'https://www.instagram.com/p/demo/',
+    });
+    const { url, options } = requestParts(fetchImpl, 0);
+    expect(url.pathname).toBe('/v23.0/media_1');
+    expect(url.searchParams.get('fields')).toBe('id,permalink');
+    expect(url.searchParams.has('access_token')).toBe(false);
+    expect(options.headers.Authorization).toBe('Bearer secret-token');
+  });
+
   test('polls an in-progress container until it is ready', async () => {
     const fetchImpl = jest
       .fn()

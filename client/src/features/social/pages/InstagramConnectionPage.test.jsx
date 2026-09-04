@@ -12,6 +12,9 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../api/instagramApi', () => ({ instagramApi: apiMocks }));
+vi.mock('../components/InstagramSocialPostPanel', () => ({
+  InstagramSocialPostPanel: () => <div>Instagram post drafts</div>,
+}));
 
 describe('InstagramConnectionPage', () => {
   beforeEach(() => {

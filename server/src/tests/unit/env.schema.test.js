@@ -238,8 +238,24 @@ describe('env schema — Instagram publishing', () => {
 
     expect(result.success).toBe(false);
     const messages = result.error.issues.map((issue) => issue.message).join(' ');
-    expect(messages).toContain('INSTAGRAM_USER_ID');
-    expect(messages).toContain('INSTAGRAM_ACCESS_TOKEN');
+    expect(messages).toContain('complete OAuth configuration or legacy Instagram credentials');
+  });
+
+  test('accepts publishing with the encrypted OAuth configuration', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        INSTAGRAM_PUBLISHING_ENABLED: 'true',
+        INSTAGRAM_OAUTH_ENABLED: 'true',
+        INSTAGRAM_GRAPH_API_VERSION: 'v23.0',
+        INSTAGRAM_APP_ID: '1234567890',
+        INSTAGRAM_APP_SECRET: 'app-secret',
+        INSTAGRAM_OAUTH_REDIRECT_URL:
+          'https://dev-api.thesportyway.com/api/v1/social/instagram/oauth/callback',
+        INSTAGRAM_TOKEN_ENCRYPTION_KEY: 'ab'.repeat(32),
+      })
+    );
+
+    expect(result.success).toBe(true);
   });
 
   test('rejects an unversioned Graph API value', () => {

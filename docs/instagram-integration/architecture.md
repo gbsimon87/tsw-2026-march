@@ -19,23 +19,28 @@ TSW source data
   -> published media ID/permalink or actionable failure
 ```
 
-The connection slice now implements the operator and `SocialConnection` portions of this flow. It
-is not connected to a social-post model, approval workflow, publishing route, or scheduler.
+The current slice implements the operator connection, a deliberately narrow social-post review
+workflow for uploaded demo game cards, and a separately gated one-shot delivery worker. It does not
+run on a recurring scheduler.
 
 ## Implemented Components
 
-| Component                                                        | Responsibility                                                                                                |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `server/src/config/env.js`                                       | Feature flag, API location/version, bootstrap account, token, and timeout validation.                         |
-| `server/src/modules/social/instagram/instagram.client.js`        | Account verification, image/Reel container creation, readiness polling, publication, and error normalisation. |
-| `server/src/scripts/verify-instagram-connection.js`              | Read-only check of the configured account; prints no credential.                                              |
-| `server/src/tests/unit/instagram.client.test.js`                 | Contract-level unit tests using a mocked network boundary.                                                    |
-| `server/src/modules/social/instagram/instagram.oauth.service.js` | OAuth exchange, account verification, encrypted token refresh/health, and key rotation.                       |
-| `server/src/modules/social/instagram/instagram.repository.js`    | Single Instagram connection and expiring one-time OAuth state persistence.                                    |
-| `server/src/modules/social/instagram/instagram.routes.js`        | Operator-only status, connect, callback, verify, refresh, and disconnect API.                                 |
-| `client/src/features/social/pages/InstagramConnectionPage.jsx`   | Operator connection, token-health, refresh, and verification screen; no credential or publish action.         |
-| `server/src/scripts/ensure-instagram-indexes.js`                 | Additive production setup for single-account uniqueness and OAuth-state uniqueness/expiry indexes.            |
-| `server/src/scripts/rotate-instagram-token-key.js`               | Compare-and-set re-encryption of the stored credential during a controlled key rotation.                      |
+| Component                                                            | Responsibility                                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `server/src/config/env.js`                                           | Feature flag, API location/version, bootstrap account, token, and timeout validation.                         |
+| `server/src/modules/social/instagram/instagram.client.js`            | Account verification, image/Reel container creation, readiness polling, publication, and error normalisation. |
+| `server/src/scripts/verify-instagram-connection.js`                  | Read-only check of the configured account; prints no credential.                                              |
+| `server/src/tests/unit/instagram.client.test.js`                     | Contract-level unit tests using a mocked network boundary.                                                    |
+| `server/src/modules/social/instagram/instagram.oauth.service.js`     | OAuth exchange, account verification, encrypted token refresh/health, and key rotation.                       |
+| `server/src/modules/social/instagram/instagram.repository.js`        | Single Instagram connection and expiring one-time OAuth state persistence.                                    |
+| `server/src/modules/social/instagram/instagram.routes.js`            | Operator-only status, connect, callback, verify, refresh, and disconnect API.                                 |
+| `client/src/features/social/pages/InstagramConnectionPage.jsx`       | Operator connection, token-health, refresh, and verification screen; no credential or publish action.         |
+| `server/src/scripts/ensure-instagram-indexes.js`                     | Additive setup for connection, OAuth-state, and social-post indexes.                                          |
+| `server/src/scripts/rotate-instagram-token-key.js`                   | Compare-and-set re-encryption of the stored credential during a controlled key rotation.                      |
+| `server/src/modules/social/instagram/instagram.social-post.*`        | Durable demo game-card drafts, content digests, and atomic review/approval/cancellation transitions.          |
+| `client/src/features/social/components/InstagramSocialPostPanel.jsx` | Exact upload preview, declaration checks, and operator review queue.                                          |
+| `server/src/modules/social/instagram/instagram.delivery.service.js`  | Durable delivery claim, container reuse, bounded retry, publication, and ambiguous-outcome handling.          |
+| `server/src/scripts/process-instagram-deliveries.js`                 | Explicit one-shot worker entry point; processes at most ten due records.                                      |
 
 ## Target Domain Model
 
@@ -57,14 +62,18 @@ Long-lived tokens expose an operator-visible health state (`healthy`, `expiring`
 database lease prevents two instances from refreshing it concurrently, and successful or failed
 attempts leave timestamps and a non-secret error classification.
 
-A future `SocialPost` should be the durable source of truth for every delivery attempt:
+`InstagramSocialPost` is now the durable approval record. The first version stores:
 
-- platform, connection, asset URL/type, caption, source entity, and attribution link;
-- consent evidence and operator approval identity/time;
-- scheduled time and lifecycle status;
-- stable idempotency key;
-- container ID, published media ID, permalink, attempt count, and last error; and
-- timestamps for every material transition.
+- the connected Instagram account and source Pulse game-card post;
+- a snapshotted game-card source plus the exact Cloudinary image URL and image-byte SHA-256;
+- the exact caption, optional attribution URL, and demo/rights declaration;
+- a digest binding the connection, source, asset bytes, caption, attribution, and declaration;
+- operator identities and timestamps for creation, readiness, approval, and cancellation; and
+- a stable private idempotency key reserved for the delivery worker.
+
+Delivery state now includes queue time, a bounded lease, container ID, published media ID,
+permalink, attempt count, next retry time, classified last error, and a private bounded attempt
+history.
 
 Recommended lifecycle:
 
@@ -74,6 +83,11 @@ draft -> ready_for_review -> approved -> scheduled
                                       \-> failed
 draft/review/approved/scheduled -> cancelled
 ```
+
+The current image-only path uses `approved -> queued -> creating_container -> processing ->
+publishing -> published`. Draft content is immutable: if the image or caption is wrong, cancel it
+and create a new record. Queueing atomically requires the approval digest to match the content
+digest.
 
 State transitions should use atomic compare-and-set updates so two workers cannot publish the
 same record. A worker restart after `media_publish` is ambiguous until the job reconciles the
@@ -107,8 +121,8 @@ before it is connected.
 
 ## Reliability
 
-The current client exposes retryability but does not perform blind internal retries. The future
-job runner should own retry policy so attempts are durable and visible.
+The client exposes retryability but does not perform blind internal retries. The delivery worker
+owns retry policy so attempts are durable and visible.
 
 - Retry transient network failures, HTTP 429, and HTTP 5xx with capped exponential backoff and
   jitter.
@@ -118,8 +132,9 @@ job runner should own retry policy so attempts are durable and visible.
 - Reconcile unknown outcomes before retrying publication.
 - Alert on token expiry/revocation, sustained rate limiting, and repeated media rejection.
 
-The repository currently has no persistent job queue or scheduler. Adding one is a prerequisite
-for scheduling and resilient publication.
+The database record is the durable job state, but the repository still has no recurring scheduler.
+The explicit worker command is appropriate for the first controlled test; automated scheduling
+requires a dedicated recurring process later.
 
 ## AI Boundary
 
