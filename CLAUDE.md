@@ -8,6 +8,11 @@ definitive reference (architecture, auth, billing, DB, conventions, tech debt).
 The code is the ultimate source of truth; if a doc disagrees, trust the code and
 fix the doc.
 
+For the shape of the system — module graph, cross-module calls, and traced
+end-to-end flows — see [`docs/codemap/`](docs/codemap/) (open `codemap.html` in a
+browser; `codemap.lock` records the commit it was generated from, so you can tell
+when it has drifted).
+
 ## Layout — where code lives
 
 - **Server is module-based**, not layered folders. Each domain lives in
@@ -62,7 +67,8 @@ Backfill scripts: `ENV_FILE=../env/server/.env.development node src/scripts/<nam
   is the source of truth. See [`docs/PROJECT-KNOWLEDGE.md`](docs/PROJECT-KNOWLEDGE.md)
   §6 for today's code, and [`docs/stripe.md`](docs/stripe.md) for setup,
   pricing, lifecycle tests, and launch status.
-- **Routing**: feed is `/pulse`; admin is `/admin`; `/pricing` is dev-only.
+- **Routing**: feed is `/pulse`; admin is `/admin`; `/pricing` is public;
+  `/onboarding` is the post-signup wizard.
 - **`OPT-###` comments** are an inline changelog of perf/correctness decisions —
   don't delete them. The old optimisation tracker was removed from `docs/`
   because it no longer represented current build work.

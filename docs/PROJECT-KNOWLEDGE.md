@@ -52,21 +52,22 @@ Cross-domain utilities are in `server/src/services/`, `server/src/utils/`, and
 
 ## Main Product Routes
 
-| Route                               | Purpose                                         | Access              |
-| ----------------------------------- | ----------------------------------------------- | ------------------- |
-| `/pulse`                            | Public feed; `/` and `/feed` redirect here      | Public              |
-| `/home`                             | Player and game discovery                       | Public              |
-| `/games/:gameId`                    | Game detail, box score, recap, replay           | Public              |
-| `/league/:leagueSlug/*`             | Public league, standings, games, teams, players | Public              |
-| `/teams/:teamId/*`                  | Public standalone team and player pages         | Public              |
-| `/players/:userId`                  | Claimed league profiles grouped by user         | Public              |
-| `/admin`                            | Team and league administration                  | Authenticated       |
-| `/admin/leagues/:leagueId`          | League administration                           | Authenticated       |
-| `/admin/leagues/:leagueId/schedule` | Bulk schedule builder                           | Authenticated       |
-| `/games/:gameId/track`              | Full-screen live tracker                        | Authenticated       |
-| `/my-sporty`                        | Current user's claimed league profiles          | Authenticated       |
-| `/following`                        | Followed players, leagues, and league teams     | Authenticated       |
-| `/pricing`                          | Pricing UI; redirects to `/pulse` in production | Non-production only |
+| Route                               | Purpose                                         | Access        |
+| ----------------------------------- | ----------------------------------------------- | ------------- |
+| `/pulse`                            | Public feed; `/` and `/feed` redirect here      | Public        |
+| `/home`                             | Player and game discovery                       | Public        |
+| `/games/:gameId`                    | Game detail, box score, recap, replay           | Public        |
+| `/league/:leagueSlug/*`             | Public league, standings, games, teams, players | Public        |
+| `/teams/:teamId/*`                  | Public standalone team and player pages         | Public        |
+| `/players/:userId`                  | Claimed league profiles grouped by user         | Public        |
+| `/admin`                            | Team and league administration                  | Authenticated |
+| `/admin/leagues/:leagueId`          | League administration                           | Authenticated |
+| `/admin/leagues/:leagueId/schedule` | Bulk schedule builder                           | Authenticated |
+| `/games/:gameId/track`              | Full-screen live tracker                        | Authenticated |
+| `/my-sporty`                        | Current user's claimed league profiles          | Authenticated |
+| `/following`                        | Followed players, leagues, and league teams     | Authenticated |
+| `/onboarding`                       | Post-signup role wizard; resumes from the user  | Authenticated |
+| `/pricing`                          | Plans and pricing                               | Public        |
 
 `client/src/app/router/AppRouter.jsx` is the complete route source of truth.
 Legacy `/leagues/...` admin URLs redirect to `/admin/leagues/...`.
@@ -369,3 +370,4 @@ auto-deploys; production deploys are manual. Secrets belong in Render, not
 | Deployment and environment    | [`deployment-render.md`](./deployment-render.md), `render.yaml`, env validators         |
 | Product backlog               | [`ideas.md`](./ideas.md)                                                                |
 | Database maintenance          | [`mongodb-production-backup.md`](./mongodb-production-backup.md), `server/src/scripts/` |
+| How the modules fit together  | [`codemap/`](./codemap/) — interactive map; open `codemap.html` in a browser            |
