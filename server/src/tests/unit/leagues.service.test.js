@@ -801,6 +801,39 @@ describe('getPublicLeaguePlayerBySlug — claimedUserId is public-league-only (F
     expect(result.milestones).toEqual({ recent: [], total: 0 });
   });
 
+  test('preserves game season ids and returns season labels for career filtering', async () => {
+    seedPlayerPage({ isPublic: true });
+    listLeagueGamesByLeagueId.mockResolvedValue([
+      {
+        _id: 'game-1',
+        seasonId: 'season-1',
+        trackingMode: 'dual_team',
+        homeLeagueTeamId: 'team-1',
+        awayLeagueTeamId: 'team-2',
+        homeRosterSnapshot: [
+          { _id: 'snapshot-player-1', leaguePlayerId: 'player-1', displayName: 'Avery Brooks' },
+        ],
+        awayRosterSnapshot: [],
+        events: [],
+      },
+    ]);
+    listSeasonsByLeague.mockResolvedValue([
+      {
+        _id: 'season-1',
+        leagueId: 'league-1',
+        label: '2026 Spring',
+        status: 'active',
+      },
+    ]);
+
+    const result = await getPublicLeaguePlayerBySlug('secret-league', 'the-team', 'player-1', null);
+
+    expect(result.games[0].seasonId).toBe('season-1');
+    expect(result.seasons).toEqual([
+      expect.objectContaining({ id: 'season-1', label: '2026 Spring' }),
+    ]);
+  });
+
   test('nulls out claimedUserId when the league is private, even for an authorized viewer', async () => {
     seedPlayerPage({ isPublic: false });
     findActiveLeagueManager.mockResolvedValue({ leagueId: 'league-1', userId: 'manager-1' });
@@ -927,6 +960,9 @@ describe('auto feed reversal on league going private (B2)', () => {
       ownerUserId: 'user-1',
       status: 'active',
       isPublic: true,
+      plan: 'league',
+      billingSource: 'comp',
+      subscriptionStatus: 'active',
       ...overrides,
     };
   }

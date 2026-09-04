@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AdminLeaguePage } from './AdminLeaguePage';
@@ -20,6 +20,7 @@ vi.mock('../api/leaguesApi', () => ({
     listSeasons: vi.fn(),
     createSeason: vi.fn(),
     completeSeason: vi.fn(),
+    archiveTeam: vi.fn(),
   },
 }));
 
@@ -40,9 +41,9 @@ function buildLeague(overrides = {}) {
   };
 }
 
-function renderPage() {
+function renderPage(entry = '/admin/leagues/league-1') {
   render(
-    <MemoryRouter initialEntries={['/admin/leagues/league-1']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/admin/leagues/:leagueId" element={<AdminLeaguePage />} />
       </Routes>
@@ -57,6 +58,7 @@ describe('AdminLeaguePage', () => {
     leaguesApi.getById.mockResolvedValue({ league: buildLeague() });
     leaguesApi.listLeagueManagers.mockResolvedValue({ managers: [] });
     leaguesApi.listSeasons.mockResolvedValue({ seasons: [] });
+    leaguesApi.archiveTeam.mockResolvedValue({ team: { id: 'team-1', status: 'archived' } });
   });
 
   afterEach(() => {
@@ -149,6 +151,44 @@ describe('AdminLeaguePage', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     expect(await screen.findByRole('button', { name: 'Complete Season' })).toBeInTheDocument();
+  });
+
+  test('opens a requested settings tab and links the owner to this league billing page', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({ viewerContext: { viewerRole: 'owner', managedTeamIds: [] } }),
+    });
+
+    renderPage('/admin/leagues/league-1?tab=settings#season');
+
+    expect(await screen.findByText('Season')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: 'Manage plan' })).toHaveAttribute(
+      'href',
+      '/pricing?leagueId=league-1&resourceType=league'
+    );
+  });
+
+  test('lets a league owner archive a team from the Teams tab', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({
+        viewerContext: { viewerRole: 'owner', managedTeamIds: [] },
+        teams: [{ id: 'team-1', name: 'North Hoops', members: [] }],
+      }),
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Teams' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive North Hoops' }));
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Archive this team?' })).getByRole('button', {
+        name: 'Confirm archive',
+      })
+    );
+
+    await waitFor(() => expect(leaguesApi.archiveTeam).toHaveBeenCalledWith('league-1', 'team-1'));
+    expect(screen.queryByRole('link', { name: 'North Hoops' })).not.toBeInTheDocument();
   });
 
   test('hides the Complete Season control from a non-owner league manager', async () => {

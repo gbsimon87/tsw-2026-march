@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { getGameHeaderImage, getLeagueHeaderImage } from '../../feed/cardImage';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
+import { formatVenueAddress, VenueMapLink } from './VenueMapLink';
 
 function formatDateTime(value) {
   if (!value) {
@@ -157,6 +158,20 @@ export function GameDetailHeader({
           ))}
         </div>
       </div>
+
+      {game?.venue || formatVenueAddress(game?.venueAddress) ? (
+        <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">{game.venue || 'Game venue'}</p>
+          {formatVenueAddress(game.venueAddress) ? (
+            <p className="mt-1">{formatVenueAddress(game.venueAddress)}</p>
+          ) : null}
+          <VenueMapLink
+            venue={game.venue}
+            venueAddress={game.venueAddress}
+            className="mt-2 inline-flex"
+          />
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {viewTeamHref && !isDualTeam ? (

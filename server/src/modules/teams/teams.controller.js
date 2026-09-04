@@ -116,6 +116,50 @@ async function removePlayer(req, res) {
   res.status(200).json({ team });
 }
 
+async function requestPlayerClaim(req, res) {
+  const userId = requireAuthUserId(req);
+  const request = await teamsService.requestStandalonePlayerClaim(
+    userId,
+    req.params.teamId,
+    req.params.playerId
+  );
+  res.status(201).json({ request });
+}
+
+async function listPlayerClaimRequests(req, res) {
+  const userId = requireAuthUserId(req);
+  const requests = await teamsService.listStandalonePlayerClaimRequests(userId, req.params.teamId);
+  res.status(200).json({ requests });
+}
+
+async function approvePlayerClaim(req, res) {
+  const userId = requireAuthUserId(req);
+  const request = await teamsService.reviewStandalonePlayerClaim(
+    userId,
+    req.params.teamId,
+    req.params.requestId,
+    'approved'
+  );
+  res.status(200).json({ request });
+}
+
+async function rejectPlayerClaim(req, res) {
+  const userId = requireAuthUserId(req);
+  const request = await teamsService.reviewStandalonePlayerClaim(
+    userId,
+    req.params.teamId,
+    req.params.requestId,
+    'rejected'
+  );
+  res.status(200).json({ request });
+}
+
+async function getMyPlayerProfiles(req, res) {
+  const userId = requireAuthUserId(req);
+  const profiles = await teamsService.getMyStandalonePlayerProfiles(userId);
+  res.status(200).json({ profiles });
+}
+
 module.exports = {
   create,
   list,
@@ -132,4 +176,9 @@ module.exports = {
   addPlayer,
   updatePlayer,
   removePlayer,
+  requestPlayerClaim,
+  listPlayerClaimRequests,
+  approvePlayerClaim,
+  rejectPlayerClaim,
+  getMyPlayerProfiles,
 };

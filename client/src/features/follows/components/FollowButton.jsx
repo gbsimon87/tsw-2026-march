@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../app/store/AuthContext';
 import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEvents';
 import { followsApi } from '../api/followsApi';
 import { useFollowStatus, followStatusQueryKey } from '../hooks/useFollowStatus';
 import { followingQueryKey } from '../hooks/useFollowing';
+import { PENDING_FOLLOW_KEY, readPendingFollowIntent } from '../followIntent';
 
 const baseClass =
   'inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60';
@@ -17,6 +18,8 @@ const LIST_ID_FIELD = {
   league: 'leagueId',
   leagueTeam: 'leagueTeamId',
 };
+
+export { PENDING_FOLLOW_KEY } from '../followIntent';
 
 // Follow/unfollow toggle for a target (user account, league, or league team).
 // Only signed-in users can follow (decision D6): logged-out visitors get a
@@ -45,8 +48,11 @@ export function FollowButton({
   const onDark = variant === 'onDark';
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [optimisticFollowing, setOptimisticFollowing] = useState(null);
+  const pendingIntentHandled = useRef(false);
 
   // Self-follow only applies to user accounts (DL3).
   const isOwnAccount = targetType === 'user' && user && String(user.id) === String(id);
@@ -54,7 +60,54 @@ export function FollowButton({
   const canQuery = Boolean(user) && !isOwnAccount && !hasKnownStatus && Boolean(id);
 
   const { data: statuses } = useFollowStatus([id], { targetType, enabled: canQuery });
-  const isFollowing = hasKnownStatus ? Boolean(knownIsFollowing) : Boolean(statuses?.[String(id)]);
+  const isFollowing =
+    optimisticFollowing ??
+    (hasKnownStatus ? Boolean(knownIsFollowing) : Boolean(statuses?.[String(id)]));
+
+  function updateFollowCaches(nextFollowing) {
+    queryClient.setQueriesData({ queryKey: ['followStatus', targetType] }, (current) => {
+      if (!current?.statuses || !(String(id) in current.statuses)) return current;
+      return {
+        ...current,
+        statuses: { ...current.statuses, [String(id)]: nextFollowing },
+      };
+    });
+    queryClient.setQueryData(followStatusQueryKey(targetType, [id]), (current) => ({
+      ...(current?.statuses ? current : { statuses: {} }),
+      statuses: { ...(current?.statuses || {}), [String(id)]: nextFollowing },
+    }));
+
+    const listKey = followingQueryKey(targetType);
+    const idField = LIST_ID_FIELD[targetType] || 'targetId';
+    queryClient.setQueryData(listKey, (current) => {
+      if (!current?.following || nextFollowing) return current;
+      return {
+        ...current,
+        following: current.following.filter((entry) => String(entry[idField]) !== String(id)),
+      };
+    });
+    if (nextFollowing) queryClient.removeQueries({ queryKey: listKey });
+  }
+
+  useEffect(() => {
+    if (!user || !id || pendingIntentHandled.current) return;
+    const intent = readPendingFollowIntent();
+    if (intent?.targetType !== targetType || String(intent?.targetId) !== String(id)) return;
+
+    pendingIntentHandled.current = true;
+    setPending(true);
+    followsApi
+      .follow(targetType, id)
+      .then(() => {
+        sessionStorage.removeItem(PENDING_FOLLOW_KEY);
+        setOptimisticFollowing(true);
+        updateFollowCaches(true);
+      })
+      .catch((followError) => {
+        setError(followError.message || 'Could not complete your follow request');
+      })
+      .finally(() => setPending(false));
+  }, [user, id, targetType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Never render for your own account.
   if (isOwnAccount) {
@@ -66,11 +119,18 @@ export function FollowButton({
     const ctaClass = onDark
       ? 'border border-white/30 text-white hover:border-[#F4A300] hover:text-[#F4A300]'
       : 'border border-[#141414] text-[#141414] hover:bg-[#141414] hover:text-white';
+    const returnTo = `${location.pathname}${location.search}`;
     return (
       <Link
-        to="/register"
+        to={`/register?redirectTo=${encodeURIComponent(returnTo)}`}
         className={`${baseClass} ${ctaClass} ${className}`}
-        onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.FOLLOW_BUTTON)}
+        onClick={() => {
+          sessionStorage.setItem(
+            PENDING_FOLLOW_KEY,
+            JSON.stringify({ targetType, targetId: String(id), returnTo })
+          );
+          trackSignupCtaClicked(SIGNUP_SOURCE.FOLLOW_BUTTON);
+        }}
       >
         Join to follow
       </Link>
@@ -94,36 +154,8 @@ export function FollowButton({
       // button's own single-id query key and any batched key a parent (e.g. a
       // discovery grid) fetched for multiple ids at once, since both may hold an
       // entry for this id. Scoped to this targetType's status keys.
-      queryClient.setQueriesData({ queryKey: ['followStatus', targetType] }, (current) => {
-        if (!current?.statuses || !(String(id) in current.statuses)) {
-          return current;
-        }
-        return {
-          ...current,
-          statuses: { ...current.statuses, [String(id)]: nextFollowing },
-        };
-      });
-      queryClient.setQueryData(followStatusQueryKey(targetType, [id]), (current) => ({
-        ...(current?.statuses ? current : { statuses: {} }),
-        statuses: { ...(current?.statuses || {}), [String(id)]: nextFollowing },
-      }));
-
-      // On unfollow, drop the card from this type's Following list cache
-      // immediately; on follow, remove the list so it refetches with the new
-      // hydrated card (which carries name/logo the button doesn't have).
-      const listKey = followingQueryKey(targetType);
-      const idField = LIST_ID_FIELD[targetType] || 'targetId';
-      queryClient.setQueryData(listKey, (current) => {
-        if (!current?.following) return current;
-        if (nextFollowing) return current;
-        return {
-          ...current,
-          following: current.following.filter((entry) => String(entry[idField]) !== String(id)),
-        };
-      });
-      if (nextFollowing) {
-        queryClient.removeQueries({ queryKey: listKey });
-      }
+      updateFollowCaches(nextFollowing);
+      setOptimisticFollowing(nextFollowing);
     } catch (toggleError) {
       setError(toggleError.message || 'Something went wrong');
     } finally {

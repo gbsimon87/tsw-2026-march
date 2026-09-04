@@ -41,10 +41,6 @@ function formatEventMeta(event, gameFormat) {
     parts.push(ZONE_LABELS[event.zoneId] || event.zoneId);
   }
 
-  if (typeof event.x === 'number' && typeof event.y === 'number') {
-    parts.push(`(${event.x.toFixed(1)}, ${event.y.toFixed(1)})`);
-  }
-
   return parts.join(' ');
 }
 
@@ -338,6 +334,7 @@ export function GameTrackPage() {
   // The derived step below exits as soon as a side has ONE player, so without
   // this there is no way to reopen it — see returnToShortLineup.
   const [lineupRevisitSide, setLineupRevisitSide] = useState(null);
+  const [isStandaloneLineupEditing, setIsStandaloneLineupEditing] = useState(false);
   const [sideState, setSideState] = useState({
     [TEAM_SIDES.HOME]: createEmptySideState(),
     [TEAM_SIDES.AWAY]: createEmptySideState(),
@@ -359,11 +356,13 @@ export function GameTrackPage() {
   const [clockRecoveryTimeDraft, setClockRecoveryTimeDraft] = useState('10:00');
   const isEventPickerOpen = Boolean(selectedShot || pendingFollowUpPrompt);
   const ghostClickGuardRef = useRef(null);
+  const eventPickerRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
   const videoIframeRef = useRef(null);
   const videoCurrentTimeRef = useRef(null);
   const entryClockSnapshotRef = useRef(null);
   const entryClockWasRunningRef = useRef(false);
+  const entryClockTransitionRef = useRef(Promise.resolve());
   const clockOperatedThisMountRef = useRef(false);
   const rotateCourt = courtOrientation === 'horizontal';
 
@@ -623,20 +622,30 @@ export function GameTrackPage() {
   const awayLineupCount = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length;
   const homeLineupReady = homeLineupCount > 0;
   const awayLineupReady = awayLineupCount > 0;
+  const homeStartingLineupSet =
+    (data?.lineups?.[TEAM_SIDES.HOME]?.startingPlayerIds || []).length > 0;
+  const awayStartingLineupSet =
+    (data?.lineups?.[TEAM_SIDES.AWAY]?.startingPlayerIds || []).length > 0;
+  const startingLineupsSet = isDualTeam
+    ? homeStartingLineupSet && awayStartingLineupSet
+    : (game?.startingLineupPlayerIds || []).length > 0;
   const allStartingLineupsReady = isDualTeam
     ? homeLineupReady && awayLineupReady
     : (game?.currentLineupPlayerIds || []).length > 0;
   const hasShortStartingLineup = isDualTeam
     ? homeLineupCount < 5 || awayLineupCount < 5
     : (game?.currentLineupPlayerIds || []).length < 5;
-  const derivedLineupSetupStep =
-    isLeagueGame && isDualTeam
-      ? !homeLineupReady
+  const derivedLineupSetupStep = !isCompleted
+    ? isDualTeam
+      ? !homeStartingLineupSet
         ? 'home'
-        : !awayLineupReady
+        : !awayStartingLineupSet
           ? 'away'
           : null
-      : null;
+      : !startingLineupsSet
+        ? 'oneSided'
+        : null
+    : null;
   // A side counts as "ready" at one player, so both sides can be ready while
   // still being short of five. lineupRevisitSide reopens the step in that case.
   const lineupSetupStep =
@@ -707,6 +716,10 @@ export function GameTrackPage() {
       setError('Resolve the running clock recovery before tracking an event');
       return false;
     }
+    if (data?.game?.clock?.status === 'ready') {
+      setError('Start the game clock before recording an event');
+      return false;
+    }
     if (isDualTeam) {
       const homeReady = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length > 0;
       const awayReady = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length > 0;
@@ -756,9 +769,13 @@ export function GameTrackPage() {
     return { teamSide: activeSide, ...withClock };
   }
 
-  function submitEvent(payload, { insertBeforeId = '' } = {}) {
+  async function submitEvent(payload, { insertBeforeId = '' } = {}) {
     captureEntrySnapshot();
     const eventPayload = buildEventPayload(payload);
+    // Pausing/resuming the clock writes the same optimistically-concurrent Game
+    // document as a stat. Wait for any entry clock transition so a quick tap on
+    // FT+ (or another stat) cannot race that write and receive a false 409.
+    await entryClockTransitionRef.current.catch(() => undefined);
     return insertBeforeId
       ? gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
       : gamesApi.appendEvent(gameId, eventPayload);
@@ -792,32 +809,38 @@ export function GameTrackPage() {
     return entryClockSnapshotRef.current;
   }
 
-  async function pauseClockForEntry() {
+  function pauseClockForEntry() {
     if (
       !pauseVideoOnEntry ||
       data?.game?.clock?.status !== 'running' ||
       entryClockWasRunningRef.current
     )
-      return;
+      return entryClockTransitionRef.current;
     entryClockWasRunningRef.current = true;
-    try {
-      const response = await gamesApi.updateClock(gameId, { action: 'pause' });
-      updateData(response);
-    } catch (clockError) {
-      entryClockWasRunningRef.current = false;
-      setError(clockError.message || 'Failed to pause the game clock');
-    }
+    const transition = entryClockTransitionRef.current
+      .catch(() => undefined)
+      .then(() => gamesApi.updateClock(gameId, { action: 'pause' }))
+      .then((response) => updateData(response))
+      .catch((clockError) => {
+        entryClockWasRunningRef.current = false;
+        setError(clockError.message || 'Failed to pause the game clock');
+      });
+    entryClockTransitionRef.current = transition;
+    return transition;
   }
 
-  async function resumeClockAfterEntry() {
-    if (!entryClockWasRunningRef.current) return;
+  function resumeClockAfterEntry() {
+    if (!entryClockWasRunningRef.current) return entryClockTransitionRef.current;
     entryClockWasRunningRef.current = false;
-    try {
-      const response = await gamesApi.updateClock(gameId, { action: 'start' });
-      updateData(response);
-    } catch (clockError) {
-      setError(clockError.message || 'Stat saved, but the game clock remains paused');
-    }
+    const transition = entryClockTransitionRef.current
+      .catch(() => undefined)
+      .then(() => gamesApi.updateClock(gameId, { action: 'start' }))
+      .then((response) => updateData(response))
+      .catch((clockError) => {
+        setError(clockError.message || 'Stat saved, but the game clock remains paused');
+      });
+    entryClockTransitionRef.current = transition;
+    return transition;
   }
 
   function onCourtSelect(point) {
@@ -1395,6 +1418,7 @@ export function GameTrackPage() {
       // Leaving the reopened step on save keeps the exit predictable: press
       // Start again and the warning re-targets whichever side is now emptier.
       setLineupRevisitSide(null);
+      setIsStandaloneLineupEditing(false);
     } catch (saveError) {
       setError(saveError.message || 'Failed to save lineup');
     } finally {
@@ -1555,6 +1579,7 @@ export function GameTrackPage() {
     }
 
     setActivePanel('court');
+    setIsStandaloneLineupEditing(true);
     if (isDualTeam) {
       setActiveSide(homeLineupCount < 5 ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY);
     }
@@ -1601,12 +1626,36 @@ export function GameTrackPage() {
     }
   }
 
+  const clearEventPickerRef = useRef(clearEventPicker);
+  clearEventPickerRef.current = clearEventPicker;
+
+  useEffect(() => {
+    if (!isEventPickerOpen) return undefined;
+
+    // Focus the dialog itself rather than its first button: the first button is
+    // a player row, and focusing it would read as a selection the user did not
+    // make. The container is focusable via tabIndex={-1}.
+    eventPickerRef.current?.focus({ preventScroll: true });
+
+    // Escape was handled by an onKeyDown on the dialog element, which only ever
+    // fires when focus is already inside it. Opening the picker is a court tap,
+    // so focus is wherever the tap left it and the key never reached the
+    // handler. A document listener does not care where focus is.
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        clearEventPickerRef.current();
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isEventPickerOpen]);
+
   if (!data || !game || !boxScore) {
     return <SportsLoader label="Loading tracking session" fullPage />;
   }
 
-  // Tracking is free (T-12): no hard subscription block here. Premium features
-  // (replay/shot maps) are surfaced/gated on the game detail page, not the tracker.
+  // Every current Team feature is included; resource capacity is enforced by the API.
 
   const gameSummary = data.gameSummary || {
     teamPoints: boxScore.teamTotals?.points || 0,
@@ -1635,12 +1684,12 @@ export function GameTrackPage() {
     return onCourtPlayers;
   })();
   const eventPickerShellClass =
-    'fixed inset-0 z-[60] flex items-stretch justify-center bg-slate-950/35 p-2 backdrop-blur-[1px] sm:p-3';
+    'fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/45 p-2 backdrop-blur-[1px] sm:p-3';
   const eventPickerPanelClass =
-    'relative z-10 flex h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
-  const eventPickerBodyClass = 'flex h-full min-h-0 w-full flex-col';
+    't-modal relative z-10 flex max-h-full min-h-0 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl';
+  const eventPickerBodyClass = 'flex min-h-0 w-full flex-col';
   const eventPickerGridClass =
-    'mt-3 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr),auto] gap-3 landscape:grid-cols-[minmax(0,1fr),minmax(12rem,0.78fr)] landscape:grid-rows-none md:grid-cols-[minmax(0,1fr),minmax(13rem,0.8fr)]';
+    'mt-3 grid min-h-0 grid-rows-[auto,auto] gap-3 landscape:grid-cols-[minmax(0,1fr),minmax(12rem,0.78fr)] landscape:grid-rows-none md:grid-cols-[minmax(0,1fr),minmax(13rem,0.8fr)]';
   const playerButtonClass = (isSelected = false) =>
     `grid min-h-12 w-full grid-cols-[2.5rem,3.5rem,minmax(0,1fr)] items-center gap-2 rounded-xl px-3 py-2 text-left transition landscape:min-h-10 landscape:grid-cols-[2.25rem,3rem,minmax(0,1fr)] landscape:py-1.5 md:min-h-14 md:grid-cols-[2.75rem,4rem,minmax(0,1fr)] md:py-2.5 ${
       isSelected ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
@@ -1652,25 +1701,39 @@ export function GameTrackPage() {
   const playerNameClass =
     'min-w-0 truncate text-base font-semibold leading-tight text-current opacity-85 landscape:text-sm md:text-sm';
   const actionColumnClass = 'flex min-h-0 flex-col overflow-hidden';
-  const actionScrollerClass = 'min-h-0 overflow-y-auto landscape:flex-1 md:flex-1';
+  const actionScrollerClass = 'min-h-0 overflow-y-auto';
   const actionGridClass =
     'grid grid-cols-2 gap-2 landscape:grid-cols-1 landscape:gap-1.5 md:grid-cols-1';
   const actionGroupClass = 'min-w-0';
   const actionPairClass = 'grid grid-cols-2 gap-1.5';
   const actionTripleClass = 'grid grid-cols-3 gap-1.5';
+  // Seven unrelated hues (emerald, rose, sky, amber, indigo, orange, dark rose)
+  // used to share this panel, none of them from the app's own palette, and the
+  // rebound amber failed WCAG AA on white text (3.19:1). The set is now four
+  // meanings drawn from the incumbent world — ink, forest, amber, red — so the
+  // colour tells the tracker what kind of outcome they are recording rather
+  // than which button it is. Every pair clears AA:
+  //   forest #1B4332 / white 11.08 · red #B42318 / white 6.57
+  //   ink #141414 / white 18.42   · amber #F4A300 / ink 8.85
   const actionButtonClass = (tone = 'slate') => {
     const tones = {
-      make: 'bg-emerald-700 text-white hover:bg-emerald-600',
-      miss: 'bg-rose-700 text-white hover:bg-rose-600',
-      ft: 'bg-sky-700 text-white hover:bg-sky-600',
-      rebound: 'bg-amber-600 text-white hover:bg-amber-500',
-      defense: 'bg-indigo-700 text-white hover:bg-indigo-600',
-      foul: 'bg-orange-700 text-white hover:bg-orange-600',
-      opponent: 'bg-rose-800 text-white hover:bg-rose-700',
+      // Points scored.
+      make: 'bg-[#1B4332] text-white hover:bg-[#245c44]',
+      ft: 'bg-[#1B4332] text-white hover:bg-[#245c44]',
+      // Possession lost or a shot missed.
+      miss: 'bg-[#B42318] text-white hover:bg-[#912013]',
+      // Neutral team stats — rebounds, steals, blocks.
+      rebound: 'bg-[#141414] text-white hover:bg-[#2a2a2a]',
+      defense: 'bg-[#141414] text-white hover:bg-[#2a2a2a]',
+      // Attention: something went against us but no shot was involved.
+      foul: 'bg-[#F4A300] text-[#141414] hover:bg-[#dc9200]',
+      // The other team. Visibly not one of ours.
+      opponent:
+        'border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50',
       slate: 'bg-slate-100 text-slate-800 hover:bg-slate-200',
     };
 
-    return `w-full rounded-xl px-3 py-3 text-center text-base font-bold transition disabled:opacity-60 landscape:py-2 landscape:text-sm md:py-3 md:text-base ${tones[tone] || tones.slate}`;
+    return `w-full rounded-xl px-3 py-3 text-center text-base font-bold transition-colors disabled:opacity-60 landscape:py-2 landscape:text-sm md:py-3 md:text-base ${tones[tone] || tones.slate}`;
   };
 
   const eventPicker = isEventPickerOpen ? (
@@ -1679,9 +1742,11 @@ export function GameTrackPage() {
     // <button> beneath this dialog.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
+      ref={eventPickerRef}
+      tabIndex={-1}
       aria-modal="true"
       aria-label="Add event"
-      className={eventPickerShellClass}
+      className={`${eventPickerShellClass} t-modal-backdrop focus:outline-none`}
       role="dialog"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -1764,7 +1829,7 @@ export function GameTrackPage() {
                         onClick={() => setActiveSide(side)}
                         className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2 transition ${
                           isActive
-                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
+                            ? 'border-[#141414] bg-[#141414] text-white shadow-sm'
                             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
@@ -1891,7 +1956,7 @@ export function GameTrackPage() {
                           disabled={isSaving}
                           onClick={() => handleFollowUpSelection('NO_ASSIST')}
                         >
-                          No Assist
+                          Unassisted
                         </button>
                       ) : pendingFollowUpPrompt.kind === 'rebound' && !isDualTeam ? (
                         <button
@@ -1909,7 +1974,7 @@ export function GameTrackPage() {
                         disabled={isSaving}
                         onClick={() => clearEventPicker()}
                       >
-                        Dismiss
+                        Skip this question
                       </button>
                     </>
                   ) : (
@@ -2083,19 +2148,20 @@ export function GameTrackPage() {
       ) : null}
 
       <GameTrackScoreHeader
-        game={game}
         gameSummary={gameSummary}
         activeSide={activeSide}
         onChangeActiveSide={changeActiveSide}
         isDualTeam={isDualTeam}
         participantsBySide={participantsBySide}
         team={team}
-        boxScore={boxScore}
         clockControls={
           <GameClockControls
             game={game}
             onCommand={runClockCommand}
             disabled={isSaving || !allStartingLineupsReady}
+            disabledReason={
+              allStartingLineupsReady ? '' : 'Save a starting five below to start the clock.'
+            }
             serverOffsetMilliseconds={serverOffsetMilliseconds}
           />
         }
@@ -2126,15 +2192,19 @@ export function GameTrackPage() {
                 stepLabel={
                   lineupRevisitSide
                     ? 'Add players'
-                    : lineupSetupStep === 'home'
-                      ? 'Step 1 of 2'
-                      : 'Step 2 of 2'
+                    : !isDualTeam
+                      ? null
+                      : lineupSetupStep === 'home'
+                        ? 'Step 1 of 2'
+                        : 'Step 2 of 2'
                 }
-                isDualTeam
+                isDualTeam={isDualTeam}
                 teamDisplayName={
-                  participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+                  isDualTeam
+                    ? participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+                    : team?.name || 'Team'
                 }
-                players={participantsBySide[lineupSetupStep]?.players || []}
+                players={isDualTeam ? participantsBySide[lineupSetupStep]?.players || [] : players}
                 canManageRoster={canAddRosterPlayer}
                 onAddPlayer={() => setIsAddPlayerOpen(true)}
                 onExit={lineupRevisitSide ? () => setLineupRevisitSide(null) : null}
@@ -2152,7 +2222,7 @@ export function GameTrackPage() {
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
-              <div className="shrink-0 grid grid-cols-4 border-b border-slate-200">
+              <div className="shrink-0 grid grid-cols-4 gap-1 border-b border-slate-200 p-1.5">
                 {[
                   {
                     id: 'court',
@@ -2218,19 +2288,17 @@ export function GameTrackPage() {
                       </svg>
                     ),
                   },
-                ].map((tab, index, arr) => (
+                ].map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActivePanel(tab.id)}
                     aria-label={tab.label}
                     aria-pressed={activePanel === tab.id}
-                    className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
-                      index < arr.length - 1 ? 'border-r border-slate-200' : ''
-                    } ${
+                    className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${
                       activePanel === tab.id
-                        ? 'bg-slate-900 text-white'
-                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                        ? 'bg-[#141414] text-white'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
                     {tab.icon}
@@ -2249,35 +2317,58 @@ export function GameTrackPage() {
                   <div
                     className={isMobileVideoWatchView ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMobileEntryMode(true);
-                        if (pauseVideoOnEntry) {
-                          pauseVideo();
-                        }
-                      }}
-                      className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-                    >
-                      <svg
-                        viewBox="0 0 20 20"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <rect x="2" y="2" width="16" height="16" rx="2" />
-                        <path d="M10 2v16M2 10h16" />
-                      </svg>
-                      Track Stat
-                    </button>
-                    <div className="min-h-0 flex-1">
-                      <GameVideoPanel
-                        videoUrl={game.videoUrl}
-                        title={game.title}
-                        videoIframeRef={videoIframeRef}
-                      />
-                    </div>
+                    {!isDualTeam && (lineupIds.length === 0 || isStandaloneLineupEditing) ? (
+                      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                        <LineupPicker
+                          isDualTeam={false}
+                          teamDisplayName={team?.name || 'Team'}
+                          players={players}
+                          canManageRoster={canAddRosterPlayer}
+                          onAddPlayer={() => setIsAddPlayerOpen(true)}
+                          lineupDraft={currentSideState.lineupDraft}
+                          onToggle={(playerId, checked) => {
+                            const nextDraft = checked
+                              ? [...currentSideState.lineupDraft, playerId]
+                              : currentSideState.lineupDraft.filter((id) => id !== playerId);
+                            updateSideState(activeKey, { lineupDraft: nextDraft });
+                          }}
+                          onSave={saveLineup}
+                          isSaving={isSaving}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMobileEntryMode(true);
+                            if (pauseVideoOnEntry) {
+                              pauseVideo();
+                            }
+                          }}
+                          className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+                        >
+                          <svg
+                            viewBox="0 0 20 20"
+                            className="h-5 w-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <rect x="2" y="2" width="16" height="16" rx="2" />
+                            <path d="M10 2v16M2 10h16" />
+                          </svg>
+                          Track Stat
+                        </button>
+                        <div className="min-h-0 flex-1">
+                          <GameVideoPanel
+                            videoUrl={game.videoUrl}
+                            title={game.title}
+                            videoIframeRef={videoIframeRef}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : null}
 
@@ -2312,8 +2403,8 @@ export function GameTrackPage() {
                       </button>
                       <div className="space-y-4">
                         {insertBeforeEventId ? (
-                          <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                            <p className="text-xs font-medium text-sky-800">
+                          <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
+                            <p className="text-xs font-medium text-[#7a5200]">
                               Tap the court to insert a shot before the selected event.
                             </p>
                             <button
@@ -2322,7 +2413,7 @@ export function GameTrackPage() {
                                 setInsertBeforeEventId('');
                                 setActivePanel('events');
                               }}
-                              className="shrink-0 text-xs font-semibold text-sky-700 hover:underline"
+                              className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
                             >
                               Cancel
                             </button>
@@ -2355,8 +2446,8 @@ export function GameTrackPage() {
                   ) : activePanel === 'court' && !(game.videoUrl && !isDesktopLayout) ? (
                     <div className="space-y-4">
                       {insertBeforeEventId ? (
-                        <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                          <p className="text-xs font-medium text-sky-800">
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
+                          <p className="text-xs font-medium text-[#7a5200]">
                             Tap the court to insert a shot before the selected event.
                           </p>
                           <button
@@ -2365,7 +2456,7 @@ export function GameTrackPage() {
                               setInsertBeforeEventId('');
                               setActivePanel('events');
                             }}
-                            className="shrink-0 text-xs font-semibold text-sky-700 hover:underline"
+                            className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
                           >
                             Cancel
                           </button>
@@ -2375,7 +2466,7 @@ export function GameTrackPage() {
                         <div className="relative">
                           <InteractiveCourtImage
                             onSelect={onCourtSelect}
-                            containerClassName="min-h-[26rem]"
+                            containerClassName="mx-auto min-h-[26rem] w-full max-w-[calc(min(78vw,26rem))] sm:h-[min(64vh,40rem)] sm:min-h-[26rem] sm:max-w-[calc(min(64vh,40rem)*0.5526)]"
                             courtClassName="min-h-[22rem]"
                             rotate90={rotateCourt}
                           />
@@ -2413,7 +2504,7 @@ export function GameTrackPage() {
                                       #{lastPlayer.jerseyNumber}
                                     </span>
                                   ) : null}
-                                  <span className="truncate text-sm font-medium text-emerald-700">
+                                  <span className="truncate text-sm font-medium text-[#1B4332]">
                                     {lastActionLabel}
                                   </span>
                                 </div>
@@ -2453,7 +2544,7 @@ export function GameTrackPage() {
                         />
                       ) : null}
 
-                      {lineupIds.length < 5 ? (
+                      {lineupIds.length === 0 || (!isDualTeam && isStandaloneLineupEditing) ? (
                         <LineupPicker
                           variant="inline"
                           isDualTeam={isDualTeam}
@@ -2485,12 +2576,12 @@ export function GameTrackPage() {
                         const bothSelected = Boolean(playerOutId && playerInId);
 
                         function SubPlayerCard({ player, isSelected, tone, onToggle }) {
-                          const baseRing = tone === 'out' ? 'ring-rose-500' : 'ring-emerald-500';
-                          const selectedBg = tone === 'out' ? 'bg-rose-50' : 'bg-emerald-50';
+                          const baseRing = tone === 'out' ? 'ring-[#B42318]' : 'ring-[#1B4332]';
+                          const selectedBg = tone === 'out' ? 'bg-[#FDF3F2]' : 'bg-[#EEF6F1]';
                           const avatarBg =
                             tone === 'out'
-                              ? 'bg-rose-100 text-rose-700'
-                              : 'bg-emerald-100 text-emerald-700';
+                              ? 'bg-[#FBE3E1] text-[#8f1c12]'
+                              : 'bg-[#DCEBE3] text-[#1B4332]';
                           const defaultAvatarBg = 'bg-slate-100 text-slate-600';
                           return (
                             <button
@@ -2589,7 +2680,7 @@ export function GameTrackPage() {
                               <div className="absolute inset-x-0 bottom-0 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
                                 <div className="mb-3 flex items-center justify-center gap-3">
                                   <div className="flex flex-col items-center gap-0.5">
-                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FBE3E1] text-sm font-black text-[#8f1c12]">
                                       {playerOut?.jerseyNumber ?? '?'}
                                     </span>
                                     <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
@@ -2606,7 +2697,7 @@ export function GameTrackPage() {
                                     <path d="M4 7h12M13 4l3 3-3 3M16 13H4M7 10l-3 3 3 3" />
                                   </svg>
                                   <div className="flex flex-col items-center gap-0.5">
-                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#DCEBE3] text-sm font-black text-[#1B4332]">
                                       {playerIn?.jerseyNumber ?? '?'}
                                     </span>
                                     <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
@@ -2638,7 +2729,7 @@ export function GameTrackPage() {
                             <button
                               type="button"
                               onClick={() => setShowAllRecentEvents((value) => !value)}
-                              className="text-sm font-medium text-sky-700 hover:underline"
+                              className="text-sm font-medium text-[#1B4332] hover:underline"
                             >
                               {showAllRecentEvents ? 'Show less' : 'Show all'}
                             </button>
@@ -2652,7 +2743,8 @@ export function GameTrackPage() {
                           </button>
                         </div>
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span className="text-xs text-slate-400">On each row:</span>
                         <span className="flex items-center gap-1.5 text-xs text-slate-500">
                           <svg
                             viewBox="0 0 16 16"
@@ -2668,7 +2760,7 @@ export function GameTrackPage() {
                         <span className="flex items-center gap-1.5 text-xs text-slate-500">
                           <svg
                             viewBox="0 0 16 16"
-                            className="h-3.5 w-3.5 shrink-0 text-sky-500"
+                            className="h-3.5 w-3.5 shrink-0 text-[#1B4332]"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.8"
@@ -2681,7 +2773,7 @@ export function GameTrackPage() {
                         <span className="flex items-center gap-1.5 text-xs text-slate-500">
                           <svg
                             viewBox="0 0 16 16"
-                            className="h-3.5 w-3.5 shrink-0 text-rose-400"
+                            className="h-3.5 w-3.5 shrink-0 text-[#B42318]"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.8"
@@ -2761,7 +2853,7 @@ export function GameTrackPage() {
                                       };
                                       setActivePanel('court');
                                     }}
-                                    className="rounded-md p-1.5 text-sky-600 transition hover:bg-sky-50"
+                                    className="rounded-md p-1.5 text-[#1B4332] transition-colors hover:bg-[#1B4332]/10"
                                   >
                                     <svg
                                       viewBox="0 0 16 16"
@@ -2778,7 +2870,7 @@ export function GameTrackPage() {
                                     type="button"
                                     aria-label="Remove this event"
                                     onClick={() => removeEvent(event.id)}
-                                    className="rounded-md p-1.5 text-rose-600 transition hover:bg-rose-50"
+                                    className="rounded-md p-1.5 text-[#B42318] transition-colors hover:bg-[#B42318]/10"
                                   >
                                     <svg
                                       viewBox="0 0 16 16"
@@ -2857,7 +2949,7 @@ export function GameTrackPage() {
                             </p>
                           </div>
                           <span
-                            className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                            className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
                           >
                             {pauseVideoOnEntry ? 'On' : 'Off'}
                           </span>
@@ -2907,7 +2999,7 @@ export function GameTrackPage() {
                               type="url"
                               aria-label="Game video URL"
                               autoComplete="off"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20"
                               placeholder="https://www.youtube.com/watch?v=..."
                               value={videoUrlDraft}
                               onChange={(e) => setVideoUrlDraft(e.target.value)}
@@ -2987,9 +3079,9 @@ export function GameTrackPage() {
                           type="button"
                           onClick={() => setShowFinishConfirm(true)}
                           disabled={isSaving}
-                          className="flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-left transition hover:bg-emerald-100 disabled:opacity-60"
+                          className="flex w-full items-center gap-3 rounded-xl border border-[#1B4332]/25 bg-[#EEF6F1] px-4 py-4 text-left transition-colors hover:bg-[#DCEBE3] disabled:opacity-60"
                         >
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1B4332] text-white">
                             <svg
                               viewBox="0 0 20 20"
                               className="h-5 w-5"
@@ -3001,8 +3093,8 @@ export function GameTrackPage() {
                             </svg>
                           </span>
                           <div>
-                            <p className="text-sm font-semibold text-emerald-900">Finish Game</p>
-                            <p className="text-xs text-emerald-700">Mark the game as complete.</p>
+                            <p className="text-sm font-semibold text-[#1B4332]">Finish Game</p>
+                            <p className="text-xs text-[#2c5c47]">Mark the game as complete.</p>
                           </div>
                         </button>
                       )}
@@ -3085,7 +3177,7 @@ export function GameTrackPage() {
                                     playerId: playerStillValid ? ev.playerId : '',
                                   }));
                                 }}
-                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${editingEvent.teamSide === side ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${editingEvent.teamSide === side ? 'border-[#141414] bg-[#141414] text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
                               >
                                 {participantsBySide[side]?.displayName || side}
                               </button>
@@ -3404,7 +3496,7 @@ export function GameTrackPage() {
                     setShowFinishConfirm(false);
                     finishGame();
                   }}
-                  className="flex-1 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                  className="flex-1 rounded-xl bg-[#1B4332] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c44] disabled:opacity-60"
                 >
                   {isSaving ? 'Finishing...' : 'Yes, finish game'}
                 </button>
@@ -3448,7 +3540,7 @@ export function GameTrackPage() {
                 setShowShortLineupWarning(false);
                 executeClockCommand({ action: 'start' });
               }}
-              className="flex-1 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+              className="flex-1 rounded-xl bg-[#1B4332] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c44] disabled:opacity-60"
             >
               Continue and start
             </button>
@@ -3461,19 +3553,20 @@ export function GameTrackPage() {
             style={{ top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
           >
             <GameTrackScoreHeader
-              game={game}
               gameSummary={gameSummary}
               activeSide={activeSide}
               onChangeActiveSide={changeActiveSide}
               isDualTeam={isDualTeam}
               participantsBySide={participantsBySide}
               team={team}
-              boxScore={boxScore}
               clockControls={
                 <GameClockControls
                   game={game}
                   onCommand={runClockCommand}
                   disabled={isSaving || !allStartingLineupsReady}
+                  disabledReason={
+                    allStartingLineupsReady ? '' : 'Save a starting five below to start the clock.'
+                  }
                   serverOffsetMilliseconds={serverOffsetMilliseconds}
                 />
               }
@@ -3489,7 +3582,7 @@ export function GameTrackPage() {
                         onClick={() => changeActiveSide(side)}
                         className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
                           activeSide === side
-                            ? 'bg-indigo-600 text-white'
+                            ? 'bg-[#141414] text-white'
                             : 'border border-slate-300 bg-white text-slate-800'
                         }`}
                       >

@@ -14,6 +14,7 @@ jest.mock('../../modules/auth/auth.repository', () => ({
   markAuthTokenUsed: jest.fn(),
   markEmailVerified: jest.fn(),
   updateUserPassword: jest.fn(),
+  updateUserOnboarding: jest.fn(),
 }));
 
 jest.mock('../../services/email.service', () => ({
@@ -67,6 +68,49 @@ describe('auth service', () => {
     expect(result.refreshToken).toEqual(expect.any(String));
     expect(result.user.email).toBe('player@example.com');
     expect(repository.upsertSession).toHaveBeenCalledTimes(1);
+    expect(repository.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onboarding: { status: 'not_started', roles: [], completedSteps: [] },
+      })
+    );
+  });
+
+  test('updates and returns durable onboarding progress', async () => {
+    repository.findUserById.mockResolvedValue({
+      _id: 'user-1',
+      email: 'player@example.com',
+      name: 'Player One',
+      roles: ['user'],
+      onboarding: { status: 'not_started', roles: [], completedSteps: [] },
+    });
+    repository.updateUserOnboarding.mockResolvedValue({
+      _id: 'user-1',
+      email: 'player@example.com',
+      name: 'Player One',
+      roles: ['user'],
+      onboarding: {
+        status: 'in_progress',
+        roles: ['player'],
+        completedSteps: ['roles'],
+      },
+    });
+
+    const user = await authService.updateOnboarding('user-1', {
+      status: 'in_progress',
+      roles: ['player'],
+      completedSteps: ['roles'],
+    });
+
+    expect(repository.updateUserOnboarding).toHaveBeenCalledWith('user-1', {
+      status: 'in_progress',
+      roles: ['player'],
+      completedSteps: ['roles'],
+    });
+    expect(user.onboarding).toEqual({
+      status: 'in_progress',
+      roles: ['player'],
+      completedSteps: ['roles'],
+    });
   });
 
   test('register rejects an email that is already in use', async () => {
@@ -334,5 +378,30 @@ describe('auth service', () => {
     expect(first).toBe('system-1');
     expect(second).toBe('system-1');
     expect(repository.findOrCreateSystemUser).toHaveBeenCalledTimes(1);
+  });
+});
+
+const { updateOnboardingSchema } = require('../../modules/auth/auth.validation');
+describe('updateOnboardingSchema roles', () => {
+  test('accepts the browse-only fan role', () => {
+    expect(updateOnboardingSchema.parse({ roles: ['fan'] }).roles).toEqual(['fan']);
+  });
+
+  test('accepts every supported role at once', () => {
+    const roles = ['league_manager', 'league_team_manager', 'team_manager', 'player', 'fan'];
+
+    expect(updateOnboardingSchema.parse({ roles }).roles).toEqual(roles);
+  });
+
+  test('rejects an unknown role', () => {
+    expect(() => updateOnboardingSchema.parse({ roles: ['referee'] })).toThrow();
+  });
+
+  test('rejects more roles than exist', () => {
+    expect(() =>
+      updateOnboardingSchema.parse({
+        roles: ['fan', 'player', 'team_manager', 'league_manager', 'league_team_manager', 'fan'],
+      })
+    ).toThrow();
   });
 });

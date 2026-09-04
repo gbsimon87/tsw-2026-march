@@ -10,6 +10,12 @@ import { Modal } from '../../../components/ui/Modal';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { GameFormatFields } from '../../games/components/GameFormatFields';
 import { DEFAULT_GAME_FORMAT } from '../../games/gameClock';
+import {
+  buildReusableVenues,
+  emptyVenueDetails,
+  VenueFields,
+  venuePayload,
+} from '../../games/components/VenueFields';
 
 // ── Shared primitives ────────────────────────────────────────────────
 
@@ -40,12 +46,17 @@ function TeamAvatar({ team, size = 'md' }) {
 }
 
 function SideToggle({ value, onChange, homeLabel = 'Home', awayLabel = 'Away' }) {
+  // The labels carry team names on this page, so each half has to be able to
+  // shrink (min-w-0) and clip (truncate) rather than widen the toggle.
+  const buttonClass =
+    'min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-sm font-semibold transition-all';
   return (
     <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1">
       <button
         type="button"
         onClick={() => onChange('home')}
-        className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+        title={homeLabel}
+        className={`${buttonClass} ${
           value === 'home'
             ? 'bg-white text-slate-900 shadow-sm'
             : 'text-slate-500 hover:text-slate-700'
@@ -56,7 +67,8 @@ function SideToggle({ value, onChange, homeLabel = 'Home', awayLabel = 'Away' })
       <button
         type="button"
         onClick={() => onChange('away')}
-        className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+        title={awayLabel}
+        className={`${buttonClass} ${
           value === 'away'
             ? 'bg-white text-slate-900 shadow-sm'
             : 'text-slate-500 hover:text-slate-700'
@@ -168,7 +180,10 @@ function TeamPickerModal({ open, onClose, teams, selectedId, disabledId, onSelec
 
 function TeamPickerButton({ label, team, onClick, hasRosterWarning }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    // min-w-0: as a grid/flex child this would otherwise take an automatic
+    // minimum size from the button's max-content width, so a long team name
+    // grew the column past the card instead of letting `truncate` engage.
+    <div className="flex min-w-0 flex-col gap-1.5">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       <button
         type="button"
@@ -219,6 +234,49 @@ function TeamPickerButton({ label, team, onClick, hasRosterWarning }) {
   );
 }
 
+function InlineTeamCreator({ label, name, onNameChange, onCreate, isSubmitting }) {
+  function handleKeyDown(event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (name.trim() && !isSubmitting) onCreate();
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label
+        htmlFor={`inline-${label.toLowerCase().replace(/\s+/g, '-')}`}
+        className="text-xs font-semibold uppercase tracking-wide text-slate-400"
+      >
+        {label}
+      </label>
+      <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-3">
+        <p className="mb-2 text-xs text-slate-600">Create this team without leaving the game.</p>
+        <div className="flex gap-2">
+          <input
+            id={`inline-${label.toLowerCase().replace(/\s+/g, '-')}`}
+            type="text"
+            maxLength={120}
+            autoComplete="off"
+            placeholder="Team name"
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+            className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          />
+          <button
+            type="button"
+            disabled={!name.trim() || isSubmitting}
+            onClick={onCreate}
+            className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isSubmitting ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────
 
 export function AdminNewLeagueGamePage() {
@@ -239,12 +297,15 @@ export function AdminNewLeagueGamePage() {
 
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
-  const [venue, setVenue] = useState('');
+  const [venueDetails, setVenueDetails] = useState(emptyVenueDetails);
+  const [reusableVenues, setReusableVenues] = useState([]);
   const [videoUrl, setVideoUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
+  const [inlineTeamNames, setInlineTeamNames] = useState({ home: '', away: '' });
+  const [creatingTeamSide, setCreatingTeamSide] = useState(null);
 
   // Picker modal state
   const [pickerOpen, setPickerOpen] = useState(null); // 'home' | 'away' | 'managed' | 'opponent'
@@ -253,13 +314,18 @@ export function AdminNewLeagueGamePage() {
   const managedTeamIds = league?.viewerContext?.managedTeamIds || [];
 
   useEffect(() => {
-    Promise.all([leaguesApi.getById(leagueId), leaguesApi.listTeams(leagueId)])
-      .then(([leagueResponse, teamsResponse]) => {
+    Promise.all([
+      leaguesApi.getById(leagueId),
+      leaguesApi.listTeams(leagueId),
+      leaguesApi.getGames(leagueId),
+    ])
+      .then(([leagueResponse, teamsResponse, gamesResponse]) => {
         const nextLeague = leagueResponse.league;
         setLeague(nextLeague);
         setGameFormat({ ...(nextLeague.defaultGameFormat || DEFAULT_GAME_FORMAT) });
         const nextTeams = teamsResponse.teams || [];
         setTeams(nextTeams);
+        setReusableVenues(buildReusableVenues(gamesResponse.games || []));
 
         const nextManagedIds = nextLeague?.viewerContext?.managedTeamIds || [];
         const isManager = nextLeague?.viewerContext?.viewerRole === 'team_manager';
@@ -268,9 +334,9 @@ export function AdminNewLeagueGamePage() {
           setSelectedManagedTeamId(nextManagedIds[0]);
           const firstOpponent = nextTeams.find((t) => !nextManagedIds.includes(t.id));
           if (firstOpponent) setOpponentTeamId(firstOpponent.id);
-        } else if (nextTeams.length > 1) {
+        } else if (nextTeams.length > 0) {
           setHomeLeagueTeamId(nextTeams[0].id);
-          setAwayLeagueTeamId(nextTeams[1].id);
+          if (nextTeams.length > 1) setAwayLeagueTeamId(nextTeams[1].id);
         }
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load league setup'))
@@ -308,7 +374,7 @@ export function AdminNewLeagueGamePage() {
         gameFormat,
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
-        ...(venue.trim() ? { venue: venue.trim() } : {}),
+        ...venuePayload(venueDetails),
         ...(videoUrl.trim() ? { videoUrl: videoUrl.trim() } : {}),
       });
       navigate(`/games/${response.game.id}/track`);
@@ -316,6 +382,26 @@ export function AdminNewLeagueGamePage() {
       setError(submitError.message || 'Failed to create league game');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function createInlineTeam(side) {
+    const name = inlineTeamNames[side].trim();
+    if (!name || creatingTeamSide) return;
+
+    setError('');
+    setCreatingTeamSide(side);
+    try {
+      const response = await leaguesApi.createTeam(leagueId, { name });
+      const newTeam = { activeRosterCount: 0, ...response.team };
+      setTeams((current) => [...current, newTeam]);
+      if (side === 'home') setHomeLeagueTeamId(newTeam.id);
+      if (side === 'away') setAwayLeagueTeamId(newTeam.id);
+      setInlineTeamNames((current) => ({ ...current, [side]: '' }));
+    } catch (createError) {
+      setError(createError.message || `Failed to create ${side} team`);
+    } finally {
+      setCreatingTeamSide(null);
     }
   }
 
@@ -335,6 +421,14 @@ export function AdminNewLeagueGamePage() {
 
   function rosterWarning(team) {
     return typeof team?.activeRosterCount === 'number' && team.activeRosterCount < 5;
+  }
+
+  function swapHomeAndAwayTeams() {
+    setHomeLeagueTeamId(awayLeagueTeamId);
+    setAwayLeagueTeamId(homeLeagueTeamId);
+    setInitialActiveSide((currentSide) =>
+      currentSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME
+    );
   }
 
   return (
@@ -387,13 +481,13 @@ export function AdminNewLeagueGamePage() {
                   />
                 </>
               ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Your Team
                   </p>
-                  <div className="flex items-center gap-3 rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3 rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3">
                     <TeamAvatar team={managedTeams[0]} />
-                    <span className="font-semibold text-indigo-900">
+                    <span className="truncate font-semibold text-indigo-900">
                       {managedTeams[0]?.name || '—'}
                     </span>
                   </div>
@@ -429,26 +523,76 @@ export function AdminNewLeagueGamePage() {
             <div className="space-y-4">
               {/* Home + Away pickers — stacked on mobile, side-by-side on md+ */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr,auto,1fr] md:items-end">
-                <TeamPickerButton
-                  label="Home Team"
-                  team={homeTeam}
-                  onClick={() => setPickerOpen('home')}
-                  hasRosterWarning={rosterWarning(homeTeam)}
-                />
+                {teams.length < 2 && !homeTeam ? (
+                  <InlineTeamCreator
+                    label="Home Team"
+                    name={inlineTeamNames.home}
+                    onNameChange={(name) =>
+                      setInlineTeamNames((current) => ({ ...current, home: name }))
+                    }
+                    onCreate={() => createInlineTeam('home')}
+                    isSubmitting={creatingTeamSide === 'home'}
+                  />
+                ) : (
+                  <TeamPickerButton
+                    label="Home Team"
+                    team={homeTeam}
+                    onClick={() => setPickerOpen('home')}
+                    hasRosterWarning={rosterWarning(homeTeam)}
+                  />
+                )}
 
-                {/* VS divider — hidden on mobile, shown between cols on md */}
-                <div className="hidden md:flex md:items-center md:justify-center md:pb-1">
-                  <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-400">
-                    VS
-                  </span>
-                </div>
+                {teams.length === 2 && hasValidMatchup ? (
+                  <div className="flex items-center justify-center md:pb-1">
+                    <button
+                      type="button"
+                      onClick={swapHomeAndAwayTeams}
+                      aria-label="Swap home and away teams"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-4 w-4"
+                      >
+                        <path
+                          d="M4 6h11m0 0-3-3m3 3-3 3M16 14H5m0 0 3 3m-3-3 3-3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      Swap
+                    </button>
+                  </div>
+                ) : (
+                  <div className="hidden md:flex md:items-center md:justify-center md:pb-1">
+                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-400">
+                      VS
+                    </span>
+                  </div>
+                )}
 
-                <TeamPickerButton
-                  label="Away Team"
-                  team={awayTeam}
-                  onClick={() => setPickerOpen('away')}
-                  hasRosterWarning={rosterWarning(awayTeam)}
-                />
+                {teams.length < 2 && !awayTeam ? (
+                  <InlineTeamCreator
+                    label="Away Team"
+                    name={inlineTeamNames.away}
+                    onNameChange={(name) =>
+                      setInlineTeamNames((current) => ({ ...current, away: name }))
+                    }
+                    onCreate={() => createInlineTeam('away')}
+                    isSubmitting={creatingTeamSide === 'away'}
+                  />
+                ) : (
+                  <TeamPickerButton
+                    label="Away Team"
+                    team={awayTeam}
+                    onClick={() => setPickerOpen('away')}
+                    hasRosterWarning={rosterWarning(awayTeam)}
+                  />
+                )}
               </div>
 
               {/* Modals */}
@@ -491,7 +635,9 @@ export function AdminNewLeagueGamePage() {
           {/* Matchup summary / warning */}
           {!hasValidMatchup ? (
             <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-              Select two different teams to continue.
+              {teams.length === 0
+                ? 'Create the home and away teams to continue.'
+                : 'Select two different teams to continue.'}
             </p>
           ) : (
             <div className="mt-4 flex items-center justify-center gap-3 rounded-xl bg-slate-50 px-4 py-3">
@@ -534,22 +680,16 @@ export function AdminNewLeagueGamePage() {
               <span className="mb-1.5 block text-sm font-medium text-slate-700">Scheduled At</span>
               <input
                 type="datetime-local"
-                className="w-full max-w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
               />
             </label>
-            <label className="block min-w-0">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Venue</span>
-              <input
-                type="text"
-                maxLength={120}
-                className="w-full max-w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                placeholder="e.g. Central Court"
-                value={venue}
-                onChange={(e) => setVenue(e.target.value)}
-              />
-            </label>
+            <VenueFields
+              value={venueDetails}
+              onChange={setVenueDetails}
+              reusableVenues={reusableVenues}
+            />
             <label className="block min-w-0">
               <span className="mb-1.5 block text-sm font-medium text-slate-700">YouTube URL</span>
               <input

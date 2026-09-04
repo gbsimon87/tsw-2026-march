@@ -6,7 +6,7 @@
 // billingSource, mirroring the compute-cheaply-with-a-request-cache convention of
 // the league-aggregate materialization path.
 //
-// Design: docs/pricing.md.
+// Setup and lifecycle guide: docs/stripe.md.
 
 const { entitlementsForPlan, normalizePlanId, getPlan } = require('./plan-catalog');
 
@@ -83,13 +83,17 @@ async function resolveForUser(userId, { cache } = {}) {
     findLeaguesByOwner(userId),
   ]);
 
-  const hasActiveTeam = (teams || []).some((t) => resolveForTeam(t).active);
+  const hasActiveTeam = (teams || []).some(
+    (team) => team.capacityType === 'free' || resolveForTeam(team).active
+  );
   const hasActiveLeague = (leagues || []).some((l) => resolveForLeague(l).active);
 
   void cache; // reserved for symmetry; user aggregate does its own batched reads
 
   return {
-    plan: hasActiveTeam ? 'team_pro' : 'starter',
+    // User.plan is now only a legacy analytics cache. Feature access lives on
+    // resources and every Team feature is free, so it must not imply a paid tier.
+    plan: 'starter',
     hasActiveTeam,
     hasActiveLeague,
   };

@@ -68,6 +68,9 @@ describe('POST /api/v1/games/:gameId/roster', () => {
       ownerUserId: owner._id,
       name: 'Test League',
       slug: `test-league-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      plan: 'league',
+      billingSource: 'comp',
+      subscriptionStatus: 'active',
     });
 
     const homeTeam = await LeagueTeam.create({
@@ -102,10 +105,13 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     const homeTeam = await Team.create({
       ownerUserId: owner._id,
       name: 'Home Squad',
+      capacityType: 'free',
     });
     const awayTeam = await Team.create({
       ownerUserId: owner._id,
       name: 'Away Squad',
+      capacityType: 'paid',
+      billingSource: 'comp',
     });
 
     const game = await Game.create({
@@ -289,5 +295,21 @@ describe('POST /api/v1/games/:gameId/roster', () => {
 
     expect(freshGame.awayRosterSnapshot || []).toHaveLength(0);
     expect(String(freshGame.awayTeamId)).toBe(String(awayTeam._id));
+  });
+
+  test('a free Team cannot be used to bypass payment for another owned Team in a dual-team game', async () => {
+    const { owner, awayTeam, game } = await createStandaloneDualFixture();
+    awayTeam.billingSource = 'stripe';
+    awayTeam.subscriptionStatus = 'inactive';
+    await awayTeam.save();
+    const app = createApp();
+
+    const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, owner._id).send({
+      side: 'home',
+      displayName: 'Blocked Player',
+    });
+
+    expect(res.statusCode).toBe(402);
+    expect(await Team.findOne({ 'players.displayName': 'Blocked Player' })).toBeNull();
   });
 });

@@ -273,21 +273,48 @@ milestones, season awards, and minutes-based milestones.
 
 ## Billing
 
-Billing is attached to a `Team` or `League`. Plans are `starter`, `team_pro`,
-and `league`; entitlements, not plan-name checks, should gate features. League
-billing grants Team Pro features to that league's teams.
+Billing is attached to a `Team` or `League`. The capacity plans are `starter`
+(one free standalone Team), `team_extra` (£5/month for each additional
+standalone Team), `league` (£29/month for 1–10 teams), and `league_plus`
+(£49/month for 11–24 teams). All paid plans are monthly. League plans receive a
+one-time 14-day trial; additional Teams do not. Every current Team feature is
+available on every Team. Billing controls management capacity, not features.
 
 Checkout and customer management use Stripe-hosted Checkout and Billing Portal
 URLs. Stripe webhooks are mounted with a raw body before JSON parsing and are
 the authority for subscription state. Comped resources use
 `billingSource: 'comp'` and must not be changed by Stripe events.
+The app passes a locked-down `STRIPE_PORTAL_CONFIGURATION_ID` for ordinary
+Portal sessions and a separate `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` only for
+the explicit League Plus confirmation flow. Ordinary Portal sessions cannot
+switch plans.
 
-In `NODE_ENV=development`, starting a new league checkout provisions a local
-comped league and redirects directly to league setup. Existing-resource billing
-management and every production billing path continue to use Stripe.
+Only `active` and `trialing` Stripe subscriptions grant paid management. A
+cancel-at-period-end subscription remains manageable until Stripe ends it;
+afterward, data stays readable but Team/League writes stop. Failed renewals stop
+management. Checkout is idempotent, the success page verifies the exact owned
+Checkout Session, League creation tolerates out-of-order events, and unknown
+Stripe Prices fail closed. League upgrades are immediately confirmed and
+prorated in Stripe; eligible downgrades are scheduled for the next period.
 
-The production pricing route is still disabled. See [`pricing.md`](./pricing.md)
-and [`pricing-manual-actions.md`](./pricing-manual-actions.md).
+In `NODE_ENV=development` without a Stripe secret, starting a new League
+provisions a local comped League and redirects directly to setup. With a Stripe
+test key present, local League Checkout uses Stripe test mode. Every deployed
+billing path uses Stripe.
+
+The capacity-pricing migration makes the oldest standalone Team for each owner
+free, makes other standalone Teams paid-capacity, and grandfathers every
+pre-launch League as complimentary so the three current production Leagues
+continue unchanged.
+
+Status on 25 August 2026: local development is code-ready and deployed
+development is undergoing manual sandbox testing. The development catalog,
+Render values, webhook, and capacity migration have been configured. The
+Pricing route is public in code and linked from navigation. Production is not
+ready until the remaining sandbox checks, live Stripe/Render setup, production
+backup and migration, tax decision, and controlled live payments are complete.
+[`stripe.md`](./stripe.md) is the only setup, testing, lifecycle, checklist,
+manual-action, and launch-status guide.
 
 ## Integrations
 
@@ -338,7 +365,7 @@ auto-deploys; production deploys are manual. Secrets belong in Render, not
 | Client routes                 | `client/src/app/router/AppRouter.jsx`                                                   |
 | Permissions                   | [`permissions.md`](./permissions.md), `leagues.service.js`                              |
 | Game events and derived stats | `games.repository.js`, `games.service.js`, `stats.constants.js`                         |
-| Billing and entitlements      | [`pricing.md`](./pricing.md), `billing.service.js`, `entitlements.service.js`           |
+| Billing and entitlements      | [`stripe.md`](./stripe.md), `billing.service.js`, `entitlements.service.js`             |
 | Deployment and environment    | [`deployment-render.md`](./deployment-render.md), `render.yaml`, env validators         |
 | Product backlog               | [`ideas.md`](./ideas.md)                                                                |
 | Database maintenance          | [`mongodb-production-backup.md`](./mongodb-production-backup.md), `server/src/scripts/` |

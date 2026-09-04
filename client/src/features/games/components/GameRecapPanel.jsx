@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import playerPlaceholder from '../../../assets/placeholders/player-placeholder.svg';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
+import { HorizontalScroller } from '../../../components/ui/HorizontalScroller';
 import { Modal } from '../../../components/ui/Modal';
 import { buildHighlightReelSegments, selectFeaturedHighlights } from '../highlightReel';
 import { extractYouTubeVideoId } from '../youtube.js';
@@ -27,11 +28,14 @@ function getParticipantName(participants, side) {
 
 // TSW-002: Highlights scrolled correctly on mobile; Key Moments didn't — it
 // was never built as a horizontal scroller (it shipped as a plain vertical
-// <ul>). This wraps the proven Highlights scroll-container pattern
-// (overflow-x-auto + shrink-0 fixed-width children) so both sections share
-// one implementation and can't drift apart again.
+// <ul>). Both now share the app's scroller, which also supplies the edge fade
+// that stops a boundary card reading as a clipped layout.
 function HorizontalScrollRow({ children, className = '' }) {
-  return <div className={`flex gap-3 overflow-x-auto pb-2 ${className}`}>{children}</div>;
+  return (
+    <HorizontalScroller className={className} innerClassName="flex gap-3 pb-2">
+      {children}
+    </HorizontalScroller>
+  );
 }
 
 function GameHighlightClip({
@@ -237,7 +241,7 @@ export function GameRecapPanel({
               {recap.keyMoments.map((moment) => (
                 <div
                   key={moment.eventId}
-                  className="flex w-56 shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
+                  className="flex w-72 shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3"
                 >
                   <CloudinaryImage
                     src={playerPlaceholder}
@@ -493,7 +497,7 @@ export function GameRecapPanel({
                 <Link
                   key={player.playerId}
                   to={playerHref}
-                  className="w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                  className="w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#F4A300]/60 hover:bg-[#F7F5F0] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414]"
                 >
                   {inner}
                 </Link>

@@ -3,7 +3,10 @@ import { useAuth } from '../../../app/store/AuthContext';
 import { trackOauthStarted } from '../../analytics/signupEvents';
 import { env } from '../../../lib/env';
 import { useAuthForm } from '../hooks/useAuthForm';
-import { registerSchema } from '../schemas/authSchemas';
+import { PASSWORD_HINT, registerSchema } from '../schemas/authSchemas';
+import { FormField } from '../../../components/ui/FormField';
+import { FormAlert } from './FormAlert';
+import { getPostAuthDestination } from '../postAuthDestination';
 
 function GoogleIcon() {
   return (
@@ -28,91 +31,74 @@ function GoogleIcon() {
   );
 }
 
-const inputClass =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20';
-
-export function RegisterForm({ redirectTo = '/pulse', onRegistered, onSwitchToLogin }) {
+export function RegisterForm({ redirectTo, onRegistered }) {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const { values, onChange, submit, isSubmitting, error } = useAuthForm(
+  const { values, onChange, submit, isSubmitting, error, fieldErrors, isShaking } = useAuthForm(
     { name: '', email: '', password: '' },
     registerSchema,
     async (payload) => {
-      await register(payload);
+      const result = await register(payload);
       // Registration signs the user in, so go straight to the destination
       // rather than sending them to the login form to re-enter what they
       // just typed. Mirrors LoginForm.
       if (onRegistered) {
-        onRegistered();
+        onRegistered(result);
       } else {
-        navigate(redirectTo);
+        navigate(getPostAuthDestination(result.user, redirectTo));
       }
     }
   );
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      {error ? (
-        <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-sm text-red-600">
-          {error}
-        </p>
-      ) : null}
+    // noValidate hands validation to the app. Without it the browser's own
+    // tooltip ("Please fill out this field") fires first, in its own styling,
+    // one field at a time, and outside the accessibility tree we control.
+    <form
+      onSubmit={submit}
+      noValidate
+      className={`t-shake space-y-4 ${isShaking ? 'is-shaking' : ''}`}
+    >
+      <FormAlert message={error} />
 
-      <div>
-        <label htmlFor="register-name" className="mb-1.5 block text-sm font-medium text-slate-700">
-          Name
-        </label>
-        <input
-          id="register-name"
-          className={inputClass}
-          type="text"
-          name="name"
-          value={values.name}
-          onChange={onChange}
-          autoComplete="name"
-          required
-        />
-      </div>
+      <FormField
+        label="Name"
+        name="name"
+        value={values.name}
+        onChange={onChange}
+        error={fieldErrors.name}
+        autoComplete="name"
+        required
+      />
 
-      <div>
-        <label htmlFor="register-email" className="mb-1.5 block text-sm font-medium text-slate-700">
-          Email
-        </label>
-        <input
-          id="register-email"
-          className={inputClass}
-          type="email"
-          name="email"
-          value={values.email}
-          onChange={onChange}
-          autoComplete="email"
-          required
-        />
-      </div>
+      <FormField
+        label="Email"
+        name="email"
+        type="email"
+        value={values.email}
+        onChange={onChange}
+        error={fieldErrors.email}
+        autoComplete="email"
+        inputMode="email"
+        required
+      />
 
-      <div>
-        <label
-          htmlFor="register-password"
-          className="mb-1.5 block text-sm font-medium text-slate-700"
-        >
-          Password
-        </label>
-        <input
-          id="register-password"
-          className={inputClass}
-          type="password"
-          name="password"
-          value={values.password}
-          onChange={onChange}
-          autoComplete="new-password"
-          required
-        />
-      </div>
+      <FormField
+        label="Password"
+        name="password"
+        type="password"
+        value={values.password}
+        onChange={onChange}
+        error={fieldErrors.password}
+        hint={PASSWORD_HINT}
+        autoComplete="new-password"
+        required
+      />
 
       <button
         type="submit"
         aria-label="Create account"
-        className="w-full rounded-lg bg-[#141414] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1B4332] active:bg-[#123328] disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-[#141414] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2a2a2a] active:bg-[#000] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={isSubmitting}
       >
         {isSubmitting ? 'Creating account…' : 'Create account'}
@@ -132,18 +118,6 @@ export function RegisterForm({ redirectTo = '/pulse', onRegistered, onSwitchToLo
         <GoogleIcon />
         Continue with Google
       </a>
-
-      <p className="text-center text-sm text-slate-500">
-        Already have an account?{' '}
-        <button
-          type="button"
-          aria-label="Log in"
-          className="font-medium text-slate-700 underline-offset-2 hover:underline"
-          onClick={onSwitchToLogin}
-        >
-          Log in
-        </button>
-      </p>
     </form>
   );
 }

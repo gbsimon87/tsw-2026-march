@@ -3,6 +3,8 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { trackAuthPageViewed } from '../../analytics/signupEvents';
 import { LoginForm } from '../components/LoginForm';
 import { RegisterForm } from '../components/RegisterForm';
+import { getPostAuthDestination } from '../postAuthDestination';
+import { safeInternalPath } from '../../../lib/safeRedirect';
 
 export function AuthPage() {
   const location = useLocation();
@@ -10,13 +12,10 @@ export function AuthPage() {
   const [searchParams] = useSearchParams();
 
   const isRegister = location.pathname === '/register';
-  // Same-origin only. `/register?redirectTo=…` is now the primary CTA from the
-  // nav, feed composer, follow button, and pricing, so an unguarded value would
-  // make every one of those an open-redirect vector. `//evil.com` is a
-  // protocol-relative URL, so a bare startsWith('/') is not enough.
-  const rawRedirectTo = searchParams.get('redirectTo') || '';
-  const redirectTo =
-    rawRedirectTo.startsWith('/') && !rawRedirectTo.startsWith('//') ? rawRedirectTo : undefined;
+  // Same-origin only. `/register?redirectTo=…` is the primary CTA from the nav,
+  // feed composer, follow button, and pricing, so an unguarded value would make
+  // every one of those an open-redirect vector. See lib/safeRedirect.
+  const redirectTo = safeInternalPath(searchParams.get('redirectTo'));
   const verifyEmail = searchParams.get('verifyEmail') === '1';
   const oauthError = searchParams.get('oauthError');
 
@@ -43,10 +42,10 @@ export function AuthPage() {
     navigate(`/register${buildQuery()}`, { replace: true });
   }
 
-  function handleRegistered() {
+  function handleRegistered(result) {
     // Registration issues a session, so land on the destination rather than
     // bouncing back to the login form.
-    navigate(redirectTo || '/pulse', { replace: true });
+    navigate(getPostAuthDestination(result?.user, redirectTo), { replace: true });
   }
 
   return (
@@ -101,13 +100,9 @@ export function AuthPage() {
         </div>
 
         {isRegister ? (
-          <RegisterForm
-            redirectTo={redirectTo}
-            onRegistered={handleRegistered}
-            onSwitchToLogin={() => goToLogin()}
-          />
+          <RegisterForm redirectTo={redirectTo} onRegistered={handleRegistered} />
         ) : (
-          <LoginForm redirectTo={redirectTo} onSwitchToRegister={goToRegister} />
+          <LoginForm redirectTo={redirectTo} />
         )}
       </div>
     </div>

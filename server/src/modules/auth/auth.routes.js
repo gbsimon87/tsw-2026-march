@@ -25,6 +25,7 @@ authRouter.post('/login', authCredentialLimiter, asyncHandler(controller.login))
 authRouter.post('/refresh', authCredentialLimiter, asyncHandler(controller.refresh));
 authRouter.post('/logout', asyncHandler(controller.logout));
 authRouter.get('/me', authMiddleware, asyncHandler(controller.me));
+authRouter.patch('/onboarding', authMiddleware, asyncHandler(controller.updateOnboarding));
 authRouter.post(
   '/avatar',
   authMiddleware,

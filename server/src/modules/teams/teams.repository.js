@@ -32,6 +32,7 @@ const playerSchema = new mongoose.Schema(
     jerseyNumber: { type: Number },
     position: { type: String, enum: ['PG', 'SG', 'SF', 'PF', 'C'], default: null },
     isActive: { type: Boolean, default: true },
+    claimedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { _id: true }
 );
@@ -47,13 +48,28 @@ const teamSchema = new mongoose.Schema(
     // Canonical-only (Phase 6 / T-26): legacy 'free'/'pro'/'team' were rewritten by
     // migrate-unify-plan-enums.js. The resolver's normalizePlanId still tolerates
     // legacy values at read time; this enum only constrains writes.
-    plan: { type: String, enum: ['starter', 'team_pro'], default: 'starter' },
+    plan: { type: String, enum: ['starter', 'team_extra', 'team_pro'], default: 'starter' },
+    // One owned standalone team is free. Every other owned standalone team needs
+    // its own £5/month subscription. Existing rows are assigned deliberately by
+    // migrate-capacity-pricing.js; defaulting new rows to paid avoids accidentally
+    // granting a second free slot if creation code is bypassed.
+    capacityType: { type: String, enum: ['free', 'paid'], default: 'paid', index: true },
     // How this team's plan is granted. 'stripe' = billed via Stripe (webhooks own it);
     // 'manual'/'comp' = granted outside Stripe (webhooks skip these). See T-10.
     billingSource: { type: String, enum: ['stripe', 'manual', 'comp'], default: 'stripe' },
     subscriptionStatus: {
       type: String,
-      enum: ['inactive', 'trialing', 'active', 'past_due', 'canceled'],
+      enum: [
+        'inactive',
+        'trialing',
+        'active',
+        'past_due',
+        'canceled',
+        'incomplete',
+        'incomplete_expired',
+        'unpaid',
+        'paused',
+      ],
       default: 'inactive',
     },
     stripeCustomerId: { type: String, default: null },
@@ -73,7 +89,38 @@ const teamSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const playerClaimRequestSchema = new mongoose.Schema(
+  {
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+    playerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+    requesterUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      index: true,
+    },
+    reviewedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reviewedAt: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
+
+playerClaimRequestSchema.index(
+  { teamId: 1, playerId: 1, requesterUserId: 1 },
+  { unique: true, partialFilterExpression: { status: 'pending' } }
+);
+
 teamSchema.index({ ownerUserId: 1, name: 1 });
+teamSchema.index(
+  { ownerUserId: 1, capacityType: 1 },
+  { unique: true, partialFilterExpression: { capacityType: 'free' } }
+);
 
 // OPT-013: materialised standalone-team season summary. One doc per team;
 // `summary` is the pre-computed object `buildPublicTeamSummary` returns
@@ -95,6 +142,9 @@ const teamSeasonSummarySchema = new mongoose.Schema(
 );
 
 const Team = mongoose.models.Team || mongoose.model('Team', teamSchema);
+const PlayerClaimRequest =
+  mongoose.models.PlayerClaimRequest ||
+  mongoose.model('PlayerClaimRequest', playerClaimRequestSchema);
 const TeamSeasonSummary =
   mongoose.models.TeamSeasonSummary || mongoose.model('TeamSeasonSummary', teamSeasonSummarySchema);
 
@@ -125,8 +175,44 @@ async function listTeams() {
   return Team.find().sort({ createdAt: -1 });
 }
 
+async function listTeamsByClaimedPlayerUserId(userId) {
+  return Team.find({ 'players.claimedByUserId': userId }).sort({ createdAt: -1 });
+}
+
+async function createPlayerClaimRequest(input) {
+  return PlayerClaimRequest.create(input);
+}
+
+async function findPendingPlayerClaimRequest(teamId, playerId, requesterUserId) {
+  return PlayerClaimRequest.findOne({ teamId, playerId, requesterUserId, status: 'pending' });
+}
+
+async function listPendingPlayerClaimRequests(teamId) {
+  return PlayerClaimRequest.find({ teamId, status: 'pending' }).sort({ createdAt: 1 });
+}
+
+async function findPlayerClaimRequestById(requestId) {
+  return PlayerClaimRequest.findById(requestId);
+}
+
+async function savePlayerClaimRequest(request) {
+  return request.save();
+}
+
 async function saveTeam(team) {
   return team.save();
+}
+
+async function makeOwnedTeamFree(ownerUserId, teamId) {
+  await Team.updateMany(
+    { ownerUserId, capacityType: 'free', _id: { $ne: teamId } },
+    { $set: { capacityType: 'paid' } }
+  );
+  return Team.findOneAndUpdate(
+    { _id: teamId, ownerUserId },
+    { $set: { capacityType: 'free' } },
+    { new: true }
+  );
 }
 
 // OPT-020: atomically claim a Stripe webhook event for a team. Returns the
@@ -167,7 +253,15 @@ module.exports = {
   findTeamByIdAndOwner,
   findTeamById,
   listTeams,
+  listTeamsByClaimedPlayerUserId,
   saveTeam,
+  PlayerClaimRequest,
+  createPlayerClaimRequest,
+  findPendingPlayerClaimRequest,
+  listPendingPlayerClaimRequests,
+  findPlayerClaimRequestById,
+  savePlayerClaimRequest,
+  makeOwnedTeamFree,
   claimTeamWebhookEvent,
   releaseTeamWebhookEvent,
   TeamSeasonSummary,

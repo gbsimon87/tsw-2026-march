@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import teamPlaceholder from '../assets/placeholders/team-logo-placeholder.svg';
 import CloudinaryImage from '../features/media/CloudinaryImage';
-import { useAuth } from '../app/store/AuthContext';
-import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../features/analytics/signupEvents';
 import { teamsApi } from '../features/teams/api/teamsApi';
 import { leaguesApi } from '../features/leagues/api/leaguesApi';
 import { DiscoverablePlayers } from '../features/players/components/DiscoverablePlayers';
 import { getLeagueHeaderImage } from '../features/feed/cardImage';
 import { SportsLoader } from '../components/SportsLoader';
 import { Tabs } from '../components/Tabs';
+import { DiscoverSearchBar } from '../components/DiscoverSearchBar';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { resolveShareImage } from '../hooks/resolveShareImage';
-import { DarkPageHeader } from '../components/DarkPageHeader';
 
 function LeaguesTabIcon() {
   return (
@@ -61,22 +60,6 @@ function PlayersTabIcon() {
   );
 }
 
-function StatReadout({ value, label }) {
-  return (
-    <div className="flex flex-col">
-      <span
-        className="text-3xl text-[#F4A300] md:text-4xl"
-        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        {String(value).padStart(2, '0')}
-      </span>
-      <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
-        {label}
-      </span>
-    </div>
-  );
-}
-
 function matchesSearch(text, query) {
   if (!query) {
     return true;
@@ -88,12 +71,22 @@ function matchesSearch(text, query) {
 }
 
 export function HomePage() {
-  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [publicLeagues, setPublicLeagues] = useState([]);
   const [publicTeams, setPublicTeams] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [leagueQuery, setLeagueQuery] = useState('');
   const [teamQuery, setTeamQuery] = useState('');
+  const requestedTab = searchParams.get('tab');
+  const discoverTab = ['leagues', 'teams', 'players'].includes(requestedTab)
+    ? requestedTab
+    : 'leagues';
+
+  function selectDiscoverTab(tab) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', tab);
+    setSearchParams(nextParams, { replace: true });
+  }
 
   useDocumentMeta({
     title: 'Discover Leagues & Teams — The Sporty Way',
@@ -137,40 +130,15 @@ export function HomePage() {
   );
 
   return (
-    <main className="space-y-6 bg-[#F7F5F0] -m-4 p-4 md:-m-6 md:p-6">
-      {/* Hero: scoreboard band */}
-      <DarkPageHeader
-        size="hero"
-        titleAriaLabel="The Sporty Way"
-        eyebrow="The Sporty Way"
-        title="Live leagues. Real stats. Every possession."
-        description="Browse public basketball leagues, standings, and games from teams currently competing — no login required."
-      >
-        <dl className="flex flex-wrap gap-x-10 gap-y-5 border-t border-white/10 pt-6">
-          <StatReadout value={publicLeagues.length} label="Active leagues" />
-          <StatReadout value={publicTeams.length} label="Teams on the board" />
-        </dl>
-
-        {/* Discover is one of the two pages anonymous visitors land on, and it
-            had no route into the product — browsing led nowhere. */}
-        {!user ? (
-          <div className="flex flex-wrap items-center gap-4 pt-6">
-            <Link
-              to="/register"
-              onClick={() => trackSignupCtaClicked(SIGNUP_SOURCE.HOME)}
-              className="rounded-lg bg-[#F4A300] px-5 py-2.5 text-sm font-semibold text-[#141414] transition-colors hover:bg-[#d98f00]"
-            >
-              Run your own league
-            </Link>
-            <span className="text-sm text-white/60">Free to start. No card needed.</span>
-          </div>
-        ) : null}
-      </DarkPageHeader>
-
-      {/* Discover: leagues, teams, players */}
+    <main>
+      <h1 className="sr-only">Discover</h1>
       <section aria-label="Discover leagues, teams, and players">
         <Tabs
-          defaultValue="leagues"
+          key={discoverTab}
+          defaultValue={discoverTab}
+          onChange={selectDiscoverTab}
+          ariaLabel="Discover categories"
+          stickyTabList
           items={[
             {
               value: 'leagues',
@@ -178,32 +146,13 @@ export function HomePage() {
               icon: <LeaguesTabIcon />,
               content: (
                 <div>
-                  <header className="gap-4 pb-4 md:flex md:items-end md:justify-between">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
-                        On the schedule
-                      </p>
-                      <h2
-                        className="mt-1 text-2xl text-slate-900"
-                        style={{ fontFamily: "'Archivo Black', sans-serif" }}
-                      >
-                        Featured Leagues
-                      </h2>
-                    </div>
-                    <label className="mt-4 block md:mt-0 md:w-72">
-                      <span className="sr-only">Search leagues</span>
-                      <input
-                        type="search"
-                        value={leagueQuery}
-                        onChange={(event) => setLeagueQuery(event.target.value)}
-                        placeholder="Search leagues"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20"
-                      />
-                    </label>
-                  </header>
-                  <p className="max-w-2xl text-slate-600">
-                    Standings and games from leagues currently competing.
-                  </p>
+                  <DiscoverSearchBar
+                    label="Search leagues"
+                    placeholder="Search leagues"
+                    value={leagueQuery}
+                    onChange={(event) => setLeagueQuery(event.target.value)}
+                    sticky
+                  />
 
                   {isLoading ? (
                     <SportsLoader label="Loading featured leagues" className="mt-4" />
@@ -275,33 +224,13 @@ export function HomePage() {
               icon: <TeamsTabIcon />,
               content: (
                 <div>
-                  <header className="gap-4 pb-4 md:flex md:items-end md:justify-between">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
-                        On the roster
-                      </p>
-                      <h2
-                        className="mt-1 text-2xl text-slate-900"
-                        style={{ fontFamily: "'Archivo Black', sans-serif" }}
-                      >
-                        Featured Teams
-                      </h2>
-                      <p className="mt-3 max-w-2xl text-slate-600">
-                        Open public team pages to review rosters, players, and recent games.
-                        Includes league and non-league teams.
-                      </p>
-                    </div>
-                    <label className="mt-4 block md:mt-0 md:w-72">
-                      <span className="sr-only">Search teams</span>
-                      <input
-                        type="search"
-                        value={teamQuery}
-                        onChange={(event) => setTeamQuery(event.target.value)}
-                        placeholder="Search teams"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20"
-                      />
-                    </label>
-                  </header>
+                  <DiscoverSearchBar
+                    label="Search teams"
+                    placeholder="Search teams"
+                    value={teamQuery}
+                    onChange={(event) => setTeamQuery(event.target.value)}
+                    sticky
+                  />
 
                   {isLoading ? (
                     <SportsLoader label="Loading featured teams" className="mt-4" />
@@ -345,13 +274,13 @@ export function HomePage() {
                                   decoding="async"
                                 />
                               ) : (
-                                <div
-                                  aria-hidden="true"
-                                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-[#141414] bg-[#141414] text-xs font-semibold text-[#F4A300]"
-                                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                                >
-                                  TSW
-                                </div>
+                                <img
+                                  src={teamPlaceholder}
+                                  alt=""
+                                  width="48"
+                                  height="48"
+                                  className="h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                                />
                               )}
                               <div>
                                 <h3 className="text-lg font-semibold text-slate-900">
@@ -372,7 +301,7 @@ export function HomePage() {
               value: 'players',
               label: 'Players',
               icon: <PlayersTabIcon />,
-              content: <DiscoverablePlayers />,
+              content: <DiscoverablePlayers stickySearch />,
             },
           ]}
         />

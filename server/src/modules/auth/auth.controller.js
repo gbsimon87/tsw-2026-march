@@ -5,6 +5,7 @@ const {
   verifyEmailSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  updateOnboardingSchema,
 } = require('./auth.validation');
 const authService = require('./auth.service');
 const { accessCookieOptions, refreshCookieOptions } = require('../../config/cookie');
@@ -83,6 +84,16 @@ async function me(req, res) {
   res.status(200).json({ user });
 }
 
+async function updateOnboarding(req, res) {
+  if (!req.auth?.userId) {
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  const payload = updateOnboardingSchema.parse(req.body);
+  const user = await authService.updateOnboarding(req.auth.userId, payload);
+  res.status(200).json({ user });
+}
+
 async function requestVerification(req, res) {
   const payload = requestVerificationSchema.parse(req.body);
   const result = await authService.requestEmailVerification(payload.email);
@@ -153,6 +164,7 @@ module.exports = {
   refresh,
   logout,
   me,
+  updateOnboarding,
   requestVerification,
   verifyEmail,
   forgotPassword,

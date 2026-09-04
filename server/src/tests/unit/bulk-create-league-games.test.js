@@ -56,6 +56,9 @@ describe('bulkCreateLeagueGamesForUser', () => {
       _id: LEAGUE_ID,
       ownerUserId: OWNER_ID,
       status: 'active',
+      plan: 'league',
+      billingSource: 'comp',
+      subscriptionStatus: 'active',
       currentSeasonId: SEASON_ID,
       defaultGameFormat: {
         regulationSegmentType: 'quarter',
@@ -192,6 +195,9 @@ describe('bulkCreateLeagueGamesForUser', () => {
       _id: LEAGUE_ID,
       ownerUserId: OWNER_ID,
       status: 'active',
+      plan: 'league',
+      billingSource: 'comp',
+      subscriptionStatus: 'active',
       currentSeasonId: null,
     });
 

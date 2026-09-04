@@ -42,6 +42,18 @@ const youtubeUrlSchema = z
   .max(500)
   .refine(isSupportedYouTubeUrl, 'Video URL must be a valid YouTube link');
 
+const venueSchema = z.string().trim().max(120).optional();
+const venueAddressSchema = z
+  .object({
+    addressLine1: z.string().trim().max(160).optional(),
+    addressLine2: z.string().trim().max(160).optional(),
+    city: z.string().trim().max(100).optional(),
+    state: z.string().trim().max(100).optional(),
+    postalCode: z.string().trim().max(32).optional(),
+    country: z.string().trim().max(100).optional(),
+  })
+  .optional();
+
 const standaloneGameSchema = z.object({
   gameContext: z.literal('standalone'),
   trackingMode: z.literal('one_sided'),
@@ -49,6 +61,8 @@ const standaloneGameSchema = z.object({
   title: z.string().trim().min(1).max(120),
   opponent: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
+  venue: venueSchema,
+  venueAddress: venueAddressSchema,
   videoUrl: youtubeUrlSchema.optional(),
 });
 
@@ -60,14 +74,13 @@ const standaloneDualGameSchema = z.object({
   initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
   title: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
+  venue: venueSchema,
+  venueAddress: venueAddressSchema,
   videoUrl: youtubeUrlSchema.optional(),
 });
 
-// Free-text venue, same rules as the Schedule Builder's bulk row schema
-// (leagues.validation.js) so a game created one-at-a-time and one created in
-// bulk accept exactly the same input.
-const venueSchema = z.string().trim().max(120).optional();
-
+// The venue label keeps the same rules as the Schedule Builder's bulk rows;
+// one-at-a-time creation can additionally attach a structured address.
 const leagueGameSchema = z.object({
   gameContext: z.literal('league'),
   trackingMode: z.literal('one_sided'),
@@ -78,6 +91,7 @@ const leagueGameSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
   venue: venueSchema,
+  venueAddress: venueAddressSchema,
   videoUrl: youtubeUrlSchema.optional(),
 });
 
@@ -91,6 +105,7 @@ const leagueDualGameSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   scheduledAt: z.string().datetime().optional(),
   venue: venueSchema,
+  venueAddress: venueAddressSchema,
   videoUrl: youtubeUrlSchema.optional(),
 });
 
@@ -105,6 +120,7 @@ const updateGameSchema = z
     scheduledAt: z.string().datetime().nullable().optional(),
     // Nullable so an admin can clear a venue, not only correct it.
     venue: z.string().trim().max(120).nullable().optional(),
+    venueAddress: venueAddressSchema.nullable().optional(),
     videoUrl: youtubeUrlSchema.nullable().optional(),
     initialActiveSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
   })

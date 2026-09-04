@@ -6,6 +6,7 @@ import { feedApi } from '../../feed/api/feedApi';
 import { FollowButton } from '../../follows/components/FollowButton';
 import { useFollowStatus } from '../../follows/hooks/useFollowStatus';
 import { useAuth } from '../../../app/store/AuthContext';
+import { DiscoverSearchBar } from '../../../components/DiscoverSearchBar';
 
 const SEARCH_DEBOUNCE_MS = 400;
 
@@ -44,7 +45,7 @@ function PlayerInitials({ name }) {
   );
 }
 
-export function DiscoverablePlayers({ limit = 24 }) {
+export function DiscoverablePlayers({ limit = 24, stickySearch = false }) {
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
@@ -72,34 +73,14 @@ export function DiscoverablePlayers({ limit = 24 }) {
   const error = isError ? queryError?.message || 'Failed to load players' : '';
 
   return (
-    <div aria-labelledby="discoverable-players-heading">
-      <header className="gap-4 pb-4 md:flex md:items-end md:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
-            Player discovery
-          </p>
-          <h2
-            id="discoverable-players-heading"
-            className="mt-1 text-2xl text-slate-900"
-            style={{ fontFamily: "'Archivo Black', sans-serif" }}
-          >
-            Discover Players
-          </h2>
-          <p className="mt-3 max-w-2xl text-slate-600">
-            Browse active players from public teams and public leagues.
-          </p>
-        </div>
-        <label className="mt-4 block md:mt-0 md:w-72">
-          <span className="sr-only">Search discoverable players</span>
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search player, team, league"
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20"
-          />
-        </label>
-      </header>
+    <section aria-label="Discover players">
+      <DiscoverSearchBar
+        label="Search discoverable players"
+        placeholder="Search player, team, league"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        sticky={stickySearch}
+      />
 
       {isLoading ? (
         <SportsLoader label="Loading discoverable players" className="mt-4" />
@@ -168,6 +149,6 @@ export function DiscoverablePlayers({ limit = 24 }) {
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

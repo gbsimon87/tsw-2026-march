@@ -24,13 +24,17 @@ Keep these pairs aligned within each environment:
 - `CLIENT_ORIGIN` and `VITE_API_BASE_URL`;
 - `GOOGLE_CALLBACK_URL` and the API host;
 - `MONGO_URI` and `MONGO_DB_NAME`;
-- Stripe secret, webhook secret, four price IDs, and success/cancel URLs;
+- Stripe secret, webhook secret, three price IDs, locked-down Portal
+  configuration ID, and success/cancel URLs;
 - Cloudinary credentials and environment-specific folder;
 - PostHog client/server keys and host.
 
 The production server also requires all four Resend settings. Stripe config is
 all-or-nothing once `STRIPE_SECRET_KEY` is present. Never copy dev Stripe,
 database, JWT, or OAuth credentials into production.
+
+Use [`stripe.md`](./stripe.md) for the exact Stripe variables, webhook events,
+mode checks, payment tests, and launch blockers.
 
 ## Deploy
 

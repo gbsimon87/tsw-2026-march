@@ -17,6 +17,7 @@ const {
   markEmailVerified,
   updateUserPassword,
   updateUserAvatar,
+  updateUserOnboarding,
 } = require('./auth.repository');
 const {
   uploadImageBuffer,
@@ -41,6 +42,7 @@ const {
 const { sendPasswordResetEmail } = require('../../services/email.service');
 
 function sanitizeUser(user) {
+  const onboardingStatus = user.onboarding?.status || 'completed';
   return {
     id: String(user._id),
     email: user.email,
@@ -53,6 +55,11 @@ function sanitizeUser(user) {
     emailVerified: Boolean(user.emailVerified),
     authProvider: user.authProvider,
     avatarUrl: transformCloudinaryUrl(user.avatar?.url || null),
+    onboarding: {
+      status: onboardingStatus,
+      roles: user.onboarding?.roles || [],
+      completedSteps: user.onboarding?.completedSteps || [],
+    },
   };
 }
 
@@ -150,6 +157,7 @@ async function register(input, metadata) {
     authProvider: 'local',
     emailVerified: true,
     roles: ['user'],
+    onboarding: { status: 'not_started', roles: [], completedSteps: [] },
     // plan intentionally omitted — the schema default 'starter' applies (audit C1;
     // the User enum is canonical-only since T-26 and rejects legacy 'free').
   });
@@ -235,6 +243,21 @@ async function getCurrentUser(userId) {
   }
 
   return sanitizeUser(user);
+}
+
+async function updateOnboarding(userId, input) {
+  const current = await findUserById(userId);
+  if (!current) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const onboarding = {
+    status: input.status || current.onboarding?.status || 'in_progress',
+    roles: input.roles || current.onboarding?.roles || [],
+    completedSteps: input.completedSteps || current.onboarding?.completedSteps || [],
+  };
+  const updated = await updateUserOnboarding(userId, onboarding);
+  return sanitizeUser(updated);
 }
 
 async function requestEmailVerification(email) {
@@ -428,5 +451,6 @@ module.exports = {
   prepareGoogleExchange,
   exchangeGoogleOAuthToken,
   uploadUserAvatar,
+  updateOnboarding,
   getSystemUserId,
 };

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
+import { readPendingFollowIntent } from '../../follows/followIntent';
+import { getPostAuthDestination } from '../postAuthDestination';
 
 export function GoogleCompletePage() {
   const [searchParams] = useSearchParams();
@@ -19,7 +21,10 @@ export function GoogleCompletePage() {
     }
 
     loginWithGoogleExchange(token)
-      .then(() => navigate('/pulse', { replace: true }))
+      .then((result) => {
+        const followReturnTo = readPendingFollowIntent()?.returnTo;
+        navigate(getPostAuthDestination(result.user, followReturnTo), { replace: true });
+      })
       .catch(() => navigate('/login?oauthError=google_unavailable', { replace: true }));
   }, [loginWithGoogleExchange, navigate, searchParams]);
 
