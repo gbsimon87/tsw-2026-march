@@ -1,12 +1,12 @@
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 import { authApi } from '../api/authApi';
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const token = searchParams.get('token') || '';
   const [newPassword, setNewPassword] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -19,13 +19,11 @@ export function ResetPasswordPage() {
     }
 
     setError('');
-    setMessage('');
     setIsSubmitting(true);
 
     try {
-      const result = await authApi.resetPassword({ token, newPassword });
-      setMessage(result.message || 'Password reset successful. Please sign in again.');
-      setNewPassword('');
+      await authApi.resetPassword({ token, newPassword });
+      navigate('/login?passwordReset=1', { replace: true });
     } catch (submitError) {
       setError(submitError.message || 'Unable to reset password.');
     } finally {
@@ -40,7 +38,6 @@ export function ResetPasswordPage() {
         <p className="text-sm text-slate-600">
           Use the reset link from your email to set a new password.
         </p>
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <label className="block">
           <span className="mb-1 block text-sm">New Password</span>

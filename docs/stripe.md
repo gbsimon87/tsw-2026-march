@@ -780,6 +780,42 @@ IDs.
 
 Do every item inside the **TSW Development** Stripe sandbox.
 
+### Trial-ending reminder email
+
+Use a disposable development League subscription for this test. Ending the trial immediately also
+starts sandbox billing, so the subscription will leave `trialing` and this cannot be undone. A
+Dashboard **Send test event** or `stripe trigger customer.subscription.trial_will_end` is not an
+end-to-end substitute: Stripe gives those events fake customer/subscription data that does not map
+to a League in the TSW database.
+
+1. Register a fresh user on `https://dev.thesportyway.com` with an email address you control.
+2. Start a League trial through TSW and complete Checkout with test card `4242 4242 4242 4242`.
+3. Finish League setup so the development database has the Stripe customer mapping and billing
+   email from Checkout.
+4. In the **TSW Development** Stripe sandbox, open **Billing → Subscriptions**, find that email, and
+   open the trialing League subscription.
+5. Confirm its metadata includes `resourceType=league` and the expected `ownerUserId`, then copy the
+   `sub_...` subscription ID.
+6. Open **Workbench → Shell** and run this once with that ID:
+
+```bash
+stripe subscriptions update sub_REPLACE_ME -d trial_end=now
+```
+
+7. Open **Workbench → Webhooks → TSW development billing webhook → Event deliveries**. Find the
+   resulting `customer.subscription.trial_will_end` event and confirm delivery returned HTTP `200`.
+8. In Resend, confirm a send with subject **Your free trial is ending soon** was accepted for the
+   same address. Then confirm it arrives in Gmail and names the expected League.
+9. In Gmail's **Show original**, confirm `SPF: PASS`, `DKIM: PASS` with domain
+   `thesportyway.com`, and `DMARC: PASS`.
+10. With the `4242` test card, the trial should then convert to an active sandbox subscription. This
+    is expected; delete or cancel the disposable subscription after the test if it is no longer
+    needed.
+
+Stripe sends `customer.subscription.trial_will_end` three days before an ordinary trial ends and
+also when a trial is ended immediately with `trial_end=now`. Using the real disposable subscription
+preserves the customer ID and metadata that TSW uses to route the reminder to the League.
+
 ### Cancel at the end of the month
 
 1. Open **Manage billing** in the app.
@@ -858,6 +894,11 @@ stripe subscriptions update sub_REPLACE_ME -d trial_end=now
 7. Open **Workbench → Webhooks**.
 8. Select the development destination named **TSW Development API**.
 9. Open **Event deliveries** and refresh it.
+
+   > **Resume here next time:** Testing paused at this point on 5 September 2026 because Stripe was
+   > still finalising the invoice. Start by refreshing **Event deliveries** and looking for
+   > `invoice.payment_failed`. Do **not** run the `trial_end=now` command again.
+
 10. Find `invoice.payment_failed`. Open it and confirm the delivery says
     **Delivered** with HTTP `200`.
 11. Also find the related `customer.subscription.updated` delivery and confirm

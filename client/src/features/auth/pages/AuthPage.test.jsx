@@ -38,6 +38,15 @@ afterEach(() => {
 });
 
 describe('AuthPage redirect handling', () => {
+  test('confirms a completed password reset on the login form', () => {
+    renderAt('/login?passwordReset=1');
+
+    expect(
+      screen.getByText('Password reset successfully. Log in with your new password.')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('login-form')).toBeInTheDocument();
+  });
+
   test('keeps a same-origin path', () => {
     renderAt('/register?redirectTo=%2Fpulse%3Fcompose%3D1');
 

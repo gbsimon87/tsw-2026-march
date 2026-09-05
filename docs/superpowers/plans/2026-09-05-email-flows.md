@@ -1292,12 +1292,25 @@ Add to the `## Done` section:
 After deploying the branch to dev, confirm with a mailbox you control. Gmail `+` addressing gives a
 password account whose mail you can read: register `y.simon.cordova+tsw1@gmail.com`.
 
-- [ ] Register that address — welcome email arrives, its button verifies and lands on `/onboarding`
-- [ ] Forgot-password on that address — reset email arrives and the link sets a new password
-- [ ] Forgot-password on your Google address — the "you sign in with Google" email arrives
-- [ ] Submit the contact form — it reaches `contact@thesportyway.com`
-- [ ] In Gmail, open any of them → ⋮ → **Show original** and confirm `SPF: PASS`, `DKIM: PASS` with
-      domain `thesportyway.com`, `DMARC: PASS`
+- [x] Register that address — welcome email arrives, its button verifies and lands on `/onboarding`
+- [x] Forgot-password on that address — reset email arrives and the link sets a new password
+- [x] Register a fresh local account and do not click its welcome link. From `/verify-email`, request
+      a new verification link for that still-unverified address and confirm the standalone
+      **Confirm your email** message arrives and works
+- [x] With a Google account that has never used dev before, sign in once and confirm the Google
+      welcome variant arrives with a **Get started** link and no verification step
+- [x] For an account created with Google only, enter that Google address on `/forgot-password` and
+      confirm the "you sign in with Google" email arrives instead of a password-reset link
+- [x] Submit the contact form and confirm the internal notification reaches
+      `contact@thesportyway.com`; no receipt is sent to the submitter's address
+- [x] On a disposable dev League trial, follow the
+      [trial-ending reminder procedure](../../stripe.md#trial-ending-reminder-email) and confirm the
+      reminder reaches the League billing address
+- [ ] Follow the [failed-payment procedure](../../stripe.md#failed-payment) with a disposable dev
+      League subscription and confirm the payment-failed message reaches its billing address
+- [x] In Gmail in a desktop browser, open any message. In the message header, use the ⋮ **More**
+      menu beside **Reply** (not the inbox toolbar menu), choose **Show original**, and confirm
+      `SPF: PASS`, `DKIM: PASS` with domain `thesportyway.com`, and `DMARC: PASS`.
 
 - [ ] **Step 6: Commit**
 

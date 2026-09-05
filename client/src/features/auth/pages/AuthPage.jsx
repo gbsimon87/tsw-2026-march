@@ -17,6 +17,7 @@ export function AuthPage() {
   // every one of those an open-redirect vector. See lib/safeRedirect.
   const redirectTo = safeInternalPath(searchParams.get('redirectTo'));
   const verifyEmail = searchParams.get('verifyEmail') === '1';
+  const passwordReset = searchParams.get('passwordReset') === '1';
   const oauthError = searchParams.get('oauthError');
 
   // Keyed on mode so switching tabs counts as reaching that form, and on
@@ -65,6 +66,11 @@ export function AuthPage() {
       {verifyEmail ? (
         <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           Check your inbox and verify your email before signing in.
+        </p>
+      ) : null}
+      {passwordReset ? (
+        <p className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          Password reset successfully. Log in with your new password.
         </p>
       ) : null}
       {oauthError === 'google_unavailable' ? (
