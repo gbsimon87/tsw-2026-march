@@ -3,7 +3,7 @@
     "project": "TSW — The Sporty Way",
     "subtitle": "Basketball stat-tracking + league-management platform (pnpm monorepo)",
     "generatedFrom": {
-      "commit": "bdd7a0dd827ce18267e0b7fb4fe8e3ce6f16218f",
+      "commit": "9b7e07b65879afa0f0c65b7be47f10b37ef22d7a",
       "branch": "feat/codemap"
     },
     "stack": {
@@ -15,8 +15,8 @@
     "counts": {
       "serverModules": 12,
       "clientFeatures": 9,
-      "serverTestFiles": 82,
-      "clientTestFiles": 80,
+      "serverTestFiles": 91,
+      "clientTestFiles": 87,
       "mongooseModels": 20,
       "primaryNodes": 34
     }
@@ -28,10 +28,10 @@
       "kind": "server-module",
       "group": "Server domain modules",
       "path": "server/src/modules/auth",
-      "role": "Cookie-based JWT auth with rotating refresh sessions, CSRF double-submit, Google OAuth, email verification and password reset. Also owns the onboarding profile — User.onboarding { status, roles, completedSteps } behind PATCH /auth/onboarding; new accounts are opted into `not_started` at creation while existing rows default to `completed`, so only new users ever see the wizard. Owns the User, Session and AuthToken models.",
+      "role": "Cookie-based JWT auth with rotating refresh sessions, CSRF double-submit, Google OAuth, email verification and password reset. Local registration signs the user in with emailVerified=false, persists a single-use verification token and dispatches a welcome email; Google-created accounts are already verified. Verification resend and forgot-password responses remain enumeration-resistant, including a Google-account reminder branch. Also owns the onboarding profile — User.onboarding { status, roles, completedSteps } behind PATCH /auth/onboarding. Owns the User, Session and AuthToken models.",
       "models": ["User", "Session", "AuthToken"],
       "mount": "/api/v1/auth",
-      "loc": 1098,
+      "loc": 1151,
       "files": [
         "server/src/modules/auth/auth.controller.js",
         "server/src/modules/auth/auth.repository.js",
@@ -156,7 +156,7 @@
           "labels": []
         }
       ],
-      "flows": ["flow-auth", "flow-onboarding"]
+      "flows": ["flow-auth", "flow-email-verification", "flow-onboarding"]
     },
     {
       "id": "leagues",
@@ -703,7 +703,7 @@
       "role": "Resource-scoped Stripe billing (per Team / per League) via hosted Checkout. Stripe is the source of truth; the webhook router is mounted before express.json(). Team billing is capacity-based, not feature-based — every built team feature is free, and an owner pays £5/mo per standalone team beyond their first (`assertTeamCreationAllowed` / `chooseFreeTeam`); leagues pay per plan (£29 League, £49 League Plus) and can switch in place via league-plan-change. entitlements.service.js resolves plan gates for every other module.",
       "models": [],
       "mount": "/api/v1/billing (+ webhook mounted pre-JSON in app.js)",
-      "loc": 1884,
+      "loc": 1878,
       "files": [
         "server/src/modules/billing/billing.controller.js",
         "server/src/modules/billing/billing.routes.js",
@@ -1440,10 +1440,10 @@
       "kind": "client-feature",
       "group": "Client features",
       "path": "client/src/features/auth",
-      "role": "Login/register, Google completion, email verification, forgot/reset password, plus the AuthContext store. postAuthDestination decides where a session lands after sign-in — /onboarding while onboarding is still not_started or in_progress, otherwise /pulse or an explicit redirectTo.",
+      "role": "Login/register, Google completion, forgot/reset password and email verification, plus the AuthContext store. A verification link auto-submits its single-use token exactly once (including under React StrictMode) and redirects the signed-in user to /onboarding; the page also supports requesting a replacement link. postAuthDestination decides where a session lands after sign-in.",
       "models": [],
       "mount": null,
-      "loc": 833,
+      "loc": 850,
       "files": [
         "client/src/features/auth/api/authApi.js",
         "client/src/features/auth/components/FormAlert.jsx",
@@ -1460,6 +1460,8 @@
       ],
       "tests": [
         "client/src/features/auth/pages/AuthPage.test.jsx",
+        "client/src/features/auth/pages/ResetPasswordPage.test.jsx",
+        "client/src/features/auth/pages/VerifyEmailPage.test.jsx",
         "client/src/features/auth/postAuthDestination.test.js"
       ],
       "upstream": [],
@@ -1488,7 +1490,7 @@
           "labels": ["apiClient / router / store"]
         }
       ],
-      "flows": ["flow-auth", "flow-onboarding"]
+      "flows": ["flow-auth", "flow-email-verification", "flow-onboarding"]
     },
     {
       "id": "c-billing",
@@ -1499,7 +1501,7 @@
       "role": "Public pricing page, checkout redirect, billing success/cancel and status pills. Uses Stripe hosted Checkout — no client Stripe.js card flows. Also drives the capacity choices: picking which standalone team is the free one, and switching a league between plans in place.",
       "models": [],
       "mount": null,
-      "loc": 963,
+      "loc": 957,
       "files": [
         "client/src/features/billing/api/billingApi.js",
         "client/src/features/billing/components/BillingStatusPill.jsx",
@@ -1967,20 +1969,22 @@
       "kind": "infra",
       "group": "Platform & infrastructure",
       "path": "server/src/services",
-      "role": "Auth-adjacent services shared across modules: token.service (JWT access/refresh), authToken.service (verification + reset tokens), session.service (rotating refresh sessions), email.service (Resend/nodemailer transport).",
+      "role": "Auth-adjacent services shared across modules: token.service (JWT access/refresh), authToken.service (single-use verification + reset tokens), session.service (rotating refresh sessions), email.service (fire-and-forget Resend delivery), and email.template.js (the shared image-free HTML/plain-text renderer used by every transactional email).",
       "models": [],
       "mount": null,
-      "loc": 219,
+      "loc": 418,
       "files": [
         "server/src/services/authToken.service.js",
         "server/src/services/email.service.js",
+        "server/src/services/email.template.js",
         "server/src/services/session.service.js",
         "server/src/services/token.service.js"
       ],
       "tests": [
         "server/src/tests/unit/token.service.test.js",
         "server/src/tests/unit/authToken.service.test.js",
-        "server/src/tests/unit/email.service.test.js"
+        "server/src/tests/unit/email.service.test.js",
+        "server/src/tests/unit/email.template.test.js"
       ],
       "upstream": [
         {
@@ -2016,7 +2020,7 @@
           "labels": []
         }
       ],
-      "flows": ["flow-auth"]
+      "flows": ["flow-auth", "flow-email-verification"]
     },
     {
       "id": "shared-utils",
@@ -2501,12 +2505,15 @@
       "kind": "external",
       "group": "External services",
       "path": null,
-      "role": "Transactional mail — verification, password reset, billing notices, contact form.",
+      "role": "Resend transactional delivery for local and Google welcome messages, verification and password-reset links, Google-account reminders, Stripe payment-failed and trial-ending notices, and the internal contact form. Every message is dispatched off the request path with matching HTML/plain-text bodies rendered through one image-free template.",
       "models": [],
       "mount": null,
       "loc": 0,
-      "files": ["server/src/services/email.service.js"],
-      "tests": [],
+      "files": ["server/src/services/email.service.js", "server/src/services/email.template.js"],
+      "tests": [
+        "server/src/tests/unit/email.service.test.js",
+        "server/src/tests/unit/email.template.test.js"
+      ],
       "upstream": [
         {
           "id": "core-services",
@@ -2525,7 +2532,7 @@
         }
       ],
       "downstream": [],
-      "flows": []
+      "flows": ["flow-email-verification"]
     }
   ],
   "edges": [
@@ -3456,6 +3463,55 @@
           "label": "AuthContext holds the user; apiClient replays through /auth/refresh on 401",
           "file": "client/src/lib/apiClient.js",
           "symbol": "refresh"
+        }
+      ]
+    },
+    {
+      "id": "flow-email-verification",
+      "name": "Local signup → Resend verification → onboarding",
+      "why": "Local signup stays usable immediately but records emailVerified=false and persists a single-use verification token before dispatching mail. Delivery is deliberately fire-and-forget so Resend latency or failure cannot roll back registration. The link auto-verifies once and continues to onboarding; resend and recovery endpoints keep identical responses to avoid account enumeration.",
+      "steps": [
+        {
+          "node": "c-auth",
+          "label": "RegisterForm submits a local account and receives session cookies immediately",
+          "file": "client/src/features/auth/api/authApi.js",
+          "symbol": "apiClient.post('/auth/register'"
+        },
+        {
+          "node": "auth",
+          "label": "register creates an unverified user, persists an email_verification token, then dispatches the welcome message",
+          "file": "server/src/modules/auth/auth.service.js",
+          "symbol": "async function register"
+        },
+        {
+          "node": "core-services",
+          "label": "email.template renders matching image-free HTML and plain text; email.service sends asynchronously",
+          "file": "server/src/services/email.template.js",
+          "symbol": "function renderEmail"
+        },
+        {
+          "node": "email",
+          "label": "Resend delivers the welcome email with one CTA carrying the verification token",
+          "file": "server/src/services/email.service.js",
+          "symbol": "function sendWelcomeEmail"
+        },
+        {
+          "node": "c-auth",
+          "label": "VerifyEmailPage auto-submits the URL token once, guarded against React StrictMode replay",
+          "file": "client/src/features/auth/pages/VerifyEmailPage.jsx",
+          "symbol": "attemptedToken"
+        },
+        {
+          "node": "auth",
+          "label": "POST /auth/verify-email consumes the token, marks the address verified and invalidates sibling tokens",
+          "file": "server/src/modules/auth/auth.service.js",
+          "symbol": "async function verifyEmail"
+        },
+        {
+          "node": "c-onboarding",
+          "label": "Successful verification replaces the route with /onboarding",
+          "file": "client/src/features/auth/pages/VerifyEmailPage.jsx",
+          "symbol": "navigate('/onboarding'"
         }
       ]
     },
