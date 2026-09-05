@@ -1,18 +1,17 @@
 import { forwardRef } from 'react';
 
 import CloudinaryImage from '../../../media/CloudinaryImage';
+import { buildInitials, formatAverage, formatPercentage } from '../posts/cardUtils';
+import { GameCardPost } from '../posts/GameCardPost';
 import {
-  buildGameCardDisplay,
-  buildInitials,
-  formatAverage,
-  formatCompactDate,
-  formatPercentage,
-} from '../posts/cardUtils';
-import {
+  BOARD_CAPTURE_SCALE,
   COLORS,
   DISPLAY_FONT,
   EXPORT_HEIGHT,
   EXPORT_WIDTH,
+  GAME_CAPTURE_SCALE,
+  GAME_FRAME_HEIGHT,
+  GAME_FRAME_WIDTH,
   HAIRLINE,
   IDENTITY_GAP,
   IDENTITY_MEASURE,
@@ -26,22 +25,25 @@ import {
   readableAccent,
 } from './shareExportTheme';
 
-// Off-screen, fixed-size render target captured by html2canvas. Positioned
-// off-viewport (NOT display:none) because html2canvas needs a laid-out node.
+// Off-screen render target captured by html2canvas. Positioned off-viewport
+// (NOT display:none) because html2canvas needs a laid-out node.
 //
-// This is composed for 1080x1350 rather than reusing the feed cards: those are
-// built for a ~380px column, so stretching one across a 1080px canvas left
-// 11px kickers and a 288px-tall card stranded in half a screen of black.
+// Two compositions live here, and they answer different questions.
 //
-// The layout is an honours board — a varnished panel, gilt beading, and the
-// record inscribed as a ruled ledger. Every card type shares that grammar,
-// because a scorer's column already is a ledger.
+// Player and team cards are an honours board — a varnished panel, gilt beading,
+// and the record inscribed as a ruled ledger — composed directly at 1080x1350.
+// Reusing the feed card at that size left 11px kickers and a 288px-tall card
+// stranded in half a screen of black, so these are drawn for the poster.
+//
+// The game card is the opposite: operators hand it to Instagram, and the image
+// has to be the card they approved in The Pulse, not a second design that could
+// drift from it. So GameExport mounts the real <GameCardPost/> at feed scale
+// inside a TSW frame, and the capture scale enlarges it. See shareExportTheme
+// for why the enlargement is html2canvas' and not a CSS transform's.
 const EXPORT_STYLE = {
   position: 'absolute',
   left: '-99999px',
   top: 0,
-  width: `${EXPORT_WIDTH}px`,
-  minHeight: `${EXPORT_HEIGHT}px`,
   pointerEvents: 'none',
 };
 
@@ -373,45 +375,6 @@ function Spacer() {
   return <div style={{ flex: 1, minHeight: '36px' }} />;
 }
 
-function MetaRow({ label, value }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'space-between',
-        gap: '24px',
-        marginTop: '30px',
-        flexShrink: 0,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: MONO_FONT,
-          fontWeight: 500,
-          fontSize: '23px',
-          letterSpacing: '0.24em',
-          textTransform: 'uppercase',
-          color: COLORS.tan,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontFamily: MONO_FONT,
-          fontWeight: 600,
-          fontSize: '28px',
-          letterSpacing: '0.02em',
-          color: COLORS.paper,
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function PlayerExport({ playerCard }) {
   const accent = readableAccent(playerCard?.teamColors);
   const imageSrc = playerCard?.playerImage?.url || playerCard?.teamLogo?.url || null;
@@ -445,44 +408,77 @@ function PlayerExport({ playerCard }) {
   );
 }
 
+// The frame is deliberately quiet: a gilt bead and a wordmark, so the card is
+// the only thing competing for attention in the feed it lands in.
 function GameExport({ gameCard }) {
-  const accent = readableAccent(gameCard?.teamColors);
-  const { statusLabel, homeName, awayName, homePoints, awayPoints, homeLogo } =
-    buildGameCardDisplay(gameCard);
-
-  const margin = homePoints - awayPoints;
-  const headline = margin > 0 ? `Won by ${margin}` : margin < 0 ? `Lost by ${-margin}` : 'Drew';
-  const topPerformer = gameCard?.recap?.topPerformers?.[0];
-
   return (
-    <Board
-      kicker={statusLabel === 'Final' ? 'Final score' : statusLabel}
-      serial={formatCompactDate(gameCard?.recap?.playedAt)}
+    <div
+      style={{
+        width: `${GAME_FRAME_WIDTH}px`,
+        height: `${GAME_FRAME_HEIGHT}px`,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        backgroundColor: COLORS.ink,
+      }}
     >
-      <Identity
-        accent={accent}
-        imageSrc={homeLogo}
-        imageAlt={`${homeName} share card logo`}
-        initials={buildInitials(homeName, 'TM')}
-        headline={headline}
-        sub={homeName}
-      />
-      <Spacer />
-      <Ledger
-        rowHeight={292}
-        valueSize={196}
-        rows={[
-          { label: homeName, value: homePoints, isName: true, lead: true, muted: margin < 0 },
-          { label: awayName, value: awayPoints, isName: true, lead: true, muted: margin > 0 },
-        ]}
-      />
-      {topPerformer?.displayName ? (
-        <MetaRow
-          label="Top scorer"
-          value={`${topPerformer.displayName}, ${topPerformer.points || 0} pts`}
-        />
-      ) : null}
-    </Board>
+      <div style={{ height: '3px', backgroundColor: COLORS.goldLeaf }} />
+      <div style={{ height: '9px', backgroundColor: COLORS.gold }} />
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '22px 20px 0',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ width: '11px', height: '11px', backgroundColor: COLORS.gold }} />
+        <div
+          style={{
+            fontFamily: DISPLAY_FONT,
+            fontSize: '13px',
+            letterSpacing: '0.26em',
+            textTransform: 'uppercase',
+            color: COLORS.paper,
+          }}
+        >
+          The Sporty Way
+        </div>
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0 16px',
+        }}
+      >
+        <div style={{ width: '400px' }}>
+          <GameCardPost gameCard={gameCard} interactive={false} exportSafe />
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: '0 20px 22px',
+          textAlign: 'right',
+          fontFamily: MONO_FONT,
+          fontWeight: 500,
+          fontSize: '11px',
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: COLORS.tan,
+          flexShrink: 0,
+        }}
+      >
+        thesportyway.com
+      </div>
+    </div>
   );
 }
 
@@ -515,20 +511,53 @@ function TeamExport({ teamCard }) {
   );
 }
 
+// Each composition declares the scale html2canvas must capture it at, because
+// the two are laid out at different sizes and both have to land on 1080x1350 —
+// the 4:5 the Instagram upload validates against.
 function renderCard({ type, gameCard, playerCard, teamCard }) {
-  if (type === 'game_card' && gameCard) return <GameExport gameCard={gameCard} />;
-  if (type === 'player_card' && playerCard) return <PlayerExport playerCard={playerCard} />;
-  if (type === 'team_card' && teamCard) return <TeamExport teamCard={teamCard} />;
+  if (type === 'game_card' && gameCard) {
+    return {
+      card: <GameExport gameCard={gameCard} />,
+      width: GAME_FRAME_WIDTH,
+      height: GAME_FRAME_HEIGHT,
+      captureScale: GAME_CAPTURE_SCALE,
+    };
+  }
+  if (type === 'player_card' && playerCard) {
+    return {
+      card: <PlayerExport playerCard={playerCard} />,
+      width: EXPORT_WIDTH,
+      height: EXPORT_HEIGHT,
+      captureScale: BOARD_CAPTURE_SCALE,
+    };
+  }
+  if (type === 'team_card' && teamCard) {
+    return {
+      card: <TeamExport teamCard={teamCard} />,
+      width: EXPORT_WIDTH,
+      height: EXPORT_HEIGHT,
+      captureScale: BOARD_CAPTURE_SCALE,
+    };
+  }
   return null;
 }
 
 export const ShareableCardExport = forwardRef(function ShareableCardExport(props, ref) {
-  const card = renderCard(props);
-  if (!card) return null;
+  const rendered = renderCard(props);
+  if (!rendered) return null;
 
   return (
-    <div ref={ref} aria-hidden="true" style={EXPORT_STYLE}>
-      {card}
+    <div
+      ref={ref}
+      aria-hidden="true"
+      data-capture-scale={rendered.captureScale}
+      style={{
+        ...EXPORT_STYLE,
+        width: `${rendered.width}px`,
+        height: `${rendered.height}px`,
+      }}
+    >
+      {rendered.card}
     </div>
   );
 });

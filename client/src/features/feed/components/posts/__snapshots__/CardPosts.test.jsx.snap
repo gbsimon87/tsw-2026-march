@@ -24,16 +24,16 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
         style="background-color: rgba(17, 34, 51, 0.16);"
       />
       <div
-        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/6"
+        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/[0.06]"
       />
       <div
         class="absolute inset-x-0 top-0 h-px bg-white/20"
       />
       <div
-        class="absolute inset-x-0 bottom-16 h-px bg-white/8"
+        class="absolute inset-x-0 bottom-16 h-px bg-white/[0.08]"
       />
       <div
-        class="absolute inset-y-0 right-[34%] w-px bg-white/8"
+        class="absolute inset-y-0 right-[34%] w-px bg-white/[0.08]"
       />
       <div
         class="relative z-10 flex min-h-[18rem] flex-col p-5 text-white"
@@ -48,16 +48,19 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             Game Recap
           </p>
           <div
-            class="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+            class="rounded-full border border-white/[0.12] bg-white/[0.08] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+            style="text-indent: 0.09em;"
           >
-            Mar 12
+            <span>
+              Mar 12
+            </span>
           </div>
         </div>
         <div
           class="mt-5 flex items-start gap-4"
         >
           <div
-            class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/12 bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] "
+            class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/[0.12] bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] "
           >
             <img
               alt="TSW Blue logo badge"
@@ -106,7 +109,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           </div>
         </div>
         <div
-          class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+          class="mt-5 rounded-[20px] border border-white/10 bg-black/[0.22] px-4 py-3 backdrop-blur-sm"
         >
           <div
             class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
@@ -121,7 +124,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               class="grid grid-cols-3 gap-2"
             >
               <div
-                class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+                class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
               >
                 <p
                   class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -135,7 +138,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
                 </p>
               </div>
               <div
-                class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+                class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
               >
                 <p
                   class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -149,7 +152,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
                 </p>
               </div>
               <div
-                class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+                class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
               >
                 <p
                   class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -188,16 +191,16 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
         style="background-color: rgba(17, 34, 51, 0.16);"
       />
       <div
-        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/6"
+        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/[0.06]"
       />
       <div
         class="absolute inset-x-0 top-0 h-px bg-white/20"
       />
       <div
-        class="absolute inset-x-0 bottom-16 h-px bg-white/8"
+        class="absolute inset-x-0 bottom-16 h-px bg-white/[0.08]"
       />
       <div
-        class="absolute inset-y-0 right-[34%] w-px bg-white/8"
+        class="absolute inset-y-0 right-[34%] w-px bg-white/[0.08]"
       />
       <div
         class="relative z-10 flex min-h-[18rem] flex-col p-5 text-white"
@@ -212,9 +215,12 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             Player Spotlight
           </p>
           <div
-            class="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+            class="rounded-full border border-white/[0.12] bg-white/[0.08] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+            style="text-indent: 0.09em;"
           >
-            #7
+            <span>
+              #7
+            </span>
           </div>
         </div>
         <div
@@ -255,13 +261,13 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           </div>
         </div>
         <div
-          class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+          class="mt-5 rounded-[20px] border border-white/10 bg-black/[0.22] px-4 py-3 backdrop-blur-sm"
         >
           <div
             class="grid grid-cols-3 gap-2"
           >
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -275,7 +281,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               </p>
             </div>
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -289,7 +295,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               </p>
             </div>
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -327,16 +333,16 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
         style="background-color: rgba(17, 34, 51, 0.16);"
       />
       <div
-        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/6"
+        class="absolute -left-10 bottom-0 h-28 w-36 rotate-[-18deg] rounded-[2rem] bg-white/[0.06]"
       />
       <div
         class="absolute inset-x-0 top-0 h-px bg-white/20"
       />
       <div
-        class="absolute inset-x-0 bottom-16 h-px bg-white/8"
+        class="absolute inset-x-0 bottom-16 h-px bg-white/[0.08]"
       />
       <div
-        class="absolute inset-y-0 right-[34%] w-px bg-white/8"
+        class="absolute inset-y-0 right-[34%] w-px bg-white/[0.08]"
       />
       <div
         class="relative z-10 flex min-h-[18rem] flex-col p-5 text-white"
@@ -351,16 +357,19 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
             Team Report
           </p>
           <div
-            class="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+            class="rounded-full border border-white/[0.12] bg-white/[0.08] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200"
+            style="text-indent: 0.09em;"
           >
-            12 Games
+            <span>
+              12 Games
+            </span>
           </div>
         </div>
         <div
           class="mt-5 flex flex-1 items-start gap-4"
         >
           <div
-            class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/12 bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] h-24 w-24"
+            class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] border border-white/[0.12] bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.28)] h-24 w-24"
           >
             <img
               alt="TSW Blue card logo"
@@ -385,13 +394,13 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
           </div>
         </div>
         <div
-          class="mt-5 rounded-[20px] border border-white/10 bg-black/22 px-4 py-3 backdrop-blur-sm"
+          class="mt-5 rounded-[20px] border border-white/10 bg-black/[0.22] px-4 py-3 backdrop-blur-sm"
         >
           <div
             class="grid grid-cols-2 gap-2"
           >
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -405,7 +414,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               </p>
             </div>
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -419,7 +428,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               </p>
             </div>
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"
@@ -433,7 +442,7 @@ exports[`feed card posts > rendered card trio matches the broadcast card fixture
               </p>
             </div>
             <div
-              class="rounded-2xl border border-white/10 bg-black/18 px-3 py-2 backdrop-blur-sm"
+              class="rounded-2xl border border-white/10 bg-black/[0.18] px-3 py-2 backdrop-blur-sm"
             >
               <p
                 class="text-center text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400"

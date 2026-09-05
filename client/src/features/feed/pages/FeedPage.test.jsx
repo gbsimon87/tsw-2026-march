@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { FeedPage } from './FeedPage';
+import { takePendingInstagramDraft } from '../../social/instagramDraftHandoff';
 
 function withQueryClient(children) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -43,6 +44,13 @@ vi.mock('../../../app/store/AuthContext', () => ({
 
 vi.mock('../../analytics/signupEvents', () => signupEventMocks);
 
+// The Instagram hand-off renders a PNG through html2canvas, which needs a real
+// canvas. Only the File it produces matters to this page.
+const shareMocks = vi.hoisted(() => ({ createImageFile: vi.fn(), shareImage: vi.fn() }));
+vi.mock('../hooks/useShareImage', () => ({
+  useShareImage: () => ({ ...shareMocks, status: 'idle' }),
+}));
+
 describe('FeedPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,7 +90,41 @@ describe('FeedPage', () => {
 
   afterEach(() => {
     cleanup();
+    takePendingInstagramDraft();
   });
+
+  function mockGameCardFeed() {
+    apiMocks.listFeed.mockResolvedValue({
+      posts: [
+        {
+          id: '507f1f77bcf86cd799439011',
+          type: 'game_card',
+          caption: 'Demo final score.',
+          createdAt: '2026-03-10T00:00:00.000Z',
+          creator: { id: 'user-1', name: 'Alex' },
+          canDelete: false,
+          image: null,
+          playerCard: null,
+          teamCard: null,
+          gameCard: {
+            gameUrl: '/games/g1',
+            teamName: 'TSW Blue',
+            opponent: 'Falcons',
+            teamColors: [],
+            recap: {
+              playedAt: '2026-03-10T00:00:00.000Z',
+              statusLabel: 'Final',
+              team: { name: 'TSW Blue', points: 70 },
+              opponent: { name: 'Falcons', points: 61 },
+              teamStats: { points: 70, reb: 10, ast: 12 },
+              topPerformers: [],
+            },
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+  }
 
   test('routes logged-out composer action to register', async () => {
     authMocks.useAuth.mockReturnValue({ user: null });
@@ -171,6 +213,52 @@ describe('FeedPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => {
       expect(apiMocks.deletePost).toHaveBeenCalledWith('post-1');
+    });
+  });
+
+  test('hides the Instagram hand-off from users without the operator role', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex', roles: ['user'] } });
+    mockGameCardFeed();
+
+    render(
+      withQueryClient(
+        <MemoryRouter>
+          <FeedPage />
+        </MemoryRouter>
+      )
+    );
+
+    expect(await screen.findByRole('button', { name: 'Share as image' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Prepare for Instagram' })).toBeNull();
+  });
+
+  test('sends an operator to the Instagram review page with the rendered card', async () => {
+    authMocks.useAuth.mockReturnValue({
+      user: { id: 'user-1', name: 'Alex', roles: ['user', 'platform_operator'] },
+    });
+    mockGameCardFeed();
+    const file = new File(['png'], 'tsw-blue-tsw.png', { type: 'image/png' });
+    shareMocks.createImageFile.mockResolvedValue(file);
+
+    render(
+      withQueryClient(
+        <MemoryRouter initialEntries={['/pulse']}>
+          <Routes>
+            <Route path="/pulse" element={<FeedPage />} />
+            <Route path="/admin/social/instagram" element={<div>Instagram admin</div>} />
+          </Routes>
+        </MemoryRouter>
+      )
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare for Instagram' }));
+
+    expect(await screen.findByText('Instagram admin')).toBeInTheDocument();
+    expect(takePendingInstagramDraft()).toEqual({
+      file,
+      sourcePostId: '507f1f77bcf86cd799439011',
+      sourceLabel: 'TSW Blue vs Falcons',
+      caption: 'Demo final score.',
     });
   });
 

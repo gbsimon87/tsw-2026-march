@@ -4,6 +4,7 @@ import { ImagePostCard } from './posts/ImagePostCard';
 import { PlayerCardPost } from './posts/PlayerCardPost';
 import { MilestonePost } from './posts/MilestonePost';
 import { ShareImageButton } from './ShareImageButton';
+import { buildInstagramDraft } from '../../social/instagramDraftHandoff';
 import { TeamCardPost } from './posts/TeamCardPost';
 import { VideoPostCard } from './posts/VideoPostCard';
 
@@ -16,7 +17,7 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
-export function FeedPostCard({ post, onDelete }) {
+export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
   let content = null;
 
   if (post.type === 'image') {
@@ -31,7 +32,15 @@ export function FeedPostCard({ post, onDelete }) {
           <div className="space-y-3">
             <GameCardPost gameCard={post.gameCard} />
             <div className="flex justify-end">
-              <ShareImageButton type="game_card" gameCard={post.gameCard} />
+              <ShareImageButton
+                type="game_card"
+                gameCard={post.gameCard}
+                onPrepareInstagram={
+                  onPrepareInstagram
+                    ? (file) => onPrepareInstagram(buildInstagramDraft(post, file))
+                    : undefined
+                }
+              />
             </div>
           </div>
         ) : (

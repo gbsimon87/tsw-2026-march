@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { feedApi } from '../../feed/api/feedApi';
+import { buildGameCardLabel } from '../../feed/components/posts/cardUtils';
 import { GameCardPost } from '../../feed/components/posts/GameCardPost';
 import { instagramApi } from '../api/instagramApi';
+import { takePendingInstagramDraft } from '../instagramDraftHandoff';
 
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -18,13 +20,6 @@ const STATUS_LABELS = {
 };
 
 const CANCELLABLE_STATUSES = new Set(['draft', 'ready_for_review', 'approved', 'queued', 'failed']);
-
-function candidateLabel(post) {
-  const card = post.gameCard;
-  const home = card?.participants?.home?.displayName || card?.teamName || 'Game card';
-  const away = card?.participants?.away?.displayName || card?.opponent || 'Opponent';
-  return `${home} vs ${away}`;
-}
 
 function formatDate(value) {
   if (!value) return '';
@@ -45,11 +40,29 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
   const [isLoading, setIsLoading] = useState(true);
   const [action, setAction] = useState('');
   const [error, setError] = useState('');
+  const [preparedDraft, setPreparedDraft] = useState(null);
+  const fileInputRef = useRef(null);
 
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === sourcePostId) || null,
     [candidates, sourcePostId]
   );
+  // The picker lists the 50 most recent feed posts. A card handed over from The
+  // Pulse can be older than that, so it contributes its own option rather than
+  // leaving the required select with a value no <option> carries.
+  const sourceOptions = useMemo(() => {
+    const options = candidates.map((candidate) => ({
+      id: candidate.id,
+      label: buildGameCardLabel(candidate.gameCard),
+    }));
+    if (preparedDraft && !options.some((option) => option.id === preparedDraft.sourcePostId)) {
+      options.unshift({
+        id: preparedDraft.sourcePostId,
+        label: preparedDraft.sourceLabel || 'Game card from The Pulse',
+      });
+    }
+    return options;
+  }, [candidates, preparedDraft]);
   const filePreviewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file]);
 
   useEffect(
@@ -82,6 +95,17 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
     };
   }, []);
 
+  // Claims the image The Pulse rendered on the way here. Consuming it means a
+  // StrictMode re-run, or a later visit, starts from an empty form.
+  useEffect(() => {
+    const draft = takePendingInstagramDraft();
+    if (!draft?.file || !draft?.sourcePostId) return;
+    setPreparedDraft(draft);
+    setSourcePostId(draft.sourcePostId);
+    setFile(draft.file);
+    setCaption(draft.caption || '');
+  }, []);
+
   function replacePost(updated) {
     setPosts((current) => current.map((post) => (post.id === updated.id ? updated : post)));
   }
@@ -103,6 +127,10 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
       setCaption('');
       setAttributionUrl('');
       setFile(null);
+      setPreparedDraft(null);
+      // The input keeps its own FileList, so clearing only the state would leave
+      // a filename on screen next to a submit button disabled for having none.
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setIsDemo(false);
       setRightsConfirmed(false);
     } catch (createError) {
@@ -154,8 +182,9 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
         </p>
         <h2 className="mt-1 text-xl font-semibold text-slate-900">Instagram post drafts</h2>
         <p className="mt-2 max-w-3xl text-sm text-slate-600">
-          Start with a labelled demo game card. Upload the exact exported 4:5 PNG that you reviewed;
-          approval does not publish it. Delivery must be enabled and queued separately.
+          Start with a labelled demo game card. Use the Instagram button on a card in The Pulse to
+          send its exact 4:5 render here, or upload the PNG yourself. Approval does not publish it;
+          delivery must be enabled and queued separately.
         </p>
         {!publishingEnabled ? (
           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -171,6 +200,13 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
         </p>
       ) : null}
 
+      {preparedDraft ? (
+        <p className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          The exact game card you shared from The Pulse is attached below. Review the caption and
+          both declarations, then create the draft — nothing is published yet.
+        </p>
+      ) : null}
+
       <form className="grid gap-5 lg:grid-cols-2" onSubmit={createDraft}>
         <div className="space-y-4">
           <label className="block text-sm font-medium text-slate-800">
@@ -182,9 +218,9 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
             >
               <option value="">Select a recent game card</option>
-              {candidates.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidateLabel(candidate)}
+              {sourceOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -192,14 +228,27 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
 
           <label className="block text-sm font-medium text-slate-800">
             Exported 4:5 image
+            {/* A prepared image lives in state, never in the input's own FileList,
+                so `required` here would block submission on a form that already
+                has its image. Emptiness is checked against state instead. */}
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/png,image/jpeg"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-              required
+              onChange={(event) => {
+                setFile(event.target.files?.[0] || null);
+                setPreparedDraft(null);
+              }}
+              required={!file}
               className="mt-1 block w-full text-sm text-slate-600"
             />
           </label>
+          {preparedDraft ? (
+            <p className="-mt-2 text-xs text-slate-600">
+              Using <span className="font-medium">{preparedDraft.file.name}</span>, rendered from
+              The Pulse. Choose a file above to replace it.
+            </p>
+          ) : null}
 
           <label className="block text-sm font-medium text-slate-800">
             Instagram caption
@@ -248,7 +297,7 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
 
           <button
             type="submit"
-            disabled={Boolean(action) || !candidates.length}
+            disabled={Boolean(action) || !sourceOptions.length || !file}
             className="rounded-lg bg-[#141414] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             {action === 'create' ? 'Creating draft…' : 'Create review draft'}
@@ -267,7 +316,8 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
             <GameCardPost gameCard={selectedCandidate.gameCard} interactive={false} />
           ) : (
             <div className="grid aspect-[4/5] place-items-center rounded-xl bg-slate-100 p-6 text-center text-sm text-slate-500">
-              Create a game-card post in The Pulse, export it as an image, then return here.
+              Open The Pulse, then use the Instagram button on a game card to send its render here.
+              Uploading an exported 4:5 PNG by hand still works.
             </div>
           )}
         </div>

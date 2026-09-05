@@ -13,6 +13,22 @@
 export const EXPORT_WIDTH = 1080;
 export const EXPORT_HEIGHT = 1350;
 
+// The honours board is composed directly at 1080x1350 and captured at 2x.
+export const BOARD_CAPTURE_SCALE = 2;
+
+// The game card is different: it reuses the *live* Pulse card, whose type sizes,
+// paddings and min-heights are all tuned for a ~400px feed column. Composing it
+// at 1080px would stretch a card built for a phone column across a poster, and
+// a CSS `transform: scale()` is worse still — html2canvas rasterises transformed
+// subtrees unreliably and the layout box stays 400px, so the frame miscentres.
+//
+// Instead the frame is laid out at feed scale and html2canvas' own `scale` does
+// the enlarging, which rasterises text at the target resolution. 432 x 540 at
+// 2.5x is exactly 1080x1350, the 4:5 the Instagram service requires.
+export const GAME_FRAME_WIDTH = 432;
+export const GAME_FRAME_HEIGHT = 540;
+export const GAME_CAPTURE_SCALE = EXPORT_WIDTH / GAME_FRAME_WIDTH;
+
 export const DISPLAY_FONT = "'Archivo Black', sans-serif";
 export const MONO_FONT = "'IBM Plex Mono', monospace";
 

@@ -10,8 +10,10 @@ import { FullScreenTeamCard } from './posts/FullScreenTeamCard';
 import { FullScreenVideoPost } from './posts/FullScreenVideoPost';
 import { MilestonePost } from './posts/MilestonePost';
 import { FeedPostCard } from './FeedPostCard';
+import { ShareImageButton } from './ShareImageButton';
+import { buildInstagramDraft } from '../../social/instagramDraftHandoff';
 
-function FullScreenSlide({ post, onDelete, observeSlide }) {
+function FullScreenSlide({ post, onDelete, observeSlide, onPrepareInstagram }) {
   let content = null;
 
   if (post.type === 'image') {
@@ -39,11 +41,23 @@ function FullScreenSlide({ post, onDelete, observeSlide }) {
   return (
     <FullScreenPost ref={observeSlide} post={post} onDelete={onDelete}>
       {content}
+      {/* Operator-only. The slide has never carried the generic share button,
+          so `showShare` stays off rather than adding one for operators alone. */}
+      {post.type === 'game_card' && post.gameCard && onPrepareInstagram ? (
+        <div className="absolute bottom-36 right-4 z-20">
+          <ShareImageButton
+            type="game_card"
+            gameCard={post.gameCard}
+            showShare={false}
+            onPrepareInstagram={(file) => onPrepareInstagram(buildInstagramDraft(post, file))}
+          />
+        </div>
+      ) : null}
     </FullScreenPost>
   );
 }
 
-export function FeedList({ posts, onDelete, onNearEnd }) {
+export function FeedList({ posts, onDelete, onNearEnd, onPrepareInstagram }) {
   const isMobile = useIsMobileDevice();
   const containerRef = useRef(null);
   const sentinelRef = useRef(null);
@@ -93,6 +107,7 @@ export function FeedList({ posts, onDelete, onNearEnd }) {
             post={post}
             onDelete={onDelete}
             observeSlide={observeSlide}
+            onPrepareInstagram={onPrepareInstagram}
           />
         ))}
       </div>
@@ -107,7 +122,12 @@ export function FeedList({ posts, onDelete, onNearEnd }) {
       className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3"
     >
       {posts.map((post) => (
-        <FeedPostCard key={post.id} post={post} onDelete={onDelete} />
+        <FeedPostCard
+          key={post.id}
+          post={post}
+          onDelete={onDelete}
+          onPrepareInstagram={onPrepareInstagram}
+        />
       ))}
       {/* col-span-full keeps the sentinel out of the last row's columns. */}
       <div ref={sentinelRef} data-testid="feed-load-more-sentinel" className="col-span-full h-px" />

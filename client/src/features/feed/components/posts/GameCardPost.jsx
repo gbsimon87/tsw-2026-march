@@ -23,7 +23,7 @@ function buildSummaryLine(gameCard) {
   return `${gameCard.teamName || 'Game'} final recap.`;
 }
 
-function GameCardContent({ gameCard, teamColors }) {
+function GameCardContent({ gameCard, teamColors, exportSafe }) {
   const {
     isDualTeam,
     statusLabel,
@@ -38,11 +38,17 @@ function GameCardContent({ gameCard, teamColors }) {
   } = buildGameCardDisplay(gameCard);
 
   return (
-    <ShareCardShell accent="amber" teamColors={teamColors} className="min-h-[19rem]">
+    <ShareCardShell
+      accent="amber"
+      teamColors={teamColors}
+      className="min-h-[19rem]"
+      exportSafe={exportSafe}
+    >
       <ShareCardHeader
         kicker="Game Recap"
         badge={formatCompactDate(gameCard?.recap?.playedAt)}
         accentColor={teamColors[1] || teamColors[0] || '#fcd34d'}
+        exportSafe={exportSafe}
       />
 
       {isDualTeam ? (
@@ -68,6 +74,7 @@ function GameCardContent({ gameCard, teamColors }) {
                 initials={buildInitials(side.name, 'TM')}
                 teamColors={teamColors}
                 accent="amber"
+                exportSafe={exportSafe}
                 className="flex-shrink-0 !h-[50px] !w-[50px] !rounded-full"
               />
               <p
@@ -97,6 +104,7 @@ function GameCardContent({ gameCard, teamColors }) {
             initials={buildInitials(homeName, 'TM')}
             teamColors={teamColors}
             accent="amber"
+            exportSafe={exportSafe}
           />
 
           <div className="min-w-0 flex-1">
@@ -124,12 +132,12 @@ function GameCardContent({ gameCard, teamColors }) {
 
       <ShareCardMetaStrip>
         {isDualTeam ? (
-          <ShareCardClamp lines={2} className="text-sm text-slate-200">
+          <ShareCardClamp lines={2} exportSafe={exportSafe} className="text-sm text-slate-200">
             {buildSummaryLine(gameCard)}
           </ShareCardClamp>
         ) : (
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <ShareCardClamp lines={1} className="text-sm text-slate-200">
+            <ShareCardClamp lines={1} exportSafe={exportSafe} className="text-sm text-slate-200">
               {buildSummaryLine(gameCard)}
             </ShareCardClamp>
             <div className="grid grid-cols-3 gap-2">
@@ -144,13 +152,13 @@ function GameCardContent({ gameCard, teamColors }) {
   );
 }
 
-export function GameCardPost({ gameCard, interactive = true }) {
+export function GameCardPost({ gameCard, interactive = true, exportSafe = false }) {
   const teamColors = gameCard?.teamColors || [];
 
   if (!interactive || !gameCard.gameUrl) {
     return (
       <article>
-        <GameCardContent gameCard={gameCard} teamColors={teamColors} />
+        <GameCardContent gameCard={gameCard} teamColors={teamColors} exportSafe={exportSafe} />
       </article>
     );
   }

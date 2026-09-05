@@ -42,6 +42,13 @@ export function buildGameCardDisplay(gameCard) {
   };
 }
 
+// The two sides of a game card as one line, for pickers and audit labels that
+// have no room for the card itself.
+export function buildGameCardLabel(gameCard) {
+  const { homeName, awayName } = buildGameCardDisplay(gameCard);
+  return `${homeName} vs ${awayName}`;
+}
+
 export function formatAverage(value) {
   return Number.isFinite(value) ? value.toFixed(1) : '0.0';
 }

@@ -7,6 +7,7 @@ import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../../analytics/signupEven
 import { SportsLoader } from '../../../components/SportsLoader';
 import { FloatingActionButton } from '../../../components/ui/FloatingActionButton';
 import { Modal } from '../../../components/ui/Modal';
+import { setPendingInstagramDraft } from '../../social/instagramDraftHandoff';
 import { feedApi } from '../api/feedApi';
 import { FeedComposer } from '../components/FeedComposer';
 import { FeedList } from '../components/FeedList';
@@ -21,6 +22,9 @@ export function FeedPage() {
   const [error, setError] = useState('');
   const composeRedirectTarget = useMemo(() => '/pulse?compose=1', []);
   const isComposerOpen = Boolean(user) && searchParams.get('compose') === '1';
+  // Cosmetic gate only — /admin/social/instagram and every Instagram route
+  // behind it are enforced server-side by platformOperatorMiddleware.
+  const isPlatformOperator = Boolean(user?.roles?.includes('platform_operator'));
 
   const {
     data,
@@ -98,6 +102,14 @@ export function FeedPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  // Hands the rendered card to the Instagram review screen. Nothing is created
+  // or published here — the operator still writes the caption, signs both
+  // declarations, and approves there.
+  function prepareInstagramPost(draft) {
+    setPendingInstagramDraft(draft);
+    navigate('/admin/social/instagram');
+  }
+
   if (isLoading) {
     return <SportsLoader label="Loading feed" fullPage />;
   }
@@ -125,7 +137,12 @@ export function FeedPage() {
       ) : null}
 
       {/* FeedList handles its own layout: fixed snap-scroll on mobile, normal flow on desktop */}
-      <FeedList posts={posts} onDelete={onDelete} onNearEnd={loadMore} />
+      <FeedList
+        posts={posts}
+        onDelete={onDelete}
+        onNearEnd={loadMore}
+        onPrepareInstagram={isPlatformOperator ? prepareInstagramPost : undefined}
+      />
 
       {/* FAB — lifted above the tab bar on mobile */}
       <FloatingActionButton

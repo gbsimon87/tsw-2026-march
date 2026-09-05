@@ -39,6 +39,8 @@ run on a recurring scheduler.
 | `server/src/scripts/rotate-instagram-token-key.js`                   | Compare-and-set re-encryption of the stored credential during a controlled key rotation.                      |
 | `server/src/modules/social/instagram/instagram.social-post.*`        | Durable demo game-card drafts, content digests, and atomic review/approval/cancellation transitions.          |
 | `client/src/features/social/components/InstagramSocialPostPanel.jsx` | Exact upload preview, declaration checks, and operator review queue.                                          |
+| `client/src/features/feed/components/cards/ShareableCardExport.jsx`  | Renders the live Pulse game card in a 432x540 TSW frame; the capture scale lands it on 1080x1350.             |
+| `client/src/features/social/instagramDraftHandoff.js`                | One-shot in-memory carry of the rendered PNG, source post id and Pulse caption across the SPA navigation.     |
 | `server/src/modules/social/instagram/instagram.delivery.service.js`  | Durable delivery claim, container reuse, bounded retry, publication, and ambiguous-outcome handling.          |
 | `server/src/scripts/process-instagram-deliveries.js`                 | Explicit one-shot worker entry point; processes at most ten due records.                                      |
 
@@ -118,6 +120,21 @@ container creation, retries, and reconciliation.
 The current Cloudinary integration is a likely storage path, but social exports need a deliberate
 upload policy, retention policy, content type, dimensions, and consent-aware deletion workflow
 before it is connected.
+
+The reviewed PNG is produced in the operator's browser by html2canvas, from the same
+`GameCardPost` component The Pulse renders, and is uploaded through the existing
+`POST /social/instagram/posts` path — the server still validates the bytes, the 4:5 ratio, and
+issues the public HTTPS URL. Two html2canvas limits shape that render and are handled by an
+`exportSafe` flag on the shared card primitives rather than by a second design: it ignores
+`filter`, so the card's blurred corner glow is swapped for an equivalent radial gradient, and it
+has no `-webkit-box` line layout, so clamped summary text is left to wrap instead of capturing as
+a slice through the glyphs. It also draws every glyph run a constant 0.367em below the browser's
+position — measured across five box and font-size combinations, and independent of the box, so it
+is a font-metric offset rather than a layout one. That is invisible in normal flow but pushed the
+team initials and the date out of centre in the two boxes whose height does not move with the
+text, so both lift their text by that amount when exporting. Note that the card's `sm:` breakpoint is a viewport query, so an
+operator exporting from a phone gets the stacked variant of the summary row — the card they are
+looking at, but not byte-identical to a desktop export of the same post.
 
 ## Reliability
 

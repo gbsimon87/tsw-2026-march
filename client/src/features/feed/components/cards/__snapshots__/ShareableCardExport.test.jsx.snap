@@ -3,7 +3,8 @@
 exports[`ShareableCardExport > renders a player card export with the TSW watermark 1`] = `
 <div
   aria-hidden="true"
-  style="position: absolute; left: -99999px; top: 0px; width: 1080px; min-height: 1350px; pointer-events: none;"
+  data-capture-scale="2"
+  style="position: absolute; left: -99999px; top: 0px; pointer-events: none; width: 1080px; height: 1350px;"
 >
   <div
     style="width: 1080px; height: 1350px; background-color: rgb(8, 11, 9); padding: 36px;"

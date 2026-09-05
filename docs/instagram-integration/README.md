@@ -4,7 +4,8 @@ This folder is the living record for TSW's Instagram publishing integration. Upd
 the implementation, Meta configuration, operational process, or delivery status changes.
 
 **Status:** test-account OAuth, demo game-card approval, and guarded one-shot delivery are
-implemented; delivery remains disabled by default
+implemented, and an operator can hand a Pulse game card straight to the review screen; delivery
+remains disabled by default
 
 **Started:** 19 August 2026  
 **Branch:** `feat/instagram-publishing`, based on `dev`
@@ -32,7 +33,9 @@ The implementation currently provides:
 - one-time OAuth state bound to the initiating user and session;
 - encrypted database storage for one official Instagram connection;
 - token-expiry health, refresh auditing, and a controlled encryption-key rotation command; and
-- an operator screen at `/admin/social/instagram` with a durable demo game-card review queue; and
+- an operator screen at `/admin/social/instagram` with a durable demo game-card review queue;
+- an operator-only hand-off that renders a Pulse game card to 1080x1350 in the browser and
+  prefills that review screen with it; and
 - a separately gated, one-shot delivery worker with durable retries and ambiguous-outcome handling.
 
 There is no direct HTTP publishing endpoint. Operators can queue an approved demo post only when
@@ -70,6 +73,8 @@ delivery is explicitly enabled; a separate command claims and processes queued r
 - [x] Add an authenticated operator UI for preview, demo/rights checks, caption entry, and approval.
 - [x] Add a guarded one-shot publishing worker with durable claim, retry/backoff, and conservative
       reconciliation state. A recurring scheduler remains future work.
+- [x] Remove the manual download-and-re-upload step: render the reviewed card in the browser and
+      carry it to the review screen. Approval and both declarations are unchanged.
 - [ ] Exercise a private test account end to end, including token expiry and rejected media.
 
 ### Later or explicitly deferred
@@ -120,3 +125,10 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
 - **5 September 2026:** added explicit delivery queueing and a one-shot worker using the encrypted
   OAuth credential. Pre-publish failures retry durably; uncertain publish outcomes stop in
   `reconciliation_required` rather than risking duplication.
+- **5 September 2026:** added an operator-only Instagram button beside the Pulse share button. It
+  renders the exact feed game card to a 1080x1350 PNG in the browser and carries it, the source
+  post id and the Pulse caption to `/admin/social/instagram`, where the existing form is prefilled.
+  The export now reuses the live `GameCardPost` inside a TSW frame instead of the separate
+  honours-board composition, so the approved image is the card the operator saw. Nothing is created
+  or published by the hand-off: the demo and rights declarations, draft creation, review and
+  approval steps are untouched.
