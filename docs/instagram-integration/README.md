@@ -35,7 +35,7 @@ The implementation currently provides:
 - token-expiry health, refresh auditing, and a controlled encryption-key rotation command; and
 - an operator screen at `/admin/social/instagram` with a durable demo game-card review queue;
 - an operator-only hand-off that renders a Pulse game card to 1080x1350 in the browser and
-  prefills that review screen with it; and
+  prefills that review screen with it, its caption, and a link to the game page; and
 - a separately gated, one-shot delivery worker with durable retries and ambiguous-outcome handling.
 
 There is no direct HTTP publishing endpoint. Operators can queue an approved demo post only when
@@ -132,3 +132,10 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
   honours-board composition, so the approved image is the card the operator saw. Nothing is created
   or published by the hand-off: the demo and rights declarations, draft creation, review and
   approval steps are untouched.
+- **5 September 2026:** the hand-off now derives the attribution URL from the game card and
+  appends it to the prefilled caption. The game detail route is anonymously readable, so the link
+  resolves for someone arriving logged out. Two limits shape this: `attributionUrl` is a
+  provenance field that never reaches Meta — only the caption does — and Instagram renders a
+  caption URL as plain text rather than a tappable link, so the caption copy is the only way the
+  address is seen at all, and a genuine click path still needs the profile bio link or a Story
+  link sticker. A non-HTTPS origin contributes no URL, because the server rejects one.

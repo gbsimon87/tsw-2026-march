@@ -259,6 +259,9 @@ describe('FeedPage', () => {
       sourcePostId: '507f1f77bcf86cd799439011',
       sourceLabel: 'TSW Blue vs Falcons',
       caption: 'Demo final score.',
+      // jsdom's origin is http, which the server rejects for attribution, so the
+      // hand-off contributes no URL rather than one that would 400 on submit.
+      attributionUrl: '',
     });
   });
 

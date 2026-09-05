@@ -104,6 +104,7 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
     setSourcePostId(draft.sourcePostId);
     setFile(draft.file);
     setCaption(draft.caption || '');
+    if (draft.attributionUrl) setAttributionUrl(draft.attributionUrl);
   }, []);
 
   function replacePost(updated) {
