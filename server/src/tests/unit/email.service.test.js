@@ -9,6 +9,7 @@ jest.mock('../../config/env', () => ({
     RESEND_API_KEY: 'test-key',
     RESEND_FROM_EMAIL: 'from@example.com',
     RESEND_FROM_NAME: 'TSW',
+    CONTACT_EMAIL: 'contact@example.com',
   },
 }));
 
@@ -87,5 +88,35 @@ describe('sendTemplateEmailAsync (OPT-020)', () => {
       env.RESEND_API_KEY = originalApiKey;
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe('reply routing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSend.mockResolvedValue({ error: null });
+  });
+
+  test('sends replies to the monitored inbox when the caller names none', async () => {
+    // Otherwise a reply goes to the From address, which need not be a mailbox.
+    await sendTemplateEmail({ to: 'a@example.com', subject: 'Reset', text: 'Reset' });
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ replyTo: 'contact@example.com' })
+    );
+  });
+
+  test('keeps a caller-supplied reply address', async () => {
+    // The contact form routes replies to whoever submitted it, not to TSW.
+    await sendTemplateEmail({
+      to: 'contact@example.com',
+      replyTo: 'submitter@example.com',
+      subject: 'Contact form',
+      text: 'Hello',
+    });
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ replyTo: 'submitter@example.com' })
+    );
   });
 });

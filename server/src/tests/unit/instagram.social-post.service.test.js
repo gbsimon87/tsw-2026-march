@@ -98,7 +98,13 @@ describe('Instagram social-post service', () => {
   test('uploads and records an audited demo game-card draft', async () => {
     const result = await service.createDraft({ userId: 'operator-1', input, file });
 
-    expect(mockCloudinary.uploadImageBuffer).toHaveBeenCalledWith(file);
+    // Social exports must not land in the shared feed folder: retention, audit
+    // and deletion all need to reach them without touching user feed images.
+    expect(mockCloudinary.uploadImageBuffer).toHaveBeenCalledWith(file, {
+      folder: expect.stringMatching(/\/social\/instagram$/),
+      publicId: expect.any(String),
+      tags: expect.arrayContaining(['tsw-social', 'tsw-social-instagram']),
+    });
     const created = mockRepository.createSocialPost.mock.calls[0][0];
     expect(created).toMatchObject({
       status: 'draft',
@@ -186,5 +192,140 @@ describe('Instagram social-post service', () => {
       service.queueSocialPost({ postId: '507f1f77bcf86cd799439099', userId: 'operator-1' })
     ).rejects.toMatchObject({ statusCode: 503 });
     expect(mockRepository.queueSocialPost).not.toHaveBeenCalled();
+  });
+
+  describe('cancellation and the stored asset', () => {
+    function cancellable(status) {
+      mockRepository.findSocialPostById.mockResolvedValue({
+        _id: '507f1f77bcf86cd799439099',
+        status,
+        asset: { publicId: 'tsw/feed/dev/social/instagram/game' },
+      });
+      mockRepository.cancelSocialPost.mockResolvedValue(
+        storedPost({ _id: '507f1f77bcf86cd799439099', status: 'cancelled' })
+      );
+    }
+
+    test.each(['draft', 'ready_for_review', 'approved'])(
+      'destroys the asset when cancelling from %s',
+      async (status) => {
+        cancellable(status);
+
+        await service.cancelSocialPost({ postId: '507f1f77bcf86cd799439099', userId: 'op-1' });
+
+        expect(mockCloudinary.destroyImage).toHaveBeenCalledWith(
+          'tsw/feed/dev/social/instagram/game'
+        );
+      }
+    );
+
+    test.each(['queued', 'failed'])(
+      'keeps the asset when cancelling from %s, which may still be referenced',
+      async (status) => {
+        cancellable(status);
+
+        await service.cancelSocialPost({ postId: '507f1f77bcf86cd799439099', userId: 'op-1' });
+
+        // A container at Meta can already point at this URL, and reconciliation
+        // needs it to resolve the outcome.
+        expect(mockCloudinary.destroyImage).not.toHaveBeenCalled();
+      }
+    );
+
+    test('still reports the cancellation when deleting the asset fails', async () => {
+      cancellable('draft');
+      mockCloudinary.destroyImage.mockRejectedValue(new Error('cloudinary down'));
+
+      const result = await service.cancelSocialPost({
+        postId: '507f1f77bcf86cd799439099',
+        userId: 'op-1',
+      });
+
+      expect(result.status).toBe('cancelled');
+    });
+  });
+
+  describe('naming the stored asset', () => {
+    async function uploadOptionsFor(cardSnapshot) {
+      mockFeedRepository.findPostById.mockResolvedValue({
+        _id: input.sourcePostId,
+        type: 'game_card',
+        gameCard: { cardSnapshot },
+      });
+      await service.createDraft({ userId: 'operator-1', input, file });
+      return mockCloudinary.uploadImageBuffer.mock.calls.at(-1)[1];
+    }
+
+    test('names a one-off game after both sides and the date it was played', async () => {
+      const { publicId } = await uploadOptionsFor({
+        gameId: '507f1f77bcf86cd799439aaa',
+        teamName: 'Portland Trailblazers',
+        opponent: 'Wildcats',
+        recap: { playedAt: '2026-09-05T18:30:00.000Z' },
+      });
+
+      expect(publicId).toMatch(/^portland-trailblazers-vs-wildcats-2026-09-05-[a-z0-9]+$/);
+    });
+
+    test('reads both sides from participants on a dual-team card', async () => {
+      // teamName is already "Home vs Away" on these, so using it would produce
+      // a doubled-up name.
+      const { publicId } = await uploadOptionsFor({
+        gameId: '507f1f77bcf86cd799439aaa',
+        teamName: 'Lions vs Bears',
+        opponent: null,
+        participants: { home: { displayName: 'Lions' }, away: { displayName: 'Bears' } },
+        recap: { playedAt: '2026-09-05T18:30:00.000Z' },
+      });
+
+      expect(publicId).toMatch(/^lions-vs-bears-2026-09-05-/);
+    });
+
+    test('keeps a club name with punctuation and accents URL-safe', async () => {
+      const { publicId } = await uploadOptionsFor({
+        gameId: '507f1f77bcf86cd799439aaa',
+        teamName: "Málaga B.C. (U18's)",
+        opponent: 'Wildcats',
+        recap: { playedAt: '2026-09-05T18:30:00.000Z' },
+      });
+
+      expect(publicId).toMatch(/^malaga-b-c-u18-s-vs-wildcats-/);
+      expect(publicId).not.toMatch(/[^a-z0-9-]/);
+    });
+
+    test('falls back rather than producing a nameless asset', async () => {
+      const { publicId } = await uploadOptionsFor({ gameId: null, teamName: null, opponent: null });
+
+      expect(publicId).toMatch(/^team-vs-opponent-\d{4}-\d{2}-\d{2}-/);
+    });
+
+    test('tags each asset with its game so one fixture can be withdrawn alone', async () => {
+      const { tags } = await uploadOptionsFor({
+        gameId: '507f1f77bcf86cd799439aaa',
+        teamName: 'Lions',
+        opponent: 'Bears',
+        recap: { playedAt: '2026-09-05T18:30:00.000Z' },
+      });
+
+      expect(tags).toEqual([
+        'tsw-social',
+        'tsw-social-instagram',
+        'tsw-game-507f1f77bcf86cd799439aaa',
+      ]);
+    });
+
+    test('does not put a player name in the public asset address', async () => {
+      const { publicId } = await uploadOptionsFor({
+        gameId: '507f1f77bcf86cd799439aaa',
+        teamName: 'Lions',
+        opponent: 'Bears',
+        recap: {
+          playedAt: '2026-09-05T18:30:00.000Z',
+          topPerformers: [{ displayName: 'Jordan Miles', points: 24 }],
+        },
+      });
+
+      expect(publicId).not.toMatch(/jordan|miles/i);
+    });
   });
 });

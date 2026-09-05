@@ -321,20 +321,23 @@ if (env.NODE_ENV === 'development' && env.STRIPE_SECRET_KEY) {
 }
 
 if (env.NODE_ENV === 'production') {
-  const requiredSmtpKeys = [
+  // Email goes out through the Resend API, not SMTP — there is no SMTP client in
+  // the codebase. The old name and message sent anyone debugging a failed boot
+  // looking for SMTP settings that do not exist.
+  const requiredEmailKeys = [
     'RESEND_API_KEY',
     'RESEND_FROM_EMAIL',
     'RESEND_FROM_NAME',
     'CONTACT_EMAIL',
   ];
-  const missing = requiredSmtpKeys.filter((key) => {
+  const missing = requiredEmailKeys.filter((key) => {
     const value = env[key];
     return value === undefined || value === null || value === '';
   });
 
   if (missing.length > 0) {
     console.error('Environment validation failed', {
-      smtp: `Missing required SMTP configuration in production: ${missing.join(', ')}`,
+      email: `Missing required email configuration in production: ${missing.join(', ')}`,
     });
     process.exit(1);
   }

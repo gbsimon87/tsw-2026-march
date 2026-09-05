@@ -85,8 +85,10 @@ delivery is explicitly enabled; a separate command claims and processes queued r
 - [ ] Publish a terms-of-service page and a data-deletion instructions URL, both required for a
       Live app.
 - [ ] Update the privacy policy to cover Instagram publishing.
-- [ ] Settle the open consent and retention questions in `policy.md`.
-- [ ] Give social exports their own Cloudinary folder before production assets accumulate.
+- [x] Give social exports their own Cloudinary folder, and destroy the asset when a pre-delivery
+      draft is cancelled.
+- [ ] Settle the open consent question in `policy.md` before publishing anything beyond demo
+      content.
 - [ ] Decide whether delivery runs on a schedule or stays a manual command.
 
 ### Later or explicitly deferred
@@ -146,6 +148,12 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
   honours-board composition, so the approved image is the card the operator saw. Nothing is created
   or published by the hand-off: the demo and rights declarations, draft creation, review and
   approval steps are untouched.
+- **5 September 2026:** published a terms-of-service page and a data-deletion section, covered
+  Instagram publishing in the privacy policy, and restored fragment links site-wide — every route is
+  a lazy chunk, so the browser was abandoning `#hash` before the section mounted, which would have
+  dropped a Meta reviewer at the top of the privacy page instead of the deletion instructions.
+  Social exports now upload to their own Cloudinary prefix, and cancelling a pre-delivery draft
+  destroys its stored image.
 - **5 September 2026:** the hand-off now derives the attribution URL from the game card and
   appends it to the prefilled caption. The game detail route is anonymously readable, so the link
   resolves for someone arriving logged out. Two limits shape this: `attributionUrl` is a

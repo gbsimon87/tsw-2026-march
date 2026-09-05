@@ -154,6 +154,9 @@ const OnboardingPage = lazy(() =>
 const AboutPage = lazy(() =>
   import('../../pages/AboutPage').then((m) => ({ default: m.AboutPage }))
 );
+const TermsPage = lazy(() =>
+  import('../../pages/TermsPage').then((m) => ({ default: m.TermsPage }))
+);
 const PrivacyPage = lazy(() =>
   import('../../pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))
 );
@@ -213,6 +216,7 @@ export function AppRouter() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/feed" element={<Navigate to="/pulse" replace />} />
           <Route path="/pulse" element={<FeedPage />} />
           <Route path="/login" element={<AuthPage />} />

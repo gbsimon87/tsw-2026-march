@@ -14,7 +14,19 @@ if (isCloudinaryConfigured()) {
   });
 }
 
-async function uploadImageBuffer(file) {
+// `folder` overrides the environment's default asset root. Social exports pass
+// their own so they are addressable as a set: retention, audit and a deletion
+// request all need to reach published social assets without touching ordinary
+// user feed images sitting in the same bucket.
+//
+// `publicId` names the asset instead of taking Cloudinary's random id, and
+// `tags` make a set deletable in one call. Both are opt-in: every other caller
+// keeps the generated id and no tags.
+//
+// overwrite:false is deliberate. A named id could in principle collide, and
+// replacing an asset an approved or published record already points at is the
+// worse failure — callers supply enough entropy that the branch is unreachable.
+async function uploadImageBuffer(file, { folder = env.CLOUDINARY_FOLDER, publicId, tags } = {}) {
   if (!isCloudinaryConfigured()) {
     throw new Error('Cloudinary is not configured');
   }
@@ -22,8 +34,10 @@ async function uploadImageBuffer(file) {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: env.CLOUDINARY_FOLDER,
+        folder,
         resource_type: 'image',
+        ...(publicId ? { public_id: publicId, overwrite: false } : {}),
+        ...(tags?.length ? { tags } : {}),
       },
       (error, result) => {
         if (error) {

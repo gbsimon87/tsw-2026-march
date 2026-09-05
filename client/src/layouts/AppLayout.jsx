@@ -4,6 +4,7 @@ import { useAuth } from '../app/store/AuthContext';
 import { ConsentBanner, openConsentSettings } from '../features/analytics/ConsentBanner';
 import { SIGNUP_SOURCE, trackSignupCtaClicked } from '../features/analytics/signupEvents';
 import { FeedTabBar } from '../features/feed/components/FeedTabBar';
+import { useHashScroll } from '../lib/useHashScroll';
 
 const desktopNavLinkClass = ({ isActive }) =>
   `text-sm transition-colors ${
@@ -18,6 +19,9 @@ const mobileNavLinkClass = ({ isActive }) =>
 export function AppLayout() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Fragment links are lost without this; every route is a lazy chunk.
+  useHashScroll();
 
   // The drawer covers the page but Escape did nothing, and the page behind it
   // still scrolled — the two things anyone expects of an open overlay.
@@ -273,6 +277,9 @@ export function AppLayout() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4">
           <Link to="/privacy" className="hover:text-slate-700">
             Privacy
+          </Link>
+          <Link to="/terms" className="hover:text-slate-700">
+            Terms
           </Link>
           <Link to="/contact" className="hover:text-slate-700">
             Contact

@@ -183,4 +183,30 @@ describe('InstagramSocialPostPanel', () => {
       expect(screen.getByRole('button', { name: 'Create review draft' })).toBeDisabled();
     });
   });
+
+  describe('a draft whose asset has been deleted', () => {
+    test('replaces the broken image rather than showing a dead thumbnail', async () => {
+      instagramMocks.listPosts.mockResolvedValue({
+        posts: [socialPost({ status: 'cancelled' })],
+      });
+      render(<InstagramSocialPostPanel />);
+
+      const image = await screen.findByAltText('Instagram post awaiting review');
+      // Cancelling a pre-delivery draft destroys the stored image, so the URL on
+      // the kept record stops resolving.
+      fireEvent.error(image);
+
+      expect(screen.getByText(/image deleted with this draft/i)).toBeInTheDocument();
+      expect(screen.queryByAltText('Instagram post awaiting review')).toBeNull();
+    });
+
+    test('is worded neutrally when the post was not cancelled', async () => {
+      instagramMocks.listPosts.mockResolvedValue({ posts: [socialPost({ status: 'draft' })] });
+      render(<InstagramSocialPostPanel />);
+
+      fireEvent.error(await screen.findByAltText('Instagram post awaiting review'));
+
+      expect(screen.getByText(/image unavailable/i)).toBeInTheDocument();
+    });
+  });
 });

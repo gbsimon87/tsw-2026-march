@@ -34,7 +34,16 @@ async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLab
   const { error } = await client.emails.send({
     from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
     to,
-    replyTo,
+    // Default replies to the monitored inbox rather than the sending address.
+    // Someone answering a password-reset email is trying to reach a person, and
+    // without this they reach a mailbox nobody owns. It also means the sending
+    // address never has to be a real mailbox, and never has to say "no-reply" —
+    // which Resend flags, because an unreplyable sender reads as one-way and
+    // costs engagement reputation.
+    //
+    // The contact form passes its own replyTo (the person who submitted it), so
+    // this only fills the gap where a caller has no better answer.
+    replyTo: replyTo || env.CONTACT_EMAIL,
     subject,
     text,
     html,

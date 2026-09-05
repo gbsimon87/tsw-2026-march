@@ -333,7 +333,8 @@ manual-action, and launch-status guide.
 ## Integrations
 
 - Cloudinary stores avatars, logos, feed media, and generated card assets.
-- Resend sends verification, password-reset, contact, and billing emails.
+- Resend sends verification, password-reset, contact, and billing emails, through its API
+  rather than SMTP. Setup and outstanding DNS work: [`email-delivery.md`](./email-delivery.md).
 - PostHog is off by default. Client tracking records explicit route events and
   internal user IDs only; autocapture and session replay are disabled.
 - OpenAI game summaries are optional and time-limited; deterministic summaries

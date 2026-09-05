@@ -22,25 +22,44 @@ Anything marked **OPEN** is a decision that has not been made yet and blocks the
 | Instagram access token       | MongoDB, AES-256-GCM encrypted  | TSW's own company account credential                                          |
 | Published post               | Instagram                       | The image and caption, publicly                                               |
 
-Note that social exports currently upload into the **same Cloudinary folder as ordinary user feed
-images** (`tsw/feed/prod`). They are not separable by prefix, which makes a targeted retention rule
-impossible to express today.
+Social exports upload to `<CLOUDINARY_FOLDER>/social/instagram` — `tsw/feed/prod/social/instagram`
+in production — rather than the shared feed folder. The prefix is derived from the existing
+environment folder, so there is nothing extra to configure per deployment, and it makes retention,
+audit and deletion addressable as a set without touching ordinary user feed images.
 
-**OPEN — blocks step 8 of `manual-actions.md`.** Give social exports their own folder
-(`tsw/social/instagram/<env>`) so retention, audit and deletion can address them as a set. This is
-a small change to the upload call, but it must happen before production assets accumulate in the
-shared folder, because it cannot be applied retroactively without moving files.
+Each asset is named after the fixture rather than taking Cloudinary's random id —
+`portland-trailblazers-vs-wildcats-2026-09-05-<random>` — so the folder is browsable and a deletion
+request can be answered without opening images one by one. Only team names and the played date go
+into the name. A player's name never does: the top scorer is already on the card without also being
+in its public address.
+
+Each asset also carries tags, which are what make a set deletable in one call:
+
+| Tag                    | Selects                           |
+| ---------------------- | --------------------------------- |
+| `tsw-social`           | every social export, any platform |
+| `tsw-social-instagram` | every Instagram export            |
+| `tsw-game-<gameId>`    | every export for one fixture      |
+
+Cloudinary can delete by tag directly (Media Library, or `DELETE /resources/image/tags/<tag>`), so
+withdrawing one game does not mean hunting for its ids.
+
+Assets uploaded before 5 September 2026 remain in the shared folder with random ids. There are none
+in production, and the development ones are demo content, so no migration is planned.
 
 ## Retention
 
 - **Cloudinary asset.** Kept while the social post record is live, because Meta fetches the URL
   during container creation and may re-fetch during retries and reconciliation. A short-lived or
   signed URL will break publication.
-- **Cancelled or failed drafts.** The asset is already destroyed on the failure path in
-  `createDraft`. A draft that is cancelled after upload currently keeps its asset.
-  **OPEN:** decide whether cancellation should destroy the asset. It should, but the delivery
-  worker's reconciliation path must be checked first — destroying an asset for a post that Meta has
-  in fact accepted would leave a published post with a dead source URL.
+- **Cancelled drafts.** Cancelling from `draft`, `ready_for_review` or `approved` destroys the
+  stored image with the record: nothing at Meta references the URL yet. Cancelling from `queued` or
+  `failed` keeps it, because a container may already point at that URL and reconciliation still
+  needs it to resolve. Deletion is best effort — a storage failure never turns a successful
+  cancellation into an error, so an orphaned asset is possible and acceptable.
+- **Records outlive their assets.** A cancelled record keeps its `asset.url` for audit, and that
+  URL stops resolving. The review queue detects the broken image and says so rather than showing a
+  dead thumbnail.
 - **Published posts.** The record is the audit trail of who approved what, and is kept
   indefinitely. It is operational data about TSW staff, not about players.
 - **Access token.** Held until disconnect or revocation, then removed.

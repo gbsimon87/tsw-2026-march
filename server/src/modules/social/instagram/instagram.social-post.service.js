@@ -12,6 +12,80 @@ const repository = require('./instagram.social-post.repository');
 const { createInstagramSocialPostSchema } = require('./instagram.social-post.validation');
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg']);
+
+// Social exports live under their own prefix rather than in the shared feed
+// folder, so they can be listed, retained and deleted as a set. Derived from
+// CLOUDINARY_FOLDER so it stays environment-scoped with no extra configuration
+// to set per deployment. Changing this does not move assets already uploaded.
+const SOCIAL_ASSET_FOLDER = `${env.CLOUDINARY_FOLDER}/social/instagram`;
+// Cancelling before delivery removes the asset with the record: nothing at Meta
+// references the URL yet, so leaving it behind would accumulate orphaned images
+// that no retention rule ever reaches. A queued or failed post is different —
+// a container may already point at the URL and reconciliation still needs it —
+// so those keep their asset until a person resolves them.
+const CANCEL_DESTROYS_ASSET = new Set(['draft', 'ready_for_review', 'approved']);
+
+// Cloudinary's generated ids are random, so a folder of social exports is
+// unbrowsable and a deletion request means opening images one by one to find
+// the right game. Naming the asset after the fixture makes the folder legible.
+//
+// Only team names and the date go in — never a player name. A public asset URL
+// is the last place personal data should end up, and the top scorer's name is
+// already on the card without also being in its address.
+const SLUG_MAX_LENGTH = 40;
+
+function slugSegment(value, fallback) {
+  const slug = String(value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, SLUG_MAX_LENGTH)
+    .replace(/-+$/g, '');
+  return slug || fallback;
+}
+
+function gameCardSides(snapshot) {
+  if (snapshot?.participants) {
+    return [
+      snapshot.recap?.home?.name || snapshot.participants.home?.displayName,
+      snapshot.recap?.away?.name || snapshot.participants.away?.displayName,
+    ];
+  }
+  return [snapshot?.teamName, snapshot?.recap?.opponent?.name || snapshot?.opponent];
+}
+
+function assetDate(snapshot) {
+  const played = new Date(snapshot?.recap?.playedAt ?? NaN);
+  const date = Number.isNaN(played.getTime()) ? new Date() : played;
+  return date.toISOString().slice(0, 10);
+}
+
+function buildAssetPublicId(snapshot) {
+  const [home, away] = gameCardSides(snapshot);
+  // The random tail keeps two exports of the same fixture from colliding, which
+  // matters because a collision would otherwise be refused by overwrite:false.
+  return [
+    slugSegment(home, 'team'),
+    'vs',
+    slugSegment(away, 'opponent'),
+    assetDate(snapshot),
+    randomToken(6)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ''),
+  ].join('-');
+}
+
+// Tags are how a set gets deleted: Cloudinary can remove every asset carrying
+// one in a single call, without needing the ids. The per-game tag lets a single
+// fixture be withdrawn without touching the rest.
+function buildAssetTags(snapshot) {
+  const tags = ['tsw-social', 'tsw-social-instagram'];
+  if (snapshot?.gameId) tags.push(`tsw-game-${slugSegment(snapshot.gameId, 'unknown')}`);
+  return tags;
+}
+
 const TARGET_ASPECT_RATIO = 4 / 5;
 const ASPECT_RATIO_TOLERANCE = 0.02;
 
@@ -131,7 +205,11 @@ async function createDraft({ userId, input, file }) {
   let upload;
   let socialPost;
   try {
-    upload = await uploadImageBuffer(file);
+    upload = await uploadImageBuffer(file, {
+      folder: SOCIAL_ASSET_FOLDER,
+      publicId: buildAssetPublicId(sourcePost.gameCard.cardSnapshot),
+      tags: buildAssetTags(sourcePost.gameCard.cardSnapshot),
+    });
   } catch {
     throw new ApiError(502, 'Could not store the Instagram image');
   }
@@ -216,11 +294,17 @@ async function approveSocialPost({ postId, userId }) {
 }
 
 async function cancelSocialPost({ postId, userId }) {
+  const before = await repository.findSocialPostById(postId);
   const updated = await repository.cancelSocialPost({ postId, userId });
   if (!updated) {
-    const existing = await repository.findSocialPostById(postId);
-    if (!existing) throw new ApiError(404, 'Instagram social post not found');
+    if (!before) throw new ApiError(404, 'Instagram social post not found');
     throw new ApiError(409, 'Instagram social post is already cancelled');
+  }
+
+  if (before && CANCEL_DESTROYS_ASSET.has(before.status) && before.asset?.publicId) {
+    // Best effort: the cancellation itself is already durable, and a storage
+    // failure must not turn a successful cancel into an error.
+    await destroyImage(before.asset.publicId).catch(() => null);
   }
   return serializeSocialPost(updated);
 }

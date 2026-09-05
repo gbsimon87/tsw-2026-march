@@ -5,7 +5,7 @@ import { env } from '../lib/env';
 // Last substantive review of this policy's content. Update whenever the data
 // collected, the purposes, or the processors below change — and bump
 // CONSENT_VERSION in lib/consent.js at the same time so visitors are re-asked.
-const LAST_UPDATED = '13 August 2026';
+const LAST_UPDATED = '5 September 2026';
 
 const processors = [
   {
@@ -43,6 +43,12 @@ const processors = [
     purpose: 'Application hosting',
     location: 'European Union',
     detail: 'Runs the site and its API.',
+  },
+  {
+    name: 'Meta (Instagram)',
+    purpose: 'Social publishing',
+    location: 'United States',
+    detail: 'Only the image and caption of a post we choose to publish to our own account.',
   },
 ];
 
@@ -276,6 +282,87 @@ export function PrivacyPage() {
           </p>
           <p>Analytics data is retained by PostHog under our project retention settings.</p>
           <p>Server logs are short-lived and kept only for security and fault diagnosis.</p>
+        </div>
+      </section>
+
+      {/* Meta App Review requires a reachable data-deletion instructions URL.
+          This section's id is that URL's anchor — /privacy#data-deletion —
+          so renaming it breaks the Meta app configuration. */}
+      <section
+        id="data-deletion"
+        className={sectionClass}
+        aria-labelledby="data-deletion-heading"
+        style={{ scrollMarginTop: '5rem' }}
+      >
+        <h2 id="data-deletion-heading" className={headingClass} style={headingStyle}>
+          Deleting your data
+        </h2>
+        <div className={bodyClass}>
+          <p>
+            You can ask us to delete your data at any time, and you do not need an account to ask.
+            Send the request through the{' '}
+            <Link to="/contact" className="underline">
+              contact form
+            </Link>
+            , from the email address on the account where possible, and say that you want your data
+            deleted.
+          </p>
+          <p>We will confirm within 7 days and complete the deletion within 30 days. We remove:</p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>your account, profile, and sign-in details;</li>
+            <li>media you uploaded, including avatars and anything you posted to the feed;</li>
+            <li>
+              any image we published to our own social accounts that features you, together with the
+              stored copy of that image; and
+            </li>
+            <li>your analytics records, if you had accepted analytics.</li>
+          </ul>
+          <p>
+            Game results and statistics that belong to a league may remain as part of that
+            league&apos;s history, in a form no longer linked to you. We keep a minimal record that
+            a deletion request was made and honoured, because we have to be able to show that we
+            acted on it.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="social-publishing"
+        className={sectionClass}
+        aria-labelledby="social-heading"
+        style={{ scrollMarginTop: '5rem' }}
+      >
+        <h2 id="social-heading" className={headingClass} style={headingStyle}>
+          Publishing to social media
+        </h2>
+        <div className={bodyClass}>
+          <p>
+            We sometimes publish game content — a scoreline card and a short caption — to {appName}
+            &apos;s own Instagram account. A person at {appName} reviews and approves every post
+            before it is published. Nothing is posted automatically.
+          </p>
+          <p>
+            A card can show team names, a score, the date, a team badge, and the name of a top
+            scorer. It never includes contact details, and we do not publish content featuring an
+            identifiable participant without a basis for doing so.
+          </p>
+          <p>
+            This works in one direction only. We connect {appName}&apos;s own Instagram account, and
+            we store the access token for that company account in encrypted form. We never ask for,
+            access, read, or post to your Instagram account, and connecting Instagram is not
+            something an ordinary {appName} account can do.
+          </p>
+          <p>
+            If a post features you and you would rather it did not, ask us through the{' '}
+            <Link to="/contact" className="underline">
+              contact form
+            </Link>{' '}
+            and we will remove it — see{' '}
+            <a className="underline" href="#data-deletion">
+              deleting your data
+            </a>{' '}
+            above.
+          </p>
         </div>
       </section>
 

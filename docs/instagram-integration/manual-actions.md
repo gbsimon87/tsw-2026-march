@@ -2,13 +2,20 @@
 
 These are the actions that cannot be completed in source code because they require the TSW Meta
 account, Instagram account, deployment secrets, and a real application user. Complete development
-first; leave production disabled until the test account flow is proven.
+first, and leave Instagram publishing disabled in production until App Review grants it — but note
+that the privacy, terms and data-deletion pages **do** have to ship to production before submitting,
+because that is where Meta's settings point.
+
+**What is still outstanding is listed at the bottom of this file.** The numbered steps below are the
+full record, including what is already done.
+
+Never put a username, password, app secret, access token, or encryption key in this file, in
+`render.yaml`, or in a chat message.
 
 ## 1. Prepare the Instagram account
 
 - [x] Use a dedicated non-production Instagram **Business or Creator** account for the first test.
 - [x] Confirm the person performing setup can sign in to that Instagram account.
-- [ ] Do not send the username, password, app secret, access token, or encryption key in chat.
 
 ## 2. Configure Meta
 
@@ -133,24 +140,34 @@ requirements below were accurate at the time of writing and Meta changes them wi
 
 An app cannot go Live without these, and reviewers do open them.
 
-- [ ] **Privacy policy URL** — `https://thesportyway.com/privacy` exists. It must be updated first;
-      see step 7c.
-- [ ] **Terms of service URL** — _TSW does not currently have one._ A `/terms` route must be built
-      and published before submitting.
-- [ ] **Data deletion** — either a Data Deletion Request Callback or a Data Deletion Instructions
-      URL. See [`policy.md`](./policy.md) for what TSW commits to and the wording to publish.
+- [x] **Privacy policy URL** — `https://thesportyway.com/privacy`, updated per step 7c.
+- [x] **Terms of service URL** — `https://thesportyway.com/terms`. Built 5 September 2026 and
+      linked from the site footer.
+- [x] **Data deletion instructions URL** — `https://thesportyway.com/privacy#data-deletion`.
 - [ ] App icon (1024x1024) and an accurate app category.
+- [ ] Paste all three URLs into the Meta app's Basic Settings, then open each one **logged out, on
+      the deployed site**, and confirm the deletion URL lands on the deletion section rather than
+      the top of the page.
+
+The anchors are load-bearing. `#data-deletion` and `#social-publishing` are element ids in
+`PrivacyPage.jsx`, and `/terms` links to both. Renaming either silently breaks the Meta app
+configuration, so `useHashScroll.test.jsx` and `TermsPage.test.jsx` guard them.
 
 ### 7c. Make the privacy policy cover what the app actually does
 
-Reviewers check that the policy covers the data use behind each requested permission. The current
-policy predates Instagram publishing and does not mention it.
+Reviewers check that the policy covers the data use behind each requested permission.
 
-- [ ] State that TSW publishes selected game content to TSW's own Instagram account.
-- [ ] State what is published: a rendered game-card image and a caption, both reviewed by a person.
-- [ ] State that TSW stores an Instagram access token for its own company account, encrypted, and
+- [x] State that TSW publishes selected game content to TSW's own Instagram account.
+- [x] State what is published: a rendered game-card image and a caption, both reviewed by a person.
+- [x] State that TSW stores an Instagram access token for its own company account, encrypted, and
       that no end user's Instagram account is accessed.
-- [ ] Link the retention and deletion commitments in [`policy.md`](./policy.md).
+- [x] Add Meta to the processor table.
+- [x] Publish the deletion commitment, including the 7-day acknowledgement and 30-day completion
+      window. **That window is now a public promise — confirm it is one TSW can keep.**
+
+The terms of service carries the matching clause: the permission to publish league content to TSW's
+own social accounts, and the opt-out. That clause is the contractual basis for the whole feature,
+so keep the two pages consistent when either changes.
 
 ### 7d. Screencast and reviewer instructions
 
@@ -167,6 +184,25 @@ This is where most submissions fail. The reviewer must be able to reproduce the 
 - [ ] Confirm the reviewer's path does not require the Render Shell. If delivery is still manual at
       submission time, say so explicitly in the instructions and show the queued state plus a
       previously published permalink rather than pretending it is automatic.
+- [ ] **State which environment the reviewer is looking at.** The demonstration runs on the
+      development app against the Instagram test account, because production publishing is
+      deliberately disabled until this permission is granted — but the app's Basic Settings point at
+      the production domain. A reviewer who has to work that mismatch out for themselves may reject
+      the submission over it. Explaining it costs a sentence.
+
+Two mismatches will be visible to the reviewer, and both are fine as long as the instructions name
+them. Wording to adapt:
+
+> The publishing workflow is demonstrated on our development environment at
+> `https://dev.thesportyway.com`, signed in with the credentials supplied above, and publishes to
+> our dedicated Instagram test account. Publishing from our production environment is deliberately
+> disabled until this permission is granted, which is why the demonstration is not on
+> `https://thesportyway.com`. Our privacy policy, terms of service, and data deletion instructions
+> are published on the production domain and are linked from the footer of every page.
+>
+> Delivery is triggered by an operator rather than a scheduler: after approving a post, the operator
+> queues it and a maintenance command publishes it. The screencast shows the queued state and the
+> resulting published post with its Instagram permalink.
 
 ### 7e. Before pressing submit
 
@@ -176,6 +212,20 @@ This is where most submissions fail. The reviewer must be able to reproduce the 
       questions you have no use case for.
 - [ ] The published content in the screencast is content TSW indisputably has the right to publish.
       A rejected submission over rights is expensive to unwind.
+
+### 7f. Verify the public URLs on a real deployment
+
+Local verification is not enough for these: the deployed build splits code differently, and the
+fragment behaviour depends on when a route chunk arrives.
+
+- [ ] Open `/privacy#data-deletion` **logged out, in a real browser**, on the deployed site.
+      Confirm it lands on the deletion section rather than the top of the page. Repeat for
+      `/privacy#social-publishing` and `/terms`.
+- [ ] Confirm all three are reachable with no account and are linked from the footer.
+- [ ] After the first draft on a fresh deployment, confirm in Cloudinary that the asset landed in
+      `<CLOUDINARY_FOLDER>/social/instagram`, is named after the fixture, and carries the
+      `tsw-social`, `tsw-social-instagram` and `tsw-game-<id>` tags. Then cancel a draft and confirm
+      its asset is gone.
 
 ## 8. Production rollout, after review is approved
 
@@ -194,7 +244,36 @@ Do not start this until step 7 is granted.
 - [ ] Connect the real TSW Instagram account and verify, with publishing still disabled.
 - [ ] Only then enable `INSTAGRAM_PUBLISHING_ENABLED` on production.
 
-## Not Yet Safe to Do
+## What is left, and who does it
+
+Everything that could be done in code is done. What remains needs a person, an account, or a
+decision.
+
+### Blocking the App Review submission
+
+| #   | Action                                                           | Why it blocks                                           |
+| --- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| 1   | Meta Business verification (step 7a)                             | Gates the submission and is itself slow. Start first.   |
+| 2   | App icon and category (step 7b)                                  | An app cannot go Live without them.                     |
+| 3   | Legal review of `/terms`                                         | It is a draft describing the product, not legal advice. |
+| 4   | Screencast and reviewer instructions (step 7d)                   | Where most submissions fail.                            |
+| 5   | A TSW test account holding `platform_operator`, for the reviewer | The reviewer cannot grant themselves the role.          |
+| 6   | Verify the public URLs on the deployed site (step 7f)            | Fragment behaviour cannot be trusted from local.        |
+| 7   | Deploy the legal pages to **production**                         | Meta's settings point at `thesportyway.com`.            |
+
+### Decisions only TSW can make
+
+- **Can the 30-day deletion window be met?** It is now published on `/privacy` and there is no
+  automation behind it. If it cannot, change the page before submitting, not after.
+- **The consent basis for real content.** Publishing is demo-only, enforced by
+  `contentDeclaration: z.literal('demo')`. That is fine for App Review, which is demonstrated
+  against demo content. It becomes the blocker the day a real league game should go out. See the
+  consent section of [`policy.md`](./policy.md), including the under-18 position.
+- **Scheduled delivery.** There is no cron service; `instagram:publish-pending` is a person running
+  a Render Shell command. Acceptable while volume is low, but say so in the reviewer instructions
+  rather than implying delivery is automatic.
+
+### Not yet safe to do
 
 - Do not connect the production Instagram account until App Review grants Advanced Access.
 - Do not publish content featuring identifiable real participants until the consent position in
