@@ -75,7 +75,19 @@ delivery is explicitly enabled; a separate command claims and processes queued r
       reconciliation state. A recurring scheduler remains future work.
 - [x] Remove the manual download-and-re-upload step: render the reviewed card in the browser and
       carry it to the review screen. Approval and both declarations are unchanged.
-- [ ] Exercise a private test account end to end, including token expiry and rejected media.
+- [x] Exercise a private test account end to end. Completed 5 September 2026; token expiry and
+      rejected-media handling remain untested against a live rejection.
+
+### Before production
+
+- [ ] Meta App Review: Advanced Access for `instagram_business_basic` and
+      `instagram_business_content_publish`. See `manual-actions.md` step 7.
+- [ ] Publish a terms-of-service page and a data-deletion instructions URL, both required for a
+      Live app.
+- [ ] Update the privacy policy to cover Instagram publishing.
+- [ ] Settle the open consent and retention questions in `policy.md`.
+- [ ] Give social exports their own Cloudinary folder before production assets accumulate.
+- [ ] Decide whether delivery runs on a schedule or stays a manual command.
 
 ### Later or explicitly deferred
 
@@ -98,7 +110,9 @@ rate limits, restarts, and ambiguous delivery outcomes.
 - [`platform-knowledge.md`](./platform-knowledge.md) — Meta API facts and decisions.
 - [`runbook.md`](./runbook.md) — setup, verification, security, and incident checks.
 - [`manual-actions.md`](./manual-actions.md) — the exact Meta, environment, and operator setup still
-  required outside the repository.
+  required outside the repository, including the App Review submission and production rollout.
+- [`policy.md`](./policy.md) — what is published, retention, deletion, and the open consent
+  questions that gate publishing anything beyond demo content.
 - [`decisions.md`](./decisions.md) — concise architecture decision records.
 
 The broader content strategy remains in [`../marketing-social.md`](../marketing-social.md), and

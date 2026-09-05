@@ -347,7 +347,11 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
                 </span>
                 <span className="text-xs text-slate-500">Created {formatDate(post.createdAt)}</span>
               </div>
-              <p className="whitespace-pre-wrap text-sm text-slate-800">{post.caption}</p>
+              {/* The caption now carries an attribution URL, which has no spaces to
+                  wrap at and overflowed the card on narrow screens. */}
+              <p className="whitespace-pre-wrap break-words text-sm text-slate-800">
+                {post.caption}
+              </p>
               {post.attributionUrl ? (
                 <a
                   href={post.attributionUrl}
