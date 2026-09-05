@@ -67,8 +67,12 @@ services:
         sync: false
       - key: INSTAGRAM_TOKEN_ENCRYPTION_KEY
         sync: false
+      # Dashboard-owned, like the key it authenticates: the version is the
+      # AES-GCM associated data AND selects the decryption key, so a blueprint
+      # sync pinning it back to v1 after a key rotation would leave the stored
+      # token undecryptable and force a reconnect.
       - key: INSTAGRAM_TOKEN_KEY_VERSION
-        value: v1
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
@@ -188,7 +192,7 @@ services:
       - key: INSTAGRAM_OAUTH_ENABLED
         value: true
       - key: INSTAGRAM_PUBLISHING_ENABLED
-        value: false
+        sync: false
       - key: INSTAGRAM_GRAPH_API_VERSION
         sync: false
       - key: INSTAGRAM_APP_ID
@@ -199,8 +203,12 @@ services:
         sync: false
       - key: INSTAGRAM_TOKEN_ENCRYPTION_KEY
         sync: false
+      # Dashboard-owned, like the key it authenticates: the version is the
+      # AES-GCM associated data AND selects the decryption key, so a blueprint
+      # sync pinning it back to v1 after a key rotation would leave the stored
+      # token undecryptable and force a reconnect.
       - key: INSTAGRAM_TOKEN_KEY_VERSION
-        value: v1
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
