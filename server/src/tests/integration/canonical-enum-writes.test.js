@@ -26,6 +26,12 @@ jest.mock('../../modules/auth/auth.repository', () => {
     // register() issues a session on success; there is no DB here, so stub the
     // write. The schema assertion below is unaffected.
     upsertSession: jest.fn(),
+    // register() also issues an email_verification token before sending the
+    // welcome email. This file runs real schema validation with no DB
+    // connection, and the token writes are not what it asserts on — stub them
+    // so the User enum-validation path stays the only thing under test.
+    createAuthToken: jest.fn(),
+    invalidateTokensForUserByType: jest.fn(),
   };
 });
 

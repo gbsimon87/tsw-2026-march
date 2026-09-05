@@ -15,7 +15,12 @@ jest.mock('../../config/env', () => ({
 
 const { logger } = require('../../config/logger');
 const { env } = require('../../config/env');
-const { sendTemplateEmail, sendTemplateEmailAsync } = require('../../services/email.service');
+const {
+  sendTemplateEmail,
+  sendTemplateEmailAsync,
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+} = require('../../services/email.service');
 
 function flushMicrotasksAndImmediate() {
   return new Promise((resolve) => setImmediate(resolve));
@@ -118,5 +123,42 @@ describe('reply routing', () => {
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({ replyTo: 'submitter@example.com' })
     );
+  });
+});
+
+describe('templates render through the shared renderer', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSend.mockResolvedValue({ error: null });
+  });
+
+  test('password reset carries the link in both bodies and emits no images', async () => {
+    sendPasswordResetEmail({
+      to: 'player@example.com',
+      name: 'Simon',
+      resetUrl: 'https://thesportyway.com/reset-password?token=abc',
+    });
+    await flushMicrotasksAndImmediate();
+
+    const payload = mockSend.mock.calls[0][0];
+    expect(payload.html).toContain('https://thesportyway.com/reset-password?token=abc');
+    expect(payload.text).toContain('https://thesportyway.com/reset-password?token=abc');
+    expect(payload.html).not.toMatch(/<img/i);
+    expect(payload.html).toContain('The Sporty Way');
+  });
+
+  test('a Google welcome has no verify link and no expiry footnote', async () => {
+    sendWelcomeEmail({
+      to: 'g@example.com',
+      name: 'Google User',
+      ctaUrl: 'https://thesportyway.com/onboarding',
+      needsVerification: false,
+    });
+    await flushMicrotasksAndImmediate();
+
+    const payload = mockSend.mock.calls[0][0];
+    expect(payload.subject).toBe('Welcome to The Sporty Way');
+    expect(payload.text).toContain('https://thesportyway.com/onboarding');
+    expect(payload.text).not.toContain('expires');
   });
 });

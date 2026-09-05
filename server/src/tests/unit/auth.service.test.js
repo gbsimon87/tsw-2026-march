@@ -19,6 +19,9 @@ jest.mock('../../modules/auth/auth.repository', () => ({
 
 jest.mock('../../services/email.service', () => ({
   sendPasswordResetEmail: jest.fn(),
+  sendWelcomeEmail: jest.fn(),
+  sendGoogleAccountEmail: jest.fn(),
+  sendVerificationEmail: jest.fn(),
 }));
 
 jest.mock('../../services/authToken.service', () => ({
@@ -35,6 +38,7 @@ jest.mock('../../modules/analytics/analytics.service', () => ({
 const repository = require('../../modules/auth/auth.repository');
 const analyticsService = require('../../modules/analytics/analytics.service');
 const authService = require('../../modules/auth/auth.service');
+const emailService = require('../../services/email.service');
 
 describe('auth service', () => {
   beforeEach(() => {
@@ -49,7 +53,7 @@ describe('auth service', () => {
       name: 'Player One',
       roles: ['user'],
       plan: 'free',
-      emailVerified: true,
+      emailVerified: false,
       authProvider: 'local',
     });
 
@@ -71,6 +75,22 @@ describe('auth service', () => {
     expect(repository.createUser).toHaveBeenCalledWith(
       expect.objectContaining({
         onboarding: { status: 'not_started', roles: [], completedSteps: [] },
+      })
+    );
+
+    // New local accounts start unverified; the welcome email carries the link
+    // that flips the flag. Nothing gates on it, so this cannot lock anyone out.
+    expect(repository.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ emailVerified: false })
+    );
+    expect(repository.createAuthToken).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'email_verification' })
+    );
+    expect(emailService.sendWelcomeEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'player@example.com',
+        needsVerification: true,
+        ctaUrl: expect.stringContaining('/verify-email?token='),
       })
     );
   });
@@ -322,6 +342,56 @@ describe('auth service', () => {
     });
   });
 
+  test('a first Google sign-in sends a welcome email with no verify link', async () => {
+    repository.findOrCreateGoogleUser.mockResolvedValue({
+      user: {
+        _id: 'user-g1',
+        email: 'google.user@example.com',
+        name: 'Google User',
+        roles: ['user'],
+        emailVerified: true,
+        authProvider: 'google',
+      },
+      isNew: true,
+    });
+
+    await authService.loginWithGoogle(
+      { id: 'g-1', email: 'google.user@example.com', name: 'Google User' },
+      { userAgent: 'jest', ip: '127.0.0.1' }
+    );
+
+    // Google has already confirmed the address, so the CTA goes straight to
+    // onboarding rather than through a verification round-trip.
+    expect(emailService.sendWelcomeEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'google.user@example.com',
+        needsVerification: false,
+        ctaUrl: expect.stringContaining('/onboarding'),
+      })
+    );
+  });
+
+  test('a returning Google user is not welcomed again', async () => {
+    repository.findOrCreateGoogleUser.mockResolvedValue({
+      user: {
+        _id: 'user-g1',
+        email: 'google.user@example.com',
+        name: 'Google User',
+        roles: ['user'],
+        emailVerified: true,
+        authProvider: 'google',
+      },
+      isNew: false,
+    });
+
+    await authService.loginWithGoogle(
+      { id: 'g-1', email: 'google.user@example.com', name: 'Google User' },
+      { userAgent: 'jest', ip: '127.0.0.1' }
+    );
+
+    expect(emailService.sendWelcomeEmail).not.toHaveBeenCalled();
+  });
+
   test('requestEmailVerification returns a generic response when verification is not required', async () => {
     repository.findUserByEmail.mockResolvedValue({
       _id: 'user-1',
@@ -336,7 +406,102 @@ describe('auth service', () => {
     expect(result.message).toBe(
       'If an account exists for that email, a verification link has been sent.'
     );
-    expect(result.verificationUrl).toBeNull();
+  });
+
+  test('requestEmailVerification sends for an unverified user', async () => {
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'user-2',
+      email: 'unverified@example.com',
+      name: 'Unverified',
+      emailVerified: false,
+    });
+
+    const result = await authService.requestEmailVerification('unverified@example.com');
+
+    expect(repository.createAuthToken).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'email_verification' })
+    );
+    expect(emailService.sendVerificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'unverified@example.com',
+        verifyUrl: expect.stringContaining('/verify-email?token='),
+      })
+    );
+    expect(result.message).toMatch(/verification link has been sent/i);
+  });
+
+  test('requestEmailVerification does not resend for an already-verified user', async () => {
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'user-3',
+      email: 'verified@example.com',
+      name: 'Verified',
+      emailVerified: true,
+    });
+
+    await authService.requestEmailVerification('verified@example.com');
+
+    expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  test('requestEmailVerification reveals nothing for an unknown address', async () => {
+    repository.findUserByEmail.mockResolvedValue(null);
+
+    const known = await authService.requestEmailVerification('unknown@example.com');
+    jest.clearAllMocks();
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'user-4',
+      email: 'real@example.com',
+      emailVerified: true,
+    });
+    const unknown = await authService.requestEmailVerification('real@example.com');
+
+    // Identical response regardless of whether the account exists.
+    expect(known).toEqual(unknown);
+    expect(emailService.sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  test('forgot-password on a Google account sends the Google notice, not a reset', async () => {
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'user-g2',
+      email: 'google.user@example.com',
+      name: 'Google User',
+      authProvider: 'google',
+      passwordHash: undefined,
+    });
+
+    await authService.forgotPassword('google.user@example.com');
+
+    expect(emailService.sendGoogleAccountEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'google.user@example.com',
+        loginUrl: expect.stringContaining('/login'),
+      })
+    );
+    expect(emailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  test('forgot-password returns an identical response for every branch', async () => {
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'u1',
+      email: 'local@example.com',
+      passwordHash: 'hash',
+    });
+    const local = await authService.forgotPassword('local@example.com');
+
+    repository.findUserByEmail.mockResolvedValue({
+      _id: 'u2',
+      email: 'google@example.com',
+      authProvider: 'google',
+    });
+    const google = await authService.forgotPassword('google@example.com');
+
+    repository.findUserByEmail.mockResolvedValue(null);
+    const missing = await authService.forgotPassword('nobody@example.com');
+
+    // Identical bodies, so forgot-password cannot be used to discover which
+    // addresses have accounts or how they sign in.
+    expect(local).toEqual(google);
+    expect(google).toEqual(missing);
   });
 
   test('login rejects the reserved system account even if a password hash is ever set', async () => {

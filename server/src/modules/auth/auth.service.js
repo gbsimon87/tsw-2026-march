@@ -39,7 +39,12 @@ const {
   hashAuthToken,
   buildTokenExpiry,
 } = require('../../services/authToken.service');
-const { sendPasswordResetEmail } = require('../../services/email.service');
+const {
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+  sendVerificationEmail,
+  sendGoogleAccountEmail,
+} = require('../../services/email.service');
 
 function sanitizeUser(user) {
   const onboardingStatus = user.onboarding?.status || 'completed';
@@ -70,6 +75,23 @@ function getPrimaryClientOrigin() {
 
 function buildClientUrl(pathname, token) {
   return `${getPrimaryClientOrigin()}${pathname}?token=${encodeURIComponent(token)}`;
+}
+
+// Issues a fresh email_verification token and returns the link that consumes it.
+// Prior unused tokens are invalidated first so an old link in an old inbox stops
+// working the moment a new one is issued.
+async function issueEmailVerification(user) {
+  await invalidateTokensForUserByType(user._id, 'email_verification');
+
+  const rawToken = generateRawToken();
+  await createAuthToken({
+    userId: user._id,
+    type: 'email_verification',
+    tokenHash: hashAuthToken(rawToken),
+    expiresAt: buildTokenExpiry('email_verification'),
+  });
+
+  return buildClientUrl('/verify-email', rawToken);
 }
 
 async function issueAuthTokens(user, metadata, { isFirstLogin = false } = {}) {
@@ -155,7 +177,7 @@ async function register(input, metadata) {
     name: input.name,
     passwordHash,
     authProvider: 'local',
-    emailVerified: true,
+    emailVerified: false,
     roles: ['user'],
     onboarding: { status: 'not_started', roles: [], completedSteps: [] },
     // plan intentionally omitted — the schema default 'starter' applies (audit C1;
@@ -166,6 +188,16 @@ async function register(input, metadata) {
     distinctId: String(user._id),
     event: 'user_registered',
     properties: { auth_provider: 'local' },
+  });
+
+  // The token is persisted before the send is dispatched, so a dropped email
+  // still leaves a valid link the user can obtain from /verify-email.
+  const verifyUrl = await issueEmailVerification(user);
+  sendWelcomeEmail({
+    to: user.email,
+    name: user.name,
+    ctaUrl: verifyUrl,
+    needsVerification: true,
   });
 
   // Sign the new user straight in rather than redirecting them to the login form
@@ -261,11 +293,17 @@ async function updateOnboarding(userId, input) {
 }
 
 async function requestEmailVerification(email) {
-  void email;
+  const user = await findUserByEmail(email);
 
+  if (user && !user.emailVerified) {
+    const verifyUrl = await issueEmailVerification(user);
+    sendVerificationEmail({ to: user.email, name: user.name, verifyUrl });
+  }
+
+  // The same response whether or not the account exists, so this endpoint is
+  // not an account-existence oracle.
   return {
     message: 'If an account exists for that email, a verification link has been sent.',
-    verificationUrl: null,
   };
 }
 
@@ -291,6 +329,15 @@ async function forgotPassword(email) {
 
   if (user && user.passwordHash) {
     await issuePasswordReset(user);
+  } else if (user) {
+    // A Google account has no password to reset. Without this the request is a
+    // silent dead end; the response is unchanged, so only the true mailbox
+    // owner learns anything.
+    sendGoogleAccountEmail({
+      to: user.email,
+      name: user.name,
+      loginUrl: `${getPrimaryClientOrigin()}/login`,
+    });
   }
 
   return {
@@ -351,6 +398,12 @@ async function loginWithGoogle(googleProfile, metadata) {
       event: 'user_registered',
       properties: { auth_provider: 'google' },
     });
+    sendWelcomeEmail({
+      to: user.email,
+      name: user.name,
+      ctaUrl: `${getPrimaryClientOrigin()}/onboarding`,
+      needsVerification: false,
+    });
   }
 
   return issueAuthTokens(user, metadata, { isFirstLogin: isNew });
@@ -368,6 +421,12 @@ async function prepareGoogleExchange(googleProfile) {
       distinctId: String(user._id),
       event: 'user_registered',
       properties: { auth_provider: 'google' },
+    });
+    sendWelcomeEmail({
+      to: user.email,
+      name: user.name,
+      ctaUrl: `${getPrimaryClientOrigin()}/onboarding`,
+      needsVerification: false,
     });
   }
 

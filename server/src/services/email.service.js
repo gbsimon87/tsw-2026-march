@@ -1,22 +1,11 @@
 const { Resend } = require('resend');
 const { env } = require('../config/env');
 const { logger } = require('../config/logger');
+const { renderEmail } = require('./email.template');
 
 function getClient() {
   if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL || !env.RESEND_FROM_NAME) return null;
   return new Resend(env.RESEND_API_KEY);
-}
-
-// Audit M14: user-controlled values (names, team/league labels) are interpolated
-// into HTML email bodies — escape them so a crafted name can't inject markup or a
-// phishing link into a legitimately-delivered email.
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 async function sendTemplateEmail({ to, replyTo, subject, text, html, fallbackLabel }) {
@@ -77,67 +66,136 @@ function sendTemplateEmailAsync(payload) {
   });
 }
 
-// OPT-020: transactional emails are dispatched fire-and-forget so a slow/failing
-// Resend call never delays or fails the auth request that triggered it.
 function sendVerificationEmail({ to, name, verifyUrl }) {
-  const safeName = name || 'there';
+  const { html, text } = renderEmail({
+    preheader: 'Confirm your email address',
+    greeting: `Hi ${name || 'there'},`,
+    paragraphs: ['Confirm this email address to finish setting up your account.'],
+    cta: { label: 'Confirm email', url: verifyUrl },
+    footnote: 'If you did not create an account, you can ignore this email.',
+  });
 
   sendTemplateEmailAsync({
     to,
-    subject: 'Verify your email',
-    text: `Hi ${safeName}, verify your email by visiting: ${verifyUrl}`,
-    html: `<p>Hi ${escapeHtml(safeName)},</p><p>Verify your email by clicking <a href="${verifyUrl}">this link</a>.</p>`,
+    subject: 'Confirm your email',
+    text,
+    html,
     fallbackLabel: 'email_verification',
   });
 }
 
 function sendPasswordResetEmail({ to, name, resetUrl }) {
-  const safeName = name || 'there';
+  const { html, text } = renderEmail({
+    preheader: 'Reset your password',
+    greeting: `Hi ${name || 'there'},`,
+    paragraphs: ['Someone asked to reset the password for this account.'],
+    cta: { label: 'Reset password', url: resetUrl },
+    footnote: 'If you did not ask for this, you can ignore this email — nothing has changed.',
+  });
 
   sendTemplateEmailAsync({
     to,
     subject: 'Reset your password',
-    text: `Hi ${safeName}, reset your password by visiting: ${resetUrl}`,
-    html: `<p>Hi ${escapeHtml(safeName)},</p><p>Reset your password by clicking <a href="${resetUrl}">this link</a>.</p>`,
+    text,
+    html,
     fallbackLabel: 'password_reset',
   });
 }
 
-// Billing lifecycle emails (T-18), dispatched fire-and-forget from webhook
-// handlers so a slow/failing Resend call never blocks webhook processing.
+// Welcome (local signup carries a verify link; Google signup goes straight to
+// onboarding because Google has already confirmed the address).
+function sendWelcomeEmail({ to, name, ctaUrl, needsVerification }) {
+  const { html, text } = renderEmail({
+    preheader: 'Welcome to The Sporty Way',
+    greeting: `Hi ${name || 'there'},`,
+    paragraphs: [
+      'Welcome to The Sporty Way. Your account is ready and you are already signed in.',
+      needsVerification
+        ? 'Confirm your email address and we will take you straight to setting up your first team or league.'
+        : 'Set up your first team or league and start tracking games.',
+    ],
+    cta: {
+      label: needsVerification ? 'Confirm and get started' : 'Get started',
+      url: ctaUrl,
+    },
+    footnote: needsVerification ? 'This link expires in 60 minutes.' : null,
+  });
+
+  sendTemplateEmailAsync({
+    to,
+    subject: 'Welcome to The Sporty Way',
+    text,
+    html,
+    fallbackLabel: 'welcome',
+  });
+}
+
+// Sent when someone asks to reset a password on an account that signs in with
+// Google. Without it that request is a silent dead end: there is no password to
+// reset, so nothing was ever sent. The on-screen response is unchanged, so this
+// tells only the true mailbox owner anything.
+function sendGoogleAccountEmail({ to, name, loginUrl }) {
+  const { html, text } = renderEmail({
+    preheader: 'This account signs in with Google',
+    greeting: `Hi ${name || 'there'},`,
+    paragraphs: [
+      'Someone asked to reset the password for this address.',
+      'This account signs in with Google, so there is no password to reset. Use "Continue with Google" on the sign-in page.',
+    ],
+    cta: { label: 'Go to sign in', url: loginUrl },
+    footnote: 'If you did not ask for this, you can ignore this email — nothing has changed.',
+  });
+
+  sendTemplateEmailAsync({
+    to,
+    subject: 'Signing in to The Sporty Way',
+    text,
+    html,
+    fallbackLabel: 'google_account_notice',
+  });
+}
+
 function sendPaymentFailedEmail({ to, name, resourceLabel, manageUrl }) {
   if (!to) return;
-  const safeName = name || 'there';
   const what = resourceLabel || 'your subscription';
-  const cta = manageUrl ? ` Update your payment method: ${manageUrl}` : '';
+  const { html, text } = renderEmail({
+    preheader: 'Your payment failed',
+    greeting: `Hi ${name || 'there'},`,
+    paragraphs: [
+      `The latest payment for ${what} failed.`,
+      'Update your payment method to keep the subscription active.',
+    ],
+    cta: manageUrl ? { label: 'Update payment method', url: manageUrl } : null,
+  });
+
   sendTemplateEmailAsync({
     to,
     subject: 'Your payment failed',
-    text: `Hi ${safeName}, the latest payment for ${what} failed. Please update your payment method to keep your subscription active.${cta}`,
-    html: `<p>Hi ${escapeHtml(safeName)},</p><p>The latest payment for <strong>${escapeHtml(
-      what
-    )}</strong> failed. Please update your payment method to keep your subscription active.</p>${
-      manageUrl ? `<p><a href="${encodeURI(manageUrl)}">Update payment method</a></p>` : ''
-    }`,
+    text,
+    html,
     fallbackLabel: 'billing_payment_failed',
   });
 }
 
 function sendTrialEndingEmail({ to, name, resourceLabel, trialEndsAt, manageUrl }) {
   if (!to) return;
-  const safeName = name || 'there';
   const what = resourceLabel || 'your subscription';
-  const when = trialEndsAt ? ` on ${new Date(trialEndsAt).toDateString()}` : ' soon';
-  const cta = manageUrl ? ` Manage your subscription: ${manageUrl}` : '';
+  const when = trialEndsAt ? `on ${new Date(trialEndsAt).toDateString()}` : 'soon';
+  const { html, text } = renderEmail({
+    preheader: 'Your free trial is ending soon',
+    greeting: `Hi ${name || 'there'},`,
+    paragraphs: [
+      `Your free trial for ${what} ends ${when}.`,
+      'Add a payment method to keep managing your league.',
+    ],
+    cta: manageUrl ? { label: 'Manage subscription', url: manageUrl } : null,
+  });
+
   sendTemplateEmailAsync({
     to,
     subject: 'Your free trial is ending soon',
-    text: `Hi ${safeName}, your free trial for ${what} ends${when}. Add a payment method to keep managing your league.${cta}`,
-    html: `<p>Hi ${escapeHtml(safeName)},</p><p>Your free trial for <strong>${escapeHtml(
-      what
-    )}</strong> ends${when}. Add a payment method to keep managing your league.</p>${
-      manageUrl ? `<p><a href="${encodeURI(manageUrl)}">Manage subscription</a></p>` : ''
-    }`,
+    text,
+    html,
     fallbackLabel: 'billing_trial_ending',
   });
 }
@@ -147,6 +205,8 @@ module.exports = {
   sendTemplateEmailAsync,
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendWelcomeEmail,
+  sendGoogleAccountEmail,
   sendPaymentFailedEmail,
   sendTrialEndingEmail,
 };

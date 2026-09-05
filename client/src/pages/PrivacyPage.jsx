@@ -29,8 +29,9 @@ const processors = [
   {
     name: 'Resend',
     purpose: 'Transactional email',
-    location: 'United States',
-    detail: 'Password resets, verification, and replies to contact messages.',
+    location: 'European Union (Ireland)',
+    detail:
+      'Password resets, verification, and replies to contact messages. Email is processed in the EU; Resend is a US-based company.',
   },
   {
     name: 'Stripe',
