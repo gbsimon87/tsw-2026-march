@@ -1,7 +1,31 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameTrackPage } from './GameTrackPage';
+
+class MockSpeechRecognition {
+  static instances = [];
+
+  constructor() {
+    MockSpeechRecognition.instances.push(this);
+    this.start = vi.fn();
+    this.abort = vi.fn();
+  }
+
+  emitStart() {
+    this.onstart?.();
+  }
+
+  emitResult(transcript) {
+    const result = [{ transcript }];
+    result.isFinal = true;
+    this.onresult?.({ resultIndex: 0, results: [result] });
+  }
+
+  emitError(error = 'network') {
+    this.onerror?.({ error });
+  }
+}
 
 const apiMocks = vi.hoisted(() => ({
   getById: vi.fn(),
@@ -57,6 +81,7 @@ function createResponse(overrides = {}) {
     game: {
       id: 'game-1',
       title: 'Dev Scrimmage',
+      sport: 'basketball',
       opponent: 'Falcons',
       status: 'in_progress',
       events: [],
@@ -113,6 +138,24 @@ function renderPage() {
   );
 }
 
+async function enableVoiceTracking() {
+  fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+  const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
+  fireEvent.click(toggle);
+  expect(MockSpeechRecognition.instances).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+  const guidance = await screen.findAllByText(
+    'Voice tracking is on. Select a court position to start listening.'
+  );
+  return guidance[0];
+}
+
+function installSpeechRecognition() {
+  MockSpeechRecognition.instances = [];
+  Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+  window.SpeechRecognition = MockSpeechRecognition;
+}
+
 function getEventPicker() {
   const closeButtons = screen.getAllByRole('button', { name: /Close event picker/i });
   return closeButtons.at(-1).parentElement?.parentElement;
@@ -124,6 +167,37 @@ function getActiveCourt() {
 
 function pointerDown(element, coordinates = {}) {
   fireEvent(element, new MouseEvent('pointerdown', { bubbles: true, ...coordinates }));
+}
+
+function tapCourtAt(clientX, clientY) {
+  const court = getActiveCourt();
+  court.getBoundingClientRect = () => ({
+    left: 0,
+    top: 0,
+    width: 500,
+    height: 940,
+    right: 500,
+    bottom: 940,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  pointerDown(court, { clientX, clientY });
+}
+
+async function startCourtVoice(clientX, clientY) {
+  const previousCount = MockSpeechRecognition.instances.length;
+  tapCourtAt(clientX, clientY);
+  await waitFor(() => expect(MockSpeechRecognition.instances).toHaveLength(previousCount + 1));
+  const recognition = MockSpeechRecognition.instances.at(-1);
+  act(() => recognition.emitStart());
+  return recognition;
+}
+
+async function speakFromCourt(transcript, clientX = 475, clientY = 900) {
+  const recognition = await startCourtVoice(clientX, clientY);
+  act(() => recognition.emitResult(transcript));
+  return recognition;
 }
 
 async function waitForEventPicker() {
@@ -154,11 +228,48 @@ function playerButtonName(playerName) {
   return new RegExp(`(^|\\s)${playerName}$`);
 }
 
+// One microphone cycle: tap, recognition starts, one final transcript arrives.
+async function speak(transcript) {
+  const availableMicrophone = screen.queryByRole('button', { name: 'Record voice command' });
+  if (!availableMicrophone) return speakFromCourt(transcript, 250, 800);
+
+  const previousCount = MockSpeechRecognition.instances.length;
+  const microphone = availableMicrophone;
+  await waitFor(() => expect(microphone).not.toBeDisabled());
+  fireEvent.click(microphone);
+  await waitFor(() => expect(MockSpeechRecognition.instances).toHaveLength(previousCount + 1));
+  const recognition = MockSpeechRecognition.instances.at(-1);
+  act(() => recognition.emitStart());
+  act(() => recognition.emitResult(transcript));
+  return recognition;
+}
+
+async function startListening() {
+  const availableMicrophone = screen.queryByRole('button', { name: 'Record voice command' });
+  if (!availableMicrophone) return startCourtVoice(250, 800);
+
+  const previousCount = MockSpeechRecognition.instances.length;
+  const microphone = availableMicrophone;
+  await waitFor(() => expect(microphone).not.toBeDisabled());
+  fireEvent.click(microphone);
+  await waitFor(() => expect(MockSpeechRecognition.instances).toHaveLength(previousCount + 1));
+  const recognition = MockSpeechRecognition.instances.at(-1);
+  act(() => recognition.emitStart());
+  return recognition;
+}
+
+async function expectVoiceMessage(message) {
+  await waitFor(() => expect(screen.getAllByText(message).length).toBeGreaterThan(0));
+}
+
 describe('GameTrackPage', () => {
   let currentResponse;
 
   afterEach(() => {
     cleanup();
+    delete window.SpeechRecognition;
+    delete window.webkitSpeechRecognition;
+    delete window.isSecureContext;
   });
 
   beforeEach(() => {
@@ -446,6 +557,1257 @@ describe('GameTrackPage', () => {
     expect(screen.queryByRole('button', { name: 'Court' })).not.toBeInTheDocument();
   });
 
+  test('enables voice from More without starting the microphone', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+
+    expect(screen.queryByRole('button', { name: 'Record voice command' })).not.toBeInTheDocument();
+    expect(MockSpeechRecognition.instances).toHaveLength(0);
+  });
+
+  test('explains the voice process and complete phrase sets for a one-team game', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    const voiceSection = screen.getByRole('heading', { name: 'Voice tracking' }).closest('section');
+    expect(
+      within(voiceSection).getByRole('button', { name: /Voice Tracking/ })
+    ).toBeInTheDocument();
+    expect(
+      within(voiceSection).getByRole('button', { name: 'How to use voice commands' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tracking setup' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Game actions' })).toBeInTheDocument();
+
+    fireEvent.click(
+      within(voiceSection).getByRole('button', { name: 'How to use voice commands' })
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'How to use voice tracking' });
+    expect(within(dialog).getByText('Track a stat')).toBeInTheDocument();
+    expect(within(dialog).getByText('player + action')).toBeInTheDocument();
+    expect(within(dialog).getByText('home/away + player + action')).toBeInTheDocument();
+    expect(within(dialog).getByText('Use one-team phrases')).toBeInTheDocument();
+    expect(within(dialog).getByText(/do not say home or away/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/use Subs to sub them in first/i)).toBeInTheDocument();
+
+    const shots = within(dialog).getByRole('table', { name: 'Shots' });
+    expect(within(shots).getByText('13 3pt field goal missed')).toBeInTheDocument();
+    expect(within(shots).getByText('Alex missed free throw')).toBeInTheDocument();
+
+    const nonShots = within(dialog).getByRole('table', { name: 'Non-shot stats' });
+    expect(within(nonShots).getByText('13 offensive rebound')).toBeInTheDocument();
+    expect(within(nonShots).getByText('Alex Morgan foul')).toBeInTheDocument();
+
+    const dualTeam = within(dialog).getByRole('table', { name: 'Dual-team tracking' });
+    expect(within(dualTeam).getByText('home number 13 steal')).toBeInTheDocument();
+    expect(within(dualTeam).getByText('away twenty three turnover')).toBeInTheDocument();
+
+    const followUps = within(dialog).getByRole('table', {
+      name: 'Follow-ups and controls',
+    });
+    expect(within(followUps).getByText('unassisted')).toBeInTheDocument();
+    expect(within(followUps).getByText('Cancel listening button')).toBeInTheDocument();
+
+    const refusals = within(dialog).getByRole('table', { name: 'Expected refusals' });
+    expect(within(refusals).getByText('21 jump shot made')).toBeInTheDocument();
+    expect(within(refusals).getByText('13 made two three')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'How to use voice tracking' })
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  test('identifies the required primary-command format for a dual-team game', async () => {
+    installSpeechRecognition();
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('button', { name: 'How to use voice commands' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'How to use voice tracking' });
+    expect(within(dialog).getByText('Use dual-team phrases')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/start every primary command with home or away/i)
+    ).toBeInTheDocument();
+    expect(
+      within(within(dialog).getByRole('table', { name: 'Dual-team tracking' })).getByText(
+        'away 7 3pt field goal missed'
+      )
+    ).toBeInTheDocument();
+  });
+
+  test('records a one-sided non-shot command with the recognition-start clock snapshot', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 2,
+          remainingMilliseconds: 321000,
+          runningSince: null,
+        },
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('Alex steal', 250, 800);
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent).toHaveBeenCalledWith(
+      'game-1',
+      expect.objectContaining({
+        playerId: 'player-1',
+        statType: 'STL',
+        segmentKind: 'regulation',
+        segmentNumber: 2,
+        clockMillisecondsRemaining: 321000,
+      })
+    );
+    expect(screen.getAllByText('Alex: Steal recorded.').length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    ['Alex two point field goal made', 74.45, 470, 'FG2_MADE'],
+    ['Alex 2pt field goal missed', 74.45, 470, 'FG2_MISS'],
+    ['Alex three point field goal made', 475, 900, 'FG3_MADE'],
+    ['Alex 3pt field goal missed', 475, 900, 'FG3_MISS'],
+    ['Alex free throw made', 250, 800, 'FT_MADE'],
+    ['Alex free throw missed', 250, 800, 'FT_MISS'],
+    ['Alex offensive rebound', 250, 800, 'OREB'],
+    ['Alex defensive rebound', 250, 800, 'DREB'],
+    ['Alex steal', 250, 800, 'STL'],
+    ['Alex block', 250, 800, 'BLK'],
+    ['Alex turnover', 250, 800, 'TOV'],
+    ['Alex foul', 250, 800, 'FOUL'],
+  ])('connects the voice action %s to %s', async (transcript, x, y, statType) => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt(transcript, x, y);
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-1', statType })
+    );
+  });
+
+  test('captures the video timestamp when voice recognition starts', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      installSpeechRecognition();
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          startingLineupPlayerIds: ['player-1'],
+          currentLineupPlayerIds: ['player-1'],
+        },
+      });
+
+      renderPage();
+      const iframe = await screen.findByTitle('Dev Scrimmage');
+      fireEvent(
+        window,
+        new MessageEvent('message', {
+          data: JSON.stringify({ event: 'infoDelivery', info: { currentTime: 27.6 } }),
+          source: iframe.contentWindow,
+        })
+      );
+
+      await enableVoiceTracking();
+      await speakFromCourt('Alex turnover', 250, 800);
+
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+        expect.objectContaining({
+          playerId: 'player-1',
+          statType: 'TOV',
+          videoTimestamp: 28,
+        })
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('uses a court tap to start a shot command and falls back to the picker on rejection', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+
+    const recognition = await startCourtVoice(475, 900);
+    expect(screen.queryByRole('button', { name: /Close event picker/i })).not.toBeInTheDocument();
+    act(() => recognition.emitResult('Alex made two'));
+    await waitFor(() =>
+      expect(
+        screen.getByText('The spoken point value does not match the court location.')
+      ).toBeInTheDocument()
+    );
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+    await waitForEventPicker();
+    expect(
+      within(getEventPicker()).queryByRole('button', { name: 'Record voice command' })
+    ).not.toBeInTheDocument();
+    expect(within(getEventPicker()).getByText(/Corner Right 3 • FG3/i)).toBeInTheDocument();
+
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        playerId: 'player-1',
+        statType: 'FG3_MADE',
+        zoneId: 'CORNER_RIGHT_3',
+        x: 95.74,
+        y: 5,
+        courtLayoutId: 'legacy-v1',
+      })
+    );
+  });
+
+  test('opens the picker with the tapped location retained when court-triggered speech fails', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    const recognition = await startCourtVoice(475, 900);
+
+    expect(screen.queryByRole('button', { name: /Close event picker/i })).not.toBeInTheDocument();
+    expect(recognition.abort).not.toHaveBeenCalled();
+    act(() => recognition.emitError('no-speech'));
+
+    await waitForEventPicker();
+    expect(within(getEventPicker()).getByText(/Corner Right 3 • FG3/i)).toBeInTheDocument();
+    expect(
+      within(getEventPicker()).queryByRole('button', { name: 'Record voice command' })
+    ).not.toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  test('retains the court tap when microphone permission fails before recognition starts', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    const previousCount = MockSpeechRecognition.instances.length;
+    tapCourtAt(475, 900);
+    await waitFor(() => expect(MockSpeechRecognition.instances).toHaveLength(previousCount + 1));
+    act(() => MockSpeechRecognition.instances.at(-1).emitError('not-allowed'));
+
+    await waitForEventPicker();
+    expect(within(getEventPicker()).getByText(/Corner Right 3 • FG3/i)).toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  test('attributes a dual-team voice command to its explicit spoken side', async () => {
+    installSpeechRecognition();
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('away Away 1 steal', 250, 800);
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ playerId: 'away-1', statType: 'STL', teamSide: 'away' })
+    );
+  });
+
+  test('shows an unavailable More option when browser speech recognition is unsupported', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText('Not supported by this browser.')).toBeInTheDocument();
+  });
+
+  test('opens the existing assist follow-up after a made field goal recorded by voice', async () => {
+    installSpeechRecognition();
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('Alex made');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-1', statType: 'FG3_MADE' })
+    );
+
+    const overlay = getEventPicker();
+    expect(within(overlay).getByText(/Who assisted\?/i)).toBeInTheDocument();
+    expect(
+      within(overlay).queryByRole('button', { name: playerButtonName('Alex') })
+    ).not.toBeInTheDocument();
+    expect(within(overlay).getByRole('button', { name: /Unassisted/i })).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Record voice command' })).toBeInTheDocument()
+    );
+    const assistButton = within(getEventPicker()).getByRole('button', {
+      name: playerButtonName('Blake'),
+    });
+    fireEvent.click(assistButton);
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-2', statType: 'AST' })
+    );
+  });
+
+  test('sends an identical append payload for a voice command and its equivalent button', async () => {
+    installSpeechRecognition();
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 3,
+          remainingMilliseconds: 275000,
+          runningSince: null,
+        },
+      },
+    });
+
+    renderPage();
+    await screen.findByTestId('interactive-court-image');
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    const buttonPayload = apiMocks.appendEvent.mock.calls[0][1];
+    expect(buttonPayload).toEqual(
+      expect.objectContaining({
+        playerId: 'player-1',
+        statType: 'STL',
+        segmentKind: 'regulation',
+        segmentNumber: 3,
+        clockMillisecondsRemaining: 275000,
+      })
+    );
+
+    apiMocks.appendEvent.mockClear();
+
+    await enableVoiceTracking();
+    await speakFromCourt('Alex steal', 250, 800);
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(buttonPayload);
+  });
+
+  test('surfaces a failed voice write once and restores the clock and video entry state', async () => {
+    // Desktop layout keeps the video in the persistent left column, so the same run can observe
+    // both the clock and the video being handed back after the failed write.
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      installSpeechRecognition();
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          startingLineupPlayerIds: ['player-1'],
+          currentLineupPlayerIds: ['player-1'],
+          gameFormat: {
+            regulationSegmentType: 'quarter',
+            regulationSegmentDurationSeconds: 600,
+            overtimeDurationSeconds: 300,
+          },
+          clock: {
+            status: 'running',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 600000,
+            runningSince: new Date().toISOString(),
+          },
+        },
+      });
+      apiMocks.updateClock.mockImplementation(() => Promise.resolve(currentResponse));
+      apiMocks.appendEvent.mockRejectedValue(new Error('Connection lost'));
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+
+      const iframe = document.querySelector('iframe');
+      const postMessageSpy = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        configurable: true,
+        value: { postMessage: postMessageSpy },
+      });
+
+      await enableVoiceTracking();
+      const recognition = await startCourtVoice(250, 800);
+
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+      );
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pauseVideo'),
+        expect.anything()
+      );
+
+      // A shot opens a follow-up optimistically, so this exercises the failure path that must
+      // close that question and return ownership of playback and the clock.
+      act(() => recognition.emitResult('Alex made'));
+
+      await waitFor(() => expect(screen.getByText('Connection lost')).toBeInTheDocument());
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getAllByText('The command was understood, but the stat was not saved.').length
+      ).toBeGreaterThan(0);
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+      );
+      expect(apiMocks.updateClock).toHaveBeenCalledTimes(2);
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('playVideo'),
+        expect.anything()
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('reconciles once and never replays the write when a voice command hits a 409', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 2,
+          remainingMilliseconds: 321000,
+          runningSince: null,
+        },
+      },
+    });
+    apiMocks.appendEvent.mockRejectedValue(
+      Object.assign(new Error('Game changed elsewhere'), { status: 409 })
+    );
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('Alex turnover', 250, 800);
+
+    await waitFor(() => {
+      expect(screen.getByText('Game changed elsewhere')).toBeInTheDocument();
+      expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+    });
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('removes the microphone when voice tracking is switched off again from More', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Off — tap to enable for this tracking session.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Record voice command' })).not.toBeInTheDocument()
+    );
+    expect(MockSpeechRecognition.instances).toHaveLength(0);
+  });
+
+  test('offers no voice tracking at all for an unsupported sport', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        sport: 'football',
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText('Not available for this sport.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+    expect(screen.queryByRole('button', { name: 'Record voice command' })).not.toBeInTheDocument();
+    expect(MockSpeechRecognition.instances).toHaveLength(0);
+  });
+
+  test('keeps the picker closed while court-triggered voice is listening, then opens it on cancel', async () => {
+    installSpeechRecognition();
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await startCourtVoice(250, 800);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Cancel voice command' })).toBeInTheDocument()
+    );
+    expect(screen.queryByRole('button', { name: /Close event picker/i })).not.toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel voice command' }));
+    await waitForEventPicker();
+    expect(
+      within(getEventPicker()).queryByRole('button', { name: 'Record voice command' })
+    ).not.toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+  });
+
+  test.each([
+    ['an unknown player', 'Nobody steal', 'No on-court player matched that number or name.'],
+    ['a bench player', 'Flynn steal', 'That player is not currently on the court.'],
+  ])('records nothing when a voice command names %s', async (_label, transcript, message) => {
+    installSpeechRecognition();
+    const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: playerIds,
+        currentLineupPlayerIds: playerIds,
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt(transcript, 250, 800);
+
+    await waitFor(() => expect(screen.getAllByText(message).length).toBeGreaterThan(0));
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  const ONE_SIDED_LINEUP = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
+
+  async function renderOneSidedVoiceGame(gameOverrides = {}) {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        ...gameOverrides,
+      },
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+  }
+
+  async function renderDualTeamVoiceGame(response) {
+    installSpeechRecognition();
+    currentResponse =
+      response || createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+
+    renderPage();
+    await enableVoiceTracking();
+  }
+
+  // Both squads share jersey numbers 1-5, which is what makes a bare "2" ambiguous
+  // across a dual-team rebound pool.
+  function withSharedJerseys(response) {
+    const numbered = (players) =>
+      players.map((player, index) => ({ ...player, jerseyNumber: index + 1 }));
+    return {
+      ...response,
+      participants: {
+        home: {
+          ...response.participants.home,
+          players: numbered(response.participants.home.players),
+        },
+        away: {
+          ...response.participants.away,
+          players: numbered(response.participants.away.players),
+        },
+      },
+    };
+  }
+
+  async function expectFollowUpQuestion(pattern) {
+    await waitFor(() => expect(within(getEventPicker()).getByText(pattern)).toBeInTheDocument());
+  }
+
+  async function openAssistPromptByVoice() {
+    await speakFromCourt('Alex made');
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who assisted\?/i);
+  }
+
+  async function openDualReboundPromptByVoice() {
+    await speakFromCourt('home Alex miss');
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who got the rebound\?/i);
+  }
+
+  test('answers a one-sided assist follow-up by voice', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    await speak('Blake');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-2', statType: 'AST' })
+    );
+    await expectVoiceMessage('Blake: Assist recorded.');
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+  });
+
+  test('closes an assist follow-up with “unassisted” and records nothing', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    await speak('unassisted');
+
+    await expectVoiceMessage('Unassisted. No assist recorded.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+    expect(MockSpeechRecognition.instances).toHaveLength(2);
+  });
+
+  test('refuses the shooter as their own assister and keeps the question open', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    await speak('Alex');
+
+    await expectVoiceMessage('That player is not valid for this question.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who assisted\?/i)).toBeInTheDocument();
+  });
+
+  test('credits an unsided dual-team rebound answer to the shooting side as an offensive rebound', async () => {
+    await renderDualTeamVoiceGame();
+    await openDualReboundPromptByVoice();
+
+    await speak('Blake');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-2', statType: 'OREB', teamSide: 'home' })
+    );
+    await expectVoiceMessage('Blake: Offensive Rebound recorded.');
+  });
+
+  test('credits a spoken opposing side on a dual-team rebound as a defensive rebound', async () => {
+    await renderDualTeamVoiceGame();
+    await openDualReboundPromptByVoice();
+
+    await speak('away Away 3');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'away-3', statType: 'DREB', teamSide: 'away' })
+    );
+    await expectVoiceMessage('Away 3: Defensive Rebound recorded.');
+  });
+
+  test('records nothing when a jersey number exists in both dual-team rebound pools', async () => {
+    await renderDualTeamVoiceGame(
+      withSharedJerseys(createLeagueDualTeamResponse({ homeReady: true, awayReady: true }))
+    );
+    await openDualReboundPromptByVoice();
+
+    await speak('2');
+
+    await expectVoiceMessage('More than one on-court player matched. No stat was recorded.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who got the rebound\?/i)).toBeInTheDocument();
+  });
+
+  test('records an opponent rebound from a one-sided rebound follow-up', async () => {
+    await renderOneSidedVoiceGame();
+    await speakFromCourt('Alex miss');
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who got the rebound\?/i);
+
+    await speak('opponent');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ statType: 'OPP_REB' })
+    );
+    await expectVoiceMessage('Opponent rebound recorded.');
+  });
+
+  test('rejects “opponent” on a dual-team rebound follow-up', async () => {
+    await renderDualTeamVoiceGame();
+    await openDualReboundPromptByVoice();
+
+    await speak('opponent');
+
+    await expectVoiceMessage(
+      'That answer is not valid for this question. Say a player number, or “skip”.'
+    );
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who got the rebound\?/i)).toBeInTheDocument();
+  });
+
+  test('answers the who-missed-shot follow-up opened by a dual-team defensive rebound', async () => {
+    await renderDualTeamVoiceGame();
+    await speak('home Alex defensive rebound');
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-1', statType: 'DREB', teamSide: 'home' })
+    );
+    await expectFollowUpQuestion(/Who missed the shot\?/i);
+
+    await speak('away Away 2');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'away-2', statType: 'FG2_MISS', teamSide: 'away' })
+    );
+  });
+
+  test.each([
+    ['a steal', 'home Alex steal', 'STL', /Who turned over the ball\?/i, 'TOV'],
+    ['a turnover', 'home Alex turnover', 'TOV', /Who got the steal\?/i, 'STL'],
+  ])(
+    'answers the opposing-side follow-up opened by %s',
+    async (_label, transcript, primaryStat, question, followUpStat) => {
+      await renderDualTeamVoiceGame();
+      await speak(transcript);
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ playerId: 'player-1', statType: primaryStat, teamSide: 'home' })
+      );
+      await expectFollowUpQuestion(question);
+
+      await speak('home Blake');
+      await expectVoiceMessage('This question is about the other team.');
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+
+      await speak('away Away 2');
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+        expect.objectContaining({ playerId: 'away-2', statType: followUpStat, teamSide: 'away' })
+      );
+    }
+  );
+
+  test('treats the who-was-fouled follow-up as skip-only', async () => {
+    await renderDualTeamVoiceGame();
+    await speak('home Alex foul');
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who was fouled\?/i);
+
+    await speak('away Away 2');
+
+    await expectVoiceMessage(
+      'The fouled player is not recorded yet. Say “skip” to close this question.'
+    );
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who was fouled\?/i)).toBeInTheDocument();
+
+    await speak('skip');
+
+    await expectVoiceMessage('Question skipped. No stat was recorded.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+  });
+
+  test('skips an open assist question by voice', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    await speak('skip');
+
+    await expectVoiceMessage('Question skipped. No stat was recorded.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+  });
+
+  test('does not let the transcript that opens a follow-up also answer it', async () => {
+    await renderOneSidedVoiceGame();
+    await speakFromCourt('Alex made');
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who assisted\?/i);
+    await expectVoiceMessage('Alex: 3PT Make recorded.');
+    // The single cycle produced the shot only; the assist is still unanswered.
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('refuses a new primary command while a follow-up question is open', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    await speak('Blake steal');
+
+    await expectVoiceMessage(
+      'That answer is not valid for this question. Say a player number, or “skip”.'
+    );
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who assisted\?/i)).toBeInTheDocument();
+  });
+
+  test('refuses “undo” while a follow-up question is open', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    await speak('undo');
+
+    await expectVoiceMessage('Finish or skip the open question before saying “undo”.');
+    expect(apiMocks.removeEvent).not.toHaveBeenCalled();
+    expect(within(getEventPicker()).getByText(/Who assisted\?/i)).toBeInTheDocument();
+  });
+
+  test('records nothing when an answer is spoken after the primary write failed', async () => {
+    await renderOneSidedVoiceGame();
+    apiMocks.appendEvent.mockRejectedValue(new Error('Connection lost'));
+
+    await speakFromCourt('Alex made');
+    await expectVoiceMessage('The command was understood, but the stat was not saved.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+
+    await speak('Blake');
+
+    await expectVoiceMessage('Say one player and one supported stat.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('lets a follow-up answer succeed after an earlier answer failed to save', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+      },
+    });
+
+    renderPage();
+    pointerDown(await screen.findByTestId('interactive-court-image'), {
+      clientX: 475,
+      clientY: 900,
+    });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who assisted\?/i);
+
+    apiMocks.appendEvent.mockRejectedValueOnce(new Error('Assist write failed'));
+    fireEvent.click(
+      within(getEventPicker()).getByRole('button', { name: playerButtonName('Blake') })
+    );
+    await waitFor(() => expect(screen.getByText('Assist write failed')).toBeInTheDocument());
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+    expect(within(getEventPicker()).getByText(/Who assisted\?/i)).toBeInTheDocument();
+
+    // A rejected promise left behind in inflightRef would silently swallow this answer.
+    fireEvent.click(
+      within(getEventPicker()).getByRole('button', { name: playerButtonName('Casey') })
+    );
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+    expect(apiMocks.appendEvent.mock.calls[2][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-3', statType: 'AST' })
+    );
+  });
+
+  test('still stamps a voice event with the video timestamp after a skipped follow-up', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      installSpeechRecognition();
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        },
+      });
+
+      renderPage();
+      const iframe = await screen.findByTitle('Dev Scrimmage');
+      fireEvent(
+        window,
+        new MessageEvent('message', {
+          data: JSON.stringify({ event: 'infoDelivery', info: { currentTime: 27.6 } }),
+          source: iframe.contentWindow,
+        })
+      );
+
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'FT-' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      await expectFollowUpQuestion(/Who got the rebound\?/i);
+
+      // Skipping keeps the entry open but drops the captured timestamp.
+      fireEvent.click(getLastButtonByName(/Skip this question/i));
+      await waitFor(() =>
+        expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+      );
+
+      await enableVoiceTracking();
+      await speak('Alex turnover');
+
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+        expect.objectContaining({ playerId: 'player-1', statType: 'TOV', videoTimestamp: 28 })
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('cancels a listening follow-up cycle when the question is closed underneath it', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    const recognition = await startListening();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(recognition.abort).toHaveBeenCalled();
+
+    act(() => recognition.emitResult('Blake'));
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('writes once when a follow-up cycle delivers the same result twice', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Record voice command' }));
+    const recognition = MockSpeechRecognition.instances.at(-1);
+    act(() => recognition.emitStart());
+    act(() => {
+      recognition.emitResult('Blake');
+      recognition.emitResult('Blake');
+    });
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    await expectVoiceMessage('Blake: Assist recorded.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+  });
+
+  test('ignores a follow-up result that arrives after recognition already failed', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    const recognition = await startListening();
+    act(() => recognition.emitError('network'));
+    await expectVoiceMessage(
+      'The browser speech service could not be reached. No stat was recorded.'
+    );
+
+    act(() => recognition.emitResult('Blake'));
+
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who assisted\?/i)).toBeInTheDocument();
+  });
+
+  test('aborts a listening follow-up cycle on unmount without writing', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await renderOneSidedVoiceGame();
+      await openAssistPromptByVoice();
+
+      const recognition = await startListening();
+      cleanup();
+
+      expect(recognition.abort).toHaveBeenCalled();
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  test('times out a follow-up cycle and leaves the question open', async () => {
+    await renderOneSidedVoiceGame();
+    await openAssistPromptByVoice();
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Record voice command' }));
+      const recognition = MockSpeechRecognition.instances.at(-1);
+      act(() => recognition.emitStart());
+      act(() => vi.advanceTimersByTime(8000));
+
+      expect(recognition.abort).toHaveBeenCalled();
+      expect(
+        screen.getAllByText('Listening timed out. No stat was recorded.').length
+      ).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(within(getEventPicker()).getByText(/Who assisted\?/i)).toBeInTheDocument();
+  });
+
+  test('undoes the expected last event by voice and hands the clock and video back', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      installSpeechRecognition();
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          events: [{ id: 'event-1', playerId: 'player-1', statType: 'STL' }],
+          gameFormat: {
+            regulationSegmentType: 'quarter',
+            regulationSegmentDurationSeconds: 600,
+            overtimeDurationSeconds: 300,
+          },
+          clock: {
+            status: 'running',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 600000,
+            runningSince: new Date().toISOString(),
+          },
+        },
+      });
+      apiMocks.updateClock.mockImplementation(() => Promise.resolve(currentResponse));
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+
+      const iframe = document.querySelector('iframe');
+      const postMessageSpy = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        configurable: true,
+        value: { postMessage: postMessageSpy },
+      });
+
+      await enableVoiceTracking();
+      await speak('undo');
+
+      await waitFor(() => expect(apiMocks.removeEvent).toHaveBeenCalledWith('game-1', 'event-1'));
+      await expectVoiceMessage('Last event undone.');
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+      );
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('playVideo'),
+        expect.anything()
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('refuses a voice undo when the event log moved on while listening', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        events: [{ id: 'event-1', playerId: 'player-1', statType: 'STL' }],
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+    const movedResponse = {
+      ...currentResponse,
+      game: {
+        ...currentResponse.game,
+        events: [
+          ...currentResponse.game.events,
+          { id: 'event-2', playerId: 'player-2', statType: 'TOV' },
+        ],
+      },
+    };
+    let resolvePause;
+    const pauseResponse = new Promise((resolve) => {
+      resolvePause = resolve;
+    });
+    apiMocks.updateClock.mockImplementation((_gameId, command) =>
+      command.action === 'pause' ? pauseResponse : Promise.resolve(movedResponse)
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+    await enableVoiceTracking();
+
+    const recognition = await startListening();
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+    );
+    // Recognition captured event-1. Only now does the clock response reveal a newer tail.
+    await act(async () => {
+      resolvePause(movedResponse);
+      await pauseResponse;
+    });
+    act(() => recognition.emitResult('undo'));
+
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+    );
+    expect(apiMocks.removeEvent).not.toHaveBeenCalled();
+  });
+
+  test('reports that there is nothing to undo by voice on an empty event log', async () => {
+    await renderOneSidedVoiceGame();
+
+    await speak('undo');
+
+    await expectVoiceMessage('There is no event to undo.');
+    expect(apiMocks.removeEvent).not.toHaveBeenCalled();
+  });
+
+  test('keeps the manual Undo Last button working and refuses it while a question is open', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+      },
+    });
+
+    renderPage();
+    pointerDown(await screen.findByTestId('interactive-court-image'), {
+      clientX: 475,
+      clientY: 900,
+    });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who assisted\?/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo Last' }));
+    await waitFor(() =>
+      expect(screen.getByText('Close the open event question first')).toBeInTheDocument()
+    );
+    expect(apiMocks.removeEvent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+    fireEvent.click(getLastButtonByName(/Skip this question/i));
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo Last' }));
+    await waitFor(() => expect(apiMocks.removeEvent).toHaveBeenCalledWith('game-1', 'event-1'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo Last' }));
+    await waitFor(() => expect(screen.getByText('No event to undo')).toBeInTheDocument());
+    expect(apiMocks.removeEvent).toHaveBeenCalledTimes(1);
+  });
+
   test('inserts a quick stat before a selected recent event', async () => {
     currentResponse = createResponse({
       game: {
@@ -505,7 +1867,6 @@ describe('GameTrackPage', () => {
 
     expect(screen.getByRole('button', { name: /Fullscreen/i })).toBeEnabled();
     expect(screen.getByText(/Starting five set/i)).toBeInTheDocument();
-    expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
     expect(screen.queryByText('Starting Lineup')).not.toBeInTheDocument();
   });
 
@@ -1055,6 +2416,80 @@ describe('GameTrackPage', () => {
     );
   });
 
+  test('keeps the initiating team side on a dual-team shot and its assist follow-up', async () => {
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    apiMocks.getById.mockResolvedValue(currentResponse);
+
+    renderPage();
+    const court = await screen.findByTestId('interactive-court-image');
+    court.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 500,
+      height: 940,
+      right: 500,
+      bottom: 940,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    pointerDown(court, { clientX: 475, clientY: 900 });
+    await waitForEventPicker();
+    const awaySideButton = within(getEventPicker()).getByRole('button', { name: /Away Squad$/ });
+    // The first post-pointer click is intentionally swallowed by the picker's ghost-click guard.
+    fireEvent.click(awaySideButton);
+    fireEvent.click(awaySideButton);
+    await selectPickerPlayer('Away 1');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        playerId: 'away-1',
+        statType: expect.stringMatching(/^FG[23]_MADE$/),
+        teamSide: 'away',
+        courtLayoutId: 'legacy-v1',
+      })
+    );
+
+    fireEvent.click(
+      within(getEventPicker()).getByRole('button', { name: playerButtonName('Away 2') })
+    );
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'away-2', statType: 'AST', teamSide: 'away' })
+    );
+  });
+
+  test.each([
+    ['a conflict', Object.assign(new Error('Game changed elsewhere'), { status: 409 })],
+    ['an uncertain network failure', new Error('Connection lost')],
+  ])('reconciles once without retrying after %s', async (_label, submitError) => {
+    currentResponse = createResponse({
+      game: {
+        currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+      },
+    });
+    apiMocks.appendEvent.mockRejectedValue(submitError);
+
+    renderPage();
+    pointerDown(await screen.findByTestId('interactive-court-image'), {
+      clientX: 250,
+      clientY: 800,
+    });
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(submitError.message)).toBeInTheDocument();
+      expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+    });
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+  });
+
   test('records court quick stats and opponent scoring', async () => {
     currentResponse = createResponse({
       game: {
@@ -1129,9 +2564,7 @@ describe('GameTrackPage', () => {
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: playerButtonName('Alex') })).toBeInTheDocument();
-    });
+    await screen.findByRole('button', { name: 'Subs' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Subs' }));
     fireEvent.click(getLastButtonByName('Alex'));
@@ -1151,8 +2584,17 @@ describe('GameTrackPage', () => {
       });
     });
 
-    expect(screen.getByRole('button', { name: playerButtonName('Flynn') })).toBeInTheDocument();
     expect(screen.getByText(/On Bench/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    expect(
+      within(getEventPicker()).getByRole('button', { name: playerButtonName('Flynn') })
+    ).toBeInTheDocument();
+    expect(
+      within(getEventPicker()).queryByRole('button', { name: playerButtonName('Alex') })
+    ).not.toBeInTheDocument();
   });
 
   test('renders the score and tracking quick actions without the extra stats strip', async () => {
@@ -1793,7 +3235,7 @@ describe('GameTrackPage', () => {
     }
   });
 
-  test('mobile entry mode exposes bench players (not just on-court) for stat attribution', async () => {
+  test('mobile entry mode limits stat attribution to on-court players', async () => {
     const restoreMatchMedia = stubMatchMedia(false);
     try {
       currentResponse = createResponse({
@@ -1811,9 +3253,14 @@ describe('GameTrackPage', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
 
-      // player-6 (Flynn) is on the roster but not in the starting five → bench.
-      expect(screen.getByText(/Bench \(1\)/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: playerButtonName('Flynn') })).toBeInTheDocument();
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      expect(
+        within(getEventPicker()).queryByRole('button', { name: playerButtonName('Flynn') })
+      ).not.toBeInTheDocument();
+      expect(
+        within(getEventPicker()).getByRole('button', { name: playerButtonName('Alex') })
+      ).toBeInTheDocument();
     } finally {
       restoreMatchMedia();
     }

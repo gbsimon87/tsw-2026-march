@@ -11,6 +11,7 @@ TSW (The Sporty Way) is a basketball stat-tracking and league-management app.
 It supports:
 
 - standalone teams, rosters, games, and live event tracking;
+- optional browser-native voice commands for live basketball tracking;
 - leagues, seasons, teams, members, join requests, schedules, standings, and
   data-health checks;
 - public game, team, league, and player pages;
@@ -164,6 +165,20 @@ may contain fewer than five players; starting the game then requires explicit
 confirmation in the tracker. Finishing a game early is allowed.
 Every stat event stores an independent
 period/clock snapshot in addition to its optional video timestamp.
+
+`GameTrackPage` provides optional, session-scoped voice tracking for basketball. The scorekeeper
+enables it in More, then a court tap captures the event location and starts one short browser
+speech-recognition turn. Parsed commands reuse the existing event handlers and preserve the same
+player, team side, location, clock, video, and court-layout payload as button entry. Attributed
+players must be active in the current on-court lineup. Recognition or parsing failures retain the
+tapped location and open the normal button picker; uncertain writes are not replayed.
+
+The speech lifecycle and basketball grammar live under `client/src/features/games/voice/`, with UI
+orchestration in `GameTrackPage` and `VoiceTrackingControl`. TSW does not store audio or transcripts
+or include them in analytics, although the browser may process audio remotely. Voice requires a
+secure context and supported browser and remains a progressive enhancement over the complete button
+workflow. The command schema, examples, release checks, open questions, and deferred extensions are
+maintained in [`superpowers/plans/2026-09-06-voice-tracking.md`](./superpowers/plans/2026-09-06-voice-tracking.md).
 
 Completed games with entitled YouTube highlights expose a storage-free virtual
 highlight reel on the game recap. The client selects up to five playable events,
@@ -374,14 +389,15 @@ auto-deploys; production deploys are manual. Secrets belong in Render, not
 
 ## Where To Look Next
 
-| Question                      | Source                                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------------- |
-| HTTP endpoints                | [`api.md`](./api.md), `server/src/routes/index.js`, module route files                  |
-| Client routes                 | `client/src/app/router/AppRouter.jsx`                                                   |
-| Permissions                   | [`permissions.md`](./permissions.md), `leagues.service.js`                              |
-| Game events and derived stats | `games.repository.js`, `games.service.js`, `stats.constants.js`                         |
-| Billing and entitlements      | [`stripe.md`](./stripe.md), `billing.service.js`, `entitlements.service.js`             |
-| Deployment and environment    | [`deployment-render.md`](./deployment-render.md), `render.yaml`, env validators         |
-| Product backlog               | [`ideas.md`](./ideas.md)                                                                |
-| Database maintenance          | [`mongodb-production-backup.md`](./mongodb-production-backup.md), `server/src/scripts/` |
-| How the modules fit together  | [`codemap/`](./codemap/) — interactive map; open `codemap.html` in a browser            |
+| Question                      | Source                                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP endpoints                | [`api.md`](./api.md), `server/src/routes/index.js`, module route files                                                                   |
+| Client routes                 | `client/src/app/router/AppRouter.jsx`                                                                                                    |
+| Permissions                   | [`permissions.md`](./permissions.md), `leagues.service.js`                                                                               |
+| Game events and derived stats | `games.repository.js`, `games.service.js`, `stats.constants.js`                                                                          |
+| Voice tracking                | [`superpowers/plans/2026-09-06-voice-tracking.md`](./superpowers/plans/2026-09-06-voice-tracking.md), `client/src/features/games/voice/` |
+| Billing and entitlements      | [`stripe.md`](./stripe.md), `billing.service.js`, `entitlements.service.js`                                                              |
+| Deployment and environment    | [`deployment-render.md`](./deployment-render.md), `render.yaml`, env validators                                                          |
+| Product backlog               | [`ideas.md`](./ideas.md)                                                                                                                 |
+| Database maintenance          | [`mongodb-production-backup.md`](./mongodb-production-backup.md), `server/src/scripts/`                                                  |
+| How the modules fit together  | [`codemap/`](./codemap/) — interactive map; open `codemap.html` in a browser                                                             |

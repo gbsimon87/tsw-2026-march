@@ -148,7 +148,15 @@
       "mcp__plugin_playwright_playwright__browser_network_request",
       "mcp__plugin_playwright_playwright__browser_console_messages",
       "mcp__plugin_playwright_playwright__browser_snapshot",
-      "mcp__plugin_playwright_playwright__browser_click"
+      "mcp__plugin_playwright_playwright__browser_click",
+      "Bash(ls /Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/)",
+      "Read(//Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/**)",
+      "Bash(/Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/task-brief docs/superpowers/plans/2026-07-11-public-unified-player-profiles.md 1)",
+      "Bash(/Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package 5a22657284a3c275ad7fb59409e26c908570204c HEAD)",
+      "Read(//Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/**)",
+      "Bash(/Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package 7e5a589b20b886e5fbbeff881207b999559f93dd HEAD)",
+      "Bash(/Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package 99268334e3e6738d064acdc8567efdcb3263e01f HEAD)",
+      "Bash(/Users/simoncordova/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package a5249306beba576daaccbbcfd64c6b51a8343d9e *)"
     ],
     "additionalDirectories": [
       "/private/tmp"
