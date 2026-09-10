@@ -883,17 +883,28 @@ Do this in Stripe's browser-based Workbench. You do not need to paste an API key
 3. Replace `sub_REPLACE_ME` below with the subscription ID you just copied:
 
 ```bash
-stripe subscriptions update sub_REPLACE_ME -d trial_end=now
+stripe subscriptions update sub_REPLACE_ME \
+  -d trial_end=now \
+  -d payment_behavior=allow_incomplete
 ```
 
-4. Run the command once.
+4. Run the command once. `payment_behavior=allow_incomplete` is required for
+   this test: it lets the failed charge leave the subscription as `past_due`.
+   Without it, Stripe Workbench can return a `card_declined` error and leave the
+   subscription trialing, which does not complete the failed-renewal test.
 5. Return to **Billing → Subscriptions** and reopen the subscription.
-6. Stripe may take up to about one hour to finalise the new invoice and attempt
-   payment. Refresh the page until the invoice is open and its payment has
-   failed. Do not run the command again.
+6. Confirm the response or subscription now shows **Past due**, its trial ended
+   at approximately the current time, and its latest invoice is open with a
+   failed payment. Event creation and delivery can take a few seconds. If the
+   subscription remains **Trialing**, stop and inspect the command response; do
+   not repeat the command blindly.
 7. Open **Workbench → Webhooks**.
-8. Select the development destination named **TSW Development API**.
-9. Open **Event deliveries** and refresh it.
+8. Select the development destination named **TSW development billing
+   webhook**.
+9. Open **Event deliveries** and refresh it. In some Dashboard layouts this tab
+   is labelled **Events**. Confirm you are inside the destination by opening an
+   event and finding its delivery status or **Delivery attempts**; the
+   account-wide Workbench **Events** page does not prove delivery to TSW.
 10. Find `invoice.payment_failed`. Open it and confirm the delivery says
     **Delivered** with HTTP `200`.
 11. Also find the related `customer.subscription.updated` delivery and confirm
@@ -944,10 +955,6 @@ stripe subscriptions update sub_REPLACE_ME -d trial_end=now
 
 This test passes only if access is available before the failure, removed after
 `invoice.payment_failed`, and restored after the real test invoice is paid.
-
-> **Resume here next time:** Testing paused at this point on 5 September 2026 because Stripe was
-> still finalising the invoice. Start by refreshing **Event deliveries** and looking for
-> `invoice.payment_failed`. Do **not** run the `trial_end=now` command again.
 
 ### Other important checks
 
@@ -1017,6 +1024,8 @@ This is different from the failed-renewal test above.
    and unchanged access. Stripe reuses the same event ID, so TSW ignores the
    already-processed change.
 
+   > **Resume here next time:**
+
 #### 5. Prove a fake webhook signature is rejected
 
 Run this command in your computer's normal Terminal, not Stripe Workbench:
@@ -1042,14 +1051,23 @@ request contains no secret and must not change any Team or League.
 6. You do not need to finish this payment. Return to TSW and confirm no new
    League access was granted.
 
-#### 7. Confirm an active paid Team cannot become the free Team
+#### 7. Confirm an active paid Team is not offered the free-Team action
 
 1. Use an account with one free Team and one active £5 Additional Team.
 2. Open Pricing and select the active Additional Team.
-3. Click **Make this my free team**.
-4. Confirm TSW refuses and tells you to cancel that Team's subscription first.
-5. Confirm the original free Team is still free and the Additional Team still
+3. Confirm the main button says **Manage team billing**.
+4. Confirm there is no **Make this my free team** button while the subscription
+   is active or scheduled to cancel at the period end.
+5. Optionally open **Manage team billing** and confirm it opens the Customer
+   Portal for that exact Team, then return without changing the subscription.
+6. Confirm the original free Team is still free and the Additional Team still
    has exactly one subscription.
+
+The free-Team action becomes available only after the paid subscription is
+fully closed and its status is `canceled`, not merely scheduled to cancel. The
+server also rejects a direct reassignment request while the subscription is
+open; the UI prevents that invalid request from being offered in the first
+place.
 
 #### 8. Test the League Plus downgrade rule
 

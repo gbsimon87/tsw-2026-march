@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { PricingPage } from './PricingPage';
@@ -69,6 +69,7 @@ function renderPricing(entry = '/pricing') {
 
 describe('PricingPage', () => {
   const originalLocation = window.location;
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,11 +101,13 @@ describe('PricingPage', () => {
     });
     delete window.location;
     window.location = { ...originalLocation, assign: vi.fn() };
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {
     cleanup();
     window.location = originalLocation;
+    Element.prototype.scrollIntoView = originalScrollIntoView;
   });
 
   test('renders all four plans and the agreed monthly prices', async () => {
@@ -294,11 +297,48 @@ describe('PricingPage', () => {
     });
     renderPricing();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Keep League Plus' }));
+    const keepButton = await screen.findByRole('button', { name: 'Keep League Plus' });
+    fireEvent.click(keepButton);
     await waitFor(() =>
       expect(billingApiMocks.changeLeaguePlan).toHaveBeenCalledWith('league-plus', 'league_plus')
     );
-    expect(screen.getByText(/scheduled downgrade was canceled/i)).toBeInTheDocument();
+    const feedback = await within(keepButton.closest('article')).findByRole('status');
+    expect(feedback).toHaveTextContent(/scheduled downgrade was canceled/i);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+  });
+
+  test('shows a scheduled League downgrade beside the button that triggered it', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-plus',
+          name: 'Big League',
+          billing: {
+            plan: 'league_plus',
+            subscriptionStatus: 'active',
+            managedByStripe: true,
+          },
+        },
+      ],
+    });
+    billingApiMocks.changeLeaguePlan.mockResolvedValue({
+      scheduled: true,
+      effectiveAt: '2026-10-10T00:00:00.000Z',
+    });
+    renderPricing();
+
+    const changeButton = await screen.findByRole('button', { name: 'Change to League' });
+    fireEvent.click(changeButton);
+
+    const feedback = await within(changeButton.closest('article')).findByRole('status');
+    expect(feedback).toHaveTextContent(/Your change to League is scheduled for/i);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
   });
 
   test('links a blocked League Plus downgrade to team archiving', async () => {
@@ -320,11 +360,43 @@ describe('PricingPage', () => {
     );
     renderPricing();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Change to League' }));
+    const changeButton = await screen.findByRole('button', { name: 'Change to League' });
+    fireEvent.click(changeButton);
 
+    const feedback = await within(changeButton.closest('article')).findByRole('alert');
     expect(
-      await screen.findByRole('link', { name: 'Manage and archive league teams' })
+      within(feedback).getByRole('link', { name: 'Manage and archive league teams' })
     ).toHaveAttribute('href', '/admin/leagues/league-plus?tab=teams');
+  });
+
+  test('shows an already-scheduled error beside the League change button', async () => {
+    leaguesApiMocks.list.mockResolvedValue({
+      leagues: [
+        {
+          id: 'league-plus',
+          name: 'Big League',
+          billing: {
+            plan: 'league_plus',
+            subscriptionStatus: 'active',
+            managedByStripe: true,
+          },
+        },
+      ],
+    });
+    billingApiMocks.changeLeaguePlan.mockRejectedValue(
+      new Error('This subscription already has a scheduled change')
+    );
+    renderPricing();
+
+    const changeButton = await screen.findByRole('button', { name: 'Change to League' });
+    fireEvent.click(changeButton);
+
+    const feedback = await within(changeButton.closest('article')).findByRole('alert');
+    expect(feedback).toHaveTextContent('This subscription already has a scheduled change');
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
   });
 
   test('refreshes league billing state when the page regains focus after Stripe', async () => {

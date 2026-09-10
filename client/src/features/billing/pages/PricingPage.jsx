@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
 import { PageHeader } from '../../../components/PageHeader';
@@ -86,6 +86,52 @@ function SignupLink({ children, source }) {
   );
 }
 
+function BillingFeedback({ error, notice, leagueId = '' }) {
+  const feedbackRef = useRef(null);
+  const message = error || notice;
+
+  useEffect(() => {
+    if (!message) return;
+    feedbackRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  }, [message]);
+
+  if (error) {
+    return (
+      <div
+        ref={feedbackRef}
+        aria-live="assertive"
+        role="alert"
+        className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+      >
+        <p>{error}</p>
+        {error.includes('Archive teams until this League has 10 or fewer') && leagueId ? (
+          <Link
+            to={`/admin/leagues/${encodeURIComponent(leagueId)}?tab=teams`}
+            className="mt-3 inline-flex rounded-lg bg-red-700 px-4 py-2 font-semibold text-white transition hover:bg-red-600"
+          >
+            Manage and archive league teams
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (notice) {
+    return (
+      <p
+        ref={feedbackRef}
+        aria-live="polite"
+        role="status"
+        className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+      >
+        {notice}
+      </p>
+    );
+  }
+
+  return null;
+}
+
 export function PricingPage() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -98,6 +144,7 @@ export function PricingPage() {
   const [pendingAction, setPendingAction] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [feedbackAction, setFeedbackAction] = useState('');
   const requestedTeamId = searchParams.get('teamId');
   const requestedLeagueId = searchParams.get('leagueId');
   const resourceType = searchParams.get('resourceType');
@@ -107,7 +154,10 @@ export function PricingPage() {
     billingApi
       .getCatalog()
       .then((response) => setCatalog(response.plans || []))
-      .catch((err) => setError(err.message || 'Failed to load pricing'));
+      .catch((err) => {
+        setFeedbackAction('');
+        setError(err.message || 'Failed to load pricing');
+      });
   }, []);
 
   const loadBillingResources = useCallback(
@@ -146,6 +196,7 @@ export function PricingPage() {
               : nextLeagues[0]?.id || ''
         );
       } catch (err) {
+        setFeedbackAction('');
         setError(err.message || 'Failed to load billing data');
       } finally {
         if (showLoader) setIsLoadingData(false);
@@ -215,6 +266,7 @@ export function PricingPage() {
   async function runAction(name, action) {
     setError('');
     setNotice('');
+    setFeedbackAction(name);
     setPendingAction(name);
     try {
       await action();
@@ -296,24 +348,7 @@ export function PricingPage() {
         description="Every team gets every tracking feature. Your first standalone team is free. Pay only when you manage another standalone team or organise a whole league."
       />
 
-      {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <p>{error}</p>
-          {error.includes('Archive teams until this League has 10 or fewer') && selectedLeagueId ? (
-            <Link
-              to={`/admin/leagues/${encodeURIComponent(selectedLeagueId)}?tab=teams`}
-              className="mt-3 inline-flex rounded-lg bg-red-700 px-4 py-2 font-semibold text-white transition hover:bg-red-600"
-            >
-              Manage and archive league teams
-            </Link>
-          ) : null}
-        </div>
-      ) : null}
-      {notice ? (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          {notice}
-        </p>
-      ) : null}
+      {!feedbackAction ? <BillingFeedback error={error} notice={notice} /> : null}
 
       <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4" aria-label="Plans">
         <PlanCard
@@ -386,6 +421,9 @@ export function PricingPage() {
                   {pendingAction === 'free-team' ? 'Saving…' : 'Make this my free team'}
                 </button>
               ) : null}
+              {feedbackAction === 'team-checkout' || feedbackAction === 'free-team' ? (
+                <BillingFeedback error={error} notice={notice} />
+              ) : null}
             </>
           ) : (
             <SignupLink source={SIGNUP_SOURCE.PRICING}>Get started</SignupLink>
@@ -445,6 +483,9 @@ export function PricingPage() {
                                 ? `Change to ${planId === 'league' ? 'League' : 'League Plus'}`
                                 : 'Start 14-day trial'}
                   </button>
+                  {feedbackAction === `league-${planId}` ? (
+                    <BillingFeedback error={error} notice={notice} leagueId={selectedLeagueId} />
+                  ) : null}
                 </>
               ) : (
                 <SignupLink source={SIGNUP_SOURCE.PRICING}>Start 14-day trial</SignupLink>
