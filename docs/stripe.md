@@ -894,11 +894,6 @@ stripe subscriptions update sub_REPLACE_ME -d trial_end=now
 7. Open **Workbench → Webhooks**.
 8. Select the development destination named **TSW Development API**.
 9. Open **Event deliveries** and refresh it.
-
-   > **Resume here next time:** Testing paused at this point on 5 September 2026 because Stripe was
-   > still finalising the invoice. Start by refreshing **Event deliveries** and looking for
-   > `invoice.payment_failed`. Do **not** run the `trial_end=now` command again.
-
 10. Find `invoice.payment_failed`. Open it and confirm the delivery says
     **Delivered** with HTTP `200`.
 11. Also find the related `customer.subscription.updated` delivery and confirm
@@ -949,6 +944,10 @@ stripe subscriptions update sub_REPLACE_ME -d trial_end=now
 
 This test passes only if access is available before the failure, removed after
 `invoice.payment_failed`, and restored after the real test invoice is paid.
+
+> **Resume here next time:** Testing paused at this point on 5 September 2026 because Stripe was
+> still finalising the invoice. Start by refreshing **Event deliveries** and looking for
+> `invoice.payment_failed`. Do **not** run the `trial_end=now` command again.
 
 ### Other important checks
 
