@@ -145,9 +145,16 @@ Stat types and court zones are defined in
 `0..100` over the court.
 
 Standalone games use a live `Team.players` roster. League one-sided games and
-all dual-team games use roster snapshots. Mid-game roster additions therefore
+all dual-team games use roster snapshots. A snapshot entry's `_id` is pinned to
+the durable player's id (LeaguePlayer for league, `Team.players._id` for
+standalone), so a player keeps one id for the whole fixture lifecycle — an id
+saved before tip-off still resolves after the snapshot is frozen, and the id the
+roster-add endpoint returns is the one the game exposes and the one a following
+substitution must be written against. Mid-game roster additions therefore
 update the durable roster and, when applicable, the game snapshot. New players
-start on the bench. Completed games cannot accept roster additions.
+start on the bench unless the voice missing-jersey confirmation immediately
+records the necessary substitution before its captured stat. Completed games
+cannot accept roster additions.
 
 Finishing a game freezes scores and summaries, updates league aggregates,
 derives player milestones for league games, and may publish automatic feed
@@ -166,14 +173,30 @@ confirmation in the tracker. Finishing a game early is allowed.
 Every stat event stores an independent
 period/clock snapshot in addition to its optional video timestamp.
 
+When a game has a video, the game clock follows it: pausing the video pauses game
+time, and playing it resumes the clock the video itself paused. A clock stopped by
+hand, or never started, is never restarted by the video, and any manual clock
+command takes ownership back. Buffering and seeking are ignored, and a pause only
+acts once it has settled, so a stuttering connection never moves game time.
+Anything that blocks tracking — the event picker, the roster and bench-sub dialogs,
+event editing, lineup setup and editing, the finish confirmation — also holds video
+and clock until it closes, so a scorekeeper never has to rewind. That hold is
+governed by the "Pause During Stat Entry" option in the tracker's Options tab; the
+video-to-clock sync above is independent of it and applies whenever a video is
+attached. Stat entry owns the clock while it runs, and the video sync stands down
+for the duration so the two can never issue competing clock writes.
+
 `GameTrackPage` provides optional, session-scoped voice tracking for basketball. The scorekeeper
-enables it in More, then a court tap captures the event location and starts one short browser
+enables it in Options, then a court tap captures the event location and starts one short browser
 speech-recognition turn. Parsed commands reuse the existing event handlers and preserve the same
 player, team side, location, clock, video, and court-layout payload as button entry. Voice covers
 every statistical action in the live tracker, including one-team opponent +1/+2/+3 scoring and the
-assist/opponent-rebound follow-ups. Attributed players must be active in the current on-court lineup.
-Recognition or parsing failures retain the tapped location and open the normal button picker;
-uncertain writes are not replayed.
+assist/opponent-rebound follow-ups. Existing attributed players must be active in the current
+on-court lineup. With roster-management permission, an unknown spoken jersey number instead opens a
+confirmation that durably adds the player, records the required substitution event or events, and
+then records the captured stat. Unknown spoken names never create players. Recognition, parsing, or
+cancelled-add failures retain the tapped location and open the normal button picker; uncertain writes
+are not replayed.
 
 The speech lifecycle and basketball grammar live under `client/src/features/games/voice/`, with UI
 orchestration in `GameTrackPage` and `VoiceTrackingControl`. TSW does not store audio or transcripts

@@ -8,6 +8,7 @@ import { teamsApi } from '../../teams/api/teamsApi';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
 import { AddRosterPlayerDialog } from '../components/AddRosterPlayerDialog';
+import { ConfirmSubInDialog } from '../components/ConfirmSubInDialog';
 import { GameTrackScoreHeader } from '../components/GameTrackScoreHeader';
 import { GameClockControls } from '../components/GameClockControls';
 import { VoiceTrackingControl } from '../components/VoiceTrackingControl';
@@ -26,6 +27,22 @@ import { getVoiceAdapter } from '../voice/voiceAdapters';
 import { getSpeechRecognitionSupport } from '../voice/useSpeechRecognition';
 
 const { STAT_LABELS, ZONE_LABELS, TEAM_SIDES } = gameConstants;
+
+// A settled video pause moves the game clock; a flicker does not. Seeking and a stuttering
+// connection bounce through paused/playing repeatedly, so a pause only acts once it has held.
+const VIDEO_PAUSE_SETTLE_MS = 1000;
+
+// Voice actions that map straight onto a single non-shot stat type. Shared by the command
+// executor and the label used in voice feedback and the missing-player confirmation.
+// A full basketball lineup. Reaching it means somebody has to come off before anyone comes on.
+const FULL_LINEUP_SIZE = 5;
+
+const VOICE_QUICK_STAT_TYPES = {
+  steal: 'STL',
+  block: 'BLK',
+  turnover: 'TOV',
+  foul: 'FOUL',
+};
 
 function formatEventMeta(event, gameFormat) {
   const parts = [];
@@ -245,8 +262,211 @@ function GameVideoPanel({ videoUrl, title, videoIframeRef }) {
   return <GameVideoEmbed ref={videoIframeRef} videoUrl={videoUrl} title={title} fill />;
 }
 
-function VoiceHelpTable({ title, description, columns, rows }) {
-  const headingId = `voice-help-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+// Voice grammar differs only by tracking mode: a dual-team command must name a side, a one-team
+// command must not, aggregate opponent scoring and the "opponent" rebound answer exist only in a
+// one-team game, and only a dual-team game asks a follow-up after a steal, block, turnover or foul.
+// Both the section for the game being tracked and the collapsed reference for the other mode are
+// built from this one function so the two can never drift apart.
+function voiceCommandTables(trackingMode) {
+  const isDual = trackingMode === 'dual_team';
+  const home = isDual ? 'home ' : '';
+  const away = isDual ? 'away ' : '';
+  const sideRule = isDual
+    ? 'Start every command with home or away.'
+    : 'Never say home or away in a one-team game.';
+
+  return [
+    {
+      title: 'Shots and scoring',
+      description: `Tap where the shot happened first — that tap starts listening and decides two or three points. If you also say the point value, it has to match the tap. ${sideRule}`,
+      columns: ['Stat', 'Say', 'What happens'],
+      rows: [
+        [
+          'Make, court decides',
+          `${home}13 made`,
+          'Records a 2PT or 3PT make, whichever the tapped spot is.',
+        ],
+        [
+          'Miss, court decides',
+          `${home}13 missed`,
+          'Records a 2PT or 3PT miss, whichever the tapped spot is.',
+        ],
+        ['2PT make', `${home}13 two point field goal made`, 'Accepted only inside the arc.'],
+        ['3PT miss', `${away}7 3pt field goal missed`, 'Accepted only outside the arc.'],
+        ['Free throw make', `${home}Alex free throw made`, 'Records a made free throw.'],
+        ['Free throw miss', `${home}Alex missed free throw`, 'Records a missed free throw.'],
+        ...(isDual
+          ? []
+          : [
+              ['Opponent +1', 'opponent plus one', 'Records an opponent free throw.'],
+              ['Opponent +2', 'opponent plus two', 'Accepted only inside the arc.'],
+              ['Opponent +3', 'opponent plus three', 'Accepted only outside the arc.'],
+            ]),
+      ],
+    },
+    {
+      title: 'Rebounds, steals, blocks, turnovers and fouls',
+      description: `Tap the court to start listening, then say the player and the action. ${sideRule}`,
+      columns: ['Stat', 'Say', 'What happens'],
+      rows: [
+        ['Offensive rebound', `${home}13 offensive rebound`, 'Records an offensive rebound.'],
+        ['Defensive rebound', `${away}Blake defensive rebound`, 'Records a defensive rebound.'],
+        [
+          'Steal',
+          `${home}number 13 steal`,
+          isDual ? 'Records the steal, then asks who turned it over.' : 'Records a steal.',
+        ],
+        [
+          'Block',
+          `${home}Alex block`,
+          isDual ? 'Records the block, then asks who missed the shot.' : 'Records a block.',
+        ],
+        [
+          'Turnover',
+          `${away}twenty three turnover`,
+          isDual
+            ? 'Records a turnover for jersey 23, then asks who got the steal.'
+            : 'Records a turnover for jersey 23.',
+        ],
+        [
+          'Foul',
+          `${home}Alex Morgan foul`,
+          isDual ? 'Records the foul, then asks who was fouled.' : 'Records a foul.',
+        ],
+      ],
+    },
+    {
+      title: 'Follow-up questions',
+      description:
+        'A follow-up question has its own microphone beside it. Tap that, then answer. The player you name must be eligible for the question being asked.',
+      columns: ['Question', 'Say', 'What happens'],
+      rows: [
+        [
+          'Who assisted?',
+          isDual ? 'away 7, or Blake' : '7, or Blake',
+          'Credits that player with an assist.',
+        ],
+        ['Nobody assisted', 'unassisted', 'Closes the question with no assist recorded.'],
+        [
+          'Who got the rebound?',
+          isDual ? 'home 7, or Blake' : '7, or Blake',
+          isDual
+            ? 'Either lineup can rebound; the side you say decides offensive or defensive.'
+            : 'Credits that player with the rebound.',
+        ],
+        ...(isDual
+          ? [
+              [
+                'Who turned it over, got the steal, or missed the shot?',
+                'away 7',
+                'Has to be a player from the opposing lineup.',
+              ],
+            ]
+          : [['The opponent got it', 'opponent', 'Records an opponent rebound.']]),
+        [
+          'Who was fouled?',
+          'skip',
+          'TSW does not store who was fouled, so this question can only be closed.',
+        ],
+        ['Any question', 'skip', 'Closes the question without recording anything else.'],
+      ],
+    },
+    {
+      title: 'Players who are not on the court',
+      description:
+        'Name someone who is not in the current lineup and your tapped spot and the stat are held while you sort it out. The substitution is recorded alongside the stat. A name matching nobody on the roster is never used to create a player.',
+      columns: ['Situation', 'Say or do', 'What happens'],
+      rows: [
+        [
+          'They are on the bench',
+          `${home}7 made`,
+          'Asks to sub them in, then records the held stat against them.',
+        ],
+        [
+          'They are not on the team at all',
+          `${home}8 made`,
+          'Asks for their name, adds them to the team, then subs them in.',
+        ],
+        [
+          'Lineup already has five',
+          'Pick someone under Sub out',
+          'Records that player out, the new player in, then the held stat.',
+        ],
+        [
+          'Lineup has fewer than five',
+          'Confirm',
+          'Subs them in, then records the held stat. Nobody has to come off.',
+        ],
+        [
+          'Leave the lineup alone',
+          'Cancel',
+          'Records nothing and reopens the stat buttons at your tapped spot.',
+        ],
+      ],
+    },
+    {
+      title: 'Undo and stopping',
+      description: 'These work the same way in every game.',
+      columns: ['Control', 'Say or do', 'What happens'],
+      rows: [
+        [
+          'Undo the last event',
+          'undo',
+          'Removes it, as long as no question is open and nothing else has been recorded since.',
+        ],
+        ['Stop listening', 'Cancel button', 'Ends the voice turn and opens the stat buttons.'],
+      ],
+    },
+    {
+      title: 'What will not be recorded',
+      description:
+        'These record nothing on purpose. The stat buttons open with your tapped spot kept, so you can always finish by hand.',
+      columns: ['Situation', 'Say', 'Why it is refused'],
+      rows: [
+        isDual
+          ? ['No side given', '13 made', 'A dual-team command has to start with home or away.']
+          : [
+              'A side in a one-team game',
+              'home 13 made',
+              'Only dual-team games use home and away.',
+            ],
+        ...(isDual
+          ? [
+              [
+                'Opponent totals',
+                'opponent plus two',
+                'Dual-team scoring has to name an on-court player.',
+              ],
+            ]
+          : []),
+        ['A name nobody matches', 'Nobody steal', 'Unmatched names never create a player.'],
+        [
+          'A player marked inactive',
+          `${home}6 steal`,
+          'Reactivate them on the team roster first. A bench player is offered a sub instead.',
+        ],
+        ['Wording we do not know', '21 jump shot made', 'Jump shot is not accepted wording.'],
+        [
+          'A point value that does not exist',
+          '13 made four',
+          'Only 2PT and 3PT field goals exist.',
+        ],
+        ['Two outcomes at once', '13 made miss', 'The command says both made and missed.'],
+        ['Two point values at once', '13 made two three', 'The command says both two and three.'],
+        ['An action we do not track', '13 travelled', 'Travelled is not a supported action.'],
+        ['A player with no action', '13', 'Say a player and a stat.'],
+        [
+          'Points that disagree with the tap',
+          `${home}13 3pt field goal made`,
+          'Refused if you tapped inside the arc.',
+        ],
+      ],
+    },
+  ];
+}
+
+function VoiceHelpTable({ title, description, columns, rows, idPrefix = 'voice-help' }) {
+  const headingId = `${idPrefix}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
   return (
     <section>
@@ -339,6 +559,10 @@ export function GameTrackPage() {
   const [voiceFeedback, setVoiceFeedback] = useState(null);
   const [courtVoiceStartRequest, setCourtVoiceStartRequest] = useState(0);
   const [isCourtVoiceAttempt, setIsCourtVoiceAttempt] = useState(false);
+  const [pendingVoicePlayerAdd, setPendingVoicePlayerAdd] = useState(null);
+  const [pendingVoiceSubIn, setPendingVoiceSubIn] = useState(null);
+  const [videoPlaybackState, setVideoPlaybackState] = useState(null);
+  const isVoiceSubInOpen = Boolean(pendingVoiceSubIn);
   const isEventPickerOpen = Boolean(
     pendingFollowUpPrompt || (selectedShot && !isCourtVoiceAttempt)
   );
@@ -352,6 +576,12 @@ export function GameTrackPage() {
   const entryVideoWasPausedRef = useRef(false);
   const entryClockTransitionRef = useRef(Promise.resolve());
   const clockOperatedThisMountRef = useRef(false);
+  // Records that the VIDEO is what paused the clock. Only a clock paused this way is restarted
+  // when the video plays again, so a clock stopped by hand — or never started — is left alone.
+  const clockPausedByVideoRef = useRef(false);
+  const videoPlaybackStateRef = useRef(null);
+  const playbackHeldByUiRef = useRef(false);
+  const liveClockStatusRef = useRef(null);
   const rotateCourt = courtOrientation === 'horizontal';
   // Resolved once from the game's immutable stamp, then used for BOTH the
   // rendered image and the click inference. Splitting those would let a
@@ -375,6 +605,17 @@ export function GameTrackPage() {
         if (data?.event === 'infoDelivery' && typeof data?.info?.currentTime === 'number') {
           videoCurrentTimeRef.current = data.info.currentTime;
         }
+        // YouTube reports playback state either as onStateChange's bare info, or alongside
+        // currentTime on infoDelivery. 1 = playing, 2 = paused, 0 = ended. Buffering (3),
+        // unstarted (-1) and cued (5) are deliberately ignored: they fire constantly while
+        // seeking and on a slow connection, and must never move the game clock.
+        const playerState =
+          data?.event === 'onStateChange' ? data.info : (data?.info?.playerState ?? null);
+        if (playerState === 1 || playerState === 2 || playerState === 0) {
+          const next = playerState === 1 ? 'playing' : 'paused';
+          videoPlaybackStateRef.current = next;
+          setVideoPlaybackState(next);
+        }
       } catch {
         // ignore non-JSON messages
       }
@@ -395,9 +636,14 @@ export function GameTrackPage() {
     // The video remounts in a new location when the layout mode flips (see GameVideoPanel
     // usages below), so any previously-captured playback position is stale until the new
     // iframe reports its own infoDelivery event — clear it rather than risk tagging a stat
-    // with a wrong timestamp from the just-destroyed iframe.
+    // with a wrong timestamp from the just-destroyed iframe. Playback state is stale for the same
+    // reason: the new iframe is unstarted, and a leftover "playing" would let stat entry claim a
+    // video it never paused and then "resume" it into playing from the start.
     videoCurrentTimeRef.current = null;
-  }, [isDesktopLayout]);
+    videoPlaybackStateRef.current = null;
+    setVideoPlaybackState(null);
+    // `data` rather than `game`: this effect is declared above the `game` binding.
+  }, [isDesktopLayout, data?.game?.videoUrl]);
 
   useEffect(() => {
     if (activePanel !== 'court') {
@@ -435,13 +681,13 @@ export function GameTrackPage() {
     const next = !pauseVideoOnEntry;
     writeLocalStorageFlag('gameTrack.pauseVideoOnEntry', next);
     setPauseVideoOnEntry(next);
-    // Turning the preference off means "stop controlling playback for stat entry".
-    // If the video was auto-paused for an in-progress entry, resume it now — otherwise
-    // it would be stranded paused, since no resume path fires while the pref is off.
-    // (playVideo on an already-playing video is a harmless no-op.)
+    // Turning the preference off means "stop controlling playback and the clock for stat entry".
+    // If either was auto-paused for an in-progress entry, hand it back now — otherwise it would be
+    // stranded paused, since no resume path fires while the pref is off. Both resumes are guarded,
+    // so a video or clock that entry never took is left exactly as the scorekeeper set it.
     if (!next) {
-      entryVideoWasPausedRef.current = false;
-      playVideo();
+      resumeVideoAfterEntry({ force: true });
+      resumeClockAfterEntry({ force: true });
     }
   }
 
@@ -461,12 +707,20 @@ export function GameTrackPage() {
 
   function pauseVideoForEntry() {
     if (!pauseVideoOnEntry || entryVideoWasPausedRef.current) return;
+    // Only a video that is actually playing can be handed back later. Claiming one that is
+    // already paused — or not mounted yet — would make the matching resume START playback the
+    // scorekeeper never asked for, which is exactly what happens on the pre-data render where
+    // the lineup-setup hold is active before there is any game or iframe.
+    if (videoPlaybackStateRef.current !== 'playing') return;
     entryVideoWasPausedRef.current = true;
     pauseVideo();
   }
 
-  function resumeVideoAfterEntry() {
+  // `force` is for switching the preference off, which means "stop controlling playback at all":
+  // the video has to be handed back even mid-hold, or it is stranded paused with no resume path.
+  function resumeVideoAfterEntry({ force = false } = {}) {
     if (!entryVideoWasPausedRef.current) return;
+    if (!force && playbackHeldByUiRef.current) return;
     entryVideoWasPausedRef.current = false;
     playVideo();
   }
@@ -538,14 +792,15 @@ export function GameTrackPage() {
   }, [loadGame]);
 
   useEffect(() => {
-    const shouldLock = isEventPickerOpen || isTrackingFullscreen;
+    const shouldLock =
+      isEventPickerOpen || isTrackingFullscreen || isAddPlayerOpen || isVoiceSubInOpen;
     document.body.style.overflow = shouldLock ? 'hidden' : '';
     document.body.style.touchAction = shouldLock ? 'none' : '';
     return () => {
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
     };
-  }, [isEventPickerOpen, isTrackingFullscreen]);
+  }, [isAddPlayerOpen, isEventPickerOpen, isTrackingFullscreen, isVoiceSubInOpen]);
 
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
   const isLeagueGame = data?.game?.gameContext === 'league';
@@ -767,6 +1022,8 @@ export function GameTrackPage() {
         lineupSetupStep,
         showClockRecovery,
         isCompleted,
+        isAddPlayerOpen,
+        isVoiceSubInOpen,
       }),
     [
       data?.lineups,
@@ -776,8 +1033,10 @@ export function GameTrackPage() {
       game?.sport,
       game?.trackingMode,
       insertBeforeEventId,
+      isAddPlayerOpen,
       isCompleted,
       isDualTeam,
+      isVoiceSubInOpen,
       lineupSetupStep,
       pendingFollowUpPrompt,
       selectedShot,
@@ -796,8 +1055,56 @@ export function GameTrackPage() {
     isCompleted ||
     showFinishConfirm ||
     pendingExitDestination ||
-    isStandaloneLineupEditing
+    isStandaloneLineupEditing ||
+    isAddPlayerOpen ||
+    isVoiceSubInOpen
   );
+  // Keep the game clock in step with the video so a scorekeeper never has to rewind: pausing the
+  // video pauses game time, and playing it again resumes the clock the video itself paused.
+  useEffect(() => {
+    if (!game?.videoUrl || !videoPlaybackState) return undefined;
+    if (videoPlaybackState === 'playing') {
+      resumeClockForVideo();
+      return undefined;
+    }
+    const timer = setTimeout(pauseClockForVideo, VIDEO_PAUSE_SETTLE_MS);
+    return () => clearTimeout(timer);
+    // Re-running on anything else would restart the settle timer mid-pause.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoPlaybackState, game?.videoUrl]);
+
+  // Anything that stops the scorekeeper tracking also holds playback, so they never come back to
+  // a video that ran on without them. The pause/resume helpers are idempotent through their own
+  // refs, so this composes with the court-tap path rather than double-firing against it.
+  // Panel switches are deliberately excluded: they are not modal, and pausing every time someone
+  // glanced at the box score would be its own annoyance.
+  const playbackHeldByUi = Boolean(
+    isEventPickerOpen ||
+    isCourtVoiceAttempt ||
+    isAddPlayerOpen ||
+    isVoiceSubInOpen ||
+    editingEvent ||
+    isStandaloneLineupEditing ||
+    lineupSetupStep ||
+    showFinishConfirm
+  );
+
+  playbackHeldByUiRef.current = playbackHeldByUi;
+  liveClockStatusRef.current = data?.game?.clock?.status ?? null;
+
+  useEffect(() => {
+    if (!pauseVideoOnEntry) return;
+    if (playbackHeldByUi) {
+      pauseVideoForEntry();
+      pauseClockForEntry();
+    } else {
+      resumeVideoAfterEntry();
+      resumeClockAfterEntry();
+    }
+    // Reacting to the hold itself; the helpers read live state when they run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackHeldByUi, pauseVideoOnEntry]);
+
   const prevLineupStepRef = useRef(lineupSetupStep);
 
   useEffect(() => {
@@ -1000,8 +1307,51 @@ export function GameTrackPage() {
     return transition;
   }
 
-  function resumeClockAfterEntry() {
+  // The video only drives the clock when stat entry does not already own it. Entry pauses the
+  // clock synchronously while `clock.status` still reads "running" locally, so without this guard
+  // a settled video-pause would fire a second pause against the same optimistic-concurrency write.
+  function pauseClockForVideo() {
+    if (entryClockWasRunningRef.current || clockPausedByVideoRef.current) {
+      return entryClockTransitionRef.current;
+    }
+    // Read through a ref, not this closure: the settle timer fires up to VIDEO_PAUSE_SETTLE_MS
+    // after it was scheduled, and a clock the scorekeeper paused by hand in the meantime must not
+    // be re-claimed by the video and restarted on the next play.
+    if (liveClockStatusRef.current !== 'running') return entryClockTransitionRef.current;
+
+    clockPausedByVideoRef.current = true;
+    const transition = entryClockTransitionRef.current
+      .catch(() => undefined)
+      .then(() => gamesApi.updateClock(gameId, { action: 'pause' }))
+      .then((response) => updateData(response))
+      .catch((clockError) => {
+        clockPausedByVideoRef.current = false;
+        setError(clockError.message || 'Failed to pause the game clock with the video');
+      });
+    entryClockTransitionRef.current = transition;
+    return transition;
+  }
+
+  function resumeClockForVideo() {
+    if (!clockPausedByVideoRef.current) return entryClockTransitionRef.current;
+    clockPausedByVideoRef.current = false;
+    const transition = entryClockTransitionRef.current
+      .catch(() => undefined)
+      .then(() => gamesApi.updateClock(gameId, { action: 'start' }))
+      .then((response) => updateData(response))
+      .catch((clockError) => {
+        setError(clockError.message || 'The video resumed, but the game clock stayed paused');
+      });
+    entryClockTransitionRef.current = transition;
+    return transition;
+  }
+
+  function resumeClockAfterEntry({ force = false } = {}) {
+    // A held entry (a recovery dialog mid-flight, the finish confirm) still owns playback even
+    // when the stat it was holding records and clears the picker. The playbackHeldByUi effect
+    // performs the real resume once the hold actually lifts.
     if (!entryClockWasRunningRef.current) return entryClockTransitionRef.current;
+    if (!force && playbackHeldByUiRef.current) return entryClockTransitionRef.current;
     entryClockWasRunningRef.current = false;
     const transition = entryClockTransitionRef.current
       .catch(() => undefined)
@@ -1025,10 +1375,12 @@ export function GameTrackPage() {
     setLastTappedHoop(inferred.nearestHoop);
     setError('');
     ghostClickGuardRef.current = Date.now();
-    if (pauseVideoOnEntry) {
-      pauseVideoForEntry();
-      pauseClockForEntry();
-    }
+    // Paused synchronously rather than left to the playbackHeldByUi effect: the voice turn started
+    // below reads entryClockWasRunningRef in the same tick to decide whether it owns the entry, so
+    // ownership has to be settled before this handler returns. Both helpers check the preference
+    // and are ref-guarded, so this is a no-op when the effect has already taken the entry.
+    pauseVideoForEntry();
+    pauseClockForEntry();
     captureVideoTimestamp();
     captureEntrySnapshot();
 
@@ -1076,7 +1428,10 @@ export function GameTrackPage() {
     setActiveSide(nextSide);
   }
 
-  function clearEventPicker(reason = '', { resume = false } = {}) {
+  // Ending an entry always hands back everything the court tap took: the picker, mobile entry
+  // mode, the video, and the clock. Every exit counts — recorded, skipped, closed or abandoned —
+  // because an entry that ends without resuming strands playback and the clock indefinitely.
+  function clearEventPicker(reason = '') {
     setIsCourtVoiceAttempt(false);
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
@@ -1085,11 +1440,9 @@ export function GameTrackPage() {
     if (isReasonLabel(reason)) {
       setLastActionLabel(reason);
     }
-    if (resume) {
-      setIsMobileEntryMode(false);
-      resumeVideoAfterEntry();
-      resumeClockAfterEntry();
-    }
+    setIsMobileEntryMode(false);
+    resumeVideoAfterEntry();
+    resumeClockAfterEntry();
   }
 
   async function addReboundEvent(
@@ -1157,12 +1510,12 @@ export function GameTrackPage() {
         updateLastAction(label, reboundPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker('', { resume: true });
+          clearEventPicker();
         }
       })
       .catch((err) => {
         setError(err.message || 'Failed to add rebound event');
-        clearEventPicker('', { resume: true });
+        clearEventPicker();
         throw err;
       })
       .finally(() => setIsSaving(false));
@@ -1186,7 +1539,7 @@ export function GameTrackPage() {
     const prompt = pendingFollowUpPrompt;
 
     if (option === 'NO_ASSIST') {
-      clearEventPicker('', { resume: true });
+      clearEventPicker();
       setError('');
       return true;
     }
@@ -1244,7 +1597,7 @@ export function GameTrackPage() {
         };
         label = STAT_LABELS[prompt.statType] || prompt.statType;
       } else if (prompt.kind === 'who_was_fouled') {
-        clearEventPicker('', { resume: true });
+        clearEventPicker();
         return true;
       } else {
         payload = {
@@ -1259,7 +1612,7 @@ export function GameTrackPage() {
       inflightRef.current = submitEvent(payload, { teamSide: actorTeamSide })
         .then((response) => {
           updateData(response, label);
-          clearEventPicker('', { resume: true });
+          clearEventPicker();
         })
         .catch((submitError) => {
           setError(
@@ -1342,7 +1695,7 @@ export function GameTrackPage() {
         courtLocation: shotCourtFields,
       });
     } else {
-      clearEventPicker('', { resume: true });
+      clearEventPicker();
     }
 
     inflightRef.current = submitEvent(payload, {
@@ -1355,12 +1708,12 @@ export function GameTrackPage() {
         updateLastAction(shotLabel, actorPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker('', { resume: true });
+          clearEventPicker();
         }
       })
       .catch((err) => {
         setError(err.message || 'Failed to add shot event');
-        clearEventPicker('', { resume: true });
+        clearEventPicker();
         throw err;
       })
       .finally(() => setIsSaving(false));
@@ -1418,7 +1771,7 @@ export function GameTrackPage() {
         courtLocation: { zoneId: inferred.zoneId, x: inferred.x, y: inferred.y },
       });
     } else {
-      clearEventPicker('', { resume: true });
+      clearEventPicker();
     }
 
     inflightRef.current = submitEvent(payload, {
@@ -1431,12 +1784,12 @@ export function GameTrackPage() {
         updateLastAction(ftLabel, actorPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker('', { resume: true });
+          clearEventPicker();
         }
       })
       .catch((err) => {
         setError(err.message || 'Failed to add free throw event');
-        clearEventPicker('', { resume: true });
+        clearEventPicker();
         throw err;
       })
       .finally(() => setIsSaving(false));
@@ -1538,7 +1891,7 @@ export function GameTrackPage() {
         courtLocation: courtFields,
       });
     } else {
-      clearEventPicker('', { resume: true });
+      clearEventPicker();
     }
 
     inflightRef.current = submitEvent(payload, {
@@ -1551,12 +1904,12 @@ export function GameTrackPage() {
         updateLastAction(quickLabel, actorPlayerId);
         if (isInsert) {
           setInsertBeforeEventId('');
-          clearEventPicker('', { resume: true });
+          clearEventPicker();
         }
       })
       .catch((err) => {
         setError(err.message || 'Failed to add event');
-        clearEventPicker('', { resume: true });
+        clearEventPicker();
         throw err;
       })
       .finally(() => setIsSaving(false));
@@ -1591,14 +1944,14 @@ export function GameTrackPage() {
         resolvedEventContext
       );
       updateData(response, STAT_LABELS[statType] || statType);
-      clearEventPicker('', { resume: true });
+      clearEventPicker();
       return true;
     } catch (submitError) {
       setError(submitError.message || 'Failed to add opponent score');
       if (eventContext.source === 'voice') {
         // A lost response may still mean the server wrote the event. Do not reopen the picker and
         // offer a second chance to record the same score.
-        clearEventPicker('', { resume: true });
+        clearEventPicker();
       }
       return false;
     } finally {
@@ -1678,17 +2031,197 @@ export function GameTrackPage() {
     return removeEvent(lastEvent.id);
   }
 
-  async function handleAddRosterPlayer({ displayName, jerseyNumber }) {
-    await gamesApi.addRosterPlayer(gameId, {
-      ...(isDualTeam ? { side: activeSide } : {}),
+  function describeVoicePlayer(player) {
+    return player?.jerseyNumber != null
+      ? `#${player.jerseyNumber} ${player.displayName}`
+      : player?.displayName || 'That player';
+  }
+
+  function requireChosenPlayerOut(pending, playerOutId) {
+    if (!pending.requirePlayerOut) return;
+    const allowedPlayerOutIds = new Set(pending.lineupPlayers.map((player) => player.id));
+    if (!playerOutId || !allowedPlayerOutIds.has(playerOutId)) {
+      throw new Error('Choose which on-court player is being subbed out.');
+    }
+  }
+
+  // Shared tail of both voice recovery paths — an unknown jersey that was just created, and a
+  // roster player sitting on the bench. Put the player on the court, then record the stat the
+  // command already captured. The substitution is written as real SUB_OUT/SUB_IN events so the
+  // lineup history is identical to what the manual Subs workflow would have produced.
+  async function subInAndRecordHeldStat({
+    player,
+    side,
+    playerOutId,
+    intent,
+    context,
+    subLabel,
+    lineupFailureMessage,
+  }) {
+    const sideFields = isDualTeam ? { teamSide: side, relatedTeamSide: side } : {};
+    const substitutionContext = {
+      source: 'voice',
+      clockSnapshot: context.clockSnapshot,
+      videoTimestamp: context.videoTimestamp,
+    };
+    let lineupResponse = null;
+
+    try {
+      if (playerOutId) {
+        lineupResponse = await submitEvent(
+          {
+            playerId: playerOutId,
+            relatedPlayerId: player.id,
+            statType: 'SUB_OUT',
+            ...sideFields,
+          },
+          substitutionContext
+        );
+      }
+
+      lineupResponse = await submitEvent(
+        {
+          playerId: player.id,
+          ...(playerOutId ? { relatedPlayerId: playerOutId } : {}),
+          statType: 'SUB_IN',
+          ...sideFields,
+        },
+        substitutionContext
+      );
+    } catch {
+      // A lost response may mean a substitution was written. Reconcile once and do not expose a
+      // retry that could submit the same lineup mutation twice. The original stat has definitely
+      // not been attempted yet, so it remains safe to hand its court location to the button flow.
+      await loadGame();
+      return { ok: false, lineupFailed: true, message: lineupFailureMessage };
+    }
+
+    if (lineupResponse) updateData(lineupResponse, subLabel);
+
+    const result = await executeVoicePlayerStat(intent, context, {
+      player,
+      playerId: player.id,
+      side: isDualTeam ? side : null,
+    });
+
+    return result;
+  }
+
+  // Must run AFTER any loadGame: that rebuilds sideState from the response and resets activeSide,
+  // so focusing the player before it would be silently undone.
+  function focusVoicePlayer(side, playerId) {
+    if (isDualTeam && side) setActiveSide(side);
+    updateSideState(isDualTeam ? side : 'oneSided', { selectedPlayerId: playerId });
+  }
+
+  function finishVoiceRecovery(context, result) {
+    setIsCourtVoiceAttempt(false);
+    // A half-applied lineup change leaves the captured location unused, so hand it to the buttons.
+    if (result.lineupFailed) openCourtVoiceFallback(context, result.message);
+    setVoiceFeedback({ message: result.message, ok: result.ok });
+  }
+
+  async function handleAddRosterPlayer({ displayName, jerseyNumber, playerOutId = null }) {
+    const pending = pendingVoicePlayerAdd;
+    const targetSide = pending?.side || activeSide;
+
+    if (!pending) {
+      await gamesApi.addRosterPlayer(gameId, {
+        ...(isDualTeam ? { side: targetSide } : {}),
+        displayName,
+        jerseyNumber,
+      });
+      // Refetch rather than patch local state: the roster is derived from either
+      // participantsBySide or team.players depending on game shape, and the server
+      // is the only thing that knows which snapshot it just appended to.
+      await loadGame();
+      setIsAddPlayerOpen(false);
+      return;
+    }
+
+    requireChosenPlayerOut(pending, playerOutId);
+
+    const addResponse = await gamesApi.addRosterPlayer(gameId, {
+      ...(isDualTeam ? { side: targetSide } : {}),
       displayName,
       jerseyNumber,
     });
-    // Refetch rather than patch local state: the roster is derived from either
-    // participantsBySide or team.players depending on game shape, and the server
-    // is the only thing that knows which snapshot it just appended to.
-    await loadGame();
+    const returnedPlayer = addResponse?.player;
+    const returnedPlayerId = returnedPlayer?.id || returnedPlayer?._id;
+    if (!returnedPlayer || !returnedPlayerId) {
+      throw new Error('The player was added, but the response did not include the new player.');
+    }
+    const addedPlayer = { ...returnedPlayer, id: String(returnedPlayerId) };
+
+    const result = await subInAndRecordHeldStat({
+      player: addedPlayer,
+      side: targetSide,
+      playerOutId,
+      intent: pending.intent,
+      context: pending.context,
+      subLabel: `${addedPlayer.displayName} added and subbed in`,
+      lineupFailureMessage: `${addedPlayer.displayName} was added, but the lineup could not be updated. Check Subs and finish with the buttons.`,
+    });
+
+    if (!result.lineupFailed) {
+      // Event deltas intentionally omit roster data. Reload after the mutation chain so the newly
+      // durable player is immediately available in lineup controls, follow-ups, and event labels.
+      await loadGame();
+      focusVoicePlayer(targetSide, addedPlayer.id);
+    }
+    setPendingVoicePlayerAdd(null);
     setIsAddPlayerOpen(false);
+    finishVoiceRecovery(pending.context, result);
+  }
+
+  function closeAddRosterPlayerDialog() {
+    const pending = pendingVoicePlayerAdd;
+    setIsAddPlayerOpen(false);
+    setPendingVoicePlayerAdd(null);
+    if (!pending) return;
+
+    openCourtVoiceFallback(
+      pending.context,
+      `Jersey #${pending.jerseyNumber} was not added. Finish with the existing buttons.`
+    );
+    setVoiceFeedback({
+      message: `Jersey #${pending.jerseyNumber} was not added. No stat was recorded.`,
+      ok: false,
+    });
+  }
+
+  async function handleConfirmVoiceSubIn({ playerOutId = null } = {}) {
+    const pending = pendingVoiceSubIn;
+    if (!pending) return;
+
+    requireChosenPlayerOut(pending, playerOutId);
+
+    const result = await subInAndRecordHeldStat({
+      player: pending.player,
+      side: pending.side || activeSide,
+      playerOutId,
+      intent: pending.intent,
+      context: pending.context,
+      subLabel: `${pending.player.displayName} subbed in`,
+      lineupFailureMessage: `${describeVoicePlayer(pending.player)} could not be subbed in. Check Subs and finish with the buttons.`,
+    });
+
+    if (!result.lineupFailed) focusVoicePlayer(pending.side || activeSide, pending.player.id);
+    setPendingVoiceSubIn(null);
+    finishVoiceRecovery(pending.context, result);
+  }
+
+  function closeVoiceSubInDialog() {
+    const pending = pendingVoiceSubIn;
+    setPendingVoiceSubIn(null);
+    if (!pending) return;
+
+    const label = describeVoicePlayer(pending.player);
+    openCourtVoiceFallback(
+      pending.context,
+      `${label} was not subbed in. Finish with the existing buttons.`
+    );
+    setVoiceFeedback({ message: `${label} was not subbed in. No stat was recorded.`, ok: false });
   }
 
   async function saveLineup() {
@@ -1817,6 +2350,9 @@ export function GameTrackPage() {
   }
 
   async function finishGame() {
+    // Closing the confirm lifts the playback hold, which would otherwise resume the clock
+    // concurrently with the finish request. Release ownership so no competing start is sent.
+    entryClockWasRunningRef.current = false;
     setError('');
     setIsSaving(true);
     trackEvent('game_tracking_finished', { game_id: gameId });
@@ -1833,6 +2369,9 @@ export function GameTrackPage() {
   async function executeClockCommand(command) {
     if (isSaving || voiceBusy) return false;
     clockOperatedThisMountRef.current = true;
+    // Operating the clock by hand takes it back from the video: a later play must not restart a
+    // clock the scorekeeper just stopped, nor stop one they just started.
+    clockPausedByVideoRef.current = false;
     setError('');
     setIsSaving(true);
     try {
@@ -2000,6 +2539,9 @@ export function GameTrackPage() {
       ghostClickGuardRef.current = null;
       if (result.ok) {
         setIsCourtVoiceAttempt(false);
+      } else if (result.keepCourtPending) {
+        // A missing-player dialog owns the captured location and entry state until the user either
+        // confirms the add-and-record flow or cancels back to the button picker.
       } else if (result.reason !== 'write_failed' && !result.skipCourtFallback) {
         openCourtVoiceFallback(context, result.message);
       } else {
@@ -2055,7 +2597,7 @@ export function GameTrackPage() {
     if (intent.kind === 'control') {
       if (intent.action === 'undo') return voiceRejection('undo_not_allowed');
       if (intent.action !== 'skip') return voiceRejection('unsupported_control');
-      // Parity with the manual "Skip this question" button, quirks included.
+      // Same path as the manual "Skip this question" button, resume included.
       clearEventPicker();
       return { ok: true, message: 'Question skipped. No stat was recorded.' };
     }
@@ -2109,7 +2651,7 @@ export function GameTrackPage() {
     // A court-triggered undo borrowed a selected location solely as its push-to-talk gesture.
     // Discard that unused location and hand the entry clock/video back.
     if (context.courtTriggered) {
-      clearEventPicker('', { resume: true });
+      clearEventPicker();
     } else {
       finishVoiceAttempt(context);
     }
@@ -2122,6 +2664,139 @@ export function GameTrackPage() {
           ? { ok: true, message: 'Last event undone.' }
           : voiceRejection('undo_failed');
     return { ...result, skipCourtFallback: true };
+  }
+
+  function voiceStatLabelFor(intent, shot) {
+    if (intent.action === 'field_goal' && shot) {
+      return STAT_LABELS[buildShotStatType(shot.shotFamily, intent.outcome)];
+    }
+    if (intent.action === 'free_throw') {
+      return intent.outcome === 'made' ? 'Free throw made' : 'Free throw missed';
+    }
+    // Rebounds keep their spoken-sentence casing rather than STAT_LABELS' title case, because
+    // these strings land mid-sentence in voice feedback and the add-player confirmation.
+    if (intent.action === 'defensive_rebound') return 'Defensive rebound';
+    if (intent.action === 'offensive_rebound') return 'Offensive rebound';
+    const statType = VOICE_QUICK_STAT_TYPES[intent.action];
+    return (statType && STAT_LABELS[statType]) || 'Stat';
+  }
+
+  // Both voice recovery paths need the same picture of the side being corrected: who is on the
+  // court (and therefore who could come off), what the team is called, and what stat is being
+  // held. Built once so the lineup-size rule and the side switch cannot drift between them.
+  function buildVoiceRecoveryPending(intent, context) {
+    const indexedSide = isDualTeam ? intent.side : 'tracked';
+    const sideIndex = context.participantIndex?.bySide?.[indexedSide];
+    if (!sideIndex) return null;
+
+    const lineupPlayers = sideIndex.players.filter((player) => sideIndex.lineupIds.has(player.id));
+    return {
+      context,
+      intent,
+      side: isDualTeam ? intent.side : null,
+      teamName: isDualTeam
+        ? participantsBySide[intent.side]?.displayName || intent.side
+        : team?.name || 'this team',
+      statLabel: voiceStatLabelFor(intent, context.selectedShot),
+      lineupPlayers,
+      requirePlayerOut: lineupPlayers.length >= FULL_LINEUP_SIZE,
+    };
+  }
+
+  // A jersey number nobody on the roster has. Only a permitted roster manager is offered the
+  // durable add; an unrecognised NAME is never used to create a player, since it may be a
+  // transcription error.
+  function offerMissingVoicePlayer(intent, context) {
+    if (
+      !canAddRosterPlayer ||
+      intent.participant?.kind !== 'jersey' ||
+      intent.participant.value == null
+    ) {
+      return null;
+    }
+
+    const pending = buildVoiceRecoveryPending(intent, context);
+    if (!pending) return null;
+
+    const jerseyNumber = intent.participant.value;
+    setPendingVoicePlayerAdd({ ...pending, jerseyNumber });
+    if (isDualTeam) setActiveSide(intent.side);
+    setIsAddPlayerOpen(true);
+
+    return {
+      ok: false,
+      reason: 'player_not_on_team',
+      message: `Jersey #${jerseyNumber} is not on ${pending.teamName}.`,
+      keepCourtPending: true,
+    };
+  }
+
+  // A jersey or name that matches exactly one roster player who is not currently on the court.
+  // Unlike an unknown jersey there is nothing to create — the recovery is a substitution.
+  function offerBenchVoicePlayer(intent, context, participant) {
+    const player = participant.player;
+    if (!player) return null;
+
+    const pending = buildVoiceRecoveryPending(intent, context);
+    if (!pending) return null;
+
+    setPendingVoiceSubIn({ ...pending, player });
+    if (isDualTeam) setActiveSide(intent.side);
+
+    return {
+      ok: false,
+      reason: 'player_on_bench',
+      message: `${describeVoicePlayer(player)} is not on the court.`,
+      keepCourtPending: true,
+    };
+  }
+
+  async function executeVoicePlayerStat(intent, context, participant) {
+    const eventContext = {
+      source: 'voice',
+      clockSnapshot: context.clockSnapshot,
+      videoTimestamp: context.videoTimestamp,
+      courtLayoutId: context.courtLayoutId,
+    };
+    const handlerOptions = {
+      playerId: participant.playerId,
+      teamSide: participant.side,
+      shot: context.selectedShot,
+      eventContext,
+    };
+
+    // The label doubles as the missing-player dialog's promise of what will be recorded, so it
+    // comes from voiceStatLabelFor rather than being spelled out a second time here.
+    const label = voiceStatLabelFor(intent, context.selectedShot);
+    let savePromise;
+    if (intent.action === 'field_goal') {
+      savePromise = addShotEvent(intent.outcome, handlerOptions);
+    } else if (intent.action === 'free_throw') {
+      savePromise = addFreeThrowEvent(intent.outcome, handlerOptions);
+    } else if (intent.action === 'defensive_rebound') {
+      savePromise = addReboundEvent('DREB', handlerOptions);
+    } else if (intent.action === 'offensive_rebound') {
+      savePromise = addReboundEvent('OREB', handlerOptions);
+    } else {
+      const statType = VOICE_QUICK_STAT_TYPES[intent.action];
+      if (!statType) {
+        finishVoiceAttempt(context);
+        return voiceRejection('unsupported_action');
+      }
+      savePromise = addQuickStatEvent(statType, handlerOptions);
+    }
+
+    if (isDualTeam && participant.side) setActiveSide(participant.side);
+    updateSideState(isDualTeam ? participant.side : 'oneSided', {
+      selectedPlayerId: participant.playerId,
+    });
+
+    const saved = await savePromise;
+    if (!saved) {
+      finishVoiceAttempt(context);
+      return voiceRejection('write_failed');
+    }
+    return { ok: true, message: `${participant.player.displayName}: ${label} recorded.` };
   }
 
   async function handleVoicePrimary(transcript, context, adapter) {
@@ -2198,66 +2873,23 @@ export function GameTrackPage() {
       return voiceRejection('location_conflict');
     }
 
-    const eventContext = {
-      source: 'voice',
-      clockSnapshot: context.clockSnapshot,
-      videoTimestamp: context.videoTimestamp,
-      courtLayoutId: context.courtLayoutId,
-    };
-
     const participant = resolveParticipant(context.participantIndex, {
       side: parsed.intent.side,
       participant: parsed.intent.participant,
     });
     if (!participant.ok) {
+      if (participant.reason === 'not_found') {
+        const offer = offerMissingVoicePlayer(parsed.intent, context);
+        if (offer) return offer;
+      }
+      if (participant.reason === 'off_court') {
+        const offer = offerBenchVoicePlayer(parsed.intent, context, participant);
+        if (offer) return offer;
+      }
       finishVoiceAttempt(context);
       return voiceRejection(participant.reason);
     }
-
-    const handlerOptions = {
-      playerId: participant.playerId,
-      teamSide: participant.side,
-      shot: context.selectedShot,
-      eventContext,
-    };
-
-    let savePromise;
-    let label;
-    if (parsed.intent.action === 'field_goal') {
-      savePromise = addShotEvent(parsed.intent.outcome, handlerOptions);
-      label =
-        STAT_LABELS[buildShotStatType(context.selectedShot.shotFamily, parsed.intent.outcome)];
-    } else if (parsed.intent.action === 'free_throw') {
-      savePromise = addFreeThrowEvent(parsed.intent.outcome, handlerOptions);
-      label = `${parsed.intent.outcome === 'made' ? 'Free throw made' : 'Free throw missed'}`;
-    } else if (parsed.intent.action === 'defensive_rebound') {
-      savePromise = addReboundEvent('DREB', handlerOptions);
-      label = 'Defensive rebound';
-    } else if (parsed.intent.action === 'offensive_rebound') {
-      savePromise = addReboundEvent('OREB', handlerOptions);
-      label = 'Offensive rebound';
-    } else {
-      const statTypes = { steal: 'STL', block: 'BLK', turnover: 'TOV', foul: 'FOUL' };
-      const statType = statTypes[parsed.intent.action];
-      if (!statType) {
-        finishVoiceAttempt(context);
-        return voiceRejection('unsupported_action');
-      }
-      savePromise = addQuickStatEvent(statType, handlerOptions);
-      label = STAT_LABELS[statType] || statType;
-    }
-
-    if (isDualTeam && participant.side) setActiveSide(participant.side);
-    updateSideState(isDualTeam ? participant.side : 'oneSided', {
-      selectedPlayerId: participant.playerId,
-    });
-
-    const saved = await savePromise;
-    if (!saved) {
-      finishVoiceAttempt(context);
-      return voiceRejection('write_failed');
-    }
-    return { ok: true, message: `${participant.player.displayName}: ${label} recorded.` };
+    return executeVoicePlayerStat(parsed.intent, context, participant);
   }
 
   function handleVoiceFailure({ context, message = '' }) {
@@ -3038,8 +3670,8 @@ export function GameTrackPage() {
                     ),
                   },
                   {
-                    id: 'more',
-                    label: 'More',
+                    id: 'options',
+                    label: 'Options',
                     icon: (
                       <svg
                         viewBox="0 0 16 16"
@@ -3048,9 +3680,8 @@ export function GameTrackPage() {
                         stroke="currentColor"
                         strokeWidth="1.8"
                       >
-                        <circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" />
-                        <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
-                        <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
+                        <circle cx="8" cy="8" r="2.25" />
+                        <path d="M8 1.75v1.6M8 12.65v1.6M1.75 8h1.6M12.65 8h1.6M3.6 3.6l1.13 1.13M11.27 11.27l1.13 1.13M12.4 3.6l-1.13 1.13M4.73 11.27L3.6 12.4" />
                       </svg>
                     ),
                   },
@@ -3110,6 +3741,7 @@ export function GameTrackPage() {
                           onClick={() => {
                             setIsMobileEntryMode(true);
                             pauseVideoForEntry();
+                            pauseClockForEntry();
                           }}
                           className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
                         >
@@ -3640,7 +4272,7 @@ export function GameTrackPage() {
                     </div>
                   ) : null}
 
-                  {activePanel === 'more' ? (
+                  {activePanel === 'options' ? (
                     <div className="space-y-6 pb-2">
                       <section aria-labelledby="voice-tracking-settings-heading">
                         <h2
@@ -3769,40 +4401,38 @@ export function GameTrackPage() {
                             </div>
                           </button>
 
-                          {game.videoUrl ? (
-                            <button
-                              type="button"
-                              onClick={togglePauseVideoOnEntry}
-                              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
-                            >
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                                <svg
-                                  viewBox="0 0 20 20"
-                                  className="h-5 w-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                >
-                                  <path d="M7 4v12M13 4v12" />
-                                </svg>
-                              </span>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">
-                                  Pause Video During Stat Entry
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  {pauseVideoOnEntry
-                                    ? 'On — video pauses while you tag a stat, resumes after.'
-                                    : 'Off — video keeps playing while you tag a stat.'}
-                                </p>
-                              </div>
-                              <span
-                                className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
+                          <button
+                            type="button"
+                            onClick={togglePauseVideoOnEntry}
+                            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+                          >
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                              <svg
+                                viewBox="0 0 20 20"
+                                className="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
                               >
-                                {pauseVideoOnEntry ? 'On' : 'Off'}
-                              </span>
-                            </button>
-                          ) : null}
+                                <path d="M7 4v12M13 4v12" />
+                              </svg>
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                Pause During Stat Entry
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {pauseVideoOnEntry
+                                  ? `On — ${game.videoUrl ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
+                                  : `Off — ${game.videoUrl ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
+                              </p>
+                            </div>
+                            <span
+                              className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
+                            >
+                              {pauseVideoOnEntry ? 'On' : 'Off'}
+                            </span>
+                          </button>
 
                           <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
                             <button
@@ -4222,15 +4852,35 @@ export function GameTrackPage() {
           panelClassName="max-w-3xl"
         >
           <div className="space-y-6 text-sm text-slate-600">
+            <section className="rounded-xl border border-[#B7D8C8] bg-[#EEF6F1] p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#356859]">
+                This game
+              </p>
+              <h3 className="mt-1 text-base font-semibold text-slate-900">
+                {isDualTeam ? 'Dual-team tracking' : 'One-team tracking'}
+              </h3>
+              <p className="mt-1 text-xs text-slate-600">
+                {isDualTeam
+                  ? 'You are tracking both teams, so every command starts with home or away to say which lineup to search.'
+                  : 'You are tracking one team, so never say home or away. Commands search your own on-court lineup.'}
+              </p>
+              <p className="mt-3 text-xs text-slate-600">
+                Every command below is written exactly as you would say it in this game:{' '}
+                <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900">
+                  {isDualTeam ? 'home/away + player + action' : 'player + action'}
+                </code>
+              </p>
+            </section>
+
             <section>
               <h3 className="font-semibold text-slate-900">Track a stat</h3>
               <ol className="mt-3 space-y-3">
                 {[
-                  'Turn on Voice Tracking in More.',
-                  'Make sure the player is currently on the court. If they are on the bench, use Subs to sub them in first.',
-                  'Open Court and tap where the event happened. That tap starts the microphone automatically.',
-                  'Say one player and one action. The stat is recorded only when the player and command are unambiguous.',
-                  'Answer any follow-up question, such as who assisted or rebounded, using the microphone in the question.',
+                  'Turn on Voice Tracking in Options.',
+                  'Name anyone on the roster. If they are on the bench — or not on the team yet — you are asked to bring them on before the stat is recorded.',
+                  'Open Court and tap where the event happened. That tap starts the microphone.',
+                  'Say one player and one action. Nothing is recorded unless both are unambiguous.',
+                  'Answer any follow-up question using the microphone beside it.',
                 ].map((step, index) => (
                   <li key={step} className="flex gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#EEF6F1] text-xs font-bold text-[#1B4332]">
@@ -4242,160 +4892,47 @@ export function GameTrackPage() {
               </ol>
             </section>
 
-            <section className="rounded-xl border border-[#B7D8C8] bg-[#EEF6F1] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#356859]">
-                This game
-              </p>
-              <h3 className="mt-1 font-semibold text-slate-900">
-                {isDualTeam ? 'Use dual-team phrases' : 'Use one-team phrases'}
-              </h3>
-              <p className="mt-1 text-xs text-slate-600">
-                {isDualTeam
-                  ? 'Start every primary command with home or away. This tells voice tracking which on-court lineup to search.'
-                  : 'Do not say home or away. Voice tracking searches the current on-court lineup for your team.'}
-              </p>
-            </section>
+            {voiceCommandTables(isDualTeam ? 'dual_team' : 'one_sided').map((table) => (
+              <VoiceHelpTable
+                key={table.title}
+                title={table.title}
+                description={table.description}
+                columns={table.columns}
+                rows={table.rows}
+              />
+            ))}
 
-            <section className="rounded-xl bg-slate-50 p-4">
-              <h3 className="font-semibold text-slate-900">Phrase structure</h3>
-              <div className="mt-3 space-y-2">
-                <p>
-                  One-team tracking:{' '}
-                  <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900">
-                    player + action
-                  </code>
-                </p>
-                <p>
-                  Dual-team tracking:{' '}
-                  <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900">
-                    home/away + player + action
-                  </code>
-                </p>
+            <details className="rounded-xl border border-slate-200 bg-slate-50">
+              <summary className="cursor-pointer px-4 py-3 font-semibold text-slate-900">
+                Commands for a {isDualTeam ? 'one-team' : 'dual-team'} game
+              </summary>
+              <div className="space-y-6 border-t border-slate-200 px-4 py-4">
                 <p className="text-xs text-slate-500">
-                  Use a jersey number or a uniquely matching player name. For a field goal, the
-                  court location decides whether it is worth two or three points; if you say the
-                  point value, it must match the location.
+                  {isDualTeam
+                    ? 'This game is not tracked this way. In a one-team game you never say a side, and you can score the opponent as a total.'
+                    : 'This game is not tracked this way. In a dual-team game every command names a side, and the opponent is tracked as real players rather than a total.'}
                 </p>
+                {voiceCommandTables(isDualTeam ? 'one_sided' : 'dual_team').map((table) => (
+                  <VoiceHelpTable
+                    key={table.title}
+                    idPrefix="voice-help-other"
+                    title={table.title}
+                    description={table.description}
+                    columns={table.columns}
+                    rows={table.rows}
+                  />
+                ))}
               </div>
-            </section>
-
-            <VoiceHelpTable
-              title="Shots"
-              description="Tap the event location first. For a field goal, the tap decides two or three points; an explicitly spoken value must match it."
-              columns={['Stat', 'Say', 'What happens']}
-              rows={[
-                ['Inferred make', '13 made', 'The court location decides 2PT or 3PT.'],
-                ['Inferred miss', '13 missed', 'The court location decides 2PT or 3PT.'],
-                ['2PT make', '13 two point field goal made', 'Accepted only inside the arc.'],
-                ['2PT miss', '13 2pt field goal missed', 'Accepted only inside the arc.'],
-                ['3PT make', '13 3pt field goal made', 'Accepted only outside the arc.'],
-                ['3PT miss', '13 3pt field goal missed', 'Accepted only outside the arc.'],
-                ['Free throw make', 'Alex free throw made', 'Records a made free throw.'],
-                ['Free throw miss', 'Alex missed free throw', 'Records a missed free throw.'],
-                ['Opponent +1 (one-team)', 'opponent plus one', 'Records an opponent free throw.'],
-                ['Opponent +2 (one-team)', 'opponent plus two', 'Accepted only inside the arc.'],
-                ['Opponent +3 (one-team)', 'opponent plus three', 'Accepted only outside the arc.'],
-              ]}
-            />
-
-            <VoiceHelpTable
-              title="Non-shot stats"
-              description="Use the exact action below after a jersey number or uniquely matching player name."
-              columns={['Stat', 'Say', 'What happens']}
-              rows={[
-                ['Offensive rebound', '13 offensive rebound', 'Records an offensive rebound.'],
-                ['Defensive rebound', '13 defensive rebound', 'Records a defensive rebound.'],
-                ['Steal', '13 steal', 'Records a steal.'],
-                ['Block', 'Alex block', 'Records a block.'],
-                ['Turnover', 'twenty three turnover', 'Records a turnover for jersey 23.'],
-                ['Foul', 'Alex Morgan foul', 'Records a foul.'],
-              ]}
-            />
-
-            <VoiceHelpTable
-              title="Dual-team tracking"
-              description="In a dual-team game, say home or away first on every primary command. In a one-team game, leave the side out."
-              columns={['Stat', 'Say', 'What happens']}
-              rows={[
-                ['Home 3PT make', 'home 13 3pt field goal made', 'Searches the home lineup.'],
-                ['Away 3PT miss', 'away 7 3pt field goal missed', 'Searches the away lineup.'],
-                ['Home free throw', 'home Alex free throw made', 'Records for the home player.'],
-                ['Away rebound', 'away Blake defensive rebound', 'Records for the away player.'],
-                ['Home steal', 'home number 13 steal', 'Records for home jersey 13.'],
-                ['Away turnover', 'away twenty three turnover', 'Records for away jersey 23.'],
-              ]}
-            />
-
-            <VoiceHelpTable
-              title="Follow-ups and controls"
-              description="Follow-ups use the microphone shown beside the question. A player answer must still match an eligible on-court player."
-              columns={['Question or control', 'Say or do', 'What happens']}
-              rows={[
-                ['Who assisted?', '7 or Blake', 'Credits the eligible player with an assist.'],
-                ['No assist', 'unassisted', 'Closes an assist question without an assist.'],
-                ['Who rebounded?', '7 or Blake', 'Credits the eligible rebounder.'],
-                ['One-team opponent rebound', 'opponent', 'Records an opponent rebound.'],
-                [
-                  'Dual-team player answer',
-                  'away 7',
-                  'Use the side when needed to remove ambiguity.',
-                ],
-                ['Any optional question', 'skip', 'Closes the question without another stat.'],
-                ['Who was fouled?', 'skip', 'The current data model does not store the victim.'],
-                [
-                  'Undo last event',
-                  'undo',
-                  'Works only when no follow-up is open and the event is still last.',
-                ],
-                [
-                  'Stop listening',
-                  'Cancel listening button',
-                  'Stops the voice turn and opens the button picker.',
-                ],
-              ]}
-            />
-
-            <VoiceHelpTable
-              title="Expected refusals"
-              description="These phrases intentionally record nothing. The button picker opens with your tapped location retained."
-              columns={['Situation', 'Say', 'Why it is refused']}
-              rows={[
-                ['No matching player', 'Nobody steal', 'No current on-court player matches.'],
-                [
-                  'Unsupported shot wording',
-                  '21 jump shot made',
-                  'Jump shot is not accepted vocabulary.',
-                ],
-                [
-                  'Unsupported point value',
-                  '13 made four',
-                  'Only two- and three-point field goals exist.',
-                ],
-                ['Conflicting outcome', '13 made miss', 'The command says both made and missed.'],
-                ['Conflicting points', '13 made two three', 'The command says both two and three.'],
-                ['Unsupported action', '13 travelled', 'Travelled is not a supported action.'],
-                ['Missing action', '13', 'A player without an action is incomplete.'],
-                ['Side in a one-team game', 'home 13 made', 'Home or away is not allowed.'],
-                ['No side in a dual-team game', '13 made', 'Home or away is required.'],
-                [
-                  'Opponent aggregate in a dual-team game',
-                  'opponent plus two',
-                  'Dual-team scoring must be attributed to an on-court player.',
-                ],
-                [
-                  'Shot does not match tap',
-                  '13 3pt field goal made',
-                  'Refused if the tapped location is inside the arc.',
-                ],
-              ]}
-            />
+            </details>
 
             <section className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
               <h3 className="font-semibold text-slate-900">Player names and numbers</h3>
               <p className="mt-2">
                 You can say a jersey number from 0–999 or a uniquely matching player name. Number
                 words zero through nineteen and combinations such as <code>twenty three</code> are
-                supported; say exact multiples of ten such as jersey 20 as digits.
+                supported; say exact multiples of ten such as jersey 20 as digits. You can also put{' '}
+                <code>number</code> or <code>jersey</code> in front of a number, as in{' '}
+                <code>number 13 steal</code>.
               </p>
             </section>
           </div>
@@ -4555,9 +5092,34 @@ export function GameTrackPage() {
 
         <AddRosterPlayerDialog
           isOpen={isAddPlayerOpen}
-          onClose={() => setIsAddPlayerOpen(false)}
+          onClose={closeAddRosterPlayerDialog}
           onSubmit={handleAddRosterPlayer}
-          teamName={isDualTeam ? participantsBySide[activeSide]?.displayName : team?.name}
+          teamName={
+            pendingVoicePlayerAdd?.teamName ||
+            (isDualTeam ? participantsBySide[activeSide]?.displayName : team?.name)
+          }
+          title={pendingVoicePlayerAdd ? 'Add missing player?' : 'Add Player'}
+          description={
+            pendingVoicePlayerAdd
+              ? `Jersey #${pendingVoicePlayerAdd.jerseyNumber} is not on this roster. Add the player, sub them into the current lineup, and record the captured ${pendingVoicePlayerAdd.statLabel}?`
+              : ''
+          }
+          initialJerseyNumber={pendingVoicePlayerAdd?.jerseyNumber ?? null}
+          lockJerseyNumber={Boolean(pendingVoicePlayerAdd)}
+          submitLabel={pendingVoicePlayerAdd ? 'Add, sub in & record stat' : 'Add Player'}
+          playersToSubOut={pendingVoicePlayerAdd?.lineupPlayers || []}
+          requirePlayerOut={Boolean(pendingVoicePlayerAdd?.requirePlayerOut)}
+        />
+
+        <ConfirmSubInDialog
+          isOpen={isVoiceSubInOpen}
+          onClose={closeVoiceSubInDialog}
+          onConfirm={handleConfirmVoiceSubIn}
+          playerLabel={describeVoicePlayer(pendingVoiceSubIn?.player)}
+          teamName={pendingVoiceSubIn?.teamName}
+          statLabel={pendingVoiceSubIn?.statLabel}
+          playersToSubOut={pendingVoiceSubIn?.lineupPlayers || []}
+          requirePlayerOut={Boolean(pendingVoiceSubIn?.requirePlayerOut)}
         />
 
         <Modal

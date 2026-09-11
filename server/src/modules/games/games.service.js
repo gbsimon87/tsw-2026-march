@@ -864,6 +864,9 @@ function buildRosterSnapshotFromStandaloneTeam(team) {
   return (team?.players || [])
     .filter((player) => player.isActive)
     .map((player) => ({
+      // Pinned to the team player's id so freezing the snapshot at tip-off does not change the
+      // id the tracker already knows this player by. See withStableSnapshotIds for the league case.
+      _id: player._id,
       sourceType: 'team_player',
       sourcePlayerId: player._id,
       displayName: player.displayName,
@@ -983,11 +986,21 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
     player = findLastAddedPlayer(team, rosterPayload.displayName);
   }
 
+  let snapshotEntry = null;
   if (target.snapshotField) {
-    await appendPlayerToGameSnapshot(gameId, game, target.snapshotField, target.kind, player);
+    snapshotEntry = await appendPlayerToGameSnapshot(
+      gameId,
+      game,
+      target.snapshotField,
+      target.kind,
+      player
+    );
   }
 
-  return { player, side };
+  // The tracker addresses players by the id the game response exposes. For a snapshot game that
+  // is the snapshot entry's id; returning the durable roster id instead would hand back an id the
+  // game does not recognise, and a substitution written against it would be rejected.
+  return { player: sanitizePlayer(snapshotEntry || player), side };
 }
 
 // UX-only flag for the tracking screen's "Add player" affordance. The service
@@ -1070,9 +1083,13 @@ function findLastAddedPlayer(team, displayName) {
 // must branch on target kind rather than emit one shape for both.
 function buildSnapshotEntry(targetKind, player) {
   if (targetKind === 'standalone') {
+    const sourcePlayerId = player.id ?? player._id;
     return {
+      // Pinned for the same reason as the league branch below: one player keeps one id for the
+      // whole fixture lifecycle, so an id saved before tip-off still resolves after the freeze.
+      _id: sourcePlayerId,
       sourceType: 'team_player',
-      sourcePlayerId: player.id ?? player._id,
+      sourcePlayerId,
       leaguePlayerId: null,
       displayName: player.displayName,
       jerseyNumber: player.jerseyNumber ?? null,
@@ -1084,8 +1101,11 @@ function buildSnapshotEntry(targetKind, player) {
   }
 
   const claimedUserId = player.claimedUserId ?? player.claimedByUserId ?? null;
+  const leaguePlayerId = player.id ?? player._id;
   return {
-    leaguePlayerId: player.id ?? player._id,
+    // Mirrors withStableSnapshotIds: one player keeps one id for the whole fixture lifecycle.
+    _id: leaguePlayerId,
+    leaguePlayerId,
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
     position: player.position ?? null,
@@ -1099,12 +1119,16 @@ function buildSnapshotEntry(targetKind, player) {
 // the same moment makes this save throw VersionError. The append is pure, so
 // replaying it on a freshly loaded game is safe — and far better than surfacing a
 // conflict to someone mid-game. The roster write above is NOT replayed.
+// Returns the stored snapshot entry. A standalone snapshot entry has no leaguePlayerId to pin,
+// so Mongoose mints its _id — and that minted id, not the durable roster id, is what the game
+// response exposes for the player. Callers need it to address the player they just added.
 async function appendPlayerToGameSnapshot(gameId, game, snapshotField, targetKind, player) {
   const entry = buildSnapshotEntry(targetKind, player);
 
   try {
     game[snapshotField] = [...(game[snapshotField] || []), entry];
     await saveGame(game);
+    return game[snapshotField].at(-1);
   } catch (error) {
     if (error?.name !== 'VersionError') {
       throw error;
@@ -1116,6 +1140,7 @@ async function appendPlayerToGameSnapshot(gameId, game, snapshotField, targetKin
     }
     fresh[snapshotField] = [...(fresh[snapshotField] || []), entry];
     await saveGame(fresh);
+    return fresh[snapshotField].at(-1);
   }
 }
 

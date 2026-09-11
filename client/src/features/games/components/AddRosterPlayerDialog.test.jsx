@@ -69,4 +69,42 @@ describe('AddRosterPlayerDialog', () => {
     setup({ teamName: 'Riverside Hawks' });
     expect(screen.getByText(/riverside hawks/i)).toBeInTheDocument();
   });
+
+  it('prefills a missing jersey and requires an outgoing player for a full lineup', async () => {
+    const { onSubmit } = setup({
+      title: 'Add missing player?',
+      description: 'Jersey #8 is not on this roster.',
+      initialJerseyNumber: 8,
+      lockJerseyNumber: true,
+      submitLabel: 'Add, sub in & record stat',
+      requirePlayerOut: true,
+      playersToSubOut: [
+        { id: 'player-1', displayName: 'Alex Morgan', jerseyNumber: 4 },
+        { id: 'player-2', displayName: 'Blake Jones', jerseyNumber: null },
+      ],
+    });
+
+    // The accessible name follows the heading, so the voice recovery mode announces itself.
+    expect(screen.getByRole('dialog', { name: 'Add missing player?' })).toHaveTextContent(
+      'Jersey #8 is not on this roster.'
+    );
+    expect(screen.getByLabelText(/jersey/i)).toHaveValue(8);
+    expect(screen.getByLabelText(/jersey/i)).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/player name/i), 'Taylor Reed');
+    await userEvent.click(screen.getByRole('button', { name: 'Add, sub in & record stat' }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByText(/choose which on-court player/i)).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Sub out'), 'player-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Add, sub in & record stat' }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        displayName: 'Taylor Reed',
+        jerseyNumber: 8,
+        playerOutId: 'player-1',
+      })
+    );
+  });
 });

@@ -67,16 +67,22 @@ export function resolveParticipant(index, { side, participant, allowedPlayerIds 
   if (lineupMatches.length === 0) {
     if (matches.length > 1) return { ok: false, reason: 'ambiguous' };
     if (matches.length === 1) {
+      // The matched player rides along on the failure: an off-court match is recoverable by
+      // substituting them in, and the caller needs to name them to ask.
       return {
         ok: false,
         reason: matches[0].isActive === false ? 'inactive' : 'off_court',
+        player: matches[0],
+        playerId: matches[0].id,
       };
     }
     return { ok: false, reason: 'not_found' };
   }
 
   const player = lineupMatches[0];
-  if (player.isActive === false) return { ok: false, reason: 'inactive' };
+  if (player.isActive === false) {
+    return { ok: false, reason: 'inactive', player, playerId: player.id };
+  }
   if (allowedPlayerIds && !new Set(allowedPlayerIds).has(player.id)) {
     return { ok: false, reason: 'not_allowed' };
   }
