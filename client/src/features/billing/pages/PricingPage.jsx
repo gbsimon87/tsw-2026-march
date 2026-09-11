@@ -496,7 +496,9 @@ export function PricingPage() {
       </section>
 
       <p className="text-sm text-slate-600">
-        Need more than 24 teams in one league?{' '}
+        All paid prices are monthly and charged in GBP. A 14-day League trial requires a card and
+        automatically becomes the selected paid monthly plan unless you cancel before the trial
+        ends. Need more than 24 teams in one league?{' '}
         <Link to="/contact" className="font-semibold text-violet-700">
           Contact us
         </Link>

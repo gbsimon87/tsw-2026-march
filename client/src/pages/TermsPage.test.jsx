@@ -53,4 +53,18 @@ describe('TermsPage', () => {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     }
   });
+
+  test('explains how the paid League trial converts', () => {
+    renderTerms();
+
+    expect(screen.getByRole('heading', { name: 'Paid plans' }).closest('section')).toHaveAttribute(
+      'id',
+      'billing'
+    );
+    expect(screen.getByText(/one 14-day free trial per owner/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not charge you immediately/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/automatically becomes the selected monthly League subscription/i)
+    ).toBeInTheDocument();
+  });
 });

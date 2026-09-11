@@ -1,70 +1,68 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Sporty Way</title>
+    <meta
+      name="description"
+      content="Track basketball stats, standings, and game recaps for leagues and teams on The Sporty Way."
+    />
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Sporty Way</title>
-  <meta
-    name="description"
-    content="Track basketball stats, standings, and game recaps for leagues and teams on The Sporty Way."
-  />
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="The Sporty Way" />
+    <meta property="og:title" content="The Sporty Way" />
+    <meta
+      property="og:description"
+      content="Track basketball stats, standings, and game recaps for leagues and teams on The Sporty Way."
+    />
+    <meta property="og:image" content="/web-app-manifest-512x512.png" />
+    <meta name="twitter:card" content="summary_large_image" />
 
-  <!-- Open Graph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="The Sporty Way" />
-  <meta property="og:title" content="The Sporty Way" />
-  <meta
-    property="og:description"
-    content="Track basketball stats, standings, and game recaps for leagues and teams on The Sporty Way."
-  />
-  <meta property="og:image" content="/web-app-manifest-512x512.png" />
-  <meta name="twitter:card" content="summary_large_image" />
-
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- PERF-005 (historical performance investigation): load the font CSS without
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- PERF-005 (historical performance investigation): load the font CSS without
        blocking first paint — media="print" defers it, onload swaps it live.
        display=swap already prevents invisible text during the swap. -->
-  <link
-    href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
-    rel="stylesheet"
-    media="print"
-    onload="this.media='all'"
-  />
-  <noscript>
     <link
       href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media = 'all'"
     />
-  </noscript>
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
 
-  <!-- Apple touch icon (iOS "Add to Home Screen") -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- Apple touch icon (iOS "Add to Home Screen") -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
-  <!-- PWA manifest -->
-  <link rel="manifest" href="/site.webmanifest" />
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/site.webmanifest" />
 
-  <!-- Theme color (browser chrome on mobile) -->
-  <meta name="theme-color" content="#FFF" />
+    <!-- Theme color (browser chrome on mobile) -->
+    <meta name="theme-color" content="#FFF" />
 
-  <!-- App meta -->
-  <meta name="application-name" content="TSW" />
-  <meta name="apple-mobile-web-app-title" content="TSW" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-</head>
+    <!-- App meta -->
+    <meta name="application-name" content="TSW" />
+    <meta name="apple-mobile-web-app-title" content="TSW" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  </head>
 
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
-</body>
-
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>

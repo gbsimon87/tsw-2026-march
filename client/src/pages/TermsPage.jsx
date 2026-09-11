@@ -8,7 +8,7 @@ import { env } from '../lib/env';
 //
 // DRAFT: written to be accurate about what the product actually does, not to be
 // a substitute for legal advice. Have it reviewed before relying on it.
-const LAST_UPDATED = '5 September 2026';
+const LAST_UPDATED = '11 September 2026';
 
 const sectionClass = 'rounded-2xl border border-slate-200 bg-white p-6 md:p-8';
 const headingClass = 'text-xl text-slate-900';
@@ -134,7 +134,7 @@ export function TermsPage() {
         </div>
       </section>
 
-      <section className={sectionClass} aria-labelledby="billing-heading">
+      <section id="billing" className={sectionClass} aria-labelledby="billing-heading">
         <h2 id="billing-heading" className={headingClass} style={headingStyle}>
           Paid plans
         </h2>
@@ -146,6 +146,12 @@ export function TermsPage() {
             </Link>{' '}
             before you subscribe. Subscriptions renew automatically until cancelled, and you can
             cancel at any time — access continues to the end of the period you have paid for.
+          </p>
+          <p>
+            League plans offer one 14-day free trial per owner and require a card. Starting a trial
+            does not charge you immediately. Unless you cancel before it ends, the trial
+            automatically becomes the selected monthly League subscription at the GBP price shown
+            when you subscribed.
           </p>
           <p>
             Payments are handled by Stripe. We never see or store your card details. If we change a

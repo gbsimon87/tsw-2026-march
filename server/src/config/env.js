@@ -127,18 +127,16 @@ const baseEnvSchema = z.object({
     .transform((v) => v === 'true'),
 });
 
-// Fail fast on a half-configured deployed billing setup: once STRIPE_SECRET_KEY
-// is set, all three subscription price IDs must be present. Otherwise a missing
-// ID resolves to `undefined` at checkout and Stripe 503s silently in production
-// (see docs/stripe.md). Local NODE_ENV=development is deliberately exempt so an
-// old or in-progress sandbox setup cannot prevent the app from starting; its paid
-// Checkout routes still return "Billing is not configured" until the new Price
-// IDs are supplied. Render uses NODE_ENV=production in both environments, so
-// deployed development and production remain strict.
+// Fail fast on any half-configured deployed billing setup. Otherwise a missing
+// value can leave Checkout unavailable or accept a payment whose webhook cannot
+// provision access (see docs/stripe.md). Local NODE_ENV=development is
+// deliberately exempt so an in-progress sandbox setup cannot prevent the app
+// from starting. Render uses NODE_ENV=production in both environments, so
+// deployed development and production remain strict even if the key itself is
+// the missing value.
 // Audit M2: the webhook secret and success/cancel URLs are as load-bearing as the
-// price IDs. Without STRIPE_WEBHOOK_SECRET, boot succeeds and checkout works, but
-// every webhook fails signature verification — customers are charged and never
-// provisioned. The success/cancel URLs are required by every checkout session.
+// price IDs. Without the right webhook secret, Checkout can take payment while
+// every delivery fails signature verification and access is never provisioned.
 const REQUIRED_STRIPE_CONFIG = [
   'STRIPE_PRICE_ID_ADDITIONAL_TEAM',
   'STRIPE_PRICE_ID_LEAGUE',
@@ -149,6 +147,7 @@ const REQUIRED_STRIPE_CONFIG = [
   'STRIPE_SUCCESS_URL',
   'STRIPE_CANCEL_URL',
 ];
+const ALL_STRIPE_CONFIG = ['STRIPE_SECRET_KEY', ...REQUIRED_STRIPE_CONFIG];
 
 const REQUIRED_INSTAGRAM_CONFIG = [
   'INSTAGRAM_GRAPH_API_VERSION',
@@ -165,7 +164,32 @@ const REQUIRED_INSTAGRAM_OAUTH_CONFIG = [
 ];
 
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
+  const configuredStripeKeys = ALL_STRIPE_CONFIG.filter((key) => Boolean(data[key]));
+  if (
+    data.NODE_ENV !== 'development' &&
+    configuredStripeKeys.length > 0 &&
+    configuredStripeKeys.length < ALL_STRIPE_CONFIG.length
+  ) {
+    for (const key of ALL_STRIPE_CONFIG) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when any Stripe setting is configured outside local development`,
+        });
+      }
+    }
+  }
+
   if (data.STRIPE_SECRET_KEY) {
+    if (data.NODE_ENV === 'production' && !data.APP_ENV) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['APP_ENV'],
+        message: 'APP_ENV is required when Stripe is enabled in a deployed environment',
+      });
+    }
+
     if (data.NODE_ENV !== 'development') {
       for (const key of REQUIRED_STRIPE_CONFIG) {
         if (!data[key]) {
@@ -240,12 +264,32 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
       clientOrigins = [];
     }
 
-    for (const key of ['STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL']) {
-      if (data[key] && !clientOrigins.includes(new URL(data[key]).origin)) {
+    const redirectPaths = {
+      STRIPE_SUCCESS_URL: '/billing/success',
+      STRIPE_CANCEL_URL: '/billing/cancel',
+    };
+    for (const [key, expectedPath] of Object.entries(redirectPaths)) {
+      if (!data[key]) continue;
+      const redirectUrl = new URL(data[key]);
+      if (!clientOrigins.includes(redirectUrl.origin)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
           message: `${key} must use an origin allowed by CLIENT_ORIGIN`,
+        });
+      }
+      if (redirectUrl.pathname !== expectedPath || redirectUrl.search || redirectUrl.hash) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} must use the exact ${expectedPath} path without a query or hash`,
+        });
+      }
+      if (data.NODE_ENV === 'production' && redirectUrl.protocol !== 'https:') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} must use HTTPS in a deployed environment`,
         });
       }
     }

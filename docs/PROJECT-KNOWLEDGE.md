@@ -316,15 +316,19 @@ the authority for subscription state. Comped resources use
 The app passes a locked-down `STRIPE_PORTAL_CONFIGURATION_ID` for ordinary
 Portal sessions and a separate `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID` only for
 the explicit League Plus confirmation flow. Ordinary Portal sessions cannot
-switch plans.
+switch plans. Both League tiers promise the same 14-day trial, so a Portal
+upgrade preserves the original trial end; after the trial, upgrades are applied
+and prorated immediately.
 
 Only `active` and `trialing` Stripe subscriptions grant paid management. A
 cancel-at-period-end subscription remains manageable until Stripe ends it;
 afterward, data stays readable but Team/League writes stop. Failed renewals stop
 management. Checkout is idempotent, the success page verifies the exact owned
 Checkout Session, League creation tolerates out-of-order events, and unknown
-Stripe Prices fail closed. League upgrades are immediately confirmed and
-prorated in Stripe; eligible downgrades are scheduled for the next period.
+Stripe Prices fail closed. League upgrades are confirmed in Stripe and apply
+immediately; trialing upgrades preserve the trial without an immediate charge,
+while paid upgrades are prorated. Eligible downgrades are scheduled for the
+next period.
 
 In `NODE_ENV=development` without a Stripe secret, starting a new League
 provisions a local comped League and redirects directly to setup. With a Stripe
@@ -334,14 +338,17 @@ billing path uses Stripe.
 The capacity-pricing migration makes the oldest standalone Team for each owner
 free, makes other standalone Teams paid-capacity, and grandfathers every
 pre-launch League as complimentary so the three current production Leagues
-continue unchanged.
+continue unchanged. It requires an explicit `--dry-run` or `--apply`; applying
+also requires `MIGRATION_CONFIRM_DB` to exactly match `MONGO_DB_NAME`.
 
-Status on 25 August 2026: local development is code-ready and deployed
-development is undergoing manual sandbox testing. The development catalog,
-Render values, webhook, and capacity migration have been configured. The
-Pricing route is public in code and linked from navigation. Production is not
-ready until the remaining sandbox checks, live Stripe/Render setup, production
-backup and migration, tax decision, and controlled live payments are complete.
+Status on 11 September 2026: the full development Stripe checklist, including
+failure recovery and all additional checks, passed. A targeted redeploy remains
+for the audit's explicit trial-preservation setting, mobile billing feedback,
+and customer-facing billing disclosures; the migration command guard is covered
+by automated tests. The Pricing route is public in code and linked from
+navigation. Production is not ready until live Stripe/Render setup, the verified
+production backup and capacity migration, the customer-facing refund policy,
+and controlled live payments are complete.
 [`stripe.md`](./stripe.md) is the only setup, testing, lifecycle, checklist,
 manual-action, and launch-status guide.
 

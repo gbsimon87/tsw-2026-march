@@ -64,6 +64,8 @@ function matchesUpgradeConfiguration(configuration, { returnUrl, leagueProducts 
     configuration.features?.payment_method_update?.enabled === true &&
     update?.enabled === true &&
     sameStringSet(update.default_allowed_updates || [], ['price']) &&
+    update.trial_update_behavior === 'continue_trial' &&
+    configuredProducts.length === leagueProducts.length &&
     leagueProducts.every((expected) =>
       configuredProducts.some(
         (actual) =>
@@ -158,6 +160,10 @@ async function main() {
             enabled: true,
             default_allowed_updates: ['price'],
             proration_behavior: 'always_invoice',
+            // League and League Plus both include the same 14-day trial. An
+            // upgrade changes the tier immediately without taking that promise
+            // away or charging earlier than the original trial end.
+            trial_update_behavior: 'continue_trial',
             products: leagueProducts.map((entry) => ({
               ...entry,
               adjustable_quantity: { enabled: false },
@@ -166,7 +172,7 @@ async function main() {
         },
       },
       {
-        idempotencyKey: `tsw_portal_upgrade_v2_${createHash('sha256')
+        idempotencyKey: `tsw_portal_upgrade_v3_${createHash('sha256')
           .update(
             `${keyMode}:${returnUrl}:${leagueProducts.map((entry) => entry.prices[0]).join(':')}`
           )
@@ -179,7 +185,13 @@ async function main() {
   console.log(`STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID=${upgradeConfiguration.id}`);
 }
 
-main().catch((error) => {
-  console.error(`Customer Portal setup failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`Customer Portal setup failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  matchesUpgradeConfiguration,
+};

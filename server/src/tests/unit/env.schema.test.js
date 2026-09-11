@@ -106,6 +106,37 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
     );
   });
 
+  it('rejects partial deployed Stripe config even when the secret key is missing', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        APP_ENV: 'production',
+        STRIPE_PRICE_ID_LEAGUE: 'price_league',
+      })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain(
+      'STRIPE_SECRET_KEY'
+    );
+  });
+
+  it('requires an explicit deployment identity when deployed Stripe is enabled', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        CLIENT_ORIGIN: 'https://thesportyway.com',
+        STRIPE_SECRET_KEY: 'rk_live_123',
+        ...FULL_STRIPE,
+        STRIPE_SUCCESS_URL: 'https://thesportyway.com/billing/success',
+        STRIPE_CANCEL_URL: 'https://thesportyway.com/billing/cancel',
+      })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain('APP_ENV');
+  });
+
   it('rejects duplicate price IDs', () => {
     const result = envSchema.safeParse(
       baseEnv({
@@ -157,6 +188,26 @@ describe('env schema — Stripe price-ID completeness (T-07)', () => {
     );
 
     expect(result.success).toBe(true);
+  });
+
+  it('requires exact HTTPS billing redirect routes in deployed environments', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        NODE_ENV: 'production',
+        APP_ENV: 'production',
+        CLIENT_ORIGIN: 'https://thesportyway.com',
+        STRIPE_SECRET_KEY: 'rk_live_123',
+        ...FULL_STRIPE,
+        STRIPE_SUCCESS_URL: 'http://thesportyway.com/wrong?checkout=done',
+        STRIPE_CANCEL_URL: 'https://thesportyway.com/billing/cancel#fragment',
+      })
+    );
+
+    expect(result.success).toBe(false);
+    const messages = result.error.issues.map((issue) => issue.message).join(' ');
+    expect(messages).toContain('exact /billing/success path');
+    expect(messages).toContain('exact /billing/cancel path');
+    expect(messages).toContain('must use HTTPS');
   });
 
   it('no longer carries the retired STRIPE_PRICE_ID_PRO_MONTHLY', () => {

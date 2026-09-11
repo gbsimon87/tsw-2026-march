@@ -12,14 +12,47 @@
 //
 // Usage:
 //   node src/scripts/migrate-capacity-pricing.js --dry-run
-//   node src/scripts/migrate-capacity-pricing.js
+//   MIGRATION_CONFIRM_DB=<exact-db-name> node src/scripts/migrate-capacity-pricing.js --apply
 
 const mongoose = require('mongoose');
 const { connectDb, disconnectDb } = require('../config/db');
+const { env } = require('../config/env');
 
-const DRY_RUN = process.argv.includes('--dry-run');
+function parseMigrationMode(argv) {
+  const dryRun = argv.includes('--dry-run');
+  const apply = argv.includes('--apply');
+  const unknown = argv.filter((arg) => !['--dry-run', '--apply'].includes(arg));
+
+  if (unknown.length > 0 || dryRun === apply) {
+    throw new Error(
+      'Choose exactly one mode: --dry-run, or --apply with MIGRATION_CONFIRM_DB set to the exact database name.'
+    );
+  }
+  return dryRun ? 'dry-run' : 'apply';
+}
+
+function assertApplyTarget({ mode, dbName, confirmedDbName }) {
+  if (mode !== 'apply') return;
+  if (!dbName) throw new Error('MONGO_DB_NAME is required for an applied migration.');
+  if (!confirmedDbName) {
+    throw new Error('MIGRATION_CONFIRM_DB is required for an applied migration.');
+  }
+  if (confirmedDbName !== dbName) {
+    throw new Error(
+      `MIGRATION_CONFIRM_DB "${confirmedDbName}" does not match MONGO_DB_NAME "${dbName}".`
+    );
+  }
+}
 
 async function main() {
+  const mode = parseMigrationMode(process.argv.slice(2));
+  const dryRun = mode === 'dry-run';
+  assertApplyTarget({
+    mode,
+    dbName: env.MONGO_DB_NAME,
+    confirmedDbName: process.env.MIGRATION_CONFIRM_DB,
+  });
+
   await connectDb();
   const teams = mongoose.connection.collection('teams');
   const leagues = mongoose.connection.collection('leagues');
@@ -54,19 +87,45 @@ async function main() {
   const ownerGroups = await teams
     .aggregate([
       { $sort: { createdAt: 1, _id: 1 } },
-      { $group: { _id: '$ownerUserId', teamIds: { $push: '$_id' } } },
+      {
+        $group: {
+          _id: '$ownerUserId',
+          teamIds: { $push: '$_id' },
+          teamNames: { $push: '$name' },
+        },
+      },
+      { $sort: { _id: 1 } },
     ])
     .toArray();
   const teamCount = ownerGroups.reduce((sum, group) => sum + group.teamIds.length, 0);
-  const leagueCount = await leagues.countDocuments({});
+  const leagueRows = await leagues
+    .find({})
+    .project({ _id: 1, name: 1, plan: 1, billingSource: 1, subscriptionStatus: 1 })
+    .sort({ createdAt: 1, _id: 1 })
+    .toArray();
+  const leagueCount = leagueRows.length;
 
   console.log(
-    `${DRY_RUN ? '[dry-run] would assign' : '[apply] assigning'} ${ownerGroups.length} free Teams across ${teamCount} standalone Teams.`
+    `${dryRun ? '[dry-run] would assign' : '[apply] assigning'} ${ownerGroups.length} free Teams across ${teamCount} standalone Teams.`
   );
   console.log(
-    `${DRY_RUN ? '[dry-run] would grandfather' : '[apply] grandfathering'} ${leagueCount} existing Leagues.`
+    `${dryRun ? '[dry-run] would grandfather' : '[apply] grandfathering'} ${leagueCount} existing Leagues.`
   );
-  if (DRY_RUN) return;
+  for (const group of ownerGroups) {
+    console.log(`  owner ${group._id}:`);
+    group.teamIds.forEach((teamId, index) => {
+      console.log(
+        `    ${index === 0 ? 'FREE' : 'PAID'} ${teamId} ${group.teamNames[index] || '(unnamed)'}`
+      );
+    });
+  }
+  for (const league of leagueRows) {
+    console.log(
+      `  COMP LEAGUE ${league._id} ${league.name || '(unnamed)'} ` +
+        `(currently ${league.billingSource || 'stripe'}/${league.plan || 'starter'}/${league.subscriptionStatus || 'inactive'})`
+    );
+  }
+  if (dryRun) return;
 
   await teams.updateMany(
     {},
@@ -130,10 +189,17 @@ async function main() {
   console.log('[ok] Capacity pricing migration completed.');
 }
 
-main()
-  .catch((error) => {
-    console.error('Capacity pricing migration failed');
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(() => disconnectDb().catch(() => {}));
+if (require.main === module) {
+  main()
+    .catch((error) => {
+      console.error('Capacity pricing migration failed');
+      console.error(error);
+      process.exitCode = 1;
+    })
+    .finally(() => disconnectDb().catch(() => {}));
+}
+
+module.exports = {
+  assertApplyTarget,
+  parseMigrationMode,
+};

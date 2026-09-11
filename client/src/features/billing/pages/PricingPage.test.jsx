@@ -119,6 +119,10 @@ describe('PricingPage', () => {
     expect(screen.getByText('£5/mo per additional team')).toBeInTheDocument();
     expect(screen.getByText('£29/mo')).toBeInTheDocument();
     expect(screen.getByText('£49/mo')).toBeInTheDocument();
+    expect(screen.getByText(/monthly and charged in GBP/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/automatically becomes the selected paid monthly plan/i)
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /season/i })).not.toBeInTheDocument();
   });
 

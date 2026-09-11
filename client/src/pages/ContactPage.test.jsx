@@ -18,6 +18,15 @@ describe('ContactPage', () => {
     cleanup();
   });
 
+  test('offers a direct monitored support email as well as the form', () => {
+    render(<ContactPage />);
+
+    expect(screen.getByRole('link', { name: 'contact@thesportyway.com' })).toHaveAttribute(
+      'href',
+      'mailto:contact@thesportyway.com'
+    );
+  });
+
   test('submits the contact form and shows the success state', async () => {
     contactApi.submit.mockResolvedValue({ ok: true });
 

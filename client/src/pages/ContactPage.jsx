@@ -32,6 +32,17 @@ export function ContactPage() {
         description={`Interested in using ${appName} for your league or team? Send us a message and we'll follow up directly.`}
       />
 
+      <p className="text-sm text-slate-600">
+        Prefer email? Contact us directly at{' '}
+        <a
+          className="font-semibold text-violet-700 underline"
+          href="mailto:contact@thesportyway.com"
+        >
+          contact@thesportyway.com
+        </a>
+        .
+      </p>
+
       <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
         <ContactForm />
       </section>
