@@ -110,6 +110,54 @@ function hasConflictingPoints(tokens) {
   return hasTwo && hasThree;
 }
 
+function parseOpponentScore(tokens, trackingMode) {
+  if (tokens[0] !== 'opponent') return null;
+  if (trackingMode === 'dual_team') return failure('opponent_score_unavailable');
+
+  let shorthandTokens = tokens.slice(1);
+  if (shorthandTokens[0] === 'plus') shorthandTokens = shorthandTokens.slice(1);
+  if (['point', 'points'].includes(shorthandTokens.at(-1))) {
+    shorthandTokens = shorthandTokens.slice(0, -1);
+  }
+  const shorthandPoints = parseSpokenNumber(
+    shorthandTokens.map((token) => (['to', 'too'].includes(token) ? 'two' : token))
+  );
+  if ([1, 2, 3].includes(shorthandPoints)) {
+    return success({
+      kind: 'opponent_score',
+      action: shorthandPoints === 1 ? 'free_throw' : 'field_goal',
+      outcome: 'made',
+      points: shorthandPoints,
+    });
+  }
+
+  const fieldGoalPhrase = stripPhrase(tokens, ['field', 'goal']);
+  const actionTokens = fieldGoalPhrase.tokens;
+  if (hasConflictingOutcome(actionTokens)) return failure('conflicting_action');
+  if (hasConflictingPoints(actionTokens)) return failure('conflicting_points');
+
+  const parsedAction = parseAction(actionTokens);
+  if (!parsedAction) return failure(tokens.length === 1 ? 'incomplete' : 'unsupported_action');
+  if (fieldGoalPhrase.found && parsedAction.action !== 'field_goal') {
+    return failure('conflicting_action');
+  }
+  if (
+    parsedAction.participantTokens.length !== 1 ||
+    parsedAction.participantTokens[0] !== 'opponent' ||
+    parsedAction.outcome !== 'made' ||
+    !['field_goal', 'free_throw'].includes(parsedAction.action)
+  ) {
+    return failure('unsupported_action');
+  }
+
+  return success({
+    kind: 'opponent_score',
+    action: parsedAction.action,
+    outcome: 'made',
+    points: parsedAction.action === 'free_throw' ? 1 : parsedAction.points,
+  });
+}
+
 function parseAction(tokens) {
   for (const { phrase, action } of SIMPLE_ACTIONS) {
     if (endsWith(tokens, phrase)) {
@@ -186,6 +234,9 @@ function parsePrimary(transcript, context = {}) {
   if (!prepared.ok) return prepared;
   if (prepared.text === 'undo') return success({ kind: 'control', action: 'undo' });
   if (prepared.tokens.includes('undo')) return failure('unsupported_action');
+
+  const opponentScore = parseOpponentScore(prepared.tokens, context.trackingMode);
+  if (opponentScore) return opponentScore;
 
   const sideResult = splitSide(prepared.tokens, context.trackingMode);
   if (!sideResult.ok) return sideResult;

@@ -188,6 +188,53 @@ describe('basketballVoiceAdapter spoken field-goal phrase', () => {
   });
 });
 
+describe('basketballVoiceAdapter opponent scoring commands', () => {
+  test.each([
+    ['opponent +1', { kind: 'opponent_score', action: 'free_throw', outcome: 'made', points: 1 }],
+    [
+      'opponent plus two',
+      { kind: 'opponent_score', action: 'field_goal', outcome: 'made', points: 2 },
+    ],
+    [
+      'opponent plus too',
+      { kind: 'opponent_score', action: 'field_goal', outcome: 'made', points: 2 },
+    ],
+    [
+      'opponent three points',
+      { kind: 'opponent_score', action: 'field_goal', outcome: 'made', points: 3 },
+    ],
+    [
+      'opponent free throw made',
+      { kind: 'opponent_score', action: 'free_throw', outcome: 'made', points: 1 },
+    ],
+    [
+      'opponent 2pt field goal made',
+      { kind: 'opponent_score', action: 'field_goal', outcome: 'made', points: 2 },
+    ],
+    [
+      'opponent made a three',
+      { kind: 'opponent_score', action: 'field_goal', outcome: 'made', points: 3 },
+    ],
+    [
+      'opponent made',
+      { kind: 'opponent_score', action: 'field_goal', outcome: 'made', points: null },
+    ],
+  ])('parses one-team %s', (transcript, intent) => {
+    expect(parsePrimary(transcript, oneSidedContext)).toEqual({ ok: true, intent });
+  });
+
+  test.each([
+    ['opponent free throw missed', 'unsupported_action', oneSidedContext],
+    ['opponent four', 'unsupported_action', oneSidedContext],
+    ['opponent plus plus two', 'unsupported_action', oneSidedContext],
+    ['opponent made miss', 'conflicting_action', oneSidedContext],
+    ['opponent made two three', 'conflicting_points', oneSidedContext],
+    ['opponent plus two', 'opponent_score_unavailable', dualContext],
+  ])('rejects %s with %s', (transcript, reason, context) => {
+    expect(parsePrimary(transcript, context)).toEqual({ ok: false, reason });
+  });
+});
+
 describe('basketballVoiceAdapter follow-up commands', () => {
   test.each([
     ['unassisted', { kind: 'answer', answer: 'unassisted', side: null, participant: null }],
