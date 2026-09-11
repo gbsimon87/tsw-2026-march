@@ -174,6 +174,93 @@ describe('POST /api/v1/games/:gameId/roster', () => {
     expect(String(freshGame.awayLeagueTeamId)).toBe(String(awayTeam._id));
   });
 
+  // REGRESSION: the tracker adds a missing player and immediately substitutes them in using the
+  // id this endpoint returns. A snapshot game exposes players by the SNAPSHOT entry's id, not the
+  // durable roster id, so returning the latter handed back an id the game did not recognise — the
+  // paired SUB_OUT committed and the SUB_IN was then rejected, stranding the lineup a player short
+  // with no stat recorded. The id identity asserted here is exactly what made that possible.
+  test.each([
+    ['league dual-team', () => createLeagueFixture()],
+    ['standalone dual-team', () => createStandaloneDualFixture()],
+  ])(
+    'returns the id %s exposes for the new player, not the durable roster id',
+    async (_label, makeFixture) => {
+      const { owner, game } = await makeFixture();
+      const app = createApp();
+
+      const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, owner._id).send({
+        side: 'home',
+        displayName: 'Jordan Blake',
+        jerseyNumber: 23,
+      });
+
+      expect(res.statusCode).toBe(201);
+      const addedId = res.body.player.id;
+      expect(addedId).toBeTruthy();
+      expect(res.body.player.displayName).toBe('Jordan Blake');
+      expect(res.body.player.jerseyNumber).toBe(23);
+
+      // sanitizePlayer exposes a snapshot player by the entry's _id, so that is the id the tracker
+      // sees for this player and the only id a substitution can be written against.
+      const afterAdd = await Game.findById(game._id).lean();
+      const entry = (afterAdd.homeRosterSnapshot || []).at(-1);
+      expect(entry).toBeDefined();
+      expect(String(entry._id)).toBe(addedId);
+    }
+  );
+
+  // withStableSnapshotIds pins a league entry's _id to the LeaguePlayer id so one player keeps one
+  // id for the whole fixture lifecycle. A player added mid-game has to follow the same rule, or a
+  // later snapshot rebuild would change their id and orphan the events already recorded against it.
+  test('pins a mid-game league snapshot entry to the LeaguePlayer id', async () => {
+    const { owner, homeTeam, game } = await createLeagueFixture();
+    const app = createApp();
+
+    const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, owner._id).send({
+      side: 'home',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+    expect(res.statusCode).toBe(201);
+
+    const leaguePlayer = await LeaguePlayer.findOne({
+      leagueTeamId: homeTeam._id,
+      displayName: 'Jordan Blake',
+    }).lean();
+    const afterAdd = await Game.findById(game._id).lean();
+    const entry = (afterAdd.homeRosterSnapshot || []).at(-1);
+
+    expect(String(entry._id)).toBe(String(leaguePlayer._id));
+    expect(String(entry.leaguePlayerId)).toBe(String(leaguePlayer._id));
+    expect(res.body.player.id).toBe(String(leaguePlayer._id));
+  });
+
+  // A standalone snapshot entry used to get a freshly minted _id, so sanitizePlayer exposed a
+  // DIFFERENT id once the snapshot was frozen than the live Team.players id the tracker had been
+  // using — the same id-change-at-tip-off bug withStableSnapshotIds fixes for league games.
+  test('pins a standalone snapshot entry to the team player id', async () => {
+    const { owner, homeTeam, game } = await createStandaloneDualFixture();
+    const app = createApp();
+
+    const res = await authedPost(app, `/api/v1/games/${game._id}/roster`, owner._id).send({
+      side: 'home',
+      displayName: 'Jordan Blake',
+      jerseyNumber: 23,
+    });
+    expect(res.statusCode).toBe(201);
+
+    const freshTeam = await Team.findById(homeTeam._id).lean();
+    const teamPlayer = (freshTeam.players || []).find(
+      (player) => player.displayName === 'Jordan Blake'
+    );
+    const afterAdd = await Game.findById(game._id).lean();
+    const entry = (afterAdd.homeRosterSnapshot || []).at(-1);
+
+    expect(String(entry._id)).toBe(String(teamPlayer._id));
+    expect(String(entry.sourcePlayerId)).toBe(String(teamPlayer._id));
+    expect(res.body.player.id).toBe(String(teamPlayer._id));
+  });
+
   test('rejects adding a player to a completed game with 409, and makes neither write', async () => {
     const { owner, homeTeam, game } = await createLeagueFixture();
     game.status = 'completed';

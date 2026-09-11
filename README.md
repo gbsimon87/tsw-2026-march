@@ -111,6 +111,7 @@ the demo seed in a shared environment.
 | API endpoints                             | [`docs/api.md`](docs/api.md)                                   |
 | League and team permissions               | [`docs/permissions.md`](docs/permissions.md)                   |
 | Stripe, pricing, and entitlements         | [`docs/stripe.md`](docs/stripe.md)                             |
+| PostHog analytics and event governance    | [`docs/posthog.md`](docs/posthog.md)                           |
 | Render deployment                         | [`docs/deployment-render.md`](docs/deployment-render.md)       |
 | Security controls                         | [`docs/security.md`](docs/security.md)                         |
 | Product backlog                           | [`docs/ideas.md`](docs/ideas.md)                               |

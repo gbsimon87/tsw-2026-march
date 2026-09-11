@@ -71,7 +71,20 @@ describe('resolveParticipant', () => {
     [{ kind: 'jersey', value: 8 }, 'inactive'],
     [{ kind: 'jersey', value: 99 }, 'not_found'],
   ])('returns a typed rejection for %j', (participant, reason) => {
-    expect(resolve('home', participant)).toEqual({ ok: false, reason });
+    expect(resolve('home', participant)).toEqual(expect.objectContaining({ ok: false, reason }));
+  });
+
+  // An off-court or inactive match is a single known player, so the caller gets them back and can
+  // offer to substitute them in rather than just refusing. Nothing matched means nobody to return.
+  test('hands back the matched player when the only match is off the court', () => {
+    const offCourt = resolve('home', { kind: 'jersey', value: 7 });
+    expect(offCourt.player).toEqual(expect.objectContaining({ jerseyNumber: 7 }));
+    expect(offCourt.playerId).toBe(offCourt.player.id);
+
+    expect(resolve('home', { kind: 'jersey', value: 8 }).player).toEqual(
+      expect.objectContaining({ jerseyNumber: 8 })
+    );
+    expect(resolve('home', { kind: 'jersey', value: 99 }).player).toBeUndefined();
   });
 
   test('enforces a prompt-limited participant pool', () => {

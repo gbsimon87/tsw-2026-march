@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameTrackPage } from './GameTrackPage';
@@ -36,6 +37,7 @@ const apiMocks = vi.hoisted(() => ({
   finish: vi.fn(),
   update: vi.fn(),
   updateClock: vi.fn(),
+  addRosterPlayer: vi.fn(),
 }));
 
 vi.mock('../api/gamesApi', () => ({
@@ -124,6 +126,7 @@ function createResponse(overrides = {}) {
       hasOpponentScore: false,
       ...overrides.gameSummary,
     },
+    canManageRoster: overrides.canManageRoster ?? false,
   };
 }
 
@@ -139,7 +142,7 @@ function renderPage() {
 }
 
 async function enableVoiceTracking() {
-  fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
   const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
   fireEvent.click(toggle);
   expect(MockSpeechRecognition.instances).toHaveLength(0);
@@ -283,9 +286,42 @@ describe('GameTrackPage', () => {
     apiMocks.finish.mockReset();
     apiMocks.update.mockReset();
     apiMocks.updateClock.mockReset();
+    apiMocks.addRosterPlayer.mockReset();
     sessionStorage.clear();
 
     apiMocks.getById.mockImplementation(() => Promise.resolve(currentResponse));
+    // Models the server contract asserted in games.roster-add.test.js: the id returned here is the
+    // id the GAME exposes for the new player, which is what a follow-up substitution must use. For
+    // a snapshot game that is the snapshot entry's id, never the durable roster id.
+    apiMocks.addRosterPlayer.mockImplementation((gameId, payload) => {
+      const player = {
+        id: `added-${payload.jerseyNumber ?? 'player'}`,
+        displayName: payload.displayName,
+        jerseyNumber: payload.jerseyNumber,
+        isActive: true,
+      };
+      if (payload.side && currentResponse.participants) {
+        currentResponse = {
+          ...currentResponse,
+          participants: {
+            ...currentResponse.participants,
+            [payload.side]: {
+              ...currentResponse.participants[payload.side],
+              players: [...currentResponse.participants[payload.side].players, player],
+            },
+          },
+        };
+      } else if (currentResponse.team) {
+        currentResponse = {
+          ...currentResponse,
+          team: {
+            ...currentResponse.team,
+            players: [...currentResponse.team.players, player],
+          },
+        };
+      }
+      return Promise.resolve({ player, side: payload.side || null });
+    });
 
     apiMocks.update.mockImplementation((gameId, payload) => {
       currentResponse = {
@@ -338,29 +374,42 @@ describe('GameTrackPage', () => {
 
     apiMocks.appendEvent.mockImplementation((gameId, payload) => {
       const eventId = `event-${currentResponse.game.events.length + 1}`;
-      let nextLineup = currentResponse.game.currentLineupPlayerIds;
+      const isSideSpecific = Boolean(payload.teamSide && currentResponse.lineups);
+      let nextLineup = isSideSpecific
+        ? currentResponse.lineups[payload.teamSide].currentPlayerIds
+        : currentResponse.game.currentLineupPlayerIds;
 
       if (payload.statType === 'SUB_OUT') {
-        nextLineup = currentResponse.game.currentLineupPlayerIds.filter(
-          (id) => id !== payload.playerId
-        );
+        nextLineup = nextLineup.filter((id) => id !== payload.playerId);
       }
 
       if (payload.statType === 'SUB_IN') {
-        nextLineup = [...currentResponse.game.currentLineupPlayerIds, payload.playerId];
+        nextLineup = [...nextLineup, payload.playerId];
       }
 
       currentResponse = {
         ...currentResponse,
         game: {
           ...currentResponse.game,
-          currentLineupPlayerIds: nextLineup,
+          ...(!isSideSpecific ? { currentLineupPlayerIds: nextLineup } : {}),
           events: [...currentResponse.game.events, { id: eventId, ...payload }],
         },
+        ...(isSideSpecific
+          ? {
+              lineups: {
+                ...currentResponse.lineups,
+                [payload.teamSide]: {
+                  ...currentResponse.lineups[payload.teamSide],
+                  currentPlayerIds: nextLineup,
+                },
+              },
+            }
+          : {}),
       };
 
       return Promise.resolve({
         game: currentResponse.game,
+        lineups: currentResponse.lineups,
         boxScore: currentResponse.boxScore,
         gameSummary: currentResponse.gameSummary,
       });
@@ -533,7 +582,7 @@ describe('GameTrackPage', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
     fireEvent.click(screen.getByText('Save & Exit'));
 
     expect(screen.getByRole('dialog', { name: 'Pause the clock and exit?' })).toBeInTheDocument();
@@ -583,7 +632,7 @@ describe('GameTrackPage', () => {
     });
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
     const voiceSection = screen.getByRole('heading', { name: 'Voice tracking' }).closest('section');
     expect(
       within(voiceSection).getByRole('button', { name: /Voice Tracking/ })
@@ -599,37 +648,52 @@ describe('GameTrackPage', () => {
     );
 
     const dialog = screen.getByRole('dialog', { name: 'How to use voice tracking' });
-    expect(within(dialog).getByText('Track a stat')).toBeInTheDocument();
-    expect(within(dialog).getByText('player + action')).toBeInTheDocument();
-    expect(within(dialog).getByText('home/away + player + action')).toBeInTheDocument();
-    expect(within(dialog).getByText('Use one-team phrases')).toBeInTheDocument();
-    expect(within(dialog).getByText(/do not say home or away/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/use Subs to sub them in first/i)).toBeInTheDocument();
 
-    const shots = within(dialog).getByRole('table', { name: 'Shots' });
-    expect(within(shots).getByText('13 3pt field goal missed')).toBeInTheDocument();
+    // The game being tracked leads, and every example is written the way THIS game needs it said.
+    expect(within(dialog).getByText('One-team tracking')).toBeInTheDocument();
+    expect(within(dialog).getByText('player + action')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/you are tracking one team, so never say home or away/i)
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('Track a stat')).toBeInTheDocument();
+    expect(within(dialog).getByText(/name anyone on the roster/i)).toBeInTheDocument();
+
+    const shots = within(dialog).getAllByRole('table', { name: 'Shots and scoring' })[0];
+    expect(within(shots).getByText('13 made')).toBeInTheDocument();
     expect(within(shots).getByText('Alex missed free throw')).toBeInTheDocument();
     expect(within(shots).getByText('opponent plus one')).toBeInTheDocument();
-    expect(within(shots).getByText('opponent plus two')).toBeInTheDocument();
     expect(within(shots).getByText('opponent plus three')).toBeInTheDocument();
 
-    const nonShots = within(dialog).getByRole('table', { name: 'Non-shot stats' });
-    expect(within(nonShots).getByText('13 offensive rebound')).toBeInTheDocument();
-    expect(within(nonShots).getByText('Alex Morgan foul')).toBeInTheDocument();
+    const otherStats = within(dialog).getAllByRole('table', {
+      name: 'Rebounds, steals, blocks, turnovers and fouls',
+    })[0];
+    expect(within(otherStats).getByText('number 13 steal')).toBeInTheDocument();
+    expect(within(otherStats).getByText('Alex Morgan foul')).toBeInTheDocument();
 
-    const dualTeam = within(dialog).getByRole('table', { name: 'Dual-team tracking' });
-    expect(within(dualTeam).getByText('home number 13 steal')).toBeInTheDocument();
-    expect(within(dualTeam).getByText('away twenty three turnover')).toBeInTheDocument();
-
-    const followUps = within(dialog).getByRole('table', {
-      name: 'Follow-ups and controls',
-    });
+    const followUps = within(dialog).getAllByRole('table', { name: 'Follow-up questions' })[0];
     expect(within(followUps).getByText('unassisted')).toBeInTheDocument();
-    expect(within(followUps).getByText('Cancel listening button')).toBeInTheDocument();
+    expect(within(followUps).getByText('opponent')).toBeInTheDocument();
 
-    const refusals = within(dialog).getByRole('table', { name: 'Expected refusals' });
+    const offCourt = within(dialog).getAllByRole('table', {
+      name: 'Players who are not on the court',
+    })[0];
+    expect(within(offCourt).getByText('7 made')).toBeInTheDocument();
+    expect(within(offCourt).getByText('8 made')).toBeInTheDocument();
+    expect(within(offCourt).getByText('Pick someone under Sub out')).toBeInTheDocument();
+
+    const refusals = within(dialog).getAllByRole('table', {
+      name: 'What will not be recorded',
+    })[0];
+    expect(within(refusals).getByText('home 13 made')).toBeInTheDocument();
+    expect(within(refusals).getByText('Nobody steal')).toBeInTheDocument();
     expect(within(refusals).getByText('21 jump shot made')).toBeInTheDocument();
-    expect(within(refusals).getByText('13 made two three')).toBeInTheDocument();
+
+    // The mode this game is NOT is kept, but collapsed, and carries that mode's phrasing.
+    const otherMode = within(dialog).getByText('Commands for a dual-team game').closest('details');
+    expect(otherMode.open).toBe(false);
+    const otherShots = within(otherMode).getByRole('table', { name: 'Shots and scoring' });
+    expect(within(otherShots).getByText('home 13 made')).toBeInTheDocument();
+    expect(within(otherShots).queryByText('opponent plus two')).not.toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
     await waitFor(() =>
@@ -644,19 +708,27 @@ describe('GameTrackPage', () => {
     currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
     fireEvent.click(screen.getByRole('button', { name: 'How to use voice commands' }));
 
     const dialog = screen.getByRole('dialog', { name: 'How to use voice tracking' });
-    expect(within(dialog).getByText('Use dual-team phrases')).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(/start every primary command with home or away/i)
-    ).toBeInTheDocument();
-    expect(
-      within(within(dialog).getByRole('table', { name: 'Dual-team tracking' })).getByText(
-        'away 7 3pt field goal missed'
-      )
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText('Dual-team tracking')).toBeInTheDocument();
+    expect(within(dialog).getByText('home/away + player + action')).toBeInTheDocument();
+    expect(within(dialog).getByText(/every command starts with home or away/i)).toBeInTheDocument();
+
+    const shots = within(dialog).getAllByRole('table', { name: 'Shots and scoring' })[0];
+    expect(within(shots).getByText('away 7 3pt field goal missed')).toBeInTheDocument();
+    // Aggregate opponent scoring does not exist in a dual-team game, so it is not offered here.
+    expect(within(shots).queryByText('opponent plus two')).not.toBeInTheDocument();
+
+    const followUps = within(dialog).getAllByRole('table', { name: 'Follow-up questions' })[0];
+    expect(within(followUps).getByText('away 7')).toBeInTheDocument();
+
+    const otherMode = within(dialog).getByText('Commands for a one-team game').closest('details');
+    expect(otherMode.open).toBe(false);
+    const otherShots = within(otherMode).getByRole('table', { name: 'Shots and scoring' });
+    expect(within(otherShots).getByText('13 made')).toBeInTheDocument();
+    expect(within(otherShots).getByText('opponent plus two')).toBeInTheDocument();
   });
 
   test('records a one-sided non-shot command with the recognition-start clock snapshot', async () => {
@@ -936,7 +1008,7 @@ describe('GameTrackPage', () => {
     });
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
     const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
     expect(toggle).toBeDisabled();
     expect(screen.getByText('Not supported by this browser.')).toBeInTheDocument();
@@ -1118,6 +1190,8 @@ describe('GameTrackPage', () => {
         configurable: true,
         value: { postMessage: postMessageSpy },
       });
+      // Entry only pauses a video that is playing, so report playback as a real embed would.
+      emitPlayerState(iframe, 1);
 
       await enableVoiceTracking();
       const recognition = await startCourtVoice(250, 800);
@@ -1221,7 +1295,7 @@ describe('GameTrackPage', () => {
     renderPage();
     await enableVoiceTracking();
 
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
     const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(toggle);
@@ -1246,7 +1320,7 @@ describe('GameTrackPage', () => {
     });
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
     const toggle = screen.getByRole('button', { name: /Voice Tracking/ });
     expect(toggle).toBeDisabled();
     expect(screen.getByText('Not available for this sport.')).toBeInTheDocument();
@@ -1289,7 +1363,6 @@ describe('GameTrackPage', () => {
 
   test.each([
     ['an unknown player', 'Nobody steal', 'No on-court player matched that number or name.'],
-    ['a bench player', 'Flynn steal', 'That player is not currently on the court.'],
   ])('records nothing when a voice command names %s', async (_label, transcript, message) => {
     installSpeechRecognition();
     const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
@@ -1298,6 +1371,7 @@ describe('GameTrackPage', () => {
         startingLineupPlayerIds: playerIds,
         currentLineupPlayerIds: playerIds,
       },
+      canManageRoster: true,
     });
 
     renderPage();
@@ -1306,6 +1380,659 @@ describe('GameTrackPage', () => {
 
     await waitFor(() => expect(screen.getAllByText(message).length).toBeGreaterThan(0));
     expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  test('offers to add a missing dual-team jersey, substitutes them, and records the captured stat', async () => {
+    installSpeechRecognition();
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    currentResponse = {
+      ...currentResponse,
+      game: {
+        ...currentResponse.game,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 3,
+          remainingMilliseconds: 184000,
+          runningSince: null,
+        },
+      },
+    };
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('home 8 2pt made', 74.45, 470);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add missing player?' });
+    expect(within(dialog).getByText('Add missing player?')).toBeInTheDocument();
+    expect(within(dialog).getByText('Home Squad')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/jersey number/i)).toHaveValue(8);
+    expect(within(dialog).getByText(/record the captured 2PT Make/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Close event picker/i })).not.toBeInTheDocument();
+    expect(apiMocks.addRosterPlayer).not.toHaveBeenCalled();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+
+    await userEvent.type(within(dialog).getByLabelText(/player name/i), 'Taylor Reed');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Sub out'), 'player-1');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
+    );
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+    expect(apiMocks.addRosterPlayer).toHaveBeenCalledTimes(1);
+    expect(apiMocks.addRosterPlayer).toHaveBeenCalledWith('game-1', {
+      side: 'home',
+      displayName: 'Taylor Reed',
+      jerseyNumber: 8,
+    });
+
+    const payloads = apiMocks.appendEvent.mock.calls.map(([, payload]) => payload);
+    for (const payload of payloads) {
+      expect(payload).toEqual(
+        expect.objectContaining({
+          segmentKind: 'regulation',
+          segmentNumber: 3,
+          clockMillisecondsRemaining: 184000,
+        })
+      );
+    }
+    expect(payloads[0]).toEqual(
+      expect.objectContaining({
+        playerId: 'player-1',
+        relatedPlayerId: 'added-8',
+        statType: 'SUB_OUT',
+        teamSide: 'home',
+        relatedTeamSide: 'home',
+      })
+    );
+    expect(payloads[1]).toEqual(
+      expect.objectContaining({
+        playerId: 'added-8',
+        relatedPlayerId: 'player-1',
+        statType: 'SUB_IN',
+        teamSide: 'home',
+        relatedTeamSide: 'home',
+      })
+    );
+    expect(payloads[2]).toEqual(
+      expect.objectContaining({
+        playerId: 'added-8',
+        statType: 'FG2_MADE',
+        teamSide: 'home',
+        courtLayoutId: 'legacy-v1',
+      })
+    );
+    expect(payloads[2]).not.toHaveProperty('relatedPlayerId');
+    expect(await screen.findByText('Taylor Reed: 2PT Make recorded.')).toBeInTheDocument();
+  });
+
+  test('adds and subs in a missing jersey without asking for a player out when the lineup is short', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+      canManageRoster: true,
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('8 steal', 250, 800);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add missing player?' });
+    expect(within(dialog).queryByLabelText('Sub out')).not.toBeInTheDocument();
+    await userEvent.type(within(dialog).getByLabelText(/player name/i), 'Taylor Reed');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
+    );
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ playerId: 'added-8', statType: 'SUB_IN' })
+    );
+    expect(apiMocks.appendEvent.mock.calls[0][1]).not.toHaveProperty('relatedPlayerId');
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'added-8', statType: 'STL' })
+    );
+    expect(await screen.findByText('Taylor Reed: Steal recorded.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Subs' }));
+    expect(
+      await screen.findByRole('button', { name: playerButtonName('Taylor Reed') })
+    ).toBeInTheDocument();
+  });
+
+  test('cancelling a missing-player offer records nothing and retains the tapped location', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+      canManageRoster: true,
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('8 3pt made', 475, 900);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add missing player?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitForEventPicker();
+    expect(within(getEventPicker()).getByText(/Corner Right 3 • FG3/i)).toBeInTheDocument();
+    expect(apiMocks.addRosterPlayer).not.toHaveBeenCalled();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByText('Jersey #8 was not added. No stat was recorded.').length
+    ).toBeGreaterThan(0);
+  });
+
+  test('does not offer roster changes for an unknown jersey without roster permission', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+      canManageRoster: false,
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('8 steal', 250, 800);
+
+    await expectVoiceMessage('No on-court player matched that number or name.');
+    expect(screen.queryByRole('dialog', { name: 'Add missing player?' })).not.toBeInTheDocument();
+    expect(apiMocks.addRosterPlayer).not.toHaveBeenCalled();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  function createBenchPlayerResponse(lineupSize) {
+    const numberedPlayers = createPlayers().map((player, index) => ({
+      ...player,
+      jerseyNumber: index + 1,
+    }));
+    return createResponse({
+      team: { players: numberedPlayers },
+      game: {
+        startingLineupPlayerIds: numberedPlayers.slice(0, lineupSize).map((player) => player.id),
+        currentLineupPlayerIds: numberedPlayers.slice(0, lineupSize).map((player) => player.id),
+      },
+      canManageRoster: true,
+    });
+  }
+
+  test('offers to sub in a bench player, records the substitution, then the captured stat', async () => {
+    installSpeechRecognition();
+    currentResponse = createBenchPlayerResponse(5);
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('6 steal', 250, 800);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Sub in a player from the bench' });
+    expect(within(dialog).getByText('Player is on the bench')).toBeInTheDocument();
+    expect(within(dialog).getByText(/#6 Flynn is not on the court/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/record the captured Steal/i)).toBeInTheDocument();
+    // Nothing is created: Flynn already exists, so this is purely a lineup change.
+    expect(apiMocks.addRosterPlayer).not.toHaveBeenCalled();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+
+    await userEvent.selectOptions(within(dialog).getByLabelText('Sub out'), 'player-1');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Sub in & record stat' }));
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+    const payloads = apiMocks.appendEvent.mock.calls.map(([, payload]) => payload);
+    expect(payloads[0]).toEqual(
+      expect.objectContaining({
+        playerId: 'player-1',
+        relatedPlayerId: 'player-6',
+        statType: 'SUB_OUT',
+      })
+    );
+    expect(payloads[1]).toEqual(
+      expect.objectContaining({
+        playerId: 'player-6',
+        relatedPlayerId: 'player-1',
+        statType: 'SUB_IN',
+      })
+    );
+    expect(payloads[2]).toEqual(expect.objectContaining({ playerId: 'player-6', statType: 'STL' }));
+    expect(apiMocks.addRosterPlayer).not.toHaveBeenCalled();
+    expect(await screen.findByText('Flynn: Steal recorded.')).toBeInTheDocument();
+  });
+
+  test('subs in a bench player without asking who comes out when the lineup is short', async () => {
+    installSpeechRecognition();
+    currentResponse = createBenchPlayerResponse(2);
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('Flynn turnover', 250, 800);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Sub in a player from the bench' });
+    expect(within(dialog).queryByLabelText('Sub out')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/nobody has to come off/i)).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Sub in & record stat' }));
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-6', statType: 'SUB_IN' })
+    );
+    expect(apiMocks.appendEvent.mock.calls[0][1]).not.toHaveProperty('relatedPlayerId');
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'player-6', statType: 'TOV' })
+    );
+  });
+
+  test('cancelling a bench sub-in records nothing and keeps the tapped location', async () => {
+    installSpeechRecognition();
+    currentResponse = createBenchPlayerResponse(5);
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('6 3pt made', 475, 900);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Sub in a player from the bench' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitForEventPicker();
+    expect(within(getEventPicker()).getByText(/Corner Right 3 • FG3/i)).toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByText('#6 Flynn was not subbed in. No stat was recorded.').length
+    ).toBeGreaterThan(0);
+  });
+
+  test('still refuses an inactive player instead of offering to sub them in', async () => {
+    installSpeechRecognition();
+    const numberedPlayers = createPlayers().map((player, index) => ({
+      ...player,
+      jerseyNumber: index + 1,
+      isActive: index !== 5,
+    }));
+    currentResponse = createResponse({
+      team: { players: numberedPlayers },
+      game: {
+        startingLineupPlayerIds: numberedPlayers.slice(0, 5).map((player) => player.id),
+        currentLineupPlayerIds: numberedPlayers.slice(0, 5).map((player) => player.id),
+      },
+      canManageRoster: true,
+    });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('6 steal', 250, 800);
+
+    await expectVoiceMessage('That player is inactive. No stat was recorded.');
+    expect(
+      screen.queryByRole('dialog', { name: 'Sub in a player from the bench' })
+    ).not.toBeInTheDocument();
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  test('keeps the missing-player dialog open and records nothing when adding the player fails', async () => {
+    installSpeechRecognition();
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ['player-1'],
+        currentLineupPlayerIds: ['player-1'],
+      },
+      canManageRoster: true,
+    });
+    apiMocks.addRosterPlayer.mockRejectedValueOnce(new Error('Roster update failed'));
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('8 turnover', 250, 800);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add missing player?' });
+    await userEvent.type(within(dialog).getByLabelText(/player name/i), 'Taylor Reed');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
+    );
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Roster update failed');
+    expect(apiMocks.addRosterPlayer).toHaveBeenCalledTimes(1);
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+  });
+
+  test('does not retry or record the stat when the missing player cannot be fully subbed in', async () => {
+    installSpeechRecognition();
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    const substitutionError = Object.assign(new Error('Lineup changed'), { status: 400 });
+    apiMocks.appendEvent
+      .mockResolvedValueOnce({
+        game: currentResponse.game,
+        lineups: currentResponse.lineups,
+        boxScore: currentResponse.boxScore,
+        gameSummary: currentResponse.gameSummary,
+      })
+      .mockRejectedValueOnce(substitutionError);
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('home 8 steal', 250, 800);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add missing player?' });
+    await userEvent.type(within(dialog).getByLabelText(/player name/i), 'Taylor Reed');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Sub out'), 'player-1');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
+    );
+
+    await waitForEventPicker();
+    expect(screen.queryByRole('dialog', { name: 'Add missing player?' })).not.toBeInTheDocument();
+    expect(apiMocks.addRosterPlayer).toHaveBeenCalledTimes(1);
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+    expect(apiMocks.appendEvent.mock.calls.map(([, payload]) => payload.statType)).toEqual([
+      'SUB_OUT',
+      'SUB_IN',
+    ]);
+    expect(
+      screen.getAllByText(
+        'Taylor Reed was added, but the lineup could not be updated. Check Subs and finish with the buttons.'
+      ).length
+    ).toBeGreaterThan(0);
+  });
+
+  // The game clock follows the video so a scorekeeper never returns to footage that ran on
+  // without them, and never has to rewind to recover the seconds they missed.
+  function emitPlayerState(iframe, playerState) {
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        data: JSON.stringify({ event: 'infoDelivery', info: { playerState } }),
+        source: iframe.contentWindow,
+      })
+    );
+  }
+
+  async function renderVideoGameWithRunningClock() {
+    currentResponse = createResponse({
+      game: {
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        // GameClockControls renders nothing without a format, so the clock buttons need one.
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+    apiMocks.updateClock.mockImplementation((_gameId, command) => {
+      currentResponse = {
+        ...currentResponse,
+        game: {
+          ...currentResponse.game,
+          clock: {
+            ...currentResponse.game.clock,
+            status: command.action === 'pause' ? 'paused' : 'running',
+          },
+        },
+      };
+      return Promise.resolve(currentResponse);
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Accept elapsed time' })).not.toBeInTheDocument()
+    );
+    return screen.getByTitle('Dev Scrimmage');
+  }
+
+  test('does not restart a clock paused by hand inside the video settle window', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      const iframe = await renderVideoGameWithRunningClock();
+
+      // The settle timer is already scheduled when the scorekeeper stops the clock themselves.
+      emitPlayerState(iframe, 2);
+      fireEvent.click(getLastButtonByName(/^Pause$/i));
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+      );
+
+      // Let the timer fire against the now-paused clock, then resume the video.
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      apiMocks.updateClock.mockClear();
+      emitPlayerState(iframe, 1);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(apiMocks.updateClock).not.toHaveBeenCalled();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('does not race a clock start against finishing the game', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      await renderVideoGameWithRunningClock();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+      fireEvent.click(getLastButtonByName(/Finish Game/i));
+      await screen.findByRole('dialog', { name: 'Finish tracking' });
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+      );
+      apiMocks.updateClock.mockClear();
+
+      fireEvent.click(getLastButtonByName(/Yes, finish game/i));
+      await waitFor(() => expect(apiMocks.finish).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Closing the confirm lifts the hold; resuming the clock here would race the finish write.
+      expect(apiMocks.updateClock).not.toHaveBeenCalledWith('game-1', { action: 'start' });
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('pauses the game clock when the video is paused, and resumes it when the video plays', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      const iframe = await renderVideoGameWithRunningClock();
+
+      emitPlayerState(iframe, 2);
+      await waitFor(
+        () => expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' }),
+        { timeout: 3000 }
+      );
+
+      currentResponse = {
+        ...currentResponse,
+        game: {
+          ...currentResponse.game,
+          clock: { ...currentResponse.game.clock, status: 'paused' },
+        },
+      };
+      emitPlayerState(iframe, 1);
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('ignores buffering and a pause that does not settle', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      const iframe = await renderVideoGameWithRunningClock();
+
+      // Buffering fires constantly on a slow connection and must never move game time.
+      emitPlayerState(iframe, 3);
+      // Scrubbing bounces through paused and straight back to playing.
+      emitPlayerState(iframe, 2);
+      emitPlayerState(iframe, 1);
+
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      expect(apiMocks.updateClock).not.toHaveBeenCalled();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('does not restart a clock the scorekeeper paused by hand when the video plays', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      const iframe = await renderVideoGameWithRunningClock();
+
+      fireEvent.click(getLastButtonByName(/^Pause$/i));
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+      );
+      apiMocks.updateClock.mockClear();
+
+      emitPlayerState(iframe, 1);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(apiMocks.updateClock).not.toHaveBeenCalled();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('holds the video and clock while the manual add-player dialog is open', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          clock: {
+            status: 'running',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 600000,
+            runningSince: new Date().toISOString(),
+          },
+        },
+        canManageRoster: true,
+      });
+      apiMocks.updateClock.mockImplementation(() => Promise.resolve(currentResponse));
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+      const iframe = document.querySelector('iframe');
+      const postMessageSpy = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        configurable: true,
+        value: { postMessage: postMessageSpy },
+      });
+      // Entry only pauses a video that is playing, so report playback as a real embed would.
+      emitPlayerState(iframe, 1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Subs' }));
+      fireEvent.click(getLastButtonByName(/Add Player/i));
+
+      await screen.findByRole('dialog', { name: 'Add Player' });
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+      );
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pauseVideo'),
+        expect.anything()
+      );
+
+      const addDialog = screen.getByRole('dialog', { name: 'Add Player' });
+      fireEvent.click(within(addDialog).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+      );
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('playVideo'),
+        expect.anything()
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  // REGRESSION: loadGame rebuilds sideState from the response and resets activeSide, so focusing
+  // the recovered player before that reload silently lost both — the tracker snapped back to the
+  // home side with the wrong player selected right after adding someone to the away team.
+  test('leaves the newly added away player selected after the roster reload', async () => {
+    installSpeechRecognition();
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+
+    renderPage();
+    await enableVoiceTracking();
+    await speakFromCourt('away 8 free throw made', 250, 800);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add missing player?' });
+    await userEvent.type(within(dialog).getByLabelText(/player name/i), 'Taylor Reed');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Sub out'), 'away-1');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
+    );
+
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+
+    // The away side must still be the active one after the reload; before the fix loadGame reset
+    // it to home, so the scorekeeper's next command went to the wrong team.
+    await waitFor(() =>
+      expect(getLastButtonByName(/Away Squad/)).toHaveAttribute('aria-pressed', 'true')
+    );
+    expect(getLastButtonByName(/Home Squad/)).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  // REGRESSION: the pre-data render has no game yet, so lineupSetupStep is truthy and the
+  // playback hold engaged before any iframe existed. Claiming a video that was never playing made
+  // the matching resume START it, so simply opening a game auto-played its video.
+  test('never starts the video on its own when opening a game', async () => {
+    const postMessageSpy = vi.fn();
+    const stubWindow = { postMessage: postMessageSpy };
+    const original = Object.getOwnPropertyDescriptor(
+      window.HTMLIFrameElement.prototype,
+      'contentWindow'
+    );
+    // Stubbed on the prototype so commands are captured from the very first render, before any
+    // iframe instance exists to attach a spy to.
+    Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', {
+      configurable: true,
+      get: () => stubWindow,
+    });
+
+    try {
+      currentResponse = createResponse({
+        game: {
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        },
+      });
+
+      renderPage();
+      await screen.findByTitle('Dev Scrimmage');
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Court' })).toBeInTheDocument()
+      );
+
+      const commands = postMessageSpy.mock.calls.map(([message]) => String(message));
+      expect(commands.filter((message) => message.includes('playVideo'))).toHaveLength(0);
+    } finally {
+      if (original) {
+        Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', original);
+      }
+    }
   });
 
   const ONE_SIDED_LINEUP = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
@@ -1671,7 +2398,8 @@ describe('GameTrackPage', () => {
       await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
       await expectFollowUpQuestion(/Who got the rebound\?/i);
 
-      // Skipping keeps the entry open but drops the captured timestamp.
+      // Skipping ends the entry and drops the captured timestamp, so the next voice command
+      // starts a fresh entry and recaptures one.
       fireEvent.click(getLastButtonByName(/Skip this question/i));
       await waitFor(() =>
         expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
@@ -1687,6 +2415,144 @@ describe('GameTrackPage', () => {
     } finally {
       restoreMatchMedia();
     }
+  });
+
+  // A court tap owns the video and the clock for the whole entry. Every way an entry can END must
+  // hand both back — including the paths that deliberately record no further event.
+  function createPausableEntryResponse() {
+    return createResponse({
+      game: {
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        clock: {
+          status: 'running',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 600000,
+          runningSince: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
+  async function startPausedEntry() {
+    apiMocks.updateClock.mockImplementation(() => Promise.resolve(currentResponse));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+
+    const iframe = document.querySelector('iframe');
+    const postMessageSpy = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      configurable: true,
+      value: { postMessage: postMessageSpy },
+    });
+    // Entry only pauses a video that is playing, so report playback as a real embed would.
+    emitPlayerState(iframe, 1);
+
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+    );
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.stringContaining('pauseVideo'),
+      expect.anything()
+    );
+    return postMessageSpy;
+  }
+
+  async function expectEntryResumed(postMessageSpy) {
+    await waitFor(() =>
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+    );
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.stringContaining('playVideo'),
+      expect.anything()
+    );
+  }
+
+  test('resumes the video and clock when a follow-up question is skipped', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createPausableEntryResponse();
+      const postMessageSpy = await startPausedEntry();
+
+      await selectPickerPlayer('Alex');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'FT-' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      await expectFollowUpQuestion(/Who got the rebound\?/i);
+
+      fireEvent.click(getLastButtonByName(/Skip this question/i));
+
+      await expectEntryResumed(postMessageSpy);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('resumes the video and clock when the event picker is closed without recording', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      currentResponse = createPausableEntryResponse();
+      const postMessageSpy = await startPausedEntry();
+
+      // The court tap's synthetic follow-up click is swallowed by the ghost-click guard, exactly
+      // as it is on a real touch device; the scorekeeper's deliberate press is the next one.
+      fireEvent.click(getLastButtonByName(/Close event picker/i));
+      fireEvent.click(getLastButtonByName(/Close event picker/i));
+
+      await expectEntryResumed(postMessageSpy);
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('resumes the video and clock when a voice follow-up is skipped by voice', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      installSpeechRecognition();
+      currentResponse = createPausableEntryResponse();
+      apiMocks.updateClock.mockImplementation(() => Promise.resolve(currentResponse));
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+      const iframe = document.querySelector('iframe');
+      const postMessageSpy = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        configurable: true,
+        value: { postMessage: postMessageSpy },
+      });
+      // Entry only pauses a video that is playing, so report playback as a real embed would.
+      emitPlayerState(iframe, 1);
+
+      await enableVoiceTracking();
+      await speakFromCourt('Alex missed free throw', 250, 800);
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      await expectFollowUpQuestion(/Who got the rebound\?/i);
+
+      await speak('skip');
+
+      await expectEntryResumed(postMessageSpy);
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  test('offers the stat-entry pause setting when the game has no video', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+      },
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
+
+    expect(await screen.findByText('Pause During Stat Entry')).toBeInTheDocument();
+    expect(screen.getByText(/clock pauses while you tag a stat/i)).toBeInTheDocument();
   });
 
   test('cancels a listening follow-up cycle when the question is closed underneath it', async () => {
@@ -1810,6 +2676,8 @@ describe('GameTrackPage', () => {
         configurable: true,
         value: { postMessage: postMessageSpy },
       });
+      // Entry only pauses a video that is playing, so report playback as a real embed would.
+      emitPlayerState(iframe, 1);
 
       await enableVoiceTracking();
       await speak('undo');
@@ -2829,13 +3697,13 @@ describe('GameTrackPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /More/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Options/i })).toBeInTheDocument();
     });
 
     // The tracker opens in the landscape view.
     expect(getActiveCourt().style.transform).toContain('rotate(90deg)');
 
-    fireEvent.click(screen.getByRole('button', { name: /More/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Options/i }));
     fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
 
     expect(screen.getByText(/Currently vertical/i)).toBeInTheDocument();
@@ -2847,7 +3715,7 @@ describe('GameTrackPage', () => {
     expect(getActiveCourt().style.transform).not.toContain('rotate(90deg)');
 
     // ...and back again, so the toggle is proven in both directions.
-    fireEvent.click(screen.getByRole('button', { name: /More/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Options/i }));
     fireEvent.click(screen.getByRole('button', { name: /Rotate Court/i }));
     expect(screen.getByText(/Currently horizontal/i)).toBeInTheDocument();
   });
@@ -3193,7 +4061,7 @@ describe('GameTrackPage', () => {
     }
   });
 
-  test('toggling "Pause Video During Stat Entry" off in the More tab disables pause/resume', async () => {
+  test('toggling "Pause During Stat Entry" off in the More tab disables pause/resume', async () => {
     const restoreMatchMedia = stubMatchMedia(false);
     try {
       currentResponse = createResponse({
@@ -3210,11 +4078,11 @@ describe('GameTrackPage', () => {
         expect(screen.getByRole('button', { name: /Track Stat/i })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
-      expect(screen.getByText(/On — video pauses/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+      expect(screen.getByText(/On — video and clock pause/i)).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole('button', { name: /Pause Video During Stat Entry/i }));
-      expect(screen.getByText(/Off — video keeps playing/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Pause During Stat Entry/i }));
+      expect(screen.getByText(/Off — video and clock keep running/i)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: 'Court' }));
       fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
@@ -3266,9 +4134,9 @@ describe('GameTrackPage', () => {
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Options' }));
 
       expect(screen.getByText('Add Video')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Add Video/i }));
@@ -3309,9 +4177,9 @@ describe('GameTrackPage', () => {
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Options' }));
 
       expect(screen.getByText('Update Video')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Update Video/i }));
@@ -3348,9 +4216,9 @@ describe('GameTrackPage', () => {
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Options' }));
       fireEvent.click(screen.getByRole('button', { name: /Update Video/i }));
 
       const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
@@ -3396,7 +4264,7 @@ describe('GameTrackPage', () => {
     }
   });
 
-  test('toggling "Pause Video During Stat Entry" off resumes the video (no stranded pause)', async () => {
+  test('toggling "Pause During Stat Entry" off resumes the video (no stranded pause)', async () => {
     // Use desktop layout: the video lives in the persistent left column, mounted across all
     // tabs, so it's still present (and controllable) when the More-tab toggle is flipped.
     const restoreMatchMedia = stubMatchMedia(true);
@@ -3422,9 +4290,21 @@ describe('GameTrackPage', () => {
         configurable: true,
         value: { postMessage: postMessageSpy },
       });
+      // Entry only pauses a video that is playing, so report playback as a real embed would.
+      emitPlayerState(iframe, 1);
 
-      fireEvent.click(screen.getByRole('button', { name: 'More' }));
-      fireEvent.click(screen.getByRole('button', { name: /Pause Video During Stat Entry/i }));
+      // Strand the video: start an entry so it is genuinely paused by the tracker, then switch the
+      // preference off. Without an entry in flight there is nothing to hand back, and turning the
+      // preference off must NOT start a video the scorekeeper had paused themselves.
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pauseVideo'),
+        expect.anything()
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+      fireEvent.click(screen.getByRole('button', { name: /Pause During Stat Entry/i }));
 
       expect(postMessageSpy).toHaveBeenCalledWith(
         expect.stringContaining('playVideo'),

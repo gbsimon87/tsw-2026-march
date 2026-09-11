@@ -14,19 +14,23 @@ new dependencies were required.
 
 ### Primary court interaction
 
-- The scorekeeper enables **Voice Tracking** in More.
-- More includes an in-app help modal covering the tracking process, the phrase format required for
-  the current game type, complete tables for shots, non-shot stats, dual-team commands, follow-ups,
-  controls, and expected refusals, plus the requirement that attributed players are currently on
-  court.
+- The scorekeeper enables **Voice Tracking** in Options.
+- Options includes an in-app help modal that leads with the game being tracked: its phrase format
+  and complete command tables, written exactly as they must be said in that game, with the other
+  tracking mode's equivalent tables kept in a collapsed section below.
 - The Court surface shows a lightweight instruction to select a court position. It does not show an
   idle microphone button or separate voice card.
 - A court tap captures the exact location and starts one short listening turn automatically. The
   event picker stays closed while recognition is active.
 - A valid, unambiguous command records through the same handler as the equivalent button action.
-- A parsing, participant, permission, timeout, no-speech, or service failure opens the normal event
-  picker with the tapped location retained. The scorekeeper can finish with buttons without tapping
-  the court again.
+- A named player who is not in the current lineup is recovered rather than refused. If the jersey
+  number is not on the roster at all, the tracker offers to add the player; if the player is on the
+  bench, it offers to sub them in. Either way it then records the already-captured stat. A full
+  lineup also requires choosing the player who came out. A spoken jersey number is fixed to the
+  number that was said.
+- Cancelling that offer, or any parsing, participant, permission, timeout, no-speech, or recognition
+  failure, opens the normal event picker with the tapped location retained. The scorekeeper can
+  finish with buttons without tapping the court again.
 - The voice turn can be cancelled before a final transcript is accepted. Cancellation also falls
   back to the retained-location picker; a claimed command is allowed to finish exactly once.
 - A failed or uncertain write is never automatically retried.
@@ -53,9 +57,10 @@ The three one-team opponent scoring actions also have direct voice paths:
 | Opponent +1 / +2 / +3 | `OPP_FT_MADE` / `OPP_FG2_MADE` / `OPP_FG3_MADE` |
 
 `AST` and `OPP_REB` are recorded through their existing made-shot and missed-shot follow-ups. This
-covers every statistical event available from the live tracker. `SUB_IN` and `SUB_OUT` remain in the
-dedicated substitution workflow because they are paired lineup-state operations, not statistical
-actions.
+covers every statistical event available from the live tracker. Spoken substitutions are not
+supported as primary commands. `SUB_IN` and, for a full lineup, `SUB_OUT` are recorded automatically
+only when the scorekeeper confirms bringing a named player on — either a newly added jersey or one
+sitting on the bench — so that player is eligible for the captured stat.
 
 The tapped location remains authoritative for a field goal. If the command explicitly says two or
 three, it must agree with the inferred court location or nothing is written.
@@ -76,11 +81,18 @@ voice turn, so the transcript that records a primary event cannot answer its fol
 
 ### Participant matching
 
-- Voice resolves players against the current on-court lineup, never the bench.
+- Voice resolves existing players against the current on-court lineup. A match found only on the
+  bench is offered as a substitution rather than silently accepted.
 - A unique exact jersey number wins first. Jersey `0` is supported.
 - Otherwise, an exact normalized full name or unique exact first/last name is accepted.
-- Duplicate, inactive, off-court, unknown, wrong-side, or question-ineligible players are rejected
-  without a write.
+- An unknown jersey number can open a confirmation to add that player to the durable roster, sub
+  them into the current lineup, and then record the captured stat. This is available only to a user
+  allowed to manage that roster. Unknown names never create players.
+- A jersey or name matching exactly one roster player who is off the court opens a confirmation to
+  sub them in and then record the captured stat. Nothing is created; only the lineup changes.
+- Duplicate, inactive, unknown-name, wrong-side, or question-ineligible players are rejected without
+  a write. An unknown jersey is also rejected when roster management is not available. An inactive
+  player is never offered a substitution — reactivate them on the roster first.
 - Dual-team primary commands require `home` or `away`. One-sided primary commands reject a side.
 
 ## General approach
@@ -91,8 +103,12 @@ The data flow is:
 2. One final transcript is passed to the adapter registered for `game.sport`.
 3. `basketballVoiceAdapter` returns an allow-listed intent.
 4. For player-attributed commands, `resolveParticipant` matches against the captured current lineup.
-5. The existing `GameTrackPage` event handler builds the same event as the equivalent button.
-6. `submitEvent` decorates the payload once and sends it through `gamesApi`.
+5. A player who is not on the court can enter a confirmed recovery path: a roster add for an unknown
+   jersey, or a straight substitution for a bench player. Both share one routine that records the
+   required substitution events before the original stat. Each server write remains
+   authorization-checked, and a failed add or substitution never writes the stat.
+6. The existing `GameTrackPage` event handler builds the same event as the equivalent button.
+7. `submitEvent` decorates the payload once and sends it through `gamesApi`.
 
 The speech lifecycle is sport-neutral. Basketball vocabulary belongs to the basketball adapter, and
 the adapter registry is the extension point for another sport. Raw transcript text never becomes a
@@ -117,7 +133,7 @@ Browser behavior:
 - processing cannot be cancelled after a final transcript has been claimed
 - insecure and unsupported browsers keep the button workflow and explain why voice is unavailable
 
-The More panel discloses that the browser speech service may process audio remotely. TSW does not
+The Options panel discloses that the browser speech service may process audio remotely. TSW does not
 store audio or transcripts, and voice data is not included in analytics or production logs.
 
 ## Voice command schema
@@ -139,6 +155,14 @@ Input is normalized for case, punctuation, apostrophes, hyphens, and diacritics.
 160 characters and 20 tokens. Jersey digits `0`–`999`, number words zero through nineteen, and
 compound tens-plus-units such as `twenty three` are supported. Exact multiples of ten such as jersey
 20 should currently be spoken as digits. `number` and `jersey` may prefix a spoken number.
+
+If a jersey number does not exist on the selected roster, a permitted roster manager is asked to
+enter the player's name and confirm the add. In a five-player lineup they must also select who came
+out. Confirmation records the durable player, the necessary substitution event or events, and the
+original parsed stat using the original court, clock, video, and layout context. Cancellation records
+no stat and opens the normal picker at the retained court location. This recovery is deliberately
+limited to jersey numbers; an unrecognized spoken name may be a transcription error and is never
+used to create a player.
 
 | Action            | Accepted form                                                                 |
 | ----------------- | ----------------------------------------------------------------------------- |
@@ -199,6 +223,11 @@ Prefix every primary command with a side:
 - `home number 13 steal`
 - `away twenty three turnover`
 
+If jersey 8 is not on the home roster, `home 8 2pt made` opens **Add missing player?** with jersey 8
+pre-filled. Enter the player's name, choose who came out if the home lineup already has five, and
+confirm. The tracker records the required substitution event or events and then the captured
+`FG2_MADE`. Cancelling records no stat and keeps the tapped location available in the button picker.
+
 ### Follow-up answers
 
 - Assist: `Blake`, `away 7`, `unassisted`, or `skip`.
@@ -212,6 +241,7 @@ Prefix every primary command with a side:
 | Say                                     | Why it is rejected                          |
 | --------------------------------------- | ------------------------------------------- |
 | `Nobody steal`                          | No current on-court player matches          |
+| `88 steal` without roster permission    | No roster change is available               |
 | `21 jump shot made`                     | `jump shot` is not current vocabulary       |
 | `13 made four`                          | Four is not a supported field-goal value    |
 | `13 made miss`                          | Conflicting outcomes                        |
@@ -240,12 +270,18 @@ writes and player choices remain explicit.
    Court actions plus one-team opponent +1/+2/+3 scoring.
 4. **Follow-ups and controls.** Connected assist, rebound, opposing-player answers, skip, and safe
    undo to the existing follow-up and removal workflows.
+5. **Missing-jersey recovery.** Added a permission-gated confirmation that creates an unknown
+   spoken jersey on the durable roster, records the necessary lineup substitution, and then records
+   the original captured stat without requiring another court tap or command.
+6. **Bench-player recovery.** A named roster player who is off the court is offered a substitution
+   instead of a refusal, sharing one sub-and-record routine with the roster-add path. Inactive
+   players stay refused.
 
 ### Unfinished task: device verification and release record
 
 Completed:
 
-- Full repository suite passes: 93 client files with 784 tests and 91 server suites with 978 tests.
+- Full repository suite passes: 93 client files with 792 tests and 91 server suites with 978 tests.
 - Client and server lint pass.
 - Production client build passes; only existing Browserslist-age and chunk-size notices remain.
 - Environment validation and the repository secret scan pass.
@@ -303,6 +339,8 @@ Create separate plans for these rather than expanding this implementation:
 | `client/src/features/games/voice/adapters/basketballVoiceAdapter.js` | Basketball grammar and actions                                     |
 | `client/src/features/games/voice/voiceAdapters.js`                   | Sport adapter registry                                             |
 | `client/src/features/games/components/VoiceTrackingControl.jsx`      | Instruction, status, follow-up microphone, and accessible feedback |
+| `client/src/features/games/components/AddRosterPlayerDialog.jsx`     | Missing-jersey confirmation and full-lineup player-out choice      |
+| `client/src/features/games/components/ConfirmSubInDialog.jsx`        | Bench-player substitution confirmation                             |
 | `client/src/features/games/pages/GameTrackPage.jsx`                  | Voice orchestration and existing handler reuse                     |
 
 ## References

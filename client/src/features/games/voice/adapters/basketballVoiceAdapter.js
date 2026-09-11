@@ -131,16 +131,9 @@ function parseOpponentScore(tokens, trackingMode) {
     });
   }
 
-  const fieldGoalPhrase = stripPhrase(tokens, ['field', 'goal']);
-  const actionTokens = fieldGoalPhrase.tokens;
-  if (hasConflictingOutcome(actionTokens)) return failure('conflicting_action');
-  if (hasConflictingPoints(actionTokens)) return failure('conflicting_points');
-
-  const parsedAction = parseAction(actionTokens);
-  if (!parsedAction) return failure(tokens.length === 1 ? 'incomplete' : 'unsupported_action');
-  if (fieldGoalPhrase.found && parsedAction.action !== 'field_goal') {
-    return failure('conflicting_action');
-  }
+  const tail = parseActionTail(tokens);
+  if (!tail.ok) return tail;
+  const parsedAction = tail.action;
   if (
     parsedAction.participantTokens.length !== 1 ||
     parsedAction.participantTokens[0] !== 'opponent' ||
@@ -229,6 +222,25 @@ function parseAction(tokens) {
   return null;
 }
 
+// The strip/conflict/parse sequence both entry points run. Shared so a new action or conflict
+// rule is added once, and so the two cannot disagree about which refusal a phrase earns.
+function parseActionTail(tokens) {
+  const fieldGoalPhrase = stripPhrase(tokens, ['field', 'goal']);
+  const actionTokens = fieldGoalPhrase.tokens;
+
+  if (hasConflictingOutcome(actionTokens)) return failure('conflicting_action');
+  if (hasConflictingPoints(actionTokens)) return failure('conflicting_points');
+
+  const action = parseAction(actionTokens);
+  if (!action) {
+    return failure(actionTokens.length <= 1 ? 'incomplete' : 'unsupported_action');
+  }
+  if (fieldGoalPhrase.found && action.action !== 'field_goal') {
+    return failure('conflicting_action');
+  }
+  return { ok: true, action };
+}
+
 function parsePrimary(transcript, context = {}) {
   const prepared = prepareVoiceText(transcript);
   if (!prepared.ok) return prepared;
@@ -240,17 +252,10 @@ function parsePrimary(transcript, context = {}) {
 
   const sideResult = splitSide(prepared.tokens, context.trackingMode);
   if (!sideResult.ok) return sideResult;
-  const fieldGoalPhrase = stripPhrase(sideResult.tokens, ['field', 'goal']);
-  const tokens = fieldGoalPhrase.tokens;
 
-  if (hasConflictingOutcome(tokens)) return failure('conflicting_action');
-  if (hasConflictingPoints(tokens)) return failure('conflicting_points');
-
-  const parsedAction = parseAction(tokens);
-  if (!parsedAction) return failure(tokens.length <= 1 ? 'incomplete' : 'unsupported_action');
-  if (fieldGoalPhrase.found && parsedAction.action !== 'field_goal') {
-    return failure('conflicting_action');
-  }
+  const tail = parseActionTail(sideResult.tokens);
+  if (!tail.ok) return tail;
+  const parsedAction = tail.action;
   if (parsedAction.participantTokens.length === 0) return failure('missing_participant');
   if (parsedAction.participantTokens.some((token) => RESERVED_ACTION_WORDS.has(token))) {
     return failure('conflicting_action');
