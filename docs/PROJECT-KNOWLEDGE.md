@@ -346,9 +346,10 @@ failure recovery and all additional checks, passed. A targeted redeploy remains
 for the audit's explicit trial-preservation setting, mobile billing feedback,
 and customer-facing billing disclosures; the migration command guard is covered
 by automated tests. The Pricing route is public in code and linked from
-navigation. Production is not ready until live Stripe/Render setup, the verified
-production backup and capacity migration, the customer-facing refund policy,
-and controlled live payments are complete.
+navigation. The seven-day first-payment refund policy is implemented in the
+terms but still needs review and deployment. Production is not ready until live
+Stripe/Render setup, the verified production backup and capacity migration, and
+controlled live payments are complete.
 [`stripe.md`](./stripe.md) is the only setup, testing, lifecycle, checklist,
 manual-action, and launch-status guide.
 

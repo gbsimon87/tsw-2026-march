@@ -157,6 +157,30 @@ export function TermsPage() {
             Payments are handled by Stripe. We never see or store your card details. If we change a
             price, we will tell you before it applies to your renewal.
           </p>
+          <h3 className="font-semibold text-slate-900">Refunds</h3>
+          <p>
+            You may request a full refund within seven calendar days after the first successful
+            payment for an Additional Team subscription or a League subscription. This introductory
+            refund is available once per account for each of those two subscription types. Changing
+            between League and League Plus does not start a new seven-day period.
+          </p>
+          <p>
+            Later renewal payments and unused parts of a billing period are normally non-refundable.
+            We will still provide refunds for duplicate or incorrect charges, qualifying failures of
+            the service, and whenever the law requires us to. This policy does not affect your
+            statutory rights.
+          </p>
+          <p>
+            Request a refund through our{' '}
+            <Link to="/contact" className="underline">
+              contact form
+            </Link>{' '}
+            within the applicable period and include your account email and the Team or League name.
+            Never send card details. When we approve a full refund, we will also cancel the related
+            subscription to prevent another renewal, and paid management access may end when that
+            cancellation is processed. Your saved data remains available as described on the pricing
+            page.
+          </p>
         </div>
       </section>
 

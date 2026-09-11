@@ -67,4 +67,20 @@ describe('TermsPage', () => {
       screen.getByText(/automatically becomes the selected monthly League subscription/i)
     ).toBeInTheDocument();
   });
+
+  test('publishes the seven-day first-payment refund policy', () => {
+    renderTerms();
+
+    expect(screen.getByRole('heading', { name: 'Refunds' })).toBeInTheDocument();
+    expect(screen.getByText(/within seven calendar days/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/once per account for each of those two subscription types/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/renewal payments.*normally non-refundable/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not affect your statutory rights/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /contact form/i }).at(-1)).toHaveAttribute(
+      'href',
+      '/contact'
+    );
+  });
 });
