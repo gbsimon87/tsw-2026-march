@@ -72,14 +72,11 @@ objects, close this final targeted development gate:
 
 ## Step 2: finish the customer policy gate
 
-> **Current progress — Friday 11 September 2026, 11:51 BST:** Step 1 passed in
-> the deployed development environment. Production setup is now on Step 2.
-
 - [x] Adopt the seven-day first-payment refund policy and add it to `/terms`.
-- [ ] Have the customer-facing terms reviewed before relying on them.
-- [ ] After deploying this change, confirm `/terms#billing` clearly covers the
+- [x] Have the customer-facing terms reviewed before relying on them.
+- [x] After deploying this change, confirm `/terms#billing` clearly covers the
       trial, automatic monthly renewal, cancellation timing, and refund policy.
-- [ ] Continue the existing monthly finance check of rolling 12-month taxable
+- [x] Continue the existing monthly finance check of rolling 12-month taxable
       turnover and the UK VAT position. Recheck current
       [HMRC guidance](https://www.gov.uk/register-for-vat) rather than treating a
       threshold in this document as permanent.
@@ -87,21 +84,24 @@ objects, close this final targeted development gate:
 The refund policy must be reviewed and published before the production client is
 deployed in Step 8.
 
+> **Current progress — Friday 11 September 2026, 11:51 BST:** Step 1 passed in
+> the deployed development environment. Production setup is now on Step 3.
+
 ## Step 3: activate and secure the live Stripe account
 
-- [ ] Open the Stripe **live account**, not **TSW Development**, and confirm
+- [x] Open the Stripe **live account**, not **TSW Development**, and confirm
       there is no sandbox/test banner.
-- [ ] Complete **Activate payments** and every outstanding identity, company,
+- [x] Complete **Activate payments** and every outstanding identity, company,
       website, bank, or payout verification requested by Stripe.
-- [ ] Enable strong two-factor authentication for Dashboard users. Prefer a
+- [x] Enable strong two-factor authentication for Dashboard users. Prefer a
       passkey, security key, or authenticator app.
-- [ ] Check the production payout bank account and choose a payout schedule.
-- [ ] Complete the public business name, website, support contact, logo, icon,
+- [x] Check the production payout bank account and choose a payout schedule.
+- [x] Complete the public business name, website, support contact, logo, icon,
       and brand colours.
-- [ ] Use a recognisable statement descriptor such as `SPORTYWAY` and preview
+- [x] Use a recognisable statement descriptor such as `SPORTYWAY` and preview
       it. Keeping it to 10 characters lets Stripe append trial-ending text
       clearly.
-- [ ] Add these public URLs in Checkout/business settings and verify that each
+- [x] Add these public URLs in Checkout/business settings and verify that each
       works while signed out:
 
 | Setting             | Exact URL                                |
@@ -112,17 +112,17 @@ deployed in Step 8.
 | Cancellation policy | `https://thesportyway.com/terms#billing` |
 | Refund policy       | `https://thesportyway.com/terms#billing` |
 
-- [ ] Confirm cards are enabled. Do not enable a delayed payment method until
+- [x] Confirm cards are enabled. Do not enable a delayed payment method until
       its success and failure flows have been tested in the sandbox.
-- [ ] In **Billing → Subscriptions and emails**, enable Stripe's free-trial
+- [x] In **Billing → Subscriptions and emails**, enable Stripe's free-trial
       reminder/messaging and set the cancellation-policy URL. TSW also sends its
       own three-day reminder, so receiving both is expected.
-- [ ] Enable receipts and the desired failed/expiring-payment emails. Send a test
+- [x] Enable receipts and the desired failed/expiring-payment emails. Send a test
       email and verify the business identity, amount, trial conversion date,
       cancellation link, and support details.
-- [ ] Enable account notifications for successful payments, failed payments,
+- [x] Enable account notifications for successful payments, failed payments,
       disputes, and payout failures.
-- [ ] Close every applicable item in Stripe's
+- [x] Close every applicable item in Stripe's
       [account checklist](https://docs.stripe.com/get-started/account/checklist)
       and [website checklist](https://docs.stripe.com/get-started/checklist/website).
 
@@ -138,12 +138,12 @@ the one-time 14-day League trial.
 | League          | Run a league with up to 10 active teams.        | £29 GBP monthly | `STRIPE_PRICE_ID_LEAGUE`          |
 | League Plus     | Run a larger league with up to 24 active teams. | £49 GBP monthly | `STRIPE_PRICE_ID_LEAGUE_PLUS`     |
 
-- [ ] In **Product catalog**, create each Product and its Price.
-- [ ] Copy the `price_...` ID, not the `prod_...` ID, into the private launch
+- [x] In **Product catalog**, create each Product and its Price.
+- [x] Copy the `price_...` ID, not the `prod_...` ID, into the private launch
       note beside the matching variable.
-- [ ] Reopen all three Prices and confirm the Product, description, amount, GBP
+- [x] Reopen all three Prices and confirm the Product, description, amount, GBP
       currency, monthly recurrence, and **Active** status.
-- [ ] Confirm the three Prices belong to three different Products.
+- [x] Confirm the three Prices belong to three different Products.
 
 Copying sandbox Products to live mode is acceptable, but the resulting live
 `price_...` IDs are different. Never reuse a sandbox ID or repurpose a Price
@@ -151,37 +151,77 @@ that has subscription history.
 
 ## Step 5: create the restricted key and Portal configurations
 
-### Restricted server key
+Step 5 uses four places. Complete the sections in this order:
+
+| Section | Platform                              | Purpose                                           |
+| ------- | ------------------------------------- | ------------------------------------------------- |
+| 5A      | Stripe Dashboard                      | Create the live restricted server key             |
+| 5B      | Render Dashboard                      | Check the existing production origin only         |
+| 5C–5D   | Local terminal and ignored local file | Create the two live Portal configurations         |
+| 5E      | Stripe Dashboard                      | Inspect the two configurations the script created |
+| 5F      | Password manager and local machine    | Store the IDs and remove the temporary file       |
+
+Do not add the new Stripe values to Render during this step. Step 7 collects all
+nine values, and Step 8 saves and deploys them together so the production API is
+never started with only part of its Stripe configuration.
+
+### 5A — Stripe Dashboard: create the restricted server key
 
 The browser client needs no Stripe publishable or secret key.
 
-- [ ] In the live API keys page, create a restricted key named
+- [x] In Stripe, select the real TSW account and confirm there is no sandbox/test
+      banner.
+- [x] Open **Workbench → API keys**. Alternatively, use the Dashboard search for
+      **API keys** or open <https://dashboard.stripe.com/apikeys>.
+- [x] In **Restricted keys**, click **Create restricted key**. Choose the option
+      to configure the key manually if Stripe offers templates, and name it
       `TSW production Render API`.
-- [ ] Give **Write** access to Checkout Sessions, Customer Portal, Subscriptions,
-      and Subscription Schedules if Stripe lists schedules separately.
-- [ ] Give **Read** access to Prices. Leave unrelated permissions as **None**.
-- [ ] Save the `rk_live_...` value in the password manager as
-      `STRIPE_SECRET_KEY`. Stripe might show it only once.
+- [x] On the permissions screen, give **Write** access to **Checkout Sessions**,
+      **Customer Portal**, **Subscriptions**, and **Subscription Schedules** if
+      Stripe lists schedules separately.
+- [x] Give **Read** access to **Prices**. Leave unrelated permissions as
+      **None**, then create the key.
+- [x] Copy the `rk_live_...` value immediately. In the password manager, create
+      or update the production TSW Stripe entry and store it under the field name
+      `STRIPE_SECRET_KEY`. Do not put it in chat, source control, the browser
+      client, or the Render client service. Stripe might show it only once.
 
 If Stripe later returns `403`, inspect the rejected request in Workbench and add
 only the permission it requires. Do not switch to an unrestricted key.
 
-### Portal configurations
+### 5B — Render Dashboard: confirm the production origin
+
+- [x] Open the Render Dashboard and select the **production API web service**:
+      `tsw-2026-march-api-prod`. Do not select
+      `tsw-2026-march-client-prod` or either `-dev` service.
+- [x] In that service's left navigation, open **Environment**. Under
+      **Environment Variables**, find `CLIENT_ORIGIN` and reveal its value if
+      necessary.
+- [x] Confirm it is exactly `https://thesportyway.com`, with no trailing slash.
+      Do not change or deploy anything if it is already correct.
+
+Do not add `STRIPE_SECRET_KEY`, Price IDs, or Portal IDs to Render yet. That is
+done as one controlled update in Steps 7–8.
+
+### 5C — Local machine: prepare the ignored temporary file
 
 The repository creates one locked-down billing-management Portal and one Portal
 used only to confirm League Plus upgrades.
 
-- [ ] Confirm production Render has
-      `CLIENT_ORIGIN=https://thesportyway.com`.
-- [ ] Run this locally from the tested `dev` release:
+- [x] In a terminal, check out the exact tested `dev` release and change into the
+      repository root—the directory containing `pnpm-workspace.yaml`.
+- [x] From that directory, run:
 
 ```bash
 git check-ignore env/server/.env.stripe-live.local
 ```
 
-It must print the path. Stop if it prints nothing.
+It must print `env/server/.env.stripe-live.local`. Stop if it prints nothing;
+the file would not be protected from an accidental commit.
 
-- [ ] Create the ignored `env/server/.env.stripe-live.local` file containing:
+- [x] In your local editor, create
+      `env/server/.env.stripe-live.local`. This is a temporary file on your
+      computer—not a Stripe Dashboard or Render file. Add:
 
 ```text
 APP_ENV=production
@@ -192,33 +232,68 @@ STRIPE_PRICE_ID_LEAGUE_PLUS=price_REPLACE_ME
 STRIPE_SUCCESS_URL=https://thesportyway.com/billing/success
 ```
 
-- [ ] Replace every placeholder, then run:
+- [x] Replace `rk_live_REPLACE_ME` with the restricted key from the password
+      manager. Replace the three `price_REPLACE_ME` values with the matching live
+      Price IDs saved in Step 4. Do not use any sandbox `rk_test_...` or test
+      `price_...` object.
+
+### 5D — Local terminal: create and reuse the Portal configurations
+
+- [x] From the same repository root, run:
 
 ```bash
 ENV_FILE="$(pwd)/env/server/.env.stripe-live.local" pnpm --filter server stripe:create-portal-config
 ```
 
-- [ ] Stop if the command reports a test key, wrong amount/currency/interval, or
+- [x] Stop if the command reports a test key, wrong amount/currency/interval, or
       reused Product.
-- [ ] Save the two printed `bpc_...` values as
-      `STRIPE_PORTAL_CONFIGURATION_ID` and
-      `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID`.
-- [ ] Run the command again and confirm it reuses the same two IDs.
-- [ ] In the live Dashboard, confirm:
-  - The normal Portal allows payment-method updates, invoice history, and
-    end-of-period cancellation, with plan switching disabled.
+- [x] The command prints two `bpc_...` IDs. Record which one is printed as
+      `STRIPE_PORTAL_CONFIGURATION_ID` and which is printed as
+      `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID`; do not swap them.
+- [x] Run the command again and confirm it reuses the same two IDs.
+
+### 5E — Stripe Dashboard: inspect both live Portal configurations
+
+- [x] Return to the live Stripe account. Open
+      **Settings → Billing → Customer portal**. If Stripe's navigation differs,
+      search the Dashboard for **Customer portal**.
+- [x] Open the configuration whose ID matches the printed
+      `STRIPE_PORTAL_CONFIGURATION_ID`. It can be named **Default** if Stripe's
+      existing default configuration already matched every required setting;
+      otherwise, the script creates it as **TSW billing management**. Confirm:
+  - It allows payment-method updates, invoice history, and end-of-period
+    cancellation, with plan switching disabled.
+- [x] Return to the configurations list, open
+      **TSW League Plus upgrade**, and confirm:
   - The upgrade Portal contains only League and League Plus, immediately
     prorates paid upgrades, and continues an active trial.
-- [ ] Delete the temporary local file after the key and IDs are safely stored.
+
+The script either reuses an exact matching live configuration or creates it in
+Stripe. Seeing **Default** and **TSW League Plus upgrade** is therefore valid.
+Do not rename or manually recreate **Default**: the first `bpc_...` ID printed by
+the script is the authoritative normal-Portal configuration. The script also
+validates the exact Price restrictions and trial behaviour.
+
+### 5F — Password manager and local machine: store and clean up
+
+- [x] In the same production TSW Stripe password-manager entry, store the two
+      printed IDs under `STRIPE_PORTAL_CONFIGURATION_ID` and
+      `STRIPE_PORTAL_UPGRADE_CONFIGURATION_ID`.
+- [x] Confirm the password manager now contains the restricted key, all three
+      live Price IDs, and both Portal IDs needed for Step 7.
+- [x] Delete the temporary local
+      `env/server/.env.stripe-live.local` file. The permanent runtime copy of
+      these values will be entered only in the production API service on Render
+      during Steps 7–8.
 
 ## Step 6: create the production webhook
 
-- [ ] Confirm `https://api.thesportyway.com/api/v1/health` is healthy.
-- [ ] In the live account, open **Workbench → Webhooks**.
-- [ ] Check for an enabled destination already pointing to the URL below. Update
+- [x] Confirm `https://api.thesportyway.com/api/v1/health` is healthy.
+- [x] In the live account, open **Workbench → Webhooks**.
+- [x] Check for an enabled destination already pointing to the URL below. Update
       it if appropriate instead of creating a duplicate; keep exactly one
       enabled production billing destination.
-- [ ] Create or verify a destination with:
+- [x] Create or verify a destination with:
   - Name: `TSW production billing webhook`
   - Endpoint: `https://api.thesportyway.com/api/v1/billing/webhooks`
   - Events from: **Your account**
@@ -240,9 +315,9 @@ invoice.payment_failed
 invoice.finalization_failed
 ```
 
-- [ ] Confirm the destination is enabled and copy its new `whsec_...` signing
+- [x] Confirm the destination is enabled and copy its new `whsec_...` signing
       secret into the password manager as `STRIPE_WEBHOOK_SECRET`.
-- [ ] Keep this secret separate from the sandbox destination and local Stripe
+- [x] Keep this secret separate from the sandbox destination and local Stripe
       CLI secrets.
 
 No successful delivery is expected until the controlled live purchase in Step 9.
@@ -263,14 +338,14 @@ STRIPE_SUCCESS_URL=https://thesportyway.com/billing/success
 STRIPE_CANCEL_URL=https://thesportyway.com/billing/cancel
 ```
 
-- [ ] Confirm there are no placeholders or quote marks.
-- [ ] Confirm the restricted key is `rk_live_...`, all three Prices and both
+- [x] Confirm there are no placeholders or quote marks.
+- [x] Confirm the restricted key is `rk_live_...`, all three Prices and both
       Portals are live objects, and the signing secret belongs to the production
       webhook.
-- [ ] In `tsw-2026-march-api-prod`, confirm
+- [x] In `tsw-2026-march-api-prod`, confirm
       `APP_ENV=production`, `NODE_ENV=production`, and
       `CLIENT_ORIGIN=https://thesportyway.com`.
-- [ ] Keep these nine Stripe values out of the production client service.
+- [x] Keep these nine Stripe values out of the production client service.
 
 The production API refuses to start with a partial Stripe configuration, mixed
 test/live values, missing deployment identity, or unsafe return URLs.
