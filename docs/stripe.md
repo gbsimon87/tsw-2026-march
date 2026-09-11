@@ -371,23 +371,23 @@ pnpm build
 git status --short
 ```
 
-- [ ] Stop unless every command passes, the secret scan succeeds, and
+- [x] Stop unless every command passes, the secret scan succeeds, and
       `git status --short` prints nothing.
-- [ ] Merge that `dev` commit into `main`, push `main`, and record the resulting
+- [x] Merge that `dev` commit into `main`, push `main`, and record the resulting
       commit SHA. Do not add launch-only changes directly to `main`.
-- [ ] Confirm the refund policy from Step 2 is published.
+- [x] Confirm the refund policy from Step 2 is published.
 
 ### Back up and deploy the API
 
-- [ ] Immediately before migration, create and verify the production MongoDB
+- [x] Immediately before migration, create and verify the production MongoDB
       backup using [`mongodb-production-backup.md`](./mongodb-production-backup.md).
-- [ ] Restore the archive into a disposable database and verify its collection
+- [x] Restore the archive into a disposable database and verify its collection
       counts. A backup that has not been restored is not verified.
-- [ ] Add all nine Stripe values to `tsw-2026-march-api-prod` and choose
+- [x] Add all nine Stripe values to `tsw-2026-march-api-prod` and choose
       **Save, rebuild, and deploy**.
-- [ ] Confirm the API deployed the recorded `main` SHA and that
+- [x] Confirm the API deployed the recorded `main` SHA and that
       `https://api.thesportyway.com/api/v1/health` succeeds.
-- [ ] Confirm the public webhook route rejects a fake signature with HTTP `400`:
+- [x] Confirm the public webhook route rejects a fake signature with HTTP `400`:
 
 ```bash
 curl -i -X POST https://api.thesportyway.com/api/v1/billing/webhooks \
@@ -400,89 +400,118 @@ Stop on `200`, `404`, or any `5xx` response.
 
 ### Verify and migrate the production database
 
-- [ ] In the production API's Render Shell, print only its non-secret identity:
+- [x] In the production API's Render Shell, print only its non-secret identity:
 
 ```bash
 node -e "console.log({ APP_ENV: process.env.APP_ENV, MONGO_DB_NAME: process.env.MONGO_DB_NAME })"
 ```
 
-- [ ] Stop unless it prints `APP_ENV: 'production'` and
+- [x] Stop unless it prints `APP_ENV: 'production'` and
       `MONGO_DB_NAME: 'tsw_2026_prod'`.
-- [ ] Preview the migration:
+- [x] Preview the migration:
 
 ```bash
 pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js --dry-run
 ```
 
-- [ ] Confirm it lists every owner and Team, makes only each owner's oldest Team
+- [x] Confirm it lists every owner and Team, makes only each owner's oldest Team
       `FREE`, makes their other standalone Teams `PAID`, and lists exactly the
       three expected pre-launch Leagues as `COMP LEAGUE`.
-- [ ] Stop if any record or count is unexpected, or if the script reports an
+- [x] Stop if any record or count is unexpected, or if the script reports an
       existing Stripe-backed subscription.
-- [ ] Apply it once:
+- [x] Apply it once:
 
 ```bash
 MIGRATION_CONFIRM_DB=tsw_2026_prod pnpm --filter server exec node src/scripts/migrate-capacity-pricing.js --apply
 ```
 
-- [ ] Verify the three old Leagues remain editable and complimentary, and each
+- [x] Verify the three old Leagues remain editable and complimentary, and each
       existing owner has exactly one manageable free standalone Team.
-- [ ] Do not run `--apply` a second time.
+- [x] Do not run `--apply` a second time.
 
 ### Deploy the client
 
-- [ ] Manually deploy `tsw-2026-march-client-prod` at the same recorded `main`
+- [x] Manually deploy `tsw-2026-march-client-prod` at the same recorded `main`
       SHA as the API.
-- [ ] Open `https://thesportyway.com/pricing` while signed out and confirm all
+- [x] Open `https://thesportyway.com/pricing` while signed out and confirm all
       four options, GBP prices, trial terms, and policy/contact links.
 
 If the paid entry point must be closed, redeploy the previous known-good client
 commit. Leave the production API, Stripe values, webhook, and subscriptions
 running so existing customers continue receiving billing updates.
 
-## Step 9: verify live payments
+> CONTINUE FROM HERE NEXT TIME: SEPT 11 4:19PM
 
-Use a controlled production account and a real card you are authorised to use.
-Do not use a Payment Link or Stripe test card; this must exercise the app's live
-Checkout metadata and webhooks.
+## Step 9: production smoke checks and first genuine payments
 
-### Additional Team
+Do **not** use your own card, ask someone else to make a pretend purchase, or
+create a live charge solely to refund it. Stripe's
+[testing guidance](https://docs.stripe.com/testing) says its Services Agreement
+prohibits testing in live mode with real payment details. Test payment success,
+failure, refunds, 3DS, trials, renewals, and webhook lifecycle behaviour in the
+sandbox. In production, stop the pre-launch Checkout checks before entering any
+payment details.
 
-- [ ] Buy one £5 GBP monthly Additional Team through the production Pricing
-      page. Before paying, confirm the business identity, amount, recurrence,
-      customer email, and absence of an unexpected tax line.
-- [ ] Watch the production webhook destination and Render logs. Confirm
+### No-payment production checks
+
+- [ ] With a controlled production TSW user that owns an eligible additional
+      Team, start the £5 monthly Checkout from the production Pricing page. Do
+      not enter card or wallet details and do not complete payment.
+- [ ] Confirm the live Checkout page shows the correct business identity,
+      customer email, £5 GBP monthly recurrence, support and policy links, and
+      no unexpected tax line. Close the page.
+- [ ] In **Stripe live account → Workbench → Logs**, confirm the corresponding
+      `POST /v1/checkout/sessions` request succeeded and used the live Additional
+      Team Price. Confirm the abandoned Checkout granted no Team entitlement.
+- [ ] Start the £29 monthly League Checkout in the same way, without entering
+      payment details. Confirm it shows the 14-day trial, future £29 GBP monthly
+      price, cancellation terms, and no immediate amount due; then close it.
+- [ ] In Workbench, confirm this second Checkout Session used the live League
+      Price and contains the expected League metadata. Confirm abandoning it
+      granted no League entitlement.
+- [ ] Confirm the production webhook destination remains enabled and Render has
+      no Stripe permission errors, unknown-Price errors, or billing `5xx`
+      responses from these Checkout Session requests.
+
+Creating an incomplete Checkout Session without supplying payment details is an
+acceptable configuration smoke check; it does not prove the paid webhook path.
+That path is verified by monitoring the first bona fide customer purchase.
+
+### Monitor the first genuine Additional Team purchase
+
+- [ ] When a real customer genuinely chooses to buy an Additional Team, monitor
+      the production webhook destination and Render logs. Confirm
       `checkout.session.completed`, the relevant `customer.subscription.*`
       event, and `invoice.paid` return HTTP `200`.
 - [ ] Confirm only the purchased Team becomes manageable and its Stripe Customer,
       Subscription, Invoice, and metadata identify the correct Team and owner.
-- [ ] Open **Manage billing**. Confirm payment-method updates, invoice history,
-      and end-of-period cancellation are available, while arbitrary plan
-      switching is unavailable.
-- [ ] Schedule cancellation and confirm access remains until the paid period
-      ends. Refund the controlled charge in Stripe if appropriate; remember that
-      refunding does not cancel a subscription.
+- [ ] Ask the customer to use **Manage billing** only if support is needed.
+      Confirm payment-method updates, invoice history, and end-of-period
+      cancellation work, while arbitrary plan switching remains unavailable.
 
-### League trial
+### Monitor the first genuine League trial and upgrade
 
-- [ ] Start a £29 GBP monthly League with a real card. Confirm Checkout clearly
-      states the 14-day trial, future price, and cancellation terms.
-- [ ] Confirm there is no immediate charge, the card is saved, the signed
-      webhook grants management to the exact League, and the trial end is
-      correct.
-- [ ] During the trial, choose League Plus. Confirm the future price becomes £49,
-      the original trial end remains unchanged, and no immediate charge occurs.
-- [ ] Cancel the controlled League at period end when finished. Archive or
-      clearly label the production test resources.
+- [ ] When a real customer genuinely starts a League trial, confirm the signed
+      webhook grants management to the exact League, no immediate charge is
+      taken, and its 14-day trial end is correct.
+- [ ] When a genuine trialing League first upgrades to League Plus, confirm its
+      future price becomes £49, its original trial end remains unchanged, and no
+      immediate charge is taken.
+- [ ] Monitor the first genuine post-trial invoice and confirm the successful
+      signed events update the correct League without errors.
 
-### Launch decision
+### Launch and incident decision
 
-- [ ] Confirm there are no failed webhook deliveries, Stripe permission errors,
-      unknown-Price errors, unexpected invoices/tax, or billing `5xx` responses.
-- [ ] If payment succeeds but access is not granted, close the paid client entry
-      point, preserve all logs, and do not ask the customer to pay again.
-- [ ] Announce paid self-service only after both live paths and all preceding
-      steps pass.
+- [ ] Announce paid self-service after the no-payment production checks and all
+      preceding steps pass. Treat the first genuine transaction on each path as
+      monitored production validation, not a manufactured test.
+- [ ] If a genuine payment succeeds but access is not granted, close the paid
+      client entry point, preserve Stripe and Render logs, help the affected
+      customer without asking them to pay again, and reconcile the subscription
+      before reopening the path.
+- [ ] Issue refunds only for genuine customer-support or policy reasons. A refund
+      does not cancel its subscription, so handle cancellation separately when
+      appropriate.
 
 ## Step 10: clean up and monitor
 
