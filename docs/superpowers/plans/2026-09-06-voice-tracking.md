@@ -46,6 +46,17 @@ Every player-attributed action in the Court event picker has a voice path:
 | Turnover                      | `TOV`                   |
 | Foul                          | `FOUL`                  |
 
+The three one-team opponent scoring actions also have direct voice paths:
+
+| Event                 | Stored stat type                                |
+| --------------------- | ----------------------------------------------- |
+| Opponent +1 / +2 / +3 | `OPP_FT_MADE` / `OPP_FG2_MADE` / `OPP_FG3_MADE` |
+
+`AST` and `OPP_REB` are recorded through their existing made-shot and missed-shot follow-ups. This
+covers every statistical event available from the live tracker. `SUB_IN` and `SUB_OUT` remain in the
+dedicated substitution workflow because they are paired lineup-state operations, not statistical
+actions.
+
 The tapped location remains authoritative for a field goal. If the command explicitly says two or
 three, it must agree with the inferred court location or nothing is written.
 
@@ -79,7 +90,7 @@ The data flow is:
 1. A court tap or follow-up microphone starts `useSpeechRecognition`.
 2. One final transcript is passed to the adapter registered for `game.sport`.
 3. `basketballVoiceAdapter` returns an allow-listed intent.
-4. `resolveParticipant` matches against the captured current lineup.
+4. For player-attributed commands, `resolveParticipant` matches against the captured current lineup.
 5. The existing `GameTrackPage` event handler builds the same event as the equivalent button.
 6. `submitEvent` decorates the payload once and sends it through `gamesApi`.
 
@@ -113,11 +124,16 @@ store audio or transcripts, and voice data is not included in analytics or produ
 
 ### Primary commands
 
-`[side] <participant> <action>`
+Player-attributed stat: `[side] <participant> <action>`
+
+One-team opponent score: `opponent <scoring action>`
 
 - `side`: `home` or `away`; required only in dual-team tracking.
 - `participant`: jersey number or uniquely matching player name.
 - `action`: one supported basketball action from the table below.
+- Opponent scoring is available only in one-team tracking and does not name a player. Say
+  `opponent plus one`, `opponent plus two`, or `opponent plus three`; the equivalent full free-throw
+  and field-goal made phrases are also accepted.
 
 Input is normalized for case, punctuation, apostrophes, hyphens, and diacritics. It is limited to
 160 characters and 20 tokens. Jersey digits `0`–`999`, number words zero through nineteen, and
@@ -167,6 +183,9 @@ Tap the event location first; that tap starts listening.
 | Block             | `Alex block`                   | `BLK`                                               |
 | Turnover          | `twenty three turnover`        | `TOV` for jersey 23                                 |
 | Foul              | `Alex Morgan foul`             | `FOUL`                                              |
+| Opponent +1       | `opponent plus one`            | `OPP_FT_MADE` in a one-team game                    |
+| Opponent +2       | `opponent plus two`            | `OPP_FG2_MADE` if the tap is inside the arc         |
+| Opponent +3       | `opponent plus three`          | `OPP_FG3_MADE` if the tap is outside the arc        |
 | Undo              | `undo`                         | Removes the captured last event if it is still last |
 
 ### Dual-team tracking
@@ -190,20 +209,21 @@ Prefix every primary command with a side:
 
 ### Commands intentionally rejected
 
-| Say                                | Why it is rejected                       |
-| ---------------------------------- | ---------------------------------------- |
-| `Nobody steal`                     | No current on-court player matches       |
-| `21 jump shot made`                | `jump shot` is not current vocabulary    |
-| `13 made four`                     | Four is not a supported field-goal value |
-| `13 made miss`                     | Conflicting outcomes                     |
-| `13 made two three`                | Conflicting point values                 |
-| `13 travelled`                     | Unsupported action                       |
-| `13`                               | Missing action                           |
-| `home 13 made` in a one-sided game | A side is not allowed                    |
-| `13 made` in a dual-team game      | A side is required                       |
+| Say                                     | Why it is rejected                          |
+| --------------------------------------- | ------------------------------------------- |
+| `Nobody steal`                          | No current on-court player matches          |
+| `21 jump shot made`                     | `jump shot` is not current vocabulary       |
+| `13 made four`                          | Four is not a supported field-goal value    |
+| `13 made miss`                          | Conflicting outcomes                        |
+| `13 made two three`                     | Conflicting point values                    |
+| `13 travelled`                          | Unsupported action                          |
+| `13`                                    | Missing action                              |
+| `home 13 made` in a one-sided game      | A side is not allowed                       |
+| `13 made` in a dual-team game           | A side is required                          |
+| `opponent plus two` in a dual-team game | Aggregate opponent scoring is one-team only |
 
-Opponent +1/+2/+3 primary commands and spoken substitutions are not implemented. Use the existing
-buttons for those events.
+Spoken substitutions are not implemented. Use the dedicated Subs workflow so its paired lineup
+writes and player choices remain explicit.
 
 ## Implementation progress
 
@@ -217,7 +237,7 @@ buttons for those events.
    retained manual behavior and optimistic-concurrency safeguards.
 3. **Speech lifecycle and primary commands.** Added the one-shot browser hook, optional More
    setting, court-tap push-to-talk, fallback picker, status/cancel feedback, and all player-attributed
-   Court actions.
+   Court actions plus one-team opponent +1/+2/+3 scoring.
 4. **Follow-ups and controls.** Connected assist, rebound, opposing-player answers, skip, and safe
    undo to the existing follow-up and removal workflows.
 
@@ -225,7 +245,7 @@ buttons for those events.
 
 Completed:
 
-- Full repository suite passes: 93 client files with 763 tests and 91 server suites with 978 tests.
+- Full repository suite passes: 93 client files with 784 tests and 91 server suites with 978 tests.
 - Client and server lint pass.
 - Production client build passes; only existing Browserslist-age and chunk-size notices remain.
 - Environment validation and the repository secret scan pass.
@@ -267,12 +287,11 @@ Freeze the grammar before collecting final gym-noise results so different runs r
 Create separate plans for these rather than expanding this implementation:
 
 1. Locationless shots and their downstream data-model/reporting changes.
-2. Opponent aggregate commands for one-sided tracking.
-3. Spoken zones stored distinctly from exact coordinates.
-4. Confirmed off-court substitution/lineup reconciliation.
-5. Temporary participants and post-game reconciliation.
-6. A replacement speech provider if native recognition fails device/noise testing.
-7. Additional sport adapters and locales.
+2. Spoken zones stored distinctly from exact coordinates.
+3. Confirmed off-court substitution/lineup reconciliation.
+4. Temporary participants and post-game reconciliation.
+5. A replacement speech provider if native recognition fails device/noise testing.
+6. Additional sport adapters and locales.
 
 ## Main files
 

@@ -1568,25 +1568,39 @@ export function GameTrackPage() {
     }
   }
 
-  async function addOpponentScore(statType) {
-    if (isSaving || voiceBusy) {
-      return;
+  async function addOpponentScore(statType, { shot = selectedShot, eventContext = {} } = {}) {
+    if (isSaving || (voiceBusy && eventContext.source !== 'voice')) {
+      return false;
     }
 
     setError('');
     setIsSaving(true);
-    const videoTimestamp = captureVideoTimestamp();
+    const resolvedEventContext = Object.prototype.hasOwnProperty.call(
+      eventContext,
+      'videoTimestamp'
+    )
+      ? eventContext
+      : { ...eventContext, videoTimestamp: captureVideoTimestamp() };
 
     try {
-      const response = await submitEvent({
-        statType,
-        ...buildCourtFields(selectedShot),
-        ...(typeof videoTimestamp === 'number' ? { videoTimestamp } : {}),
-      });
+      const response = await submitEvent(
+        {
+          statType,
+          ...buildCourtFields(shot),
+        },
+        resolvedEventContext
+      );
       updateData(response, STAT_LABELS[statType] || statType);
       clearEventPicker('', { resume: true });
+      return true;
     } catch (submitError) {
       setError(submitError.message || 'Failed to add opponent score');
+      if (eventContext.source === 'voice') {
+        // A lost response may still mean the server wrote the event. Do not reopen the picker and
+        // offer a second chance to record the same score.
+        clearEventPicker('', { resume: true });
+      }
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -1928,6 +1942,7 @@ export function GameTrackPage() {
       conflicting_action: 'The command contained conflicting actions. No stat was recorded.',
       conflicting_points: 'The command contained conflicting point values. No stat was recorded.',
       unsupported_action: 'That stat command is not supported. No stat was recorded.',
+      opponent_score_unavailable: 'Opponent scoring commands are only available in one-team games.',
       unrecognised_words: 'Some of that command was not understood. Try “21 made” or “21 steal”.',
       ambiguous: 'More than one on-court player matched. No stat was recorded.',
       inactive: 'That player is inactive. No stat was recorded.',
@@ -2121,6 +2136,49 @@ export function GameTrackPage() {
         return voiceRejection('unsupported_control');
       }
       return handleVoiceUndo(context);
+    }
+    if (parsed.intent.kind === 'opponent_score') {
+      if (!context.selectedShot) {
+        finishVoiceAttempt(context);
+        return voiceRejection('location_required');
+      }
+      if (
+        parsed.intent.action === 'field_goal' &&
+        parsed.intent.points &&
+        parsed.intent.points !== (context.selectedShot.shotFamily === 'FG3' ? 3 : 2)
+      ) {
+        return voiceRejection('location_conflict');
+      }
+
+      const points =
+        parsed.intent.action === 'free_throw'
+          ? 1
+          : parsed.intent.points || (context.selectedShot.shotFamily === 'FG3' ? 3 : 2);
+      const statTypes = {
+        1: 'OPP_FT_MADE',
+        2: 'OPP_FG2_MADE',
+        3: 'OPP_FG3_MADE',
+      };
+      const statType = statTypes[points];
+      if (!statType) {
+        finishVoiceAttempt(context);
+        return voiceRejection('unsupported_action');
+      }
+
+      const saved = await addOpponentScore(statType, {
+        shot: context.selectedShot,
+        eventContext: {
+          source: 'voice',
+          clockSnapshot: context.clockSnapshot,
+          videoTimestamp: context.videoTimestamp,
+          courtLayoutId: context.courtLayoutId,
+        },
+      });
+      if (!saved) {
+        finishVoiceAttempt(context);
+        return voiceRejection('write_failed');
+      }
+      return { ok: true, message: `${STAT_LABELS[statType]} recorded.` };
     }
     if (parsed.intent.kind !== 'primary') {
       finishVoiceAttempt(context);
@@ -4234,6 +4292,9 @@ export function GameTrackPage() {
                 ['3PT miss', '13 3pt field goal missed', 'Accepted only outside the arc.'],
                 ['Free throw make', 'Alex free throw made', 'Records a made free throw.'],
                 ['Free throw miss', 'Alex missed free throw', 'Records a missed free throw.'],
+                ['Opponent +1 (one-team)', 'opponent plus one', 'Records an opponent free throw.'],
+                ['Opponent +2 (one-team)', 'opponent plus two', 'Accepted only inside the arc.'],
+                ['Opponent +3 (one-team)', 'opponent plus three', 'Accepted only outside the arc.'],
               ]}
             />
 
@@ -4316,6 +4377,11 @@ export function GameTrackPage() {
                 ['Missing action', '13', 'A player without an action is incomplete.'],
                 ['Side in a one-team game', 'home 13 made', 'Home or away is not allowed.'],
                 ['No side in a dual-team game', '13 made', 'Home or away is required.'],
+                [
+                  'Opponent aggregate in a dual-team game',
+                  'opponent plus two',
+                  'Dual-team scoring must be attributed to an on-court player.',
+                ],
                 [
                   'Shot does not match tap',
                   '13 3pt field goal made',

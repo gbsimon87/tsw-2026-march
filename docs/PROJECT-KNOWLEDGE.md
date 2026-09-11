@@ -169,9 +169,11 @@ period/clock snapshot in addition to its optional video timestamp.
 `GameTrackPage` provides optional, session-scoped voice tracking for basketball. The scorekeeper
 enables it in More, then a court tap captures the event location and starts one short browser
 speech-recognition turn. Parsed commands reuse the existing event handlers and preserve the same
-player, team side, location, clock, video, and court-layout payload as button entry. Attributed
-players must be active in the current on-court lineup. Recognition or parsing failures retain the
-tapped location and open the normal button picker; uncertain writes are not replayed.
+player, team side, location, clock, video, and court-layout payload as button entry. Voice covers
+every statistical action in the live tracker, including one-team opponent +1/+2/+3 scoring and the
+assist/opponent-rebound follow-ups. Attributed players must be active in the current on-court lineup.
+Recognition or parsing failures retain the tapped location and open the normal button picker;
+uncertain writes are not replayed.
 
 The speech lifecycle and basketball grammar live under `client/src/features/games/voice/`, with UI
 orchestration in `GameTrackPage` and `VoiceTrackingControl`. TSW does not store audio or transcripts
