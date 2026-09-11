@@ -21,18 +21,11 @@ async function list(req, res) {
   res.status(200).json(result);
 }
 
-async function createImage(req, res) {
-  const userId = requireAuthUserId(req);
-  await assertFeedPostingAllowed(userId);
-  const post = await service.createImagePostForUser(userId, req.file, req.body.caption);
-  res.status(201).json({ post });
-}
-
-async function createVideo(req, res) {
-  const userId = requireAuthUserId(req);
-  await assertFeedPostingAllowed(userId);
-  const post = await service.createVideoPostForUser(userId, req.file, req.body.caption);
-  res.status(201).json({ post });
+function rejectMediaUpload() {
+  throw new ApiError(
+    403,
+    'Image and video posts are temporarily disabled while safety moderation is being added'
+  );
 }
 
 async function createGameCard(req, res) {
@@ -95,8 +88,7 @@ async function listShareableTeams(req, res) {
 
 module.exports = {
   list,
-  createImage,
-  createVideo,
+  rejectMediaUpload,
   createGameCard,
   createPlayerCard,
   createTeamCard,

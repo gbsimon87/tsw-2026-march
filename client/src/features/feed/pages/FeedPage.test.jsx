@@ -16,7 +16,6 @@ const apiMocks = vi.hoisted(() => ({
   listShareableGames: vi.fn(),
   listShareablePlayers: vi.fn(),
   listShareableTeams: vi.fn(),
-  createImagePost: vi.fn(),
   createGameCardPost: vi.fn(),
   createPlayerCardPost: vi.fn(),
   createTeamCardPost: vi.fn(),
@@ -209,6 +208,12 @@ describe('FeedPage', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'post-submit' })).toBeInTheDocument();
     });
+
+    expect(screen.getByRole('button', { name: 'Game' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Player' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Team' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Image' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Video' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => {

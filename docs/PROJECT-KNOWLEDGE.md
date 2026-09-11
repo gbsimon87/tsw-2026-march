@@ -211,6 +211,15 @@ use a non-login system account and are restricted to finalized public-league
 games. Making a league private removes its system-generated posts, not users'
 manual posts.
 
+**Pulse media safety hold — 11 September 2026, 12:31 BST:** creation of new raw
+image and video posts is temporarily disabled in both the client and API. The
+Pulse composer offers only game, player, and team cards; existing image and
+video posts remain readable. Authenticated requests to `POST /feed/image` and
+`POST /feed/video` fail with 403 before multipart parsing or Cloudinary upload.
+Do not re-enable either route until pending/approved/rejected moderation and
+user reporting/operator review tools are implemented and verified. The release
+boundary and re-enable checklist are in [`pulse-media-safety.md`](./pulse-media-safety.md).
+
 Unified `/players/:userId` pages include only claimed player records from
 public leagues. Standalone players cannot currently be claimed or included in
 unified profiles. Follows to leagues that later become private remain stored,

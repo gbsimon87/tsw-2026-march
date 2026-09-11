@@ -13,12 +13,6 @@ export const feedApi = {
     const suffix = searchParams.toString() ? `?${searchParams.toString()}` : '';
     return apiClient.get(`/feed${suffix}`);
   },
-  createImagePost(formData) {
-    return apiClient.postFormData('/feed/image', formData);
-  },
-  createVideoPost(formData, onProgress) {
-    return apiClient.postFormDataWithProgress('/feed/video', formData, onProgress);
-  },
   createGameCardPost(payload) {
     return apiClient.post('/feed/game-card', payload);
   },

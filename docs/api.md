@@ -100,8 +100,8 @@ GET    /feed/discoverable/players                   public
 GET    /feed/shareable/games                        public
 GET    /feed/shareable/players                      public
 GET    /feed/shareable/teams                        public
-POST   /feed/image                                  multipart: file
-POST   /feed/video                                  multipart: file
+POST   /feed/image                                  disabled: returns 403 before upload parsing
+POST   /feed/video                                  disabled: returns 403 before upload parsing
 POST   /feed/game-card
 POST   /feed/player-card
 POST   /feed/team-card
@@ -116,6 +116,10 @@ DELETE /follows/:targetType/:targetId
 
 Follow target types: `user`, `league`, `leagueTeam`. Legacy
 `/follows/users/:userId` mutation aliases remain temporarily.
+
+Raw Pulse image/video creation was disabled on 11 September 2026 at 12:31 BST.
+Existing media remains readable. See [`pulse-media-safety.md`](./pulse-media-safety.md)
+for the safety boundary and conditions for re-enabling these endpoints.
 
 ## Leagues
 

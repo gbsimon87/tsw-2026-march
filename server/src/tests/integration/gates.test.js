@@ -122,34 +122,21 @@ describe('feed affiliation gate', () => {
     jest.clearAllMocks();
   });
 
-  test('14.5 POST /feed/image returns 403 for user with no team/league affiliation', async () => {
-    billingService.assertFeedPostingAllowed.mockRejectedValue(
-      new ApiError(403, 'You must be part of a team or league to post')
-    );
+  test.each(['/api/v1/feed/image', '/api/v1/feed/video'])(
+    '14.5 POST %s rejects raw media while the safety hold is active',
+    async (endpoint) => {
+      const app = createApp();
+      const res = await authedPost(app, endpoint).send({});
 
-    const app = createApp();
-    const res = await authedPost(app, '/api/v1/feed/image').send({});
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error.message).toMatch(/temporarily disabled/i);
+      expect(billingService.assertFeedPostingAllowed).not.toHaveBeenCalled();
+      expect(feedService.createImagePostForUser).not.toHaveBeenCalled();
+      expect(feedService.createVideoPostForUser).not.toHaveBeenCalled();
+    }
+  );
 
-    expect(res.statusCode).toBe(403);
-    expect(billingService.assertFeedPostingAllowed).toHaveBeenCalledWith('user-1');
-  });
-
-  test('14.6 POST /feed/image returns 201 for team owner (affiliation check passes)', async () => {
-    billingService.assertFeedPostingAllowed.mockResolvedValue(undefined);
-    feedService.createImagePostForUser.mockResolvedValue({ id: 'post-1', type: 'image' });
-
-    const app = createApp();
-    const res = await request(app)
-      .post('/api/v1/feed/image')
-      .set('Authorization', `Bearer ${signAccessToken({ sub: 'owner-1', sid: 's1' })}`)
-      .set('Origin', CSRF_ORIGIN)
-      .send({});
-
-    expect(res.statusCode).toBe(201);
-    expect(billingService.assertFeedPostingAllowed).toHaveBeenCalledWith('owner-1');
-  });
-
-  test('14.7 POST /feed/game-card returns 201 for league team member (affiliation check passes)', async () => {
+  test('14.6 POST /feed/game-card returns 201 for league team member (affiliation check passes)', async () => {
     billingService.assertFeedPostingAllowed.mockResolvedValue(undefined);
     feedService.createGameCardPostForUser.mockResolvedValue({ id: 'post-2', type: 'game_card' });
 
@@ -158,30 +145,6 @@ describe('feed affiliation gate', () => {
 
     expect(res.statusCode).toBe(201);
     expect(billingService.assertFeedPostingAllowed).toHaveBeenCalledWith('user-1');
-  });
-
-  test('14.8 POST /feed/image returns 403 after affiliation check fails (user removed from team)', async () => {
-    billingService.assertFeedPostingAllowed.mockRejectedValue(
-      new ApiError(403, 'You must be part of a team or league to post')
-    );
-
-    const app = createApp();
-    const res = await authedPost(app, '/api/v1/feed/image').send({});
-
-    expect(res.statusCode).toBe(403);
-    expect(feedService.createImagePostForUser).not.toHaveBeenCalled();
-  });
-
-  test('assertFeedPostingAllowed is called before any upload processing', async () => {
-    billingService.assertFeedPostingAllowed.mockRejectedValue(
-      new ApiError(403, 'You must be part of a team or league to post')
-    );
-
-    const app = createApp();
-    await authedPost(app, '/api/v1/feed/video').send({});
-
-    // Service should never be reached if gate rejects
-    expect(feedService.createVideoPostForUser).not.toHaveBeenCalled();
   });
 
   test('all post creation endpoints check affiliation', async () => {
