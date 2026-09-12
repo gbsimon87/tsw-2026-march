@@ -1,81 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { matchPath, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../app/store/AuthContext';
-import { onConsentChange } from '../../lib/consent';
-import { env } from '../../lib/env';
+import { CONSENT_ACCEPTED, onConsentChange } from '../../lib/consent';
 import {
   capturePostHogPageLeave,
   capturePostHogPageView,
   identifyPostHogUser,
   initPostHog,
   resetPostHogUser,
+  setPostHogCommonContext,
 } from '../../lib/posthog';
 import { useScrollDepth } from './useScrollDepth';
-
-const routePatterns = [
-  '/',
-  '/home',
-  '/pulse',
-  '/login',
-  '/register',
-  '/privacy',
-  '/terms',
-  '/auth/google/complete',
-  '/forgot-password',
-  '/reset-password',
-  '/verify-email',
-  '/league/:leagueSlug',
-  '/league/:leagueSlug/standings',
-  '/league/:leagueSlug/games',
-  '/league/:leagueSlug/teams/:teamSlug',
-  '/league/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId',
-  '/teams',
-  '/teams/new',
-  '/teams/:teamId/edit',
-  '/teams/:teamId/players/:playerId',
-  '/teams/:teamId',
-  '/opponents/:opponentSlug',
-  '/admin',
-  '/dashboard',
-  '/admin/leagues/new',
-  '/admin/leagues/:leagueId',
-  '/admin/leagues/:leagueId/teams/:leagueTeamId',
-  '/admin/leagues/:leagueId/games/new',
-  '/games',
-  '/games/new',
-  '/games/:gameId/track',
-  '/games/:gameId',
-];
-
-function getRoutePattern(pathname) {
-  const match = routePatterns.find((pattern) => matchPath({ path: pattern, end: true }, pathname));
-
-  return match || pathname;
-}
+import { getRoutePattern } from './routePatterns';
 
 function getSafeUserProperties(user) {
   return {
-    // The user-level plan is only a legacy analytics cache and now stays Starter; no
-    // longer serializes user.leagueBilling (dropped in T-25), so the old
-    // leaguePlan/leagueSubscriptionStatus props reported 'free' for every user.
-    // billing access is inferred from this field.
-    plan: user.plan || 'starter',
-    roles: user.roles || [],
-    emailVerified: Boolean(user.emailVerified),
-    authProvider: user.authProvider || 'password',
+    auth_provider: user.authProvider === 'google' ? 'google' : 'local',
+    email_verified: Boolean(user.emailVerified),
+    onboarding_status: user.onboarding?.status || 'completed',
+    onboarding_roles: user.onboarding?.roles || [],
+    is_internal: Boolean(user.isInternal),
   };
 }
 
 export function PostHogRouteTracker() {
   const location = useLocation();
   const { user, isLoading } = useAuth();
-  const lastPageKeyRef = useRef('');
-  const lastPagePropsRef = useRef(null);
+  const activePageRef = useRef(null);
   const maxScrollDepthRef = useRef(0);
   const identifiedUserIdRef = useRef('');
   const [consentRevision, setConsentRevision] = useState(0);
   const routePattern = useMemo(() => getRoutePattern(location.pathname), [location.pathname]);
-  const routeKey = `${location.pathname}${location.search}`;
+  const routeKey = location.pathname;
 
   const onScrollDepthReached = useCallback((depth) => {
     maxScrollDepthRef.current = Math.max(maxScrollDepthRef.current, depth);
@@ -83,7 +39,30 @@ export function PostHogRouteTracker() {
 
   useScrollDepth(onScrollDepthReached, routeKey);
 
-  useEffect(() => onConsentChange(() => setConsentRevision((value) => value + 1)), []);
+  useEffect(
+    () =>
+      onConsentChange((decision) => {
+        if (decision !== CONSENT_ACCEPTED) activePageRef.current = null;
+        setConsentRevision((value) => value + 1);
+      }),
+    []
+  );
+
+  const leaveActivePage = useCallback(() => {
+    const page = activePageRef.current;
+    if (!page || page.left) return;
+    page.left = true;
+    capturePostHogPageLeave({
+      ...page.properties,
+      duration_seconds: Math.max(0, (performance.now() - page.startedAt) / 1000),
+      max_scroll_depth: maxScrollDepthRef.current,
+    });
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('pagehide', leaveActivePage);
+    return () => window.removeEventListener('pagehide', leaveActivePage);
+  }, [leaveActivePage]);
 
   useEffect(() => {
     // Init here (after first paint, before the first capture) rather than at
@@ -91,35 +70,32 @@ export function PostHogRouteTracker() {
     // idempotent — safe to call on every route change.
     initPostHog();
 
-    const pageKey = `${location.pathname}${location.search}${location.hash}`;
+    const pageKey = location.pathname;
 
-    if (lastPageKeyRef.current === pageKey) {
+    if (activePageRef.current?.key === pageKey) {
       return;
     }
 
-    if (lastPagePropsRef.current) {
-      capturePostHogPageLeave({
-        ...lastPagePropsRef.current,
-        scroll_depth: maxScrollDepthRef.current,
-      });
-    }
+    leaveActivePage();
 
-    lastPageKeyRef.current = pageKey;
     maxScrollDepthRef.current = 0;
 
     const pageProps = {
-      $current_url: window.location.href,
-      path: location.pathname,
-      search: location.search,
-      url: window.location.href,
-      referrer: document.referrer || '',
-      app_env: env.appEnv,
       route_pattern: routePattern,
+      is_authenticated: Boolean(user?.id),
     };
 
-    lastPagePropsRef.current = pageProps;
-    capturePostHogPageView(pageProps);
-  }, [location.hash, location.pathname, location.search, routePattern]);
+    if (capturePostHogPageView(pageProps)) {
+      activePageRef.current = {
+        key: pageKey,
+        properties: pageProps,
+        startedAt: performance.now(),
+        left: false,
+      };
+    } else {
+      activePageRef.current = null;
+    }
+  }, [consentRevision, leaveActivePage, location.pathname, routePattern, user?.id]);
 
   useEffect(() => {
     if (isLoading) {
@@ -127,6 +103,15 @@ export function PostHogRouteTracker() {
     }
 
     if (user?.id) {
+      if (identifiedUserIdRef.current && identifiedUserIdRef.current !== user.id) {
+        resetPostHogUser();
+        identifiedUserIdRef.current = '';
+      }
+      setPostHogCommonContext({
+        isAuthenticated: true,
+        isInternal: user.isInternal,
+        isDemo: user.isDemo,
+      });
       // Only record the id once identify actually happened. identifyPostHogUser
       // is a no-op before consent, and setting the ref regardless would make
       // the consentRevision re-run below think the work was already done —
@@ -141,6 +126,7 @@ export function PostHogRouteTracker() {
       identifiedUserIdRef.current = '';
       resetPostHogUser();
     }
+    setPostHogCommonContext({ isAuthenticated: false, isInternal: false, isDemo: false });
     // consentRevision re-runs this after the visitor accepts, so someone
     // already signed in is identified without needing a page reload.
   }, [isLoading, user, consentRevision]);

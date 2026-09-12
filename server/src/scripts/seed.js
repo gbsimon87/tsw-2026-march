@@ -407,6 +407,7 @@ function createSeedUsers() {
       name: identity?.userName || buildFallbackUserName(index - seedIdentityBlueprints.length),
       teamName: identity?.teamName || buildFallbackTeamName(index - seedIdentityBlueprints.length),
       plan: 'starter',
+      isDemo: true,
       onboarding: buildSeedOnboarding(index, email === seededLeagueBlueprint.ownerEmail),
     };
   });

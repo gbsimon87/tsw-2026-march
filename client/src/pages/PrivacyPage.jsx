@@ -5,7 +5,7 @@ import { env } from '../lib/env';
 // Last substantive review of this policy's content. Update whenever the data
 // collected, the purposes, or the processors below change — and bump
 // CONSENT_VERSION in lib/consent.js at the same time so visitors are re-asked.
-const LAST_UPDATED = '5 September 2026';
+const LAST_UPDATED = '12 September 2026';
 
 const processors = [
   {
@@ -141,8 +141,8 @@ export function PrivacyPage() {
             in, these are linked to your internal account ID — never to your name or email.
           </p>
           <p>
-            If you decline, we still count the visit so we know roughly how busy the site is, but
-            nothing is stored on your device and nothing is linked to you between visits.
+            If you decline, or have not made a choice, we do not send analytics events. You can
+            withdraw consent at any time from Cookie settings.
           </p>
 
           <h3 className="pt-2 font-semibold text-slate-900">Technical data</h3>
@@ -281,7 +281,10 @@ export function PrivacyPage() {
             results and statistics, for example — may remain as part of that league&apos;s history
             in a form no longer linked to you.
           </p>
-          <p>Analytics data is retained by PostHog under our project retention settings.</p>
+          <p>
+            Analytics data is retained by PostHog under our project retention settings. We are
+            reviewing a 13-month limit before enabling analytics in production.
+          </p>
           <p>Server logs are short-lived and kept only for security and fault diagnosis.</p>
         </div>
       </section>

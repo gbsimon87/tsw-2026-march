@@ -1,5 +1,6 @@
 const { ApiError } = require('../../utils/apiError');
 const gamesService = require('./games.service');
+const { readAnalyticsConsent } = require('../analytics/analyticsConsent');
 const {
   createGameSchema,
   updateGameSchema,
@@ -22,7 +23,10 @@ function requireAuthUserId(req) {
 async function create(req, res) {
   const userId = requireAuthUserId(req);
   const payload = createGameSchema.parse(req.body);
-  const game = await gamesService.createGameForUser(userId, payload);
+  const game = await gamesService.createGameForUser(userId, payload, {
+    analyticsConsent: readAnalyticsConsent(req),
+    creationMethod: 'single',
+  });
   res.status(201).json({ game });
 }
 
@@ -101,14 +105,22 @@ async function removeEvent(req, res) {
 
 async function finish(req, res) {
   const userId = requireAuthUserId(req);
-  const result = await gamesService.finishGameForUser(userId, req.params.gameId);
+  const result = await gamesService.finishGameForUser(userId, req.params.gameId, {
+    analyticsConsent: readAnalyticsConsent(req),
+  });
   res.status(200).json(result);
 }
 
 async function updateClock(req, res) {
   const userId = requireAuthUserId(req);
   const command = clockCommandSchema.parse(req.body);
-  const result = await gamesService.updateClockForUser(userId, req.params.gameId, command);
+  const result = await gamesService.updateClockForUser(
+    userId,
+    req.params.gameId,
+    command,
+    new Date(),
+    { analyticsConsent: readAnalyticsConsent(req) }
+  );
   res.status(200).json(result);
 }
 

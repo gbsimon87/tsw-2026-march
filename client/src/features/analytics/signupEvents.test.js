@@ -41,7 +41,7 @@ describe('trackAuthPageViewed', () => {
 
     expect(trackEventMock).toHaveBeenCalledWith('auth_page_viewed', {
       mode: 'register',
-      redirect_to: false,
+      has_redirect: false,
     });
   });
 
@@ -52,7 +52,7 @@ describe('trackAuthPageViewed', () => {
     // and whether the visitor was gated is the part that matters.
     expect(trackEventMock).toHaveBeenCalledWith('auth_page_viewed', {
       mode: 'register',
-      redirect_to: true,
+      has_redirect: true,
     });
   });
 });

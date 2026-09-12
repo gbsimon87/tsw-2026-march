@@ -692,7 +692,6 @@ export function GameDetailPage() {
 
   function onFeedPostCreated() {
     closeFeedComposer();
-    trackEvent('game_detail_feed_post_created', { game_id: gameId });
     setFeedPostState('posted');
     window.setTimeout(() => {
       setFeedPostState((current) => (current === 'posted' ? '' : current));

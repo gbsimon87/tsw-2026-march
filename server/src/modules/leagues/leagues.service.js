@@ -11,6 +11,7 @@ const {
 } = require('../shared/statSummary');
 const { TEAM_SIDES } = require('../shared/stats.constants');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
+const { captureUserEventDetached } = require('../analytics/analytics.service');
 const {
   listLeaguesByOwner,
   listPublicLeagues: listPublicLeaguesRepo,
@@ -410,6 +411,19 @@ function ensureSeasonEditable(season) {
 async function isTeamManager(userId, leagueTeamId) {
   const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
   return Boolean(member && member.role === 'manager');
+}
+
+// The assert helpers speak the authorization vocabulary ('owner', 'manager');
+// docs/posthog.md §9 requires the analytics vocabulary. Translate once here so
+// no call site invents its own spelling and splits a chart in two.
+const ANALYTICS_ACTOR_ROLES = {
+  owner: 'league_owner',
+  league_manager: 'league_manager',
+  manager: 'team_manager',
+};
+
+function toAnalyticsActorRole(role) {
+  return ANALYTICS_ACTOR_ROLES[role] || null;
 }
 
 async function assertTeamManagerOrOwner(userId, leagueId, leagueTeamId) {
@@ -856,8 +870,8 @@ async function archiveLeagueForUser(userId, leagueId) {
   return sanitizeLeague(league);
 }
 
-async function createLeagueTeamForLeague(userId, leagueId, payload) {
-  const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
+async function createLeagueTeamForLeague(userId, leagueId, payload, metadata = {}) {
+  const { league, role } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
 
   const slug = payload.slug?.trim() ? slugify(payload.slug) : slugify(payload.name);
@@ -892,6 +906,17 @@ async function createLeagueTeamForLeague(userId, leagueId, payload) {
     slug,
     colors: (payload.colors || []).map(normalizeHexColor).filter(Boolean),
     status: 'active',
+  });
+
+  captureUserEventDetached({
+    userId,
+    event: 'league_team_created',
+    properties: {
+      league_id: String(leagueId),
+      league_team_id: String(leagueTeam._id),
+      actor_role: toAnalyticsActorRole(role),
+    },
+    consent: metadata.analyticsConsent,
   });
 
   // OPT-010: a new team adds a (zeroed) standings row.
@@ -1566,8 +1591,8 @@ async function removeLeagueLogo(userId, leagueId) {
   return sanitizeLeague(league);
 }
 
-async function addPlayerToLeagueTeam(userId, leagueId, leagueTeamId, payload) {
-  const { league } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
+async function addPlayerToLeagueTeam(userId, leagueId, leagueTeamId, payload, metadata = {}) {
+  const { league, role } = await assertTeamManagerOrOwner(userId, leagueId, leagueTeamId);
   ensureLeagueEditable(league);
   const team = await assertLeagueTeamExists(leagueId, leagueTeamId);
   const existingPlayers = await listLeaguePlayers(team._id);
@@ -1589,6 +1614,24 @@ async function addPlayerToLeagueTeam(userId, leagueId, leagueTeamId, payload) {
     position: normalizePosition(payload.position),
     isActive: true,
   });
+
+  // docs/posthog.md §11.4: send once per resource. Players are deactivated
+  // rather than deleted, so an empty `existingPlayers` means this team has
+  // never had a player and the transition cannot repeat after later churn.
+  if (existingPlayers.length === 0) {
+    captureUserEventDetached({
+      userId,
+      event: 'roster_populated',
+      properties: {
+        resource_type: 'league_team',
+        resource_id: String(leagueTeamId),
+        league_id: String(leagueId),
+        actor_role: toAnalyticsActorRole(role),
+        method: 'manual',
+      },
+      consent: metadata.analyticsConsent,
+    });
+  }
 
   return sanitizeLeaguePlayer(player);
 }
@@ -2650,6 +2693,7 @@ async function getLeagueContextForGame(userId, payload, options = {}) {
     trackedTeam,
     rosterSnapshot: buildLeagueRosterSnapshot(trackedPlayers),
     seasonId: league.currentSeasonId,
+    actorRole: isOwner ? 'league_owner' : isLeagueMgr ? 'league_manager' : 'team_manager',
   };
 }
 

@@ -7,6 +7,7 @@ const expected = {
   'env/client/.env.development': [
     'VITE_APP_NAME',
     'VITE_APP_ENV',
+    'VITE_APP_VERSION',
     'VITE_API_BASE_URL',
     'VITE_ENABLE_ANALYTICS',
     'VITE_POSTHOG_KEY',
@@ -15,6 +16,7 @@ const expected = {
   'env/client/.env.production': [
     'VITE_APP_NAME',
     'VITE_APP_ENV',
+    'VITE_APP_VERSION',
     'VITE_API_BASE_URL',
     'VITE_ENABLE_ANALYTICS',
     'VITE_POSTHOG_KEY',
@@ -23,6 +25,8 @@ const expected = {
   'env/server/.env.development': [
     'NODE_ENV',
     'APP_ENV',
+    'APP_VERSION',
+    'ENABLE_ANALYTICS',
     'PORT',
     'CLIENT_ORIGIN',
     'MONGO_URI',
@@ -57,6 +61,8 @@ const expected = {
   'env/server/.env.production': [
     'NODE_ENV',
     'APP_ENV',
+    'APP_VERSION',
+    'ENABLE_ANALYTICS',
     'PORT',
     'CLIENT_ORIGIN',
     'MONGO_URI',

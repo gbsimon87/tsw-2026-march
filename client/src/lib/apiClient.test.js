@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from './apiClient';
 
+vi.mock('./consent', () => ({
+  getAnalyticsConsentHeader: vi.fn(() => 'accepted;version=2'),
+}));
+
 describe('apiClient request timeout', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -33,5 +37,26 @@ describe('apiClient request timeout', () => {
 
     await vi.advanceTimersByTimeAsync(15000);
     await assertion;
+  });
+
+  it('propagates positive versioned analytics consent to the API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({}),
+      }))
+    );
+
+    await apiClient.get('/health');
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-analytics-consent': 'accepted;version=2' }),
+      })
+    );
   });
 });

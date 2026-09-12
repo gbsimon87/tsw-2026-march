@@ -5,6 +5,7 @@ const { ApiError } = require('../../utils/apiError');
 const { buildCursorPage } = require('../../utils/pagination');
 const { logger } = require('../../config/logger');
 const { env } = require('../../config/env');
+const { captureUserEventDetached } = require('../analytics/analytics.service');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
 const {
   createGame,
@@ -1431,7 +1432,58 @@ function clockAwareGameFields(format) {
   return { sport: SPORTS.BASKETBALL, gameFormat, clock: createReadyClock(gameFormat) };
 }
 
-async function createGameForUser(userId, payload) {
+// docs/posthog.md §9: game_scheduled, game_tracking_started and game_completed
+// describe one game at three points in its life, so they must agree on their
+// context properties or a funnel across them silently drops games.
+function gameAnalyticsContext(game, actorRole) {
+  const properties = {
+    game_id: String(game._id),
+    game_context: game.gameContext || 'standalone',
+    tracking_mode: game.trackingMode || 'one_sided',
+    actor_role: actorRole,
+  };
+  if (game.teamId) properties.team_id = String(game.teamId);
+  if (game.leagueId) properties.league_id = String(game.leagueId);
+  if (game.seasonId) properties.season_id = String(game.seasonId);
+  return properties;
+}
+
+// A league game's owner is its league owner; anyone else who got this far
+// passed the league-manager authorization check.
+function gameActorRole(game, userId) {
+  if (game.gameContext !== 'league') return 'team_manager';
+  return String(game.ownerUserId) === String(userId) ? 'league_owner' : 'league_manager';
+}
+
+function captureGameTrackingStarted(userId, game, metadata, actorRole) {
+  captureUserEventDetached({
+    userId,
+    event: 'game_tracking_started',
+    properties: gameAnalyticsContext(game, actorRole || gameActorRole(game, userId)),
+    consent: metadata.analyticsConsent,
+  });
+}
+
+function captureGameCreation(userId, game, metadata, actorRole) {
+  captureUserEventDetached({
+    userId,
+    event: 'game_scheduled',
+    properties: {
+      ...gameAnalyticsContext(game, actorRole),
+      creation_method: metadata.creationMethod || 'single',
+    },
+    consent: metadata.analyticsConsent,
+  });
+
+  // A "quick game" is committed straight into tracking, so it never passes
+  // through the clock-start transition below. Without this the funnel would
+  // show it as scheduled and never tracked.
+  if (game.status === 'in_progress') {
+    captureGameTrackingStarted(userId, game, metadata, actorRole);
+  }
+}
+
+async function createGameForUser(userId, payload, metadata = {}) {
   if (payload.trackingMode === 'dual_team' && payload.homeTeamId && payload.awayTeamId) {
     const [homeTeam, awayTeam] = await Promise.all([
       assertTeamOwnership(userId, payload.homeTeamId).catch(() => findTeamById(payload.homeTeamId)),
@@ -1469,6 +1521,7 @@ async function createGameForUser(userId, payload) {
       status: 'in_progress',
     });
 
+    captureGameCreation(userId, game, metadata, 'team_manager');
     return sanitizeGame(game);
   }
 
@@ -1542,6 +1595,7 @@ async function createGameForUser(userId, payload) {
       status: 'scheduled',
     });
 
+    captureGameCreation(userId, game, metadata, context.actorRole);
     return sanitizeGame(game);
   }
 
@@ -1571,6 +1625,7 @@ async function createGameForUser(userId, payload) {
       rosterSnapshot: context.rosterSnapshot,
     });
 
+    captureGameCreation(userId, game, metadata, context.actorRole);
     return sanitizeGame(game);
   }
 
@@ -1595,6 +1650,7 @@ async function createGameForUser(userId, payload) {
     entitlementsSnapshot: resolveForTeam(team).entitlements,
   });
 
+  captureGameCreation(userId, game, metadata, 'team_manager');
   return sanitizeGame(game);
 }
 
@@ -2204,12 +2260,16 @@ function requireStartingLineups(game) {
   }
 }
 
-async function updateClockForUser(userId, gameId, command, now = new Date()) {
+async function updateClockForUser(userId, gameId, command, now = new Date(), metadata = {}) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (game.status === 'completed') throw new ApiError(400, 'Cannot operate a completed game clock');
 
   const normalized = normalizeClock(game.clock.toObject?.() || game.clock, now);
   game.clock = normalized;
+  // Only the scheduled -> in_progress transition is tip-off. Every later start
+  // (a resume after a pause, a reconnect) finds the game already in_progress,
+  // which is what keeps game_tracking_started a once-per-game event.
+  let enteredTracking = false;
 
   switch (command.action) {
     case 'start':
@@ -2219,6 +2279,7 @@ async function updateClockForUser(userId, gameId, command, now = new Date()) {
       }
       if (game.status === 'scheduled') {
         game.status = 'in_progress';
+        enteredTracking = true;
         // Reads were live up to this point; capture the roster now that the game
         // is being played. Saved by the saveGame below, with the clock change.
         await freezeLeagueRosterSnapshots(game);
@@ -2312,6 +2373,11 @@ async function updateClockForUser(userId, gameId, command, now = new Date()) {
   }
 
   await saveGameEventMutation(game);
+  // After the write: an event named as a transition must describe a transition
+  // that was actually committed.
+  if (enteredTracking) {
+    captureGameTrackingStarted(userId, game, metadata);
+  }
   const result = await getGameForUser(userId, gameId);
   return { ...result, serverTime: now.toISOString() };
 }
@@ -2424,7 +2490,7 @@ async function deleteGameForUser(userId, gameId) {
   }
 }
 
-async function finishGameForUser(userId, gameId) {
+async function finishGameForUser(userId, gameId, metadata = {}) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (game.status === 'completed') {
     throw new ApiError(400, 'Game is already completed');
@@ -2466,6 +2532,13 @@ async function finishGameForUser(userId, gameId) {
   game.gameSummary = buildGameSummary(game);
 
   await saveGameEventMutation(game);
+
+  captureUserEventDetached({
+    userId,
+    event: 'game_completed',
+    properties: gameAnalyticsContext(game, gameActorRole(game, userId)),
+    consent: metadata.analyticsConsent,
+  });
 
   // OPT-010/013/017: a newly completed game changes its league's standings,
   // its standalone team's season summary, and any shared feed card's score.

@@ -1,4 +1,5 @@
 import { env } from './env';
+import { getAnalyticsConsentHeader } from './consent';
 
 let csrfToken =
   document.cookie
@@ -12,6 +13,11 @@ let refreshPromise = null;
 // permanently disabled with no error. Every request gets an AbortController-based
 // ceiling so it always eventually rejects.
 const REQUEST_TIMEOUT_MS = 15000;
+
+function addAnalyticsConsentHeader(headers = {}) {
+  const analyticsConsent = getAnalyticsConsentHeader();
+  return analyticsConsent ? { ...headers, 'x-analytics-consent': analyticsConsent } : headers;
+}
 
 async function fetchWithTimeout(url, options) {
   const controller = new AbortController();
@@ -33,7 +39,7 @@ async function refreshSession() {
     refreshPromise = fetchWithTimeout(`${env.apiBaseUrl}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
-      headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
+      headers: addAnalyticsConsentHeader(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
     })
       .then(async (response) => {
         const nextCsrfToken = response.headers.get('x-csrf-token');
@@ -69,6 +75,8 @@ async function request(path, options = {}, retryState = {}) {
   if (isMutation && csrfToken) {
     headers['x-csrf-token'] = csrfToken;
   }
+
+  Object.assign(headers, addAnalyticsConsentHeader(headers));
 
   const response = await fetchWithTimeout(`${env.apiBaseUrl}${path}`, {
     credentials: 'include',
@@ -131,6 +139,7 @@ function parseContentDispositionFilename(header) {
 async function requestBlob(path, retryState = {}) {
   const response = await fetchWithTimeout(`${env.apiBaseUrl}${path}`, {
     credentials: 'include',
+    headers: addAnalyticsConsentHeader(),
   });
 
   const nextCsrfToken = response.headers.get('x-csrf-token');
@@ -196,6 +205,9 @@ export const apiClient = {
       if (csrfToken) {
         xhr.setRequestHeader('x-csrf-token', csrfToken);
       }
+
+      const analyticsConsent = getAnalyticsConsentHeader();
+      if (analyticsConsent) xhr.setRequestHeader('x-analytics-consent', analyticsConsent);
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {

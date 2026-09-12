@@ -32,7 +32,6 @@ jest.mock('../../services/authToken.service', () => ({
 
 jest.mock('../../modules/analytics/analytics.service', () => ({
   captureEventDetached: jest.fn(),
-  pseudonymousId: jest.fn((email) => `anon_${email}`),
 }));
 
 const repository = require('../../modules/auth/auth.repository');
@@ -148,6 +147,14 @@ describe('auth service', () => {
   });
 
   describe('analytics events', () => {
+    const consent = { accepted: true, version: 2 };
+    const metadata = {
+      userAgent: 'jest',
+      ip: '127.0.0.1',
+      requestId: 'request-1',
+      analyticsConsent: consent,
+    };
+
     function mockNewUser() {
       repository.findUserByEmail.mockResolvedValue(null);
       repository.createUser.mockResolvedValue({
@@ -166,7 +173,7 @@ describe('auth service', () => {
 
       await authService.register(
         { email: 'player@example.com', name: 'Player One', password: 'password123' },
-        { userAgent: 'jest', ip: '127.0.0.1' }
+        metadata
       );
 
       // Acquisition and engagement stay separate: user_registered fires once
@@ -176,11 +183,17 @@ describe('auth service', () => {
         distinctId: 'user-1',
         event: 'user_registered',
         properties: { auth_provider: 'local' },
+        consent,
+        isInternal: false,
+        isDemo: false,
       });
       expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
         distinctId: 'user-1',
         event: 'user_logged_in',
         properties: { auth_provider: 'local', is_first_login: true },
+        consent,
+        isInternal: false,
+        isDemo: false,
       });
     });
 
@@ -190,15 +203,15 @@ describe('auth service', () => {
       await expect(
         authService.register(
           { email: 'taken@example.com', name: 'Someone', password: 'password123' },
-          { userAgent: 'jest', ip: '127.0.0.1' }
+          metadata
         )
       ).rejects.toMatchObject({ statusCode: 409 });
 
-      expect(analyticsService.pseudonymousId).toHaveBeenCalledWith('taken@example.com');
       expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
-        distinctId: 'anon_taken@example.com',
+        distinctId: 'request-1',
         event: 'registration_failed',
         properties: { reason: 'email_in_use' },
+        consent,
       });
     });
 
@@ -213,15 +226,15 @@ describe('auth service', () => {
         plan: 'starter',
       });
 
-      await authService.login(
-        { email: 'player@example.com', password: 'password123' },
-        { userAgent: 'jest', ip: '127.0.0.1' }
-      );
+      await authService.login({ email: 'player@example.com', password: 'password123' }, metadata);
 
       expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
         distinctId: 'user-1',
         event: 'user_logged_in',
         properties: { auth_provider: 'local', is_first_login: false },
+        consent,
+        isInternal: false,
+        isDemo: false,
       });
     });
 
@@ -289,22 +302,27 @@ describe('auth service', () => {
         name: 'Google Player',
       });
 
+      expect(analyticsService.captureEventDetached).not.toHaveBeenCalled();
+
+      repository.findUserById.mockResolvedValue(googleUser);
+      await authService.exchangeGoogleOAuthToken(exchangeToken, metadata);
+
       expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
         distinctId: 'google-user-1',
         event: 'user_registered',
         properties: { auth_provider: 'google' },
-      });
-
-      repository.findUserById.mockResolvedValue(googleUser);
-      await authService.exchangeGoogleOAuthToken(exchangeToken, {
-        userAgent: 'jest',
-        ip: '127.0.0.1',
+        consent,
+        isInternal: false,
+        isDemo: false,
       });
 
       expect(analyticsService.captureEventDetached).toHaveBeenCalledWith({
         distinctId: 'google-user-1',
         event: 'user_logged_in',
         properties: { auth_provider: 'google', is_first_login: true },
+        consent,
+        isInternal: false,
+        isDemo: false,
       });
     });
 
@@ -326,10 +344,7 @@ describe('auth service', () => {
         name: 'Google Player',
       });
       repository.findUserById.mockResolvedValue(googleUser);
-      await authService.exchangeGoogleOAuthToken(exchangeToken, {
-        userAgent: 'jest',
-        ip: '127.0.0.1',
-      });
+      await authService.exchangeGoogleOAuthToken(exchangeToken, metadata);
 
       expect(analyticsService.captureEventDetached).not.toHaveBeenCalledWith(
         expect.objectContaining({ event: 'user_registered' })
@@ -338,6 +353,9 @@ describe('auth service', () => {
         distinctId: 'google-user-1',
         event: 'user_logged_in',
         properties: { auth_provider: 'google', is_first_login: false },
+        consent,
+        isInternal: false,
+        isDemo: false,
       });
     });
   });

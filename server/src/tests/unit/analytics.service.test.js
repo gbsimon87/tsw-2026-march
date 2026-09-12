@@ -13,6 +13,8 @@ jest.mock('../../config/env', () => ({
   env: {
     NODE_ENV: 'production',
     APP_ENV: 'development',
+    APP_VERSION: 'test-build',
+    ENABLE_ANALYTICS: true,
     POSTHOG_KEY: 'phc_test_key',
     POSTHOG_HOST: 'https://eu.i.posthog.com',
   },
@@ -21,6 +23,11 @@ jest.mock('../../config/env', () => ({
 const mockLoggerWarn = jest.fn();
 jest.mock('../../config/logger', () => ({
   logger: { debug: jest.fn(), warn: mockLoggerWarn },
+}));
+
+const mockFindUserById = jest.fn();
+jest.mock('../../modules/auth/auth.repository', () => ({
+  findUserById: mockFindUserById,
 }));
 
 const analyticsService = require('../../modules/analytics/analytics.service');
@@ -39,6 +46,7 @@ describe('analytics service', () => {
         distinctId: 'user-1',
         event: 'user_registered',
         properties: { auth_provider: 'local' },
+        consent: { accepted: true, version: 2 },
       });
 
       await flush();
@@ -46,7 +54,15 @@ describe('analytics service', () => {
       expect(mockCapture).toHaveBeenCalledWith({
         distinctId: 'user-1',
         event: 'user_registered',
-        properties: { auth_provider: 'local', app_env: 'development' },
+        properties: {
+          auth_provider: 'local',
+          app_env: 'development',
+          app_version: 'test-build',
+          event_schema_version: 1,
+          event_source: 'api',
+          is_internal: false,
+          is_demo: false,
+        },
       });
     });
 
@@ -56,7 +72,12 @@ describe('analytics service', () => {
       });
 
       expect(() =>
-        analyticsService.captureEventDetached({ distinctId: 'user-1', event: 'user_logged_in' })
+        analyticsService.captureEventDetached({
+          distinctId: 'user-1',
+          event: 'user_logged_in',
+          properties: { auth_provider: 'local', is_first_login: false },
+          consent: { accepted: true, version: 2 },
+        })
       ).not.toThrow();
 
       await flush();
@@ -100,31 +121,100 @@ describe('analytics service', () => {
     });
   });
 
-  describe('pseudonymousId', () => {
-    test('is stable for the same email, so repeated failures group together', () => {
-      expect(analyticsService.pseudonymousId('player@example.com')).toBe(
-        analyticsService.pseudonymousId('player@example.com')
-      );
+  test('drops events when consent is missing or the event contract is invalid', async () => {
+    await expect(
+      analyticsService.captureEvent({
+        distinctId: 'user-1',
+        event: 'user_registered',
+        properties: { auth_provider: 'local' },
+      })
+    ).resolves.toEqual({ captured: false, reason: 'consent_not_granted' });
+
+    await expect(
+      analyticsService.captureEvent({
+        distinctId: 'user-1',
+        event: 'unknown_event',
+        properties: {},
+        consent: { accepted: true, version: 2 },
+      })
+    ).resolves.toEqual({ captured: false, reason: 'invalid_event_contract' });
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+});
+
+// captureUserEventDetached is the path every resource/activation event takes,
+// so docs/posthog.md §16.5 — "analytics failure never fails the application
+// operation" — has to hold for it specifically, not only for the auth-flow
+// helper above.
+describe('captureUserEventDetached', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFindUserById.mockResolvedValue({ _id: 'user-1', isInternal: false, isDemo: false });
+  });
+
+  test('stamps traffic classification from the account, not from the caller', async () => {
+    mockFindUserById.mockResolvedValue({ _id: 'user-1', isInternal: true, isDemo: true });
+
+    analyticsService.captureUserEventDetached({
+      userId: 'user-1',
+      event: 'league_team_created',
+      properties: { league_id: 'league-1', league_team_id: 'lt-1', actor_role: 'league_owner' },
+      consent: { accepted: true, version: 2 },
     });
 
-    test('normalises case and surrounding whitespace', () => {
-      expect(analyticsService.pseudonymousId('  Player@Example.com  ')).toBe(
-        analyticsService.pseudonymousId('player@example.com')
-      );
+    await flush();
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        distinctId: 'user-1',
+        event: 'league_team_created',
+        properties: expect.objectContaining({ is_internal: true, is_demo: true }),
+      })
+    );
+  });
+
+  test.each([
+    ['no consent header at all', undefined],
+    ['an explicit decline', { accepted: false, version: 2 }],
+    ['a consent decision predating the current policy', { accepted: true, version: 1 }],
+  ])('sends nothing for %s', async (_label, consent) => {
+    analyticsService.captureUserEventDetached({
+      userId: 'user-1',
+      event: 'game_tracking_started',
+      properties: {
+        game_id: 'game-1',
+        game_context: 'league',
+        tracking_mode: 'dual_team',
+        actor_role: 'league_owner',
+      },
+      consent,
     });
 
-    test('differs between addresses', () => {
-      expect(analyticsService.pseudonymousId('a@example.com')).not.toBe(
-        analyticsService.pseudonymousId('b@example.com')
-      );
-    });
+    await flush();
 
-    test('does not leak the address it was derived from', () => {
-      const id = analyticsService.pseudonymousId('player@example.com');
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
 
-      expect(id).not.toContain('player');
-      expect(id).not.toContain('example.com');
-      expect(id).toMatch(/^anon_[a-f0-9]{32}$/);
-    });
+  test('swallows a lookup failure so the request that triggered it still succeeds', async () => {
+    mockFindUserById.mockRejectedValue(new Error('mongo unreachable'));
+
+    expect(() =>
+      analyticsService.captureUserEventDetached({
+        userId: 'user-1',
+        event: 'roster_populated',
+        properties: {
+          resource_type: 'league_team',
+          resource_id: 'lt-1',
+          actor_role: 'league_owner',
+          method: 'manual',
+        },
+        consent: { accepted: true, version: 2 },
+      })
+    ).not.toThrow();
+
+    await flush();
+
+    expect(mockLoggerWarn).toHaveBeenCalled();
+    expect(mockCapture).not.toHaveBeenCalled();
   });
 });

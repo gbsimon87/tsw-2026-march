@@ -210,6 +210,7 @@ async function upsertUser({ email, name, password, plan, forceCredentials }) {
     user.emailVerified = true;
     user.emailVerifiedAt = user.emailVerifiedAt || new Date();
     user.plan = plan || 'starter';
+    user.isDemo = true;
     await user.save();
     log(`  user ${email}: existing account found, credentials/plan updated to match demo spec`);
     return { user, created: false };
@@ -230,6 +231,7 @@ async function upsertUser({ email, name, password, plan, forceCredentials }) {
     emailVerifiedAt: new Date(),
     roles: ['user'],
     plan: plan || 'starter',
+    isDemo: true,
   });
   log(`  user ${email}: created`);
   return { user, created: true };

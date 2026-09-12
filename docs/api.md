@@ -9,8 +9,6 @@ public. Errors use `{ error: { message, details, requestId } }`.
 ```text
 GET    /health                                      public
 POST   /contact                                     public, rate-limited
-POST   /analytics/event
-
 POST   /auth/register                               public
 POST   /auth/login                                  public
 POST   /auth/refresh                                public

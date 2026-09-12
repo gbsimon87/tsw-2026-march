@@ -16,6 +16,8 @@ const userSchema = new mongoose.Schema(
     // The seven dead User.league* mirror fields were removed (Phase 6 / T-25) — league
     // billing lives on the League doc; migrate-drop-user-league-fields.js $unsets them.
     roles: { type: [String], default: ['user'] },
+    isInternal: { type: Boolean, default: false },
+    isDemo: { type: Boolean, default: false },
     avatar: {
       url: { type: String, default: null },
       publicId: { type: String, default: null },

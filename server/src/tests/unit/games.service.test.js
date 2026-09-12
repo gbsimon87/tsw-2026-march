@@ -1,3 +1,7 @@
+jest.mock('../../modules/analytics/analytics.service', () => ({
+  captureUserEventDetached: jest.fn(),
+}));
+
 jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamByIdAndOwner: jest.fn(),
   findTeamById: jest.fn(),
@@ -102,6 +106,7 @@ const {
   getLeagueRosterSnapshotForTeam,
   getLeagueTeamRosterSnapshotForGame,
   canEditCompletedLeagueGame,
+  canManageLeagueGame,
 } = require('../../modules/leagues/leagues.service');
 const {
   computeBoxScore,
@@ -119,6 +124,7 @@ const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 const { autoPublishForFinalizedGame } = require('../../modules/feed/feed.service');
 const { env } = require('../../config/env');
 const { findLeagueById } = require('../../modules/leagues/leagues.repository');
+const { captureUserEventDetached } = require('../../modules/analytics/analytics.service');
 
 beforeEach(() => {
   // Most tests in this file exercise game behaviour rather than billing. Give
@@ -1991,5 +1997,129 @@ describe('court layout compatibility contract', () => {
     await expect(
       updateEventForUser('user-1', 'game-1', 'event-1', { playerId: 'p1' })
     ).resolves.toBeDefined();
+  });
+});
+
+// docs/posthog.md §11.4 / §16.3: the activation events are the product's North
+// Star inputs, so each must be server-confirmed and emitted exactly once — a
+// repeated start or a retried finish must not inflate the funnel.
+describe('games service activation analytics', () => {
+  const CONSENT = { accepted: true, version: 2 };
+
+  function eventsNamed(name) {
+    return captureUserEventDetached.mock.calls
+      .map(([call]) => call)
+      .filter((c) => c.event === name);
+  }
+
+  function buildStartableGame(overrides = {}) {
+    const players = ['p1', 'p2', 'p3', 'p4', 'p5'];
+    return buildDualLeagueGame({
+      status: 'scheduled',
+      seasonId: 'season-1',
+      homeCurrentLineupPlayerIds: players,
+      awayCurrentLineupPlayerIds: players.map((id) => `away-${id}`),
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 600000,
+        runningSince: null,
+      },
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  describe('game_tracking_started', () => {
+    test('is captured with safe game context when a scheduled game tips off', async () => {
+      const game = buildStartableGame();
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+
+      await updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date(), {
+        analyticsConsent: CONSENT,
+      });
+
+      expect(eventsNamed('game_tracking_started')).toEqual([
+        {
+          userId: 'user-1',
+          event: 'game_tracking_started',
+          properties: {
+            game_id: 'game-1',
+            game_context: 'league',
+            tracking_mode: 'dual_team',
+            actor_role: 'league_owner',
+            league_id: 'league-1',
+            season_id: 'season-1',
+          },
+          consent: CONSENT,
+        },
+      ]);
+    });
+
+    // The scheduled -> in_progress branch is the one-time guard: a second start
+    // (a reconnect, a double tap, a resumed clock) finds the game already
+    // in_progress and must not re-emit.
+    test('is not captured again when the clock is restarted after a pause', async () => {
+      const game = buildStartableGame({ status: 'in_progress' });
+      game.clock.status = 'paused';
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+
+      await updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date(), {
+        analyticsConsent: CONSENT,
+      });
+
+      expect(eventsNamed('game_tracking_started')).toHaveLength(0);
+    });
+
+    test('is not captured when the start is rejected for a missing lineup', async () => {
+      const game = buildStartableGame({
+        homeCurrentLineupPlayerIds: [],
+        awayCurrentLineupPlayerIds: [],
+      });
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+
+      await expect(
+        updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date(), {
+          analyticsConsent: CONSENT,
+        })
+      ).rejects.toThrow();
+
+      expect(eventsNamed('game_tracking_started')).toHaveLength(0);
+      expect(game.status).toBe('scheduled');
+    });
+
+    test('reports a non-owner league manager with the league_manager role', async () => {
+      const game = buildStartableGame({ ownerUserId: 'owner-9' });
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      canManageLeagueGame.mockImplementation(() => true);
+
+      await updateClockForUser('user-1', 'game-1', { action: 'start' }, new Date(), {
+        analyticsConsent: CONSENT,
+      });
+
+      expect(eventsNamed('game_tracking_started')[0].properties.actor_role).toBe('league_manager');
+    });
+  });
+
+  describe('game_completed', () => {
+    test('is not captured when the same game is finished twice', async () => {
+      const game = buildDualLeagueGame({ status: 'completed', completedAt: new Date() });
+      findGameById.mockResolvedValue(game);
+
+      await expect(
+        finishGameForUser('user-1', 'game-1', { analyticsConsent: CONSENT })
+      ).rejects.toThrow('Game is already completed');
+
+      expect(eventsNamed('game_completed')).toHaveLength(0);
+    });
   });
 });
