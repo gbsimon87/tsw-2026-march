@@ -210,4 +210,54 @@ describe('posthog lib', () => {
       properties: { route_pattern: '/games/:gameId', nested: { allowed: true } },
     });
   });
+
+  // Regression: posthog-js stashes the PROJECT API key (the public phc_ token)
+  // on every event as `properties.token`, then reads it back off the first
+  // event of a batch to build the request's `api_key`. Stripping it sent every
+  // batch with no api_key, so ingestion could not resolve the team and
+  // rejected the lot with a misleading "missing event name attribute" 400.
+  test('preserves the SDK project key that posthog-js reads back as api_key', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: '$pageview',
+        properties: { token: 'phc_project_key', route_pattern: '/about' },
+      })
+    ).toEqual({
+      event: '$pageview',
+      properties: { token: 'phc_project_key', route_pattern: '/about' },
+    });
+  });
+
+  test('still strips any affixed token-ish property, and nested ones', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: '$pageview',
+        properties: {
+          token: 'phc_project_key',
+          reset_token: 'secret',
+          token_id: 'secret',
+          $session_token: 'secret',
+          nested: { token: 'secret' },
+          route_pattern: '/about',
+        },
+      })
+    ).toEqual({
+      event: '$pageview',
+      properties: { token: 'phc_project_key', nested: {}, route_pattern: '/about' },
+    });
+  });
+
+  test('does not deny-list the SDK project key at the posthog-js layer', async () => {
+    const { default: posthog } = await import('posthog-js');
+    const { initPostHog } = await loadPostHogModule({ analytics: 'true' });
+    initPostHog();
+
+    const [, options] = posthog.init.mock.calls[0];
+    expect(options.property_denylist).not.toContain('token');
+    expect(options.property_denylist).toContain('$current_url');
+  });
 });

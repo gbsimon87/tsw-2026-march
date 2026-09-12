@@ -49,7 +49,6 @@ export function initPostHog() {
       'search',
       'query',
       'hash',
-      'token',
       'email',
       'name',
       'caption',
@@ -106,6 +105,17 @@ export function declinePostHogConsent() {
 const FORBIDDEN_KEY =
   /(^|[_$])(url|uri|href|referrer|search|query|hash|token|email|name|caption|transcript|text|error|stack|message)(_|$)/i;
 
+// posthog-js stashes the PROJECT API key — the public `phc_` token, not a
+// secret — on every event as `properties.token`, then reads it back off the
+// first event of a batch to build the request's `api_key`. Stripping it sent
+// every batch with no api_key at all, which ingestion rejects with a 400 whose
+// message ("missing event name attribute") points nowhere near the cause. The
+// exact key `token` is therefore preserved at the top level of an event's
+// properties; `reset_token`, `token_id` and any nested `token` are still
+// removed, and no event schema in analyticsContract.js defines a `token`
+// property, so a call site cannot smuggle a real secret through this hole.
+const SDK_RESERVED_PROPERTY_KEYS = new Set(['token']);
+
 function sanitizeValue(value) {
   if (Array.isArray(value)) return value.map(sanitizeValue);
   if (!value || typeof value !== 'object') return value;
@@ -119,7 +129,13 @@ function sanitizeValue(value) {
 
 export function sanitizePostHogEvent(event) {
   if (!event || !event.properties) return event;
-  return { ...event, properties: sanitizeValue(event.properties) };
+
+  const properties = sanitizeValue(event.properties);
+  for (const key of SDK_RESERVED_PROPERTY_KEYS) {
+    if (key in event.properties) properties[key] = event.properties[key];
+  }
+
+  return { ...event, properties };
 }
 
 export function capturePostHogPageView(properties) {

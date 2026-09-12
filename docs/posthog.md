@@ -12,6 +12,56 @@ that somebody who has never used PostHog can follow it.
 This document is an implementation plan and operating manual. The execution log
 below records changes made after the original audit.
 
+## 0. Pick up here next time
+
+Last worked on 12 September 2026, on branch `feat/posthog`. Phases A-C of §15
+are complete apart from one blocked item, and §16.1 (local browser test,
+steps 1-15) passes on a clean profile.
+
+**Do this next, in order:**
+
+1. **Finish §16.1 steps 16-18** — needs a signed-in local session. Log in and
+   confirm the distinct ID becomes the internal user ID, that only the approved
+   person properties appear, that logout resets the identity, and that signing
+   in as a second account does not merge with the first.
+2. **Run §16.2** (sensitive routes: Google completion, verification link,
+   password reset, Stripe test checkout → `/billing/success`). This is the test
+   that proves no token or session ID reaches PostHog.
+3. **Run §16.3 locally** — the server outcome test. It exercises the P1
+   activation events end to end and is the first real proof that
+   `resource_created`, `roster_populated`, `league_team_created`,
+   `game_scheduled`, `game_tracking_started` and `game_completed` fire once and
+   only after the write succeeds. Nothing has confirmed them outside unit tests.
+4. **Deploy to Render development and repeat §16.3-§16.4 there**, then inspect
+   the payloads in Dev **Activity → Live events**.
+5. **Only then mark the P1 event definitions verified** in Dev. They are all
+   currently `verified: false`, deliberately: none of the new P1 events has ever
+   been ingested, so the definitions are documentation, not proof.
+
+**State of the PostHog projects:** every P1 event definition now exists in Dev
+(unverified). Production analytics is disabled in `render.yaml` for both the
+browser and the API, and the live Render dashboard has still not been checked
+by hand. Three `tsw_probe_local` events exist in Dev from debugging the
+ingestion endpoint; they are not real traffic.
+
+**Blocked on a decision, not on engineering:**
+
+- the historical URL-exposure deletion (§13.4) — 2,095 Dev and 606 Prod
+  `$pageview` events carry URL-bearing properties, and deletion is irreversible;
+- organisation MFA, which §17.1 gates production analytics on;
+- sign-off on the consent wording.
+
+**Deliberately not done** (out of the agreed P1 scope): moving the durable feed
+success events to the server (the last open Phase B box), and all of Phase D
+and E. `game_tracking_finished` and `consent_decision` still have visible Dev
+definitions and could be hidden.
+
+**Lesson worth keeping:** both defects found on 12 September lived at a
+boundary the unit tests mock out — the SDK's request builder and the CORS
+preflight. Green unit tests say nothing about whether an event reaches PostHog.
+Run §16 against a real browser after any change to the sanitizer, the consent
+header, or the SDK config.
+
 ### Execution log — 12 September 2026
 
 - Applied the strict project baseline to Dev and Prod: Europe/London timezone,
@@ -80,6 +130,79 @@ moving the durable feed success events to the server, and every Phase D/E item.
 The deprecated `game_tracking_finished` and `consent_decision` events (§4.4)
 still have live, visible Dev definitions. Hiding them preserves their history
 while removing them from pickers; that has deliberately not been done yet.
+
+### Execution log — 12 September 2026 (§16.1 local verification)
+
+Running the §16.1 local browser test found two defects that no unit test could
+have caught, because both live at a boundary the tests mock out. Both are fixed
+and covered by regression tests.
+
+1. **Every browser event was rejected with HTTP 400.** `posthog-js` stashes the
+   public project key on each event as `properties.token`, then reads it back
+   off the first event of a batch to build the request's `api_key`. Both the
+   `property_denylist` and the `FORBIDDEN_KEY` sanitizer stripped any key named
+   `token`, so every batch left with no `api_key`, and ingestion rejected it
+   with the badly misleading message `non-engage request missing event name
+attribute`. The bare key is now preserved at the top level of an event's
+   properties; `reset_token`, `token_id` and nested `token` keys are still
+   stripped, and no schema in `analyticsContract.js` defines a `token`
+   property, so a call site still cannot smuggle a secret through.
+2. **Accepting analytics broke the entire API.** `x-analytics-consent` was
+   added to the API client but never to the server's CORS `allowedHeaders`, so
+   the preflight rejected it and every request failed for exactly the users who
+   consented. Added to `cors.js` with a regression test asserting the allowlist
+   covers every custom header the client sends.
+
+Verified afterwards in a clean browser profile:
+
+- no PostHog request and no PostHog storage before a decision, or after a
+  decline — only `tsw_consent` and the CSRF cookie, both strictly necessary;
+- after acceptance, ingestion returns 200 and events arrive in Dev carrying
+  `route_pattern`, `app_env=development`, `app_version`, `event_source=browser`
+  and a null `$current_url`;
+- one `$pageview` per route and one `$pageleave` per departure.
+
+Note that `properties.token` (the public `phc_` project key, the same value
+shipped in the client bundle) is now visible on stored events. It is not a
+secret and cannot be removed without breaking `api_key`, because `posthog-js`
+reads it after `before_send` has run.
+
+§16.1 steps 16-18 (identify, logout, account switch) and all of §16.2-§16.4
+still require a signed-in journey and have not been run.
+
+## Next-session checkpoint — start here
+
+Resume from this exact order; do not build dashboards or add Phase D/E events
+before the Dev stream passes these checks.
+
+1. Merge/deploy this `feat/posthog` branch to the Render development services.
+   Set `APP_VERSION` and `VITE_APP_VERSION` to the deployed commit SHA, confirm
+   `ENABLE_ANALYTICS=true` only on the Dev API, and confirm the Dev browser/API
+   each use the Dev project key. Keep both production enable flags false.
+2. Finish §16.1 steps 16-18 with two development accounts: identify, logout,
+   account switch, and confirm no person merge or unapproved person property.
+3. Run §16.2 with harmless development-only OAuth, verification, reset, and
+   Stripe test tokens. Search for the harmless marker and confirm no URL,
+   query, fragment, referrer, session ID, or secret-bearing token property was
+   stored. The SDK's top-level public `phc_` project-key property is the one
+   documented exception.
+4. Run §16.3 end to end. Confirm first-roster and first-tracking events occur
+   once, a failed finish emits nothing, a successful finish emits one
+   `game_completed`, and a retry emits nothing additional.
+5. Inspect each new Dev payload, then mark the P1 event definitions verified
+   and document their reusable properties. Do not reproduce definitions in
+   Prod until this succeeds.
+6. Obtain decisions/approval for historical URL-bearing data deletion, the
+   final consent wording, and the proposed 13-month retention period. Enable
+   organisation MFA. These are human/privacy account tasks, not code tasks.
+7. Then resume at the first unchecked engineering item in §15: move durable
+   feed create/delete success events to the server. Phase D/E and dashboards
+   remain later work.
+
+Production re-enablement is the final step only: check the live Render settings
+manually, deploy with the approved production key/version, run one internal
+smoke journey, annotate the release, and immediately disable collection if any
+payload or project separation check fails.
 
 > Privacy note: this is an engineering recommendation, not legal advice. The
 > service operates in the UK and may serve people elsewhere. Have the final
