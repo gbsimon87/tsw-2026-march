@@ -110,7 +110,7 @@ services:
       - key: COOKIE_DOMAIN
         sync: false
       - key: AUTO_FEED_ENABLED
-        sync: true
+        sync: false
       - key: AUTO_FEED_MILESTONES_ENABLED
         value: false
 
@@ -254,7 +254,7 @@ services:
       - key: AUTO_FEED_ENABLED
         value: true
       - key: AUTO_FEED_MILESTONES_ENABLED
-        sync: true
+        sync: false
 
   - type: web
     name: tsw-2026-march-client-dev
