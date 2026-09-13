@@ -1119,6 +1119,11 @@ is a contract table, not a copy-and-paste code snippet.
 | `loaded`/central registration  | common safe properties only                      | Register environment, version, source, and approved traffic flags.                                        |
 | dated `defaults`               | pin only after compatibility testing             | Prevent an SDK upgrade silently changing collection behaviour.                                            |
 
+Error reporting is a separate, consent-reviewed purpose in the
+[Sentry error-monitoring plan](error-monitoring-plan.md). Keep PostHog
+`capture_exceptions` disabled and do not forward Sentry issues into PostHog;
+the two systems must not create duplicate incident events.
+
 The sanitizer is the last safety net, not permission for call sites to pass raw
 objects. It should return only the event's allow-listed properties and approved
 PostHog system fields. Test the actual outgoing request because SDK properties

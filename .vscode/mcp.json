@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "my-mcp-server-264399d6": {
+      "url": "https://mcp.sentry.dev/mcp",
+      "type": "http"
+    }
+  },
+  "inputs": []
+}
