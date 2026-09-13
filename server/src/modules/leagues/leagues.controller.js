@@ -16,6 +16,8 @@ const dataCompletenessService = require('./dataCompleteness.service');
 const { dismissIssueSchema, issueKeySchema } = require('./dataCompleteness.validation');
 const { ApiError } = require('../../utils/apiError');
 const { paginationQuerySchema } = require('../shared/pagination.validation');
+const { captureUserEventDetached } = require('../analytics/analytics.service');
+const { readAnalyticsConsent } = require('../analytics/analyticsConsent');
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -29,6 +31,16 @@ async function create(req, res) {
   const userId = requireAuthUserId(req);
   const payload = createLeagueSchema.parse(req.body);
   const league = await leaguesService.createLeagueForUser(userId, payload);
+  captureUserEventDetached({
+    userId,
+    event: 'resource_created',
+    properties: {
+      resource_type: 'league',
+      resource_id: league.id,
+      actor_role: 'league_owner',
+    },
+    consent: readAnalyticsConsent(req),
+  });
   res.status(201).json({ league });
 }
 
@@ -95,7 +107,14 @@ async function archive(req, res) {
 async function createTeam(req, res) {
   const userId = requireAuthUserId(req);
   const payload = createLeagueTeamSchema.parse(req.body);
-  const team = await leaguesService.createLeagueTeamForLeague(userId, req.params.leagueId, payload);
+  const team = await leaguesService.createLeagueTeamForLeague(
+    userId,
+    req.params.leagueId,
+    payload,
+    {
+      analyticsConsent: readAnalyticsConsent(req),
+    }
+  );
   res.status(201).json({ team });
 }
 
@@ -197,7 +216,8 @@ async function addPlayer(req, res) {
     userId,
     req.params.leagueId,
     req.params.leagueTeamId,
-    payload
+    payload,
+    { analyticsConsent: readAnalyticsConsent(req) }
   );
   res.status(201).json({ player });
 }

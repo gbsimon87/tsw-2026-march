@@ -11,6 +11,7 @@ const posthogLibMocks = vi.hoisted(() => ({
   // (no consent yet), and the tracker retries after the visitor accepts.
   identifyPostHogUser: vi.fn(() => true),
   resetPostHogUser: vi.fn(),
+  setPostHogCommonContext: vi.fn(),
 }));
 
 const authMocks = vi.hoisted(() => ({
@@ -57,6 +58,7 @@ function renderTracker(initialEntry = '/pulse') {
 describe('PostHogRouteTracker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    posthogLibMocks.capturePostHogPageView.mockReturnValue(true);
     authMocks.authState = {
       user: null,
       isLoading: false,
@@ -73,10 +75,8 @@ describe('PostHogRouteTracker', () => {
     expect(posthogLibMocks.capturePostHogPageView).toHaveBeenCalledTimes(1);
     expect(posthogLibMocks.capturePostHogPageView).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        path: '/pulse',
-        search: '',
-        app_env: 'development',
         route_pattern: '/pulse',
+        is_authenticated: false,
       })
     );
 
@@ -85,10 +85,8 @@ describe('PostHogRouteTracker', () => {
     expect(posthogLibMocks.capturePostHogPageView).toHaveBeenCalledTimes(2);
     expect(posthogLibMocks.capturePostHogPageView).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        path: '/games/game-1',
-        search: '?tab=replay',
-        app_env: 'development',
         route_pattern: '/games/:gameId',
+        is_authenticated: false,
       })
     );
   });
@@ -100,7 +98,6 @@ describe('PostHogRouteTracker', () => {
         id: 'user-1',
         email: 'alex@example.com',
         name: 'Alex',
-        plan: 'team_pro',
         roles: ['user'],
         emailVerified: true,
         authProvider: 'google',
@@ -112,10 +109,11 @@ describe('PostHogRouteTracker', () => {
     // Audit M7: leaguePlan/leagueSubscriptionStatus props were dropped (server no
     // longer serializes user.leagueBilling; they reported 'free' for everyone).
     expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith('user-1', {
-      plan: 'team_pro',
-      roles: ['user'],
-      emailVerified: true,
-      authProvider: 'google',
+      auth_provider: 'google',
+      email_verified: true,
+      onboarding_status: 'completed',
+      onboarding_roles: [],
+      is_internal: false,
     });
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('leaguePlan');
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('email');
@@ -177,5 +175,15 @@ describe('PostHogRouteTracker', () => {
     });
 
     expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not count query-string-only navigation as a new page', () => {
+    renderTracker('/pulse?tab=latest');
+    expect(posthogLibMocks.capturePostHogPageView).toHaveBeenCalledTimes(1);
+
+    window.history.pushState({}, '', '/pulse?tab=following');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    expect(posthogLibMocks.capturePostHogPageView).toHaveBeenCalledTimes(1);
   });
 });

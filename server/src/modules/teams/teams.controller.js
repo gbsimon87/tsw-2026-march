@@ -7,6 +7,17 @@ const {
 const teamsService = require('./teams.service');
 const { ApiError } = require('../../utils/apiError');
 const { paginationQuerySchema } = require('../shared/pagination.validation');
+const { captureUserEventDetached } = require('../analytics/analytics.service');
+const { readAnalyticsConsent } = require('../analytics/analyticsConsent');
+
+function captureForUser(req, event, properties) {
+  captureUserEventDetached({
+    userId: req.auth.userId,
+    event,
+    properties,
+    consent: readAnalyticsConsent(req),
+  });
+}
 
 function requireAuthUserId(req) {
   if (!req.auth?.userId) {
@@ -20,6 +31,19 @@ async function create(req, res) {
   const userId = requireAuthUserId(req);
   const payload = createTeamSchema.parse(req.body);
   const team = await teamsService.createTeamForUser(userId, payload);
+  captureForUser(req, 'resource_created', {
+    resource_type: 'team',
+    resource_id: team.id,
+    actor_role: 'team_manager',
+  });
+  if ((team.players || []).some((player) => player.isActive)) {
+    captureForUser(req, 'roster_populated', {
+      resource_type: 'team',
+      resource_id: team.id,
+      actor_role: 'team_manager',
+      method: 'manual',
+    });
+  }
   res.status(201).json({ team });
 }
 
@@ -91,6 +115,16 @@ async function addPlayer(req, res) {
   const userId = requireAuthUserId(req);
   const payload = addPlayerSchema.parse(req.body);
   const team = await teamsService.addPlayerToTeam(userId, req.params.teamId, payload);
+  // Players are deactivated, not removed, so a one-row roster means this is
+  // the first player ever added and cannot fire again after later churn.
+  if ((team.players || []).length === 1) {
+    captureForUser(req, 'roster_populated', {
+      resource_type: 'team',
+      resource_id: team.id,
+      actor_role: 'team_manager',
+      method: 'manual',
+    });
+  }
   res.status(200).json({ team });
 }
 

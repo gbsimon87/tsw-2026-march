@@ -4,6 +4,7 @@ import {
   CONSENT_DECLINED,
   CONSENT_VERSION,
   clearConsent,
+  getAnalyticsConsentHeader,
   hasAccepted,
   onConsentChange,
   readConsent,
@@ -56,6 +57,7 @@ describe('consent storage', () => {
 
     expect(readConsent(NOW)).toBe(CONSENT_ACCEPTED);
     expect(hasAccepted(NOW)).toBe(true);
+    expect(getAnalyticsConsentHeader(NOW)).toBe(`accepted;version=${CONSENT_VERSION}`);
   });
 
   test('a declined decision is remembered, so the banner does not nag', () => {
@@ -63,6 +65,7 @@ describe('consent storage', () => {
 
     expect(readConsent(NOW)).toBe(CONSENT_DECLINED);
     expect(hasAccepted(NOW)).toBe(false);
+    expect(getAnalyticsConsentHeader(NOW)).toBeNull();
   });
 
   test('clearConsent returns the visitor to undecided', () => {

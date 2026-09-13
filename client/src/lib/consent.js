@@ -1,10 +1,7 @@
 // Analytics consent (UK PUECR / GDPR). See docs/analytics-plan.md §3.
 //
-// The rule that shapes this module: the obligation attaches to *writing an
-// identifier to the device*, not to what the identifier contains. So before
-// consent PostHog runs with `persistence: 'memory'` — no cookie, no
-// localStorage, nothing to consent to — and anonymous pageviews are still
-// counted so traffic totals stay honest for people who decline.
+// No analytics event leaves the browser before a current, positive decision.
+// PostHog is also opted out and kept in memory-only mode until that decision.
 //
 // Storing the decision itself is exempt: it is strictly necessary to honour
 // the choice the visitor made.
@@ -15,7 +12,7 @@ const STORAGE_KEY = 'tsw_consent';
 // decision predates the current version is asked again rather than assumed to
 // have agreed to something they never saw. Keep in step with the "last updated"
 // date on PrivacyPage.
-export const CONSENT_VERSION = 1;
+export const CONSENT_VERSION = 2;
 
 // Consent goes stale. The ICO expects it to be refreshed at reasonable
 // intervals; 12 months is the common reading.
@@ -140,4 +137,11 @@ export function clearConsent() {
 
 export function hasAccepted(now = Date.now()) {
   return readConsent(now) === CONSENT_ACCEPTED;
+}
+
+// This header is context, never authentication. The API accepts this exact,
+// versioned value and treats missing, malformed, stale, or declined values as
+// no consent.
+export function getAnalyticsConsentHeader(now = Date.now()) {
+  return hasAccepted(now) ? `accepted;version=${CONSENT_VERSION}` : null;
 }

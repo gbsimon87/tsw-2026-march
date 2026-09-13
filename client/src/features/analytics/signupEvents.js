@@ -20,7 +20,7 @@ export function trackSignupCtaClicked(source) {
 export function trackAuthPageViewed({ mode, redirectTo }) {
   // Separates "reached the form" from "completed it", isolating abandonment on
   // the form itself from failure to get there at all.
-  trackEvent('auth_page_viewed', { mode, redirect_to: Boolean(redirectTo) });
+  trackEvent('auth_page_viewed', { mode, has_redirect: Boolean(redirectTo) });
 }
 
 /**

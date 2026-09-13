@@ -24,7 +24,7 @@ const {
   destroyImage,
   isCloudinaryConfigured,
 } = require('../feed/cloudinary.client');
-const { captureEventDetached, pseudonymousId } = require('../analytics/analytics.service');
+const { captureEventDetached } = require('../analytics/analytics.service');
 const { ApiError } = require('../../utils/apiError');
 const { env } = require('../../config/env');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
@@ -65,6 +65,8 @@ function sanitizeUser(user) {
       roles: user.onboarding?.roles || [],
       completedSteps: user.onboarding?.completedSteps || [],
     },
+    isInternal: Boolean(user.isInternal),
+    isDemo: Boolean(user.isDemo),
   };
 }
 
@@ -115,7 +117,7 @@ async function issueAuthTokens(user, metadata, { isFirstLogin = false } = {}) {
   // steps would double-count for the same reason. Callers that represent a
   // real sign-in call captureLogin() instead.
   if (isFirstLogin) {
-    captureLogin(user, { isFirstLogin: true });
+    captureLogin(user, metadata, { isFirstLogin: true });
   }
 
   return {
@@ -125,7 +127,15 @@ async function issueAuthTokens(user, metadata, { isFirstLogin = false } = {}) {
   };
 }
 
-function captureLogin(user, { isFirstLogin = false } = {}) {
+function analyticsActor(user, metadata) {
+  return {
+    consent: metadata?.analyticsConsent,
+    isInternal: Boolean(user?.isInternal),
+    isDemo: Boolean(user?.isDemo),
+  };
+}
+
+function captureLogin(user, metadata, { isFirstLogin = false } = {}) {
   captureEventDetached({
     distinctId: String(user._id),
     event: 'user_logged_in',
@@ -133,6 +143,7 @@ function captureLogin(user, { isFirstLogin = false } = {}) {
       auth_provider: user.authProvider || 'local',
       is_first_login: isFirstLogin,
     },
+    ...analyticsActor(user, metadata),
   });
 }
 
@@ -164,9 +175,10 @@ async function register(input, metadata) {
     // malformed input in the controller before the service runs, so validation
     // failures never reach this point.
     captureEventDetached({
-      distinctId: pseudonymousId(input.email),
+      distinctId: metadata?.requestId || 'anonymous_request',
       event: 'registration_failed',
       properties: { reason: 'email_in_use' },
+      consent: metadata?.analyticsConsent,
     });
     throw new ApiError(409, 'Email is already in use');
   }
@@ -188,6 +200,7 @@ async function register(input, metadata) {
     distinctId: String(user._id),
     event: 'user_registered',
     properties: { auth_provider: 'local' },
+    ...analyticsActor(user, metadata),
   });
 
   // The token is persisted before the send is dispatched, so a dropped email
@@ -219,7 +232,7 @@ async function login(input, metadata) {
   // After the session write, not before: a failed upsertSession returns a 500,
   // and recording a login that never happened would overstate the funnel.
   const tokens = await issueAuthTokens(user, metadata);
-  captureLogin(user);
+  captureLogin(user, metadata);
 
   return tokens;
 }
@@ -277,7 +290,7 @@ async function getCurrentUser(userId) {
   return sanitizeUser(user);
 }
 
-async function updateOnboarding(userId, input) {
+async function updateOnboarding(userId, input, metadata) {
   const current = await findUserById(userId);
   if (!current) {
     throw new ApiError(404, 'User not found');
@@ -289,6 +302,31 @@ async function updateOnboarding(userId, input) {
     completedSteps: input.completedSteps || current.onboarding?.completedSteps || [],
   };
   const updated = await updateUserOnboarding(userId, onboarding);
+  const priorSteps = new Set(current.onboarding?.completedSteps || []);
+  for (const step of onboarding.completedSteps.filter((value) => !priorSteps.has(value))) {
+    captureEventDetached({
+      distinctId: String(current._id),
+      event: 'onboarding_step_completed',
+      properties: { step, selected_role_count: onboarding.roles.length },
+      ...analyticsActor(current, metadata),
+    });
+  }
+  if (current.onboarding?.status !== 'completed' && onboarding.status === 'completed') {
+    captureEventDetached({
+      distinctId: String(current._id),
+      event: 'onboarding_completed',
+      properties: { selected_roles: onboarding.roles },
+      ...analyticsActor(current, metadata),
+    });
+  }
+  if (current.onboarding?.status !== 'skipped' && onboarding.status === 'skipped') {
+    captureEventDetached({
+      distinctId: String(current._id),
+      event: 'onboarding_skipped',
+      properties: { step: onboarding.completedSteps.includes('roles') ? 'profiles' : 'roles' },
+      ...analyticsActor(current, metadata),
+    });
+  }
   return sanitizeUser(updated);
 }
 
@@ -397,6 +435,7 @@ async function loginWithGoogle(googleProfile, metadata) {
       distinctId: String(user._id),
       event: 'user_registered',
       properties: { auth_provider: 'google' },
+      ...analyticsActor(user, metadata),
     });
     sendWelcomeEmail({
       to: user.email,
@@ -417,11 +456,6 @@ async function prepareGoogleExchange(googleProfile) {
   });
 
   if (isNew) {
-    captureEventDetached({
-      distinctId: String(user._id),
-      event: 'user_registered',
-      properties: { auth_provider: 'google' },
-    });
     sendWelcomeEmail({
       to: user.email,
       name: user.name,
@@ -491,7 +525,15 @@ async function exchangeGoogleOAuthToken(exchangeToken, metadata) {
   // sign-in, and this is the one that completes it. After the session write for
   // the same reason as login().
   const tokens = await issueAuthTokens(user, metadata);
-  captureLogin(user, { isFirstLogin: payload.isFirstLogin === true });
+  if (payload.isFirstLogin === true) {
+    captureEventDetached({
+      distinctId: String(user._id),
+      event: 'user_registered',
+      properties: { auth_provider: 'google' },
+      ...analyticsActor(user, metadata),
+    });
+  }
+  captureLogin(user, metadata, { isFirstLogin: payload.isFirstLogin === true });
 
   return tokens;
 }

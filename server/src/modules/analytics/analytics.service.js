@@ -1,7 +1,8 @@
-const crypto = require('crypto');
 const { PostHog } = require('posthog-node');
 const { env } = require('../../config/env');
 const { logger } = require('../../config/logger');
+const { ANALYTICS_CONSENT_VERSION } = require('./analyticsConsent');
+const { parseServerEvent } = require('./analytics.contract');
 
 const appEnv = env.APP_ENV || (env.NODE_ENV === 'production' ? 'production' : 'development');
 
@@ -10,12 +11,13 @@ const appEnv = env.APP_ENV || (env.NODE_ENV === 'production' ? 'production' : 'd
 // development a handful of manual test events never reach the threshold, so
 // nothing appears in PostHog and the instrumentation looks broken. Flush every
 // event immediately outside production.
-const posthogClient = env.POSTHOG_KEY
-  ? new PostHog(env.POSTHOG_KEY, {
-      host: env.POSTHOG_HOST,
-      ...(appEnv === 'production' ? {} : { flushAt: 1, flushInterval: 0 }),
-    })
-  : null;
+const posthogClient =
+  env.ENABLE_ANALYTICS && env.POSTHOG_KEY
+    ? new PostHog(env.POSTHOG_KEY, {
+        host: env.POSTHOG_HOST,
+        ...(appEnv === 'production' ? {} : { flushAt: 1, flushInterval: 0 }),
+      })
+    : null;
 
 /**
  * Flush anything queued and close the client. Without this a restart or deploy
@@ -37,18 +39,31 @@ async function captureEvent(input) {
   if (!posthogClient) {
     return {
       captured: false,
-      reason: 'PostHog key is not configured',
+      reason: 'analytics_disabled',
     };
   }
 
+  if (!input.consent?.accepted || input.consent.version !== ANALYTICS_CONSENT_VERSION) {
+    return { captured: false, reason: 'consent_not_granted' };
+  }
+
+  const properties = parseServerEvent(input.event, input.properties);
+  if (!properties || !input.distinctId) {
+    logger.warn({ event: input.event }, 'PostHog event rejected by contract');
+    return { captured: false, reason: 'invalid_event_contract' };
+  }
+
   await posthogClient.capture({
-    distinctId: input.distinctId,
+    distinctId: String(input.distinctId),
     event: input.event,
     properties: {
-      ...(input.properties || {}),
-      // Server events do not share browser super-properties. Attach the tag
-      // here so a valid key pointed at the wrong project is still detectable.
+      ...properties,
       app_env: appEnv,
+      app_version: env.APP_VERSION,
+      event_schema_version: 1,
+      event_source: input.eventSource || 'api',
+      is_internal: Boolean(input.isInternal),
+      is_demo: Boolean(input.isDemo),
     },
   });
 
@@ -73,22 +88,29 @@ function captureEventDetached(input) {
     });
 }
 
-/**
- * A stable pseudonymous id for someone with no account yet — used so repeated
- * failures by one person group together. The email is hashed, never stored:
- * a failed registration must not put an address into analytics.
- */
-function pseudonymousId(email) {
-  return `anon_${crypto
-    .createHash('sha256')
-    .update(String(email).trim().toLowerCase())
-    .digest('hex')
-    .slice(0, 32)}`;
+function captureUserEventDetached(input) {
+  Promise.resolve()
+    .then(async () => {
+      if (!input.consent?.accepted) return;
+      // Lazy import avoids an auth-service cycle while still deriving traffic
+      // classification from approved account metadata instead of email rules.
+      const { findUserById } = require('../auth/auth.repository');
+      const user = await findUserById(input.userId);
+      return captureEvent({
+        ...input,
+        distinctId: String(input.userId),
+        isInternal: Boolean(user?.isInternal),
+        isDemo: Boolean(user?.isDemo),
+      });
+    })
+    .catch((error) => {
+      logger.warn({ err: error, event: input.event }, 'PostHog user event capture failed');
+    });
 }
 
 module.exports = {
   captureEvent,
   captureEventDetached,
-  pseudonymousId,
+  captureUserEventDetached,
   shutdownAnalytics,
 };

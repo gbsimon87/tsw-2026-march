@@ -63,7 +63,6 @@ export function FeedPage() {
           posts: (page.posts || []).filter((post) => post.id !== postId),
         })),
       }));
-      trackEvent('feed_post_deleted');
     } catch (deleteError) {
       setError(deleteError.message || 'Failed to delete post');
     }
@@ -80,7 +79,6 @@ export function FeedPage() {
         pages: [{ ...firstPage, posts: [post, ...(firstPage.posts || [])] }, ...restPages],
       };
     });
-    trackEvent('feed_post_created', { post_type: post.type || 'unknown' });
     closeComposer();
   }
 

@@ -239,6 +239,39 @@ describe('env schema — analytics deployment identity', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('keeps analytics disabled unless explicitly enabled', () => {
+    expect(envSchema.parse(baseEnv()).ENABLE_ANALYTICS).toBe(false);
+  });
+
+  it('requires a complete EU analytics configuration when enabled', () => {
+    const incomplete = envSchema.safeParse(baseEnv({ ENABLE_ANALYTICS: 'true' }));
+    expect(incomplete.success).toBe(false);
+
+    const complete = envSchema.safeParse(
+      baseEnv({
+        ENABLE_ANALYTICS: 'true',
+        APP_ENV: 'development',
+        APP_VERSION: 'test-build',
+        POSTHOG_KEY: 'phc_test_key',
+        POSTHOG_HOST: 'https://eu.i.posthog.com',
+      })
+    );
+    expect(complete.success).toBe(true);
+  });
+
+  it('rejects personal API keys and the US host', () => {
+    const result = envSchema.safeParse(
+      baseEnv({
+        ENABLE_ANALYTICS: 'true',
+        APP_ENV: 'development',
+        APP_VERSION: 'test-build',
+        POSTHOG_KEY: 'phx_personal_key',
+        POSTHOG_HOST: 'https://us.i.posthog.com',
+      })
+    );
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('AUTO_FEED_MILESTONES_ENABLED', () => {

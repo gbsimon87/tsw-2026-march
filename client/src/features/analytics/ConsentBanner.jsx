@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   CONSENT_ACCEPTED,
   CONSENT_DECLINED,
+  CONSENT_VERSION,
   onConsentChange,
   readConsent,
   writeConsent,
@@ -59,11 +60,8 @@ export function ConsentBanner() {
 
     if (decision === CONSENT_ACCEPTED) {
       acceptPostHogConsent();
-      trackEvent('consent_decision', { decision });
+      trackEvent('analytics_consent_accepted', { consent_policy_version: CONSENT_VERSION });
     } else {
-      // Capture before clearing: declinePostHogConsent() resets the client, and
-      // this event is the denominator for what share of traffic is attributable.
-      trackEvent('consent_decision', { decision });
       declinePostHogConsent();
     }
 

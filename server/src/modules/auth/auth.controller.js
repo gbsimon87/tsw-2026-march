@@ -11,6 +11,7 @@ const authService = require('./auth.service');
 const { accessCookieOptions, refreshCookieOptions } = require('../../config/cookie');
 const { env } = require('../../config/env');
 const { ApiError } = require('../../utils/apiError');
+const { readAnalyticsConsent } = require('../analytics/analyticsConsent');
 
 function primaryClientOrigin() {
   return env.CLIENT_ORIGIN.split(',')[0].trim();
@@ -20,6 +21,8 @@ function metadata(req) {
   return {
     userAgent: req.headers['user-agent'],
     ip: req.ip,
+    requestId: req.id,
+    analyticsConsent: readAnalyticsConsent(req),
   };
 }
 
@@ -90,7 +93,7 @@ async function updateOnboarding(req, res) {
   }
 
   const payload = updateOnboardingSchema.parse(req.body);
-  const user = await authService.updateOnboarding(req.auth.userId, payload);
+  const user = await authService.updateOnboarding(req.auth.userId, payload, metadata(req));
   res.status(200).json({ user });
 }
 

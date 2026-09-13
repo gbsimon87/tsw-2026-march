@@ -3,7 +3,6 @@ const { authRouter } = require('../modules/auth/auth.routes');
 const { contactRouter } = require('../modules/contact/contact.routes');
 const { contactLimiter } = require('../middleware/rateLimit.middleware');
 const { publicCacheMiddleware } = require('../middleware/publicCache.middleware');
-const { analyticsRouter } = require('../modules/analytics/analytics.routes');
 const { billingRouter } = require('../modules/billing/billing.routes');
 const { feedRouter } = require('../modules/feed/feed.routes');
 const { followsRouter } = require('../modules/follows/follows.routes');
@@ -27,7 +26,6 @@ const apiRouter = Router();
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/contact', contactLimiter, contactRouter);
-apiRouter.use('/analytics', analyticsRouter);
 apiRouter.use('/billing', billingRouter);
 apiRouter.use('/feed', feedRouter);
 apiRouter.use('/follows', followsRouter);

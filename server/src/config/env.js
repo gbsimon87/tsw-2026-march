@@ -31,6 +31,11 @@ const baseEnvSchema = z.object({
   CONTACT_EMAIL: z.string().email().optional(),
   EMAIL_VERIFY_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+  ENABLE_ANALYTICS: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  APP_VERSION: z.string().min(1).optional(),
   POSTHOG_KEY: z.string().optional(),
   POSTHOG_HOST: z.string().url().default('https://eu.i.posthog.com'),
   OPENAI_API_KEY: z.string().optional(),
@@ -164,6 +169,30 @@ const REQUIRED_INSTAGRAM_OAUTH_CONFIG = [
 ];
 
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
+  if (data.ENABLE_ANALYTICS) {
+    const requirements = [
+      ['APP_ENV', Boolean(data.APP_ENV), 'APP_ENV is required when analytics is enabled'],
+      [
+        'APP_VERSION',
+        Boolean(data.APP_VERSION),
+        'APP_VERSION is required when analytics is enabled',
+      ],
+      [
+        'POSTHOG_KEY',
+        /^phc_[A-Za-z0-9_-]+$/.test(data.POSTHOG_KEY || ''),
+        'POSTHOG_KEY must be a valid phc_ project key when analytics is enabled',
+      ],
+      [
+        'POSTHOG_HOST',
+        new URL(data.POSTHOG_HOST).origin === 'https://eu.i.posthog.com',
+        'POSTHOG_HOST must use the approved EU ingestion host when analytics is enabled',
+      ],
+    ];
+    for (const [path, valid, message] of requirements) {
+      if (!valid) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    }
+  }
+
   const configuredStripeKeys = ALL_STRIPE_CONFIG.filter((key) => Boolean(data[key]));
   if (
     data.NODE_ENV !== 'development' &&

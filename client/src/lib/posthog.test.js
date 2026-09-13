@@ -7,6 +7,8 @@ const posthogMocks = vi.hoisted(() => ({
   reset: vi.fn(),
   register: vi.fn(),
   set_config: vi.fn(),
+  opt_in_capturing: vi.fn(),
+  opt_out_capturing: vi.fn(),
 }));
 
 const consentMocks = vi.hoisted(() => ({
@@ -22,13 +24,14 @@ vi.mock('./consent', async (importOriginal) => ({
   hasAccepted: consentMocks.hasAccepted,
 }));
 
-async function loadPostHogModule({ analytics = 'true', key = 'ph_test_key' } = {}) {
+async function loadPostHogModule({ analytics = 'true', key = 'phc_test_key' } = {}) {
   vi.resetModules();
   vi.stubEnv('VITE_APP_ENV', 'production');
   vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/api/v1');
   vi.stubEnv('VITE_ENABLE_ANALYTICS', analytics);
+  vi.stubEnv('VITE_APP_VERSION', 'test-build');
   vi.stubEnv('VITE_POSTHOG_KEY', key);
-  vi.stubEnv('VITE_POSTHOG_HOST', 'https://app.posthog.com');
+  vi.stubEnv('VITE_POSTHOG_HOST', 'https://eu.i.posthog.com');
 
   return import('./posthog');
 }
@@ -40,7 +43,7 @@ describe('posthog lib', () => {
     consentMocks.hasAccepted.mockReturnValue(false);
   });
 
-  test('initializes in memory-only persistence before consent', async () => {
+  test('initializes opted out with memory-only persistence before consent', async () => {
     const { initPostHog } = await loadPostHogModule();
 
     initPostHog();
@@ -48,13 +51,14 @@ describe('posthog lib', () => {
     // UK PUECR attaches its obligation to writing an identifier to the device,
     // so nothing may be stored until the visitor accepts.
     expect(posthogMocks.init).toHaveBeenCalledWith(
-      'ph_test_key',
+      'phc_test_key',
       expect.objectContaining({
-        api_host: 'https://app.posthog.com',
+        api_host: 'https://eu.i.posthog.com',
         autocapture: false,
         capture_pageview: false,
-        capture_pageleave: true,
+        capture_pageleave: false,
         disable_session_recording: true,
+        opt_out_capturing_by_default: true,
         persistence: 'memory',
       })
     );
@@ -67,7 +71,7 @@ describe('posthog lib', () => {
     initPostHog();
 
     expect(posthogMocks.init).toHaveBeenCalledWith(
-      'ph_test_key',
+      'phc_test_key',
       expect.objectContaining({ persistence: 'localStorage+cookie' })
     );
   });
@@ -81,7 +85,14 @@ describe('posthog lib', () => {
     const instance = { register: vi.fn() };
     loaded(instance);
 
-    expect(instance.register).toHaveBeenCalledWith({ app_env: 'production' });
+    expect(instance.register).toHaveBeenCalledWith(
+      expect.objectContaining({
+        app_env: 'production',
+        app_version: 'test-build',
+        event_schema_version: 1,
+        event_source: 'browser',
+      })
+    );
   });
 
   test('accepting consent upgrades persistence in place', async () => {
@@ -93,6 +104,7 @@ describe('posthog lib', () => {
     expect(posthogMocks.set_config).toHaveBeenCalledWith({
       persistence: 'localStorage+cookie',
     });
+    expect(posthogMocks.opt_in_capturing).toHaveBeenCalledTimes(1);
   });
 
   test('declining consent switches to memory before resetting', async () => {
@@ -102,6 +114,7 @@ describe('posthog lib', () => {
     declinePostHogConsent();
 
     expect(posthogMocks.reset).toHaveBeenCalled();
+    expect(posthogMocks.opt_out_capturing).toHaveBeenCalledTimes(1);
     expect(posthogMocks.set_config).toHaveBeenCalledWith({ persistence: 'memory' });
 
     // Order matters: reset() writes a fresh anonymous id using whatever
@@ -143,13 +156,10 @@ describe('posthog lib', () => {
 
     expect(posthogMocks.init).not.toHaveBeenCalled();
 
-    const missingKeyModule = await loadPostHogModule({ key: '' });
-    missingKeyModule.initPostHog();
-
-    expect(posthogMocks.init).not.toHaveBeenCalled();
+    await expect(loadPostHogModule({ key: '' })).rejects.toThrow(/valid phc_ project key/i);
   });
 
-  test('captures page views and identifies only after initialization', async () => {
+  test('captures page views and identifies only after initialization and consent', async () => {
     consentMocks.hasAccepted.mockReturnValue(true);
     const { capturePostHogPageView, identifyPostHogUser, initPostHog, resetPostHogUser } =
       await loadPostHogModule();
@@ -172,17 +182,82 @@ describe('posthog lib', () => {
     expect(posthogMocks.reset).toHaveBeenCalledTimes(1);
   });
 
-  test('does not identify before consent, even when initialized', async () => {
+  test('does not capture or identify before consent, even when initialized', async () => {
     const { capturePostHogPageView, identifyPostHogUser, initPostHog } = await loadPostHogModule();
 
     initPostHog();
     capturePostHogPageView({ path: '/pulse' });
     identifyPostHogUser('user-1', { plan: 'pro' });
 
-    // Anonymous visits are still counted so traffic totals stay honest, but in
-    // memory-only mode there is no durable id to merge — identifying here would
-    // create a person with no history and no way to link later sessions.
-    expect(posthogMocks.capture).toHaveBeenCalledWith('$pageview', { path: '/pulse' });
+    expect(posthogMocks.capture).not.toHaveBeenCalled();
     expect(posthogMocks.identify).not.toHaveBeenCalled();
+  });
+
+  test('strips URL, token, and free-text fields in the final safety net', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: 'safe',
+        properties: {
+          route_pattern: '/games/:gameId',
+          url: 'https://example.com/?token=secret',
+          nested: { email: 'player@example.com', allowed: true },
+        },
+      })
+    ).toEqual({
+      event: 'safe',
+      properties: { route_pattern: '/games/:gameId', nested: { allowed: true } },
+    });
+  });
+
+  // Regression: posthog-js stashes the PROJECT API key (the public phc_ token)
+  // on every event as `properties.token`, then reads it back off the first
+  // event of a batch to build the request's `api_key`. Stripping it sent every
+  // batch with no api_key, so ingestion could not resolve the team and
+  // rejected the lot with a misleading "missing event name attribute" 400.
+  test('preserves the SDK project key that posthog-js reads back as api_key', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: '$pageview',
+        properties: { token: 'phc_project_key', route_pattern: '/about' },
+      })
+    ).toEqual({
+      event: '$pageview',
+      properties: { token: 'phc_project_key', route_pattern: '/about' },
+    });
+  });
+
+  test('still strips any affixed token-ish property, and nested ones', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: '$pageview',
+        properties: {
+          token: 'phc_project_key',
+          reset_token: 'secret',
+          token_id: 'secret',
+          $session_token: 'secret',
+          nested: { token: 'secret' },
+          route_pattern: '/about',
+        },
+      })
+    ).toEqual({
+      event: '$pageview',
+      properties: { token: 'phc_project_key', nested: {}, route_pattern: '/about' },
+    });
+  });
+
+  test('does not deny-list the SDK project key at the posthog-js layer', async () => {
+    const { default: posthog } = await import('posthog-js');
+    const { initPostHog } = await loadPostHogModule({ analytics: 'true' });
+    initPostHog();
+
+    const [, options] = posthog.init.mock.calls[0];
+    expect(options.property_denylist).not.toContain('token');
+    expect(options.property_denylist).toContain('$current_url');
   });
 });

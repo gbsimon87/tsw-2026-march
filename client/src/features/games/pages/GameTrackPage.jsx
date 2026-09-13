@@ -2355,7 +2355,6 @@ export function GameTrackPage() {
     entryClockWasRunningRef.current = false;
     setError('');
     setIsSaving(true);
-    trackEvent('game_tracking_finished', { game_id: gameId });
     try {
       await gamesApi.finish(gameId);
       navigate(`/games/${gameId}`);

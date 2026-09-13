@@ -89,7 +89,9 @@ describe('ConsentBanner', () => {
 
     expect(readConsent()).toBe(CONSENT_ACCEPTED);
     expect(posthogLibMocks.acceptPostHogConsent).toHaveBeenCalled();
-    expect(trackEventMock).toHaveBeenCalledWith('consent_decision', { decision: 'accepted' });
+    expect(trackEventMock).toHaveBeenCalledWith('analytics_consent_accepted', {
+      consent_policy_version: CONSENT_VERSION,
+    });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -103,18 +105,12 @@ describe('ConsentBanner', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  test('records the decline before clearing, so it is not lost', () => {
+  test('does not send an event for a declined decision', () => {
     renderBanner();
 
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
 
-    // consent_decision is the denominator for what share of traffic is
-    // attributable, so it has to survive the reset that follows it.
-    expect(trackEventMock).toHaveBeenCalledWith('consent_decision', { decision: 'declined' });
-
-    const captureOrder = trackEventMock.mock.invocationCallOrder[0];
-    const resetOrder = posthogLibMocks.declinePostHogConsent.mock.invocationCallOrder[0];
-    expect(captureOrder).toBeLessThan(resetOrder);
+    expect(trackEventMock).not.toHaveBeenCalled();
   });
 
   test('stays hidden once a decision has been made', () => {
