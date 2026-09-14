@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { ShareableCardExport } from './ShareableCardExport';
+import { ShareableCardExport, ShareableCardPreview } from './ShareableCardExport';
+import { SOCIAL_EXPORT_PRESETS } from './socialExportPresets';
 import {
   EXPORT_HEIGHT,
   EXPORT_WIDTH,
@@ -97,6 +98,71 @@ describe('ShareableCardExport', () => {
     expect(Number(root.dataset.captureScale)).toBe(GAME_CAPTURE_SCALE);
     expect(GAME_FRAME_WIDTH * GAME_CAPTURE_SCALE).toBe(EXPORT_WIDTH);
     expect(GAME_FRAME_HEIGHT * GAME_CAPTURE_SCALE).toBe(EXPORT_HEIGHT);
+  });
+
+  it.each([
+    ['story', 1080, 1920],
+    ['link', 1200, 630],
+  ])('frames the %s export at exactly %ix%i', (format, width, height) => {
+    const { container } = renderExport({ type: 'game_card', gameCard: gameCardFixture, format });
+    const root = container.firstChild;
+
+    expect(root).toHaveStyle({ width: `${width}px`, height: `${height}px` });
+    expect(root.dataset.exportWidth).toBe(String(width));
+    expect(root.dataset.exportHeight).toBe(String(height));
+    expect(Number(root.dataset.captureScale)).toBe(1);
+    expect(root.querySelector('[data-safe-content]')).toHaveStyle({
+      top: `${SOCIAL_EXPORT_PRESETS[format].safeArea.top}px`,
+      left: `${SOCIAL_EXPORT_PRESETS[format].safeArea.left}px`,
+    });
+    expect(root.querySelector('[data-safe-area-overlay]')).toBeNull();
+  });
+
+  it.each(['story', 'link'])('shows a guide in the %s preview only', (format) => {
+    const { container } = render(
+      <MemoryRouter>
+        <ShareableCardPreview type="game_card" gameCard={gameCardFixture} format={format} />
+      </MemoryRouter>
+    );
+
+    expect(container.querySelector('[data-safe-area-overlay]')).not.toBeNull();
+  });
+
+  it.each(['story', 'link'])(
+    'keeps long player and team names un-clamped in the %s export',
+    (format) => {
+      const longName = 'Northside Community Warriors Basketball Club and Athletic Association';
+      const { container, getAllByText, rerender } = renderExport({
+        type: 'player_card',
+        playerCard: { ...playerCard, playerName: longName, teamName: longName },
+        format,
+      });
+
+      expect(getAllByText(longName)[0]).toHaveStyle({ overflowWrap: 'anywhere' });
+      expect(container.querySelector('[data-safe-content]')).not.toBeNull();
+
+      rerender(
+        <MemoryRouter>
+          <ShareableCardExport
+            type="team_card"
+            teamCard={{ ...teamCardFixture, teamName: longName }}
+            format={format}
+          />
+        </MemoryRouter>
+      );
+      expect(getAllByText(longName)[0]).toHaveStyle({ overflowWrap: 'anywhere' });
+    }
+  );
+
+  it('falls back to initials if a preset portrait cannot load', () => {
+    const { getByAltText, getByText } = renderExport({
+      type: 'player_card',
+      playerCard: playerCardFixture,
+      format: 'story',
+    });
+
+    fireEvent.error(getByAltText('Jordan Miles mark'));
+    expect(getByText('JM')).toBeInTheDocument();
   });
 
   it('drops the CSS blur html2canvas cannot rasterise from the game export', () => {

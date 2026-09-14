@@ -3,6 +3,8 @@ import { forwardRef } from 'react';
 import CloudinaryImage from '../../../media/CloudinaryImage';
 import { buildInitials, formatAverage, formatPercentage } from '../posts/cardUtils';
 import { GameCardPost } from '../posts/GameCardPost';
+import { SocialPresetCard } from './SocialPresetCard';
+import { SOCIAL_EXPORT_PRESETS, socialExportPreset } from './socialExportPresets';
 import {
   BOARD_CAPTURE_SCALE,
   COLORS,
@@ -28,7 +30,7 @@ import {
 // Off-screen render target captured by html2canvas. Positioned off-viewport
 // (NOT display:none) because html2canvas needs a laid-out node.
 //
-// Two compositions live here, and they answer different questions.
+// The 4:5 compositions answer different questions.
 //
 // Player and team cards are an honours board — a varnished panel, gilt beading,
 // and the record inscribed as a ruled ledger — composed directly at 1080x1350.
@@ -511,10 +513,30 @@ function TeamExport({ teamCard }) {
   );
 }
 
-// Each composition declares the scale html2canvas must capture it at, because
-// the two are laid out at different sizes and both have to land on 1080x1350 —
-// the 4:5 the Instagram upload validates against.
-function renderCard({ type, gameCard, playerCard, teamCard }) {
+// Each composition declares the scale html2canvas must capture it at. The
+// existing game-card post stays exactly 1080x1350 for the Instagram handoff;
+// the new story and link compositions render directly at their target size.
+function renderCard({ type, gameCard, playerCard, teamCard, format = 'post' }) {
+  if (format !== 'post' && SOCIAL_EXPORT_PRESETS[format]) {
+    const cardData = { game_card: gameCard, player_card: playerCard, team_card: teamCard }[type];
+    if (!cardData) return null;
+    const preset = socialExportPreset(format);
+    return {
+      card: (
+        <SocialPresetCard
+          format={format}
+          type={type}
+          gameCard={gameCard}
+          playerCard={playerCard}
+          teamCard={teamCard}
+        />
+      ),
+      width: preset.width,
+      height: preset.height,
+      captureScale: 1,
+      safeArea: preset.safeArea,
+    };
+  }
   if (type === 'game_card' && gameCard) {
     return {
       card: <GameExport gameCard={gameCard} />,
@@ -551,6 +573,14 @@ export const ShareableCardExport = forwardRef(function ShareableCardExport(props
       ref={ref}
       aria-hidden="true"
       data-capture-scale={rendered.captureScale}
+      data-export-width={
+        props.format && props.format !== 'post' ? rendered.width * rendered.captureScale : undefined
+      }
+      data-export-height={
+        props.format && props.format !== 'post'
+          ? rendered.height * rendered.captureScale
+          : undefined
+      }
       style={{
         ...EXPORT_STYLE,
         width: `${rendered.width}px`,
@@ -561,3 +591,48 @@ export const ShareableCardExport = forwardRef(function ShareableCardExport(props
     </div>
   );
 });
+
+// The preview mounts the very same composition as the off-screen export, at a
+// smaller visual scale. The guide is outside the captured node and never lands
+// in the PNG.
+export function ShareableCardPreview(props) {
+  const rendered = renderCard(props);
+  if (!rendered) return null;
+
+  const previewWidth = 280;
+  const scale = previewWidth / rendered.width;
+  const safe = rendered.safeArea;
+
+  return (
+    <div
+      aria-hidden="true"
+      data-preview-format={props.format || 'post'}
+      style={{
+        position: 'relative',
+        width: `${previewWidth}px`,
+        height: `${rendered.height * scale}px`,
+        overflow: 'hidden',
+        backgroundColor: COLORS.ink,
+      }}
+    >
+      <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+        {rendered.card}
+      </div>
+      {safe ? (
+        <div
+          data-safe-area-overlay="true"
+          style={{
+            position: 'absolute',
+            top: `${safe.top * scale}px`,
+            right: `${safe.right * scale}px`,
+            bottom: `${safe.bottom * scale}px`,
+            left: `${safe.left * scale}px`,
+            border: '2px dashed #fff',
+            boxShadow: '0 0 0 999px rgba(0, 0, 0, 0.28)',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}

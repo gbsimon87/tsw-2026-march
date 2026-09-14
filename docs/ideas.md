@@ -1,9 +1,9 @@
 # Product Backlog
 
-Ideas only; nothing in this file is built. Every item was checked against the
-code on the date below and is absent or partial as described. **Delete an item
-when it ships** — do not tick it and leave it behind, or this becomes a release
-log instead of a backlog.
+Most entries in this file are unbuilt ideas, checked against the code on the date
+below. **Delete an item when it ships**, except in the Prioritised Social Asset
+Backlog: that table keeps completed rows so we can work through it one idea at a
+time.
 
 Last reviewed against the code: 12 September 2026.
 
@@ -122,13 +122,12 @@ content; every asset must also render from the demo dataset.
 
 ### Where Today's Exports Fall Short
 
-Game, player, and team cards export as PNGs through `ShareableCardExport`, each
-declaring its own `data-capture-scale` so it lands on 1080x1350 exactly, with a
-test covering that framing. The Instagram panel carries a caption field and an
-attribution URL that rides in the caption. What does not exist:
+Game, player, and team cards export as PNGs through `ShareableCardExport`. The
+4:5 post, 9:16 Story/Reel/TikTok, and 1200x630 link-image presets have framing
+tests; the latter two show a text-safe guide in preview. The Instagram panel
+carries a caption field and an attribution URL that rides in the caption. The
+remaining gaps are:
 
-- any preset other than 4:5 — no 1080x1920 Story/Reel size, no 1200x630 link
-  preview, and no safe-area overlay in the preview;
 - a per-game player line — the player card shows season averages
   (`pointsPerGame`, `reboundsPerGame`, `assistsPerGame`), which is the less
   socially compelling asset;
@@ -143,23 +142,26 @@ attribution URL that rides in the caption. What does not exist:
 
 Impact is the expected reduction in weekly work plus the likely share value.
 Effort is relative to the current React/html2canvas and feed architecture.
+Completion Status tracks each idea here; finished rows stay visible for resuming
+this sequence. Rank 1 provides a downloadable link image, while crawler-visible
+Open Graph previews remain rank 12 and P8.
 
-|   Rank | Idea                                | Impact      | Effort | Size | Definition of done                                                                                                                                                                                                                                                                                                    |
-| -----: | ----------------------------------- | ----------- | ------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|  **1** | Remaining export presets            | High        | Medium | M    | The 4:5 preset ships. Add **1080x1920 Story/Reel/TikTok** and **1200x630 link preview** through the same renderer, each with a visible safe-area overlay in preview, no clipped long names, and the same kind of framing test the game card already has.                                                              |
-|  **2** | Per-game player stat card           | High        | Low    | S    | From a completed game's frozen box score, export a card with player photo, name, team, opponent, result/date, and a legible PTS/REB/AST line plus one context stat. Do not reuse the season-average player spotlight for this job.                                                                                    |
-|  **3** | Milestone social export             | High        | Low    | S    | Add a milestone type to `renderCard`/`ShareableCardExport`; use the already-snapshotted player avatar, make the achievement the headline, and include team, source game, date, TSW handle, and one CTA.                                                                                                               |
-|  **4** | Caption, keyword, and tag assistant | High        | Low    | S    | Generate editable copy from verified data: hook, one-sentence context, question/CTA, 3-5 relevant hashtags, player/team handles when recorded, and alt text. The attributed permalink half already exists in `instagramDraftHandoff.js`. One-click copy buttons; never invent a stat or handle.                       |
-|  **5** | Social attribution and join landing | High        | Low    | XS   | Persist first-touch UTM/referrer values, distinguish Instagram and TikTok, create source-specific links, and send new visitors to a useful public page or registration rather than a login dead end. Track `social_asset_exported`, `social_share_opened`, landing, signup, and league-enquiry events.                |
-|  **6** | Completed-game social kit           | High        | Medium | M    | A single button prepares a final-score card, top-performer card, box-score carousel, 9:16 Story result, suggested caption, alt text, and tagged public link. The operator can preview and download individually or as a ZIP.                                                                                          |
-|  **7** | Box-score breakdown carousel        | High        | Medium | M    | Export 3-4 ordered 4:5 slides: result/hook, team comparison, top performers, and CTA. Slides share a template and can be removed or reordered without design work.                                                                                                                                                    |
-|  **8** | League leaders and rankings cards   | Medium-high | Low    | S    | The data already ships: `GET /public/leagues/:leagueSlug/leaders` backs the MVP Standings fantasy-points leaderboard on the public league page. This item is only the export — feed and 9:16 cards for top-five scoring/rebounding/assists plus the current table and form, suppressed below three qualified players. |
-|  **9** | Social identity and consent fields  | Medium-high | Medium | S    | Optional Instagram/TikTok handles for leagues, teams, and players; marketing-permission status and date; minor/adult status where appropriate; and an export guard that defaults to demo/anonymised output without recorded permission.                                                                               |
-| **10** | Highlight + stat receipt            | Medium-high | Medium | M    | Export a 9:16 8-12 second clip around an eligible timestamp with player/stat/result overlays, burned-in descriptive text, source-video credit, and end card. Start with user-selected clips; do not auto-publish.                                                                                                     |
-| **11** | Player progress card                | Medium      | Medium | M    | Compare the last five games with the prior five or a season baseline, label the sample clearly, and export a simple trend card. Suppress the asset when the sample is too small.                                                                                                                                      |
-| **12** | Per-page Open Graph images          | Medium      | Medium | M    | Public game, player, team, and league links render 1200x630 previews from the same template system instead of the global square icon. Titles and descriptions are already per-page via `useDocumentMeta`, but set client-side — only worth building after P8.                                                         |
-| **13** | Templated stat-video renderer       | Medium      | High   | L    | Deferred; see **Not Now**. Turn any final score, player line, milestone, or leaderboard into a 6-10 second MP4 using two or three transitions. No timeline editor.                                                                                                                                                    |
-| **14** | Social content inbox                | Medium      | High   | L    | Deferred; see **Not Now**. Rank new assets by notability, show permission status, mark used/skipped, filter by league/date/type, retain caption/export history.                                                                                                                                                       |
+|   Rank | Idea                                | Impact      | Effort | Size | Definition of done                                                                                                                                                                                                                                                                                                    | Completion Status |
+| -----: | ----------------------------------- | ----------- | ------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+|  **1** | Remaining export presets            | High        | Medium | M    | The 4:5 preset ships. Add **1080x1920 Story/Reel/TikTok** and **1200x630 link preview** through the same renderer, each with a visible safe-area overlay in preview, no clipped long names, and the same kind of framing test the game card already has.                                                              | Complete          |
+|  **2** | Per-game player stat card           | High        | Low    | S    | From a completed game's frozen box score, export a card with player photo, name, team, opponent, result/date, and a legible PTS/REB/AST line plus one context stat. Do not reuse the season-average player spotlight for this job.                                                                                    | Not started       |
+|  **3** | Milestone social export             | High        | Low    | S    | Add a milestone type to `renderCard`/`ShareableCardExport`; use the already-snapshotted player avatar, make the achievement the headline, and include team, source game, date, TSW handle, and one CTA.                                                                                                               | Not started       |
+|  **4** | Caption, keyword, and tag assistant | High        | Low    | S    | Generate editable copy from verified data: hook, one-sentence context, question/CTA, 3-5 relevant hashtags, player/team handles when recorded, and alt text. The attributed permalink half already exists in `instagramDraftHandoff.js`. One-click copy buttons; never invent a stat or handle.                       | Not started       |
+|  **5** | Social attribution and join landing | High        | Low    | XS   | Persist first-touch UTM/referrer values, distinguish Instagram and TikTok, create source-specific links, and send new visitors to a useful public page or registration rather than a login dead end. Track `social_asset_exported`, `social_share_opened`, landing, signup, and league-enquiry events.                | Not started       |
+|  **6** | Completed-game social kit           | High        | Medium | M    | A single button prepares a final-score card, top-performer card, box-score carousel, 9:16 Story result, suggested caption, alt text, and tagged public link. The operator can preview and download individually or as a ZIP.                                                                                          | Not started       |
+|  **7** | Box-score breakdown carousel        | High        | Medium | M    | Export 3-4 ordered 4:5 slides: result/hook, team comparison, top performers, and CTA. Slides share a template and can be removed or reordered without design work.                                                                                                                                                    | Not started       |
+|  **8** | League leaders and rankings cards   | Medium-high | Low    | S    | The data already ships: `GET /public/leagues/:leagueSlug/leaders` backs the MVP Standings fantasy-points leaderboard on the public league page. This item is only the export — feed and 9:16 cards for top-five scoring/rebounding/assists plus the current table and form, suppressed below three qualified players. | Not started       |
+|  **9** | Social identity and consent fields  | Medium-high | Medium | S    | Optional Instagram/TikTok handles for leagues, teams, and players; marketing-permission status and date; minor/adult status where appropriate; and an export guard that defaults to demo/anonymised output without recorded permission.                                                                               | Not started       |
+| **10** | Highlight + stat receipt            | Medium-high | Medium | M    | Export a 9:16 8-12 second clip around an eligible timestamp with player/stat/result overlays, burned-in descriptive text, source-video credit, and end card. Start with user-selected clips; do not auto-publish.                                                                                                     | Not started       |
+| **11** | Player progress card                | Medium      | Medium | M    | Compare the last five games with the prior five or a season baseline, label the sample clearly, and export a simple trend card. Suppress the asset when the sample is too small.                                                                                                                                      | Not started       |
+| **12** | Per-page Open Graph images          | Medium      | Medium | M    | Public game, player, team, and league links render 1200x630 previews from the same template system instead of the global square icon. Titles and descriptions are already per-page via `useDocumentMeta`, but set client-side — only worth building after P8.                                                         | Not started       |
+| **13** | Templated stat-video renderer       | Medium      | High   | L    | Deferred; see **Not Now**. Turn any final score, player line, milestone, or leaderboard into a 6-10 second MP4 using two or three transitions. No timeline editor.                                                                                                                                                    | Not started       |
+| **14** | Social content inbox                | Medium      | High   | L    | Deferred; see **Not Now**. Rank new assets by notability, show permission status, mark used/skipped, filter by league/date/type, retain caption/export history.                                                                                                                                                       | Not started       |
 
 ### Shared Design Requirements
 
@@ -191,8 +193,8 @@ These apply to every new asset, not just the first three items.
    attribution, and it is the smallest thing here.
 2. **Cheap high-share assets:** ranks 2 and 3. Both read from data that is
    already frozen and need no new pipeline.
-3. **Reach:** P8, then ranks 1 and 12, so the links those assets carry preview
-   properly wherever they land.
+3. **Reach:** P8, then rank 12, so the links those assets carry preview properly
+   wherever they land. Rank 1 export presets are complete.
 4. **Weekly engine:** ranks 4, 6, and 7 — this supplies most of a 12-week
    calendar from verified content.
 5. **Depth:** ranks 8, 9, and 11 once the weekly loop is running.

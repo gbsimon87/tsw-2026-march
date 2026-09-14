@@ -1,6 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
-import { ShareableCardExport } from './cards/ShareableCardExport';
+import { Modal } from '../../../components/ui/Modal';
+import { ShareableCardExport, ShareableCardPreview } from './cards/ShareableCardExport';
+import { SOCIAL_EXPORT_FORMATS, socialExportPreset } from './cards/socialExportPresets';
 import { useShareImage } from '../hooks/useShareImage';
 
 function defaultFileName(props) {
@@ -11,9 +13,8 @@ function defaultFileName(props) {
     .replace(/[^a-z0-9]+/g, '-')}-tsw.png`;
 }
 
-// Owns the single off-screen export node, so both actions rasterise the exact
-// same card. `onPrepareInstagram` receives that File instead of downloading it,
-// which is what removes the save-then-re-upload step from the operator's job.
+// The chooser captures the selected format. The Instagram handoff keeps a
+// separate 4:5 node because that publishing flow requires a post-sized image.
 export function ShareImageButton({
   className,
   fileName,
@@ -22,15 +23,24 @@ export function ShareImageButton({
   ...cardProps
 }) {
   const exportRef = useRef(null);
+  const instagramRef = useRef(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [format, setFormat] = useState('post');
   const { createImageFile, shareImage, status } = useShareImage();
   const resolvedFileName = fileName || defaultFileName(cardProps);
+  const preset = socialExportPreset(format);
 
-  const handleClick = () => {
-    shareImage(exportRef.current, resolvedFileName);
+  const handleShare = () => {
+    const name =
+      format === 'post'
+        ? resolvedFileName
+        : `${resolvedFileName.replace(/\.png$/i, '')}-${preset.suffix}.png`;
+    shareImage(exportRef.current, name);
   };
 
   const handlePrepareInstagram = async () => {
-    const file = await createImageFile(exportRef.current, resolvedFileName);
+    const node = format === 'post' ? exportRef.current : instagramRef.current;
+    const file = await createImageFile(node, resolvedFileName);
     if (file) onPrepareInstagram(file);
   };
 
@@ -40,7 +50,7 @@ export function ShareImageButton({
         {showShare ? (
           <button
             type="button"
-            onClick={handleClick}
+            onClick={() => setChooserOpen(true)}
             disabled={status === 'generating'}
             aria-label="Share as image"
             title="Share as image"
@@ -86,7 +96,56 @@ export function ShareImageButton({
           Couldn&apos;t create image. Try again.
         </p>
       ) : null}
-      <ShareableCardExport ref={exportRef} {...cardProps} />
+      <ShareableCardExport ref={exportRef} format={format} {...cardProps} />
+      {onPrepareInstagram && format !== 'post' ? (
+        <ShareableCardExport ref={instagramRef} format="post" {...cardProps} />
+      ) : null}
+      {showShare ? (
+        <Modal open={chooserOpen} onClose={() => setChooserOpen(false)} title="Share an image">
+          <div className="flex flex-col items-center gap-4">
+            <label className="w-full text-sm font-medium text-slate-700">
+              Format
+              <select
+                aria-label="Image format"
+                value={format}
+                onChange={(event) => setFormat(event.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+              >
+                {SOCIAL_EXPORT_FORMATS.map((value) => {
+                  const option = socialExportPreset(value);
+                  return (
+                    <option key={value} value={value}>
+                      {option.label}
+                      {value === 'post' ? '' : ` (${option.width}×${option.height})`}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <ShareableCardPreview format={format} {...cardProps} />
+            {preset.safeArea ? (
+              <p className="text-center text-xs text-slate-600">
+                Dashed box shows the text-safe area. It will not appear in the PNG. Check the final
+                placement in each app before posting.
+              </p>
+            ) : null}
+            {format === 'link' ? (
+              <p className="text-center text-xs text-slate-600">
+                This exports an image; shared URLs still need crawler-visible metadata for automatic
+                link previews.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleShare}
+              disabled={status === 'generating'}
+              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {status === 'generating' ? 'Creating image…' : 'Share or download PNG'}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

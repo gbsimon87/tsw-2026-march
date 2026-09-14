@@ -5,10 +5,10 @@ import html2canvas from 'html2canvas';
 // to the OS share sheet or downloads it.
 //
 // The node carries its own capture scale in `data-capture-scale`: the honours
-// board is already composed at 1080x1350 and only needs 2x for crispness, while
-// the game card is laid out at feed scale and relies on the capture to enlarge
-// it onto 1080x1350 exactly. One hard-coded scale here would silently produce a
-// game-card PNG at the wrong size for the Instagram 4:5 check.
+// board is composed at 1080x1350 and uses 2x for crispness, while the game card
+// is laid out at feed scale and relies on capture to reach 1080x1350. Story and
+// link compositions render at their exact target sizes and use 1x. One
+// hard-coded scale here would produce incorrectly sized PNGs.
 const DEFAULT_CAPTURE_SCALE = 2;
 
 function captureScaleOf(node) {
