@@ -7,7 +7,11 @@ import { useShareImage } from '../hooks/useShareImage';
 
 function defaultFileName(props) {
   const label =
-    props.playerCard?.playerName || props.teamCard?.teamName || props.gameCard?.teamName || 'tsw';
+    props.playerCard?.playerName ||
+    props.playerGameCard?.playerName ||
+    props.teamCard?.teamName ||
+    props.gameCard?.teamName ||
+    'tsw';
   return `${String(label)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')}-tsw.png`;
@@ -15,16 +19,26 @@ function defaultFileName(props) {
 
 // The chooser captures the selected format. The Instagram handoff keeps a
 // separate 4:5 node because that publishing flow requires a post-sized image.
+//
+// Pass `open`/`onOpenChange` to drive the chooser from outside and suppress the
+// built-in trigger. The box score uses that to run ONE instance off the selected
+// row: a button per row would mount a 1080x1350 off-screen export node per
+// player, which is what html2canvas has to walk.
 export function ShareImageButton({
   className,
   fileName,
   showShare = true,
   onPrepareInstagram,
+  open,
+  onOpenChange,
   ...cardProps
 }) {
+  const isControlled = typeof onOpenChange === 'function';
   const exportRef = useRef(null);
   const instagramRef = useRef(null);
-  const [chooserOpen, setChooserOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const chooserOpen = isControlled ? Boolean(open) : uncontrolledOpen;
+  const setChooserOpen = isControlled ? onOpenChange : setUncontrolledOpen;
   const [format, setFormat] = useState('post');
   const { createImageFile, shareImage, status } = useShareImage();
   const resolvedFileName = fileName || defaultFileName(cardProps);
@@ -47,7 +61,7 @@ export function ShareImageButton({
   return (
     <div className={className}>
       <div className="flex items-center justify-end gap-2">
-        {showShare ? (
+        {showShare && !isControlled ? (
           <button
             type="button"
             onClick={() => setChooserOpen(true)}

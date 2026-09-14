@@ -54,3 +54,60 @@ describe('deleteAutoPostsForGameIds — league going private', () => {
     expect(deleteMany).not.toHaveBeenCalled();
   });
 });
+
+describe('Post schema — per-game player cards', () => {
+  test('accepts a league-sourced player_game_card', () => {
+    const doc = new Post({
+      creatorUserId: '507f1f77bcf86cd799439011',
+      type: 'player_game_card',
+      playerGameCard: {
+        gameId: '507f1f77bcf86cd799439015',
+        leagueTeamId: '507f1f77bcf86cd799439014',
+        leaguePlayerId: '507f1f77bcf86cd799439013',
+        cardSnapshot: { playerName: 'Jordan Lee' },
+      },
+    });
+    expect(doc.validateSync()).toBeUndefined();
+  });
+
+  test('accepts a standalone player_game_card', () => {
+    const doc = new Post({
+      creatorUserId: '507f1f77bcf86cd799439011',
+      type: 'player_game_card',
+      playerGameCard: {
+        gameId: '507f1f77bcf86cd799439015',
+        teamId: '507f1f77bcf86cd799439016',
+        playerId: '507f1f77bcf86cd799439017',
+      },
+    });
+    expect(doc.validateSync()).toBeUndefined();
+  });
+
+  test('requires a gameId', () => {
+    const doc = new Post({
+      creatorUserId: '507f1f77bcf86cd799439011',
+      type: 'player_game_card',
+      playerGameCard: { playerId: '507f1f77bcf86cd799439017' },
+    });
+    expect(doc.validateSync()).toBeDefined();
+  });
+
+  // One post per (game, player), matching the highlight_clip precedent. Two
+  // partial indexes rather than one sparse compound: a sparse COMPOUND index
+  // still includes a doc when only one of the keys is present, so the league
+  // and standalone id flavours would collide on null.
+  test.each([['playerGameCard.playerId'], ['playerGameCard.leaguePlayerId']])(
+    'declares a unique partial index on gameId + %s',
+    (playerField) => {
+      const index = Post.schema
+        .indexes()
+        .find(([fields]) => fields['playerGameCard.gameId'] === 1 && fields[playerField] === 1);
+
+      expect(index).toBeDefined();
+      expect(index[1].unique).toBe(true);
+      expect(index[1].partialFilterExpression).toEqual({
+        [playerField]: { $exists: true },
+      });
+    }
+  );
+});

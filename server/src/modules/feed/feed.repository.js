@@ -83,6 +83,34 @@ const teamCardSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Social backlog rank 2: a per-game player line, distinct from playerCard's
+// season averages — the socially compelling asset is "28 PTS last night", not
+// "18.2 PPG this season". Kept as its own type rather than a nullable gameId on
+// playerCard so the two never have to be told apart by a nullable field.
+// teamId/playerId vs leagueTeamId/leaguePlayerId are mutually exclusive, the
+// same TSW-005 split playerCard uses, enforced in feed.validation.js.
+const playerGameCardSchema = new mongoose.Schema(
+  {
+    gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
+    teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, default: null },
+    playerId: { type: mongoose.Schema.Types.ObjectId, required: false, default: null },
+    leagueTeamId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeagueTeam',
+      required: false,
+      default: null,
+    },
+    leaguePlayerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LeaguePlayer',
+      required: false,
+      default: null,
+    },
+    cardSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
 const highlightClipSchema = new mongoose.Schema(
   {
     gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
@@ -147,6 +175,7 @@ const postSchema = new mongoose.Schema(
         'video',
         'game_card',
         'player_card',
+        'player_game_card',
         'team_card',
         'highlight_clip',
         'milestone',
@@ -159,6 +188,7 @@ const postSchema = new mongoose.Schema(
     video: { type: videoSchema, default: null },
     gameCard: { type: gameCardSchema, default: null },
     playerCard: { type: playerCardSchema, default: null },
+    playerGameCard: { type: playerGameCardSchema, default: null },
     teamCard: { type: teamCardSchema, default: null },
     highlightClip: { type: highlightClipSchema, default: null },
     milestoneCard: { type: milestoneCardSchema, default: null },
@@ -171,6 +201,20 @@ postSchema.index({ 'highlightClip.eventId': 1 }, { unique: true, sparse: true })
 
 // One post per milestone, even under concurrent finalise/retry.
 postSchema.index({ 'milestoneCard.milestoneId': 1 }, { unique: true, sparse: true });
+
+// Social backlog rank 2: one per-game player card per (game, player), the same
+// global dedupe highlight_clip applies to an event. Two partial indexes rather
+// than one sparse compound index: a sparse COMPOUND index still covers a doc
+// when only some of its keys are present, so every standalone card (null
+// leaguePlayerId) would collide with every other one on the league index.
+postSchema.index(
+  { 'playerGameCard.gameId': 1, 'playerGameCard.playerId': 1 },
+  { unique: true, partialFilterExpression: { 'playerGameCard.playerId': { $exists: true } } }
+);
+postSchema.index(
+  { 'playerGameCard.gameId': 1, 'playerGameCard.leaguePlayerId': 1 },
+  { unique: true, partialFilterExpression: { 'playerGameCard.leaguePlayerId': { $exists: true } } }
+);
 
 // Auto Feed Generation: at most one auto-generated game_card per game, even
 // under concurrent/retried finalise requests. Manual game_card posts (auto:
@@ -220,6 +264,12 @@ async function deletePostById(postId) {
 // their stale cardSnapshot after that game's score changes post-share.
 async function listGameCardPostsByGameId(gameId) {
   return Post.find({ type: 'game_card', 'gameCard.gameId': gameId });
+}
+
+// Social backlog rank 2: the per-game player twin of the helper above, so a
+// refreezed box score can correct cards already published from it.
+async function listPlayerGameCardPostsByGameId(gameId) {
+  return Post.find({ type: 'player_game_card', 'playerGameCard.gameId': gameId });
 }
 
 async function deletePostsByGameId(gameId) {
@@ -301,4 +351,5 @@ module.exports = {
   findSharedEventIds,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
+  listPlayerGameCardPostsByGameId,
 };

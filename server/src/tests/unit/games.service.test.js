@@ -23,6 +23,7 @@ jest.mock('../../modules/teams/teams.service', () => ({
 
 jest.mock('../../modules/feed/feed.service', () => ({
   refreshGameCardPostsForGame: jest.fn(() => Promise.resolve()),
+  refreshPlayerGameCardPostsForGame: jest.fn(() => Promise.resolve()),
   autoPublishForFinalizedGame: jest.fn(() => Promise.resolve()),
 }));
 
@@ -691,6 +692,29 @@ describe('games service finish summaries', () => {
       topPerformers: [],
       keyMoments: [],
     });
+  });
+
+  // Social backlog rank 2: finishing (or editing) a game refreezes its box
+  // score, so a per-game player card already in The Pulse must be re-snapshotted
+  // alongside the game cards or it shows a wrong stat line forever.
+  test('finishing a game refreshes per-game player cards as well as game cards', async () => {
+    const feedService = require('../../modules/feed/feed.service');
+    const game = buildDualLeagueGame({
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FG3_MADE },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FG2_MADE },
+      ],
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+
+    await finishGameForUser('user-1', 'game-1');
+    await flushAsyncScheduler();
+
+    expect(feedService.refreshGameCardPostsForGame).toHaveBeenCalledWith(game._id);
+    expect(feedService.refreshPlayerGameCardPostsForGame).toHaveBeenCalledWith(game._id);
   });
 
   test('generates and saves a league game summary when finishing a game without one', async () => {

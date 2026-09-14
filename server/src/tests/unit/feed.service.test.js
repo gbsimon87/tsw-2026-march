@@ -5,6 +5,7 @@ jest.mock('../../modules/feed/feed.repository', () => ({
   deletePostById: jest.fn(),
   updatePostCardSnapshot: jest.fn(() => Promise.resolve()),
   listGameCardPostsByGameId: jest.fn(() => Promise.resolve([])),
+  listPlayerGameCardPostsByGameId: jest.fn(() => Promise.resolve([])),
   findAutoGameCardPost: jest.fn(() => Promise.resolve(null)),
   findPostByHighlightEventId: jest.fn(() => Promise.resolve(null)),
   findSharedEventIds: jest.fn(() => Promise.resolve([])),
@@ -72,6 +73,7 @@ const {
   deletePostById,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
+  listPlayerGameCardPostsByGameId,
   findAutoGameCardPost,
   findSharedEventIds,
   deleteAutoPostsForGameIds,
@@ -1230,5 +1232,347 @@ describe('feed service', () => {
       expect(claimed.claimedByUserId).toBe('user-1');
       expect(unclaimed.claimedByUserId).toBeNull();
     });
+  });
+});
+
+// Social backlog rank 2 — per-game player stat card.
+describe('player_game_card', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const GAME_ID = '0120a4f9196a5f9eb9f523f3';
+  const TEAM_ID = '83f1535f99ab0bf4e9d02dfd';
+  const PLAYER_ID = '507f1f77bcf86cd799439017';
+  const LEAGUE_TEAM_ID = '2e13ff6bcb41415413eaf71a';
+  const AWAY_LEAGUE_TEAM_ID = '2e13ff6bcb41415413eaf71b';
+  const LEAGUE_PLAYER_ID = '73c99ccbbdad0ab009f59815';
+
+  function standalonePayload(overrides = {}) {
+    return {
+      game: {
+        id: GAME_ID,
+        trackingMode: 'one_sided',
+        status: 'completed',
+        opponent: 'Hawks',
+        scheduledAt: '2026-09-12T19:00:00.000Z',
+        ...overrides.game,
+      },
+      team: {
+        id: TEAM_ID,
+        name: 'Falcons',
+        logo: { url: 'https://cdn/falcons.png' },
+        colors: ['#1B4332'],
+        players: [
+          {
+            id: PLAYER_ID,
+            displayName: 'Jordan Lee',
+            jerseyNumber: 23,
+            avatarUrl: 'https://cdn/jordan.png',
+          },
+        ],
+      },
+      participants: null,
+      boxScore: {
+        players: [
+          {
+            playerId: PLAYER_ID,
+            displayName: 'Jordan Lee',
+            points: 28,
+            reb: 9,
+            ast: 5,
+            stl: 1,
+            blk: 0,
+            fg2m: 8,
+            fg2a: 12,
+            fg3m: 4,
+            fg3a: 7,
+            ftm: 0,
+            fta: 0,
+            tov: 2,
+            foul: 3,
+          },
+        ],
+      },
+      gameSummary: { teamPoints: 78, opponentPoints: 64, hasOpponentScore: true },
+      recap: { opponent: { name: 'Hawks' } },
+      ...overrides,
+    };
+  }
+
+  function leaguePayload() {
+    return {
+      game: {
+        id: GAME_ID,
+        trackingMode: 'dual_team',
+        status: 'completed',
+        gameContext: 'league',
+        scheduledAt: '2026-09-12T19:00:00.000Z',
+      },
+      team: null,
+      participants: {
+        home: {
+          id: LEAGUE_TEAM_ID,
+          displayName: 'Rockets',
+          logo: { url: 'https://cdn/rockets.png' },
+          players: [
+            {
+              id: LEAGUE_PLAYER_ID,
+              leaguePlayerId: LEAGUE_PLAYER_ID,
+              displayName: 'Sam Doyle',
+              jerseyNumber: 7,
+              avatarUrl: null,
+            },
+          ],
+        },
+        away: { id: AWAY_LEAGUE_TEAM_ID, displayName: 'Comets', logo: null, players: [] },
+      },
+      boxScore: {
+        home: {
+          players: [
+            {
+              playerId: LEAGUE_PLAYER_ID,
+              leaguePlayerId: LEAGUE_PLAYER_ID,
+              displayName: 'Sam Doyle',
+              points: 12,
+              reb: 3,
+              ast: 8,
+              stl: 4,
+              blk: 1,
+              fg2m: 5,
+              fg2a: 9,
+              fg3m: 0,
+              fg3a: 2,
+              ftm: 2,
+              fta: 2,
+              tov: 1,
+              foul: 2,
+            },
+          ],
+        },
+        away: { players: [] },
+      },
+      gameSummary: { homePoints: 70, awayPoints: 81, hasOpponentScore: true },
+      recap: null,
+    };
+  }
+
+  describe('buildPlayerGameCardSnapshot', () => {
+    test('reads the tracked player line from a standalone game', () => {
+      const snapshot = service.buildPlayerGameCardSnapshot(standalonePayload(), {
+        playerId: PLAYER_ID,
+      });
+
+      expect(snapshot).toMatchObject({
+        gameId: GAME_ID,
+        gameUrl: `/games/${GAME_ID}`,
+        playerName: 'Jordan Lee',
+        jerseyNumber: 23,
+        playerImage: { url: 'https://cdn/jordan.png' },
+        imageFallback: 'player',
+        teamName: 'Falcons',
+        teamLogo: { url: 'https://cdn/falcons.png' },
+        opponentName: 'Hawks',
+        resultLabel: 'W 78–64',
+        stats: { points: 28, reb: 9, ast: 5 },
+      });
+    });
+
+    test('reads the right side of a dual-team league game', () => {
+      const snapshot = service.buildPlayerGameCardSnapshot(leaguePayload(), {
+        leaguePlayerId: LEAGUE_PLAYER_ID,
+      });
+
+      expect(snapshot).toMatchObject({
+        playerName: 'Sam Doyle',
+        teamName: 'Rockets',
+        opponentName: 'Comets',
+        resultLabel: 'L 70–81',
+        stats: { points: 12, reb: 3, ast: 8, stl: 4 },
+      });
+    });
+
+    test('falls back to the team logo and records that it did', () => {
+      const payload = leaguePayload();
+      const snapshot = service.buildPlayerGameCardSnapshot(payload, {
+        leaguePlayerId: LEAGUE_PLAYER_ID,
+      });
+
+      expect(snapshot.playerImage).toBeNull();
+      expect(snapshot.imageFallback).toBe('team_logo');
+    });
+
+    // A one-sided game where nobody tracked the opponent's scoring has no
+    // result to report — a "W 78-0" would be a fabricated claim.
+    test('omits the result when the opponent score was never tracked', () => {
+      const payload = standalonePayload();
+      payload.gameSummary = { teamPoints: 78, opponentPoints: 0, hasOpponentScore: false };
+
+      const snapshot = service.buildPlayerGameCardSnapshot(payload, { playerId: PLAYER_ID });
+
+      expect(snapshot.resultLabel).toBeNull();
+    });
+
+    test('labels a drawn game', () => {
+      const payload = standalonePayload();
+      payload.gameSummary = { teamPoints: 70, opponentPoints: 70, hasOpponentScore: true };
+
+      const snapshot = service.buildPlayerGameCardSnapshot(payload, { playerId: PLAYER_ID });
+
+      expect(snapshot.resultLabel).toBe('D 70–70');
+    });
+
+    test('returns null when the player has no line in this game', () => {
+      const snapshot = service.buildPlayerGameCardSnapshot(standalonePayload(), {
+        playerId: '507f1f77bcf86cd799439099',
+      });
+
+      expect(snapshot).toBeNull();
+    });
+  });
+
+  describe('createPlayerGameCardPostForUser', () => {
+    test('snapshots the line at creation time', async () => {
+      getPublicGame.mockResolvedValue(standalonePayload());
+      findGameById.mockResolvedValue({ _id: GAME_ID, status: 'completed', isPublic: true });
+      createPost.mockResolvedValue({
+        _id: 'post-1',
+        type: 'player_game_card',
+        creatorUserId: 'user-1',
+        playerGameCard: { gameId: GAME_ID, cardSnapshot: { playerName: 'Jordan Lee' } },
+      });
+      findUserById.mockResolvedValue({ _id: 'user-1', name: 'Ops' });
+
+      await service.createPlayerGameCardPostForUser('user-1', {
+        gameId: GAME_ID,
+        teamId: TEAM_ID,
+        playerId: PLAYER_ID,
+      });
+
+      expect(createPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'player_game_card',
+          playerGameCard: expect.objectContaining({
+            gameId: GAME_ID,
+            teamId: TEAM_ID,
+            playerId: PLAYER_ID,
+            cardSnapshot: expect.objectContaining({
+              playerName: 'Jordan Lee',
+              stats: expect.any(Object),
+            }),
+          }),
+        })
+      );
+    });
+
+    test('rejects a game that is not complete', async () => {
+      getPublicGame.mockResolvedValue(
+        standalonePayload({
+          game: { id: GAME_ID, trackingMode: 'one_sided', status: 'in_progress' },
+        })
+      );
+      findGameById.mockResolvedValue({ _id: GAME_ID, status: 'in_progress', isPublic: true });
+
+      await expect(
+        service.createPlayerGameCardPostForUser('user-1', {
+          gameId: GAME_ID,
+          teamId: TEAM_ID,
+          playerId: PLAYER_ID,
+        })
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('rejects a player with no line in that game', async () => {
+      getPublicGame.mockResolvedValue(standalonePayload());
+      findGameById.mockResolvedValue({ _id: GAME_ID, status: 'completed', isPublic: true });
+
+      await expect(
+        service.createPlayerGameCardPostForUser('user-1', {
+          gameId: GAME_ID,
+          teamId: TEAM_ID,
+          playerId: '507f1f77bcf86cd799439099',
+        })
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    test('rejects a game from a private league', async () => {
+      findGameById.mockResolvedValue({
+        _id: GAME_ID,
+        status: 'completed',
+        isPublic: true,
+        gameContext: 'league',
+        leagueId: '377fd569971eedeba8fbea28',
+      });
+      isLeaguePublic.mockResolvedValue(false);
+
+      await expect(
+        service.createPlayerGameCardPostForUser('user-1', {
+          gameId: GAME_ID,
+          leagueTeamId: LEAGUE_TEAM_ID,
+          leaguePlayerId: LEAGUE_PLAYER_ID,
+        })
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(createPost).not.toHaveBeenCalled();
+    });
+
+    // Same global dedupe highlight_clip applies: one card per (game, player).
+    test('maps a duplicate-key race to a 409, not a 500', async () => {
+      getPublicGame.mockResolvedValue(standalonePayload());
+      findGameById.mockResolvedValue({ _id: GAME_ID, status: 'completed', isPublic: true });
+      createPost.mockRejectedValue(Object.assign(new Error('dup'), { code: 11000 }));
+
+      await expect(
+        service.createPlayerGameCardPostForUser('user-1', {
+          gameId: GAME_ID,
+          teamId: TEAM_ID,
+          playerId: PLAYER_ID,
+        })
+      ).rejects.toMatchObject({ statusCode: 409 });
+    });
+  });
+
+  test('sanitizePost serves the card straight from its snapshot', async () => {
+    findUserById.mockResolvedValue({ _id: 'user-1', name: 'Ops' });
+
+    const result = await service.sanitizePost(
+      {
+        _id: 'post-1',
+        type: 'player_game_card',
+        creatorUserId: 'user-1',
+        createdAt: new Date('2026-09-12T20:00:00.000Z'),
+        playerGameCard: { gameId: GAME_ID, cardSnapshot: { playerName: 'Jordan Lee' } },
+      },
+      'user-1'
+    );
+
+    expect(result.playerGameCard).toEqual({ playerName: 'Jordan Lee' });
+    expect(getPublicGame).not.toHaveBeenCalled();
+  });
+
+  // A stat correction on a completed game refreezes its box score; a card
+  // already in The Pulse must follow, or it shows a wrong stat line forever.
+  test('refreshPlayerGameCardPostsForGame re-snapshots every card for that game', async () => {
+    getPublicGame.mockResolvedValue(standalonePayload());
+    listPlayerGameCardPostsByGameId.mockResolvedValue([
+      {
+        _id: 'post-1',
+        type: 'player_game_card',
+        playerGameCard: {
+          gameId: GAME_ID,
+          playerId: PLAYER_ID,
+          cardSnapshot: { stats: { points: 2 } },
+        },
+      },
+    ]);
+
+    await service.refreshPlayerGameCardPostsForGame(GAME_ID);
+
+    expect(updatePostCardSnapshot).toHaveBeenCalledWith(
+      'post-1',
+      'playerGameCard',
+      expect.objectContaining({ stats: expect.objectContaining({ points: 28 }) })
+    );
   });
 });

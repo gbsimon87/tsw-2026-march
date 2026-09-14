@@ -145,3 +145,69 @@ describe('ShareImageButton', () => {
     expect(screen.getByRole('button', { name: /prepare for instagram/i })).toBeInTheDocument();
   });
 });
+
+// Social backlog rank 2: the box score drives one page-level instance from a
+// selected row, rather than mounting a 1080x1350 export node per player.
+describe('ShareImageButton — controlled mode', () => {
+  it('renders no trigger of its own when the caller controls it', () => {
+    shareStatus = 'idle';
+    render(
+      <ShareImageButton
+        type="player_game_card"
+        playerGameCard={{ playerName: 'X' }}
+        open={false}
+        onOpenChange={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /share as image/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the chooser when the caller opens it', () => {
+    shareStatus = 'idle';
+    render(
+      <ShareImageButton
+        type="player_game_card"
+        playerGameCard={{ playerName: 'X' }}
+        open
+        onOpenChange={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('dialog', { name: /share an image/i })).toBeInTheDocument();
+  });
+
+  it('tells the caller when the chooser is dismissed', () => {
+    shareStatus = 'idle';
+    const onOpenChange = vi.fn();
+    render(
+      <ShareImageButton
+        type="player_game_card"
+        playerGameCard={{ playerName: 'X' }}
+        open
+        onOpenChange={onOpenChange}
+      />
+    );
+
+    // The modal renders both a backdrop and an in-header dismiss; either is a
+    // dismissal as far as the caller is concerned.
+    fireEvent.click(screen.getAllByRole('button', { name: /close dialog/i })[0]);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('names the download after the player', () => {
+    shareStatus = 'idle';
+    render(
+      <ShareImageButton
+        type="player_game_card"
+        playerGameCard={{ playerName: 'Jordan Miles' }}
+        open
+        onOpenChange={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share or download png/i }));
+    expect(shareImage).toHaveBeenCalledWith(expect.anything(), 'jordan-miles-tsw.png');
+  });
+});

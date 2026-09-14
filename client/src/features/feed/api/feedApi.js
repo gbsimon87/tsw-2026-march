@@ -19,6 +19,9 @@ export const feedApi = {
   createPlayerCardPost(payload) {
     return apiClient.post('/feed/player-card', payload);
   },
+  createPlayerGameCardPost(payload) {
+    return apiClient.post('/feed/player-game-card', payload);
+  },
   createTeamCardPost(payload) {
     return apiClient.post('/feed/team-card', payload);
   },

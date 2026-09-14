@@ -31,6 +31,7 @@ jest.mock('../../modules/feed/feed.service', () => ({
   createVideoPostForUser: jest.fn(),
   createGameCardPostForUser: jest.fn(),
   createPlayerCardPostForUser: jest.fn(),
+  createPlayerGameCardPostForUser: jest.fn(),
   createTeamCardPostForUser: jest.fn(),
   createHighlightClipPostForUser: jest.fn(),
   deletePostForUser: jest.fn(),
@@ -147,6 +148,25 @@ describe('feed affiliation gate', () => {
     expect(billingService.assertFeedPostingAllowed).toHaveBeenCalledWith('user-1');
   });
 
+  test('14.7 POST /feed/player-game-card returns 201 for an affiliated user', async () => {
+    billingService.assertFeedPostingAllowed.mockResolvedValue(undefined);
+    feedService.createPlayerGameCardPostForUser.mockResolvedValue({
+      id: 'post-3',
+      type: 'player_game_card',
+    });
+
+    const app = createApp();
+    const res = await authedPost(app, '/api/v1/feed/player-game-card').send({
+      gameId: '507f1f77bcf86cd799439015',
+      teamId: '507f1f77bcf86cd799439016',
+      playerId: '507f1f77bcf86cd799439017',
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.post).toEqual({ id: 'post-3', type: 'player_game_card' });
+    expect(billingService.assertFeedPostingAllowed).toHaveBeenCalledWith('user-1');
+  });
+
   test('all post creation endpoints check affiliation', async () => {
     billingService.assertFeedPostingAllowed.mockRejectedValue(
       new ApiError(403, 'You must be part of a team or league to post')
@@ -156,6 +176,7 @@ describe('feed affiliation gate', () => {
     const endpoints = [
       '/api/v1/feed/game-card',
       '/api/v1/feed/player-card',
+      '/api/v1/feed/player-game-card',
       '/api/v1/feed/team-card',
       '/api/v1/feed/highlight-clip',
     ];

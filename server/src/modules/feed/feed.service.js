@@ -12,10 +12,12 @@ const {
   findSharedEventIds,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
+  listPlayerGameCardPostsByGameId,
 } = require('./feed.repository');
 const {
   createGameCardPostSchema,
   createPlayerCardPostSchema,
+  createPlayerGameCardPostSchema,
   createTeamCardPostSchema,
   createHighlightClipPostSchema,
 } = require('./feed.validation');
@@ -226,6 +228,94 @@ function buildPlayerCardSnapshot(payload) {
   };
 }
 
+// Social backlog rank 2: the per-game player line, built from a getPublicGame()
+// payload exactly like buildGameCardSnapshot — so the Pulse post and the
+// downloadable PNG are the same shape from the same source. Returns null when
+// the player has no line in this game; callers decide whether that is a 404.
+function buildPlayerGameCardSnapshot(payload, { playerId = null, leaguePlayerId = null } = {}) {
+  const isDualTeam = payload.game?.trackingMode === 'dual_team';
+  const matches = (row) =>
+    leaguePlayerId
+      ? String(row.leaguePlayerId ?? '') === String(leaguePlayerId)
+      : String(row.playerId ?? '') === String(playerId);
+
+  const side = isDualTeam
+    ? ['home', 'away'].find((key) => (payload.boxScore?.[key]?.players || []).some(matches)) || null
+    : null;
+  const rows = isDualTeam
+    ? side
+      ? payload.boxScore[side].players
+      : []
+    : payload.boxScore?.players || [];
+  const row = rows.find(matches);
+  if (!row) return null;
+
+  const team = isDualTeam ? payload.participants?.[side] : payload.team;
+  const opponent = isDualTeam ? payload.participants?.[side === 'home' ? 'away' : 'home'] : null;
+  // The roster entry is sanitizePlayer's shape ({id, leaguePlayerId, ...}), not
+  // the box-score row's ({playerId, leaguePlayerId, ...}) — matching it with
+  // `matches` above silently returns nothing, and the card loses the jersey
+  // number and the photo.
+  const rosterEntry =
+    (team?.players || []).find((entry) =>
+      leaguePlayerId
+        ? String(entry.leaguePlayerId ?? entry.id ?? '') === String(leaguePlayerId)
+        : String(entry.id ?? '') === String(playerId)
+    ) || null;
+
+  const summary = payload.gameSummary || {};
+  const teamPoints = isDualTeam
+    ? ((side === 'home' ? summary.homePoints : summary.awayPoints) ?? 0)
+    : (summary.teamPoints ?? 0);
+  const opponentPoints = isDualTeam
+    ? ((side === 'home' ? summary.awayPoints : summary.homePoints) ?? 0)
+    : (summary.opponentPoints ?? 0);
+
+  const playerImage = rosterEntry?.avatarUrl ? { url: rosterEntry.avatarUrl } : null;
+  const teamLogo = team?.logo ?? null;
+
+  return {
+    gameId: payload.game.id,
+    gameUrl: `/games/${payload.game.id}`,
+    playerId: leaguePlayerId ? null : String(playerId),
+    leaguePlayerId: leaguePlayerId ? String(leaguePlayerId) : null,
+    playerName: row.displayName,
+    jerseyNumber: rosterEntry?.jerseyNumber ?? null,
+    playerImage,
+    // Shared Design Requirements: a team logo may stand in for a missing photo,
+    // but the card must be able to say that it did rather than pass a crest off
+    // as a face.
+    imageFallback: playerImage ? 'player' : teamLogo ? 'team_logo' : 'placeholder',
+    teamName: team?.name ?? team?.displayName ?? null,
+    teamLogo,
+    teamColors: team?.colors ?? [],
+    opponentName: isDualTeam
+      ? (opponent?.displayName ?? null)
+      : (payload.recap?.opponent?.name ?? payload.game.opponent ?? null),
+    // A one-sided game where nobody tracked the opponent's scoring has no
+    // result to report, and "W 78-0" would be a fabricated claim.
+    resultLabel: summary.hasOpponentScore
+      ? `${teamPoints > opponentPoints ? 'W' : teamPoints < opponentPoints ? 'L' : 'D'} ${teamPoints}\u2013${opponentPoints}`
+      : null,
+    playedOn: payload.game.completedAt ?? payload.game.scheduledAt ?? null,
+    stats: {
+      points: row.points ?? 0,
+      reb: row.reb ?? 0,
+      ast: row.ast ?? 0,
+      stl: row.stl ?? 0,
+      blk: row.blk ?? 0,
+      fg2m: row.fg2m ?? 0,
+      fg2a: row.fg2a ?? 0,
+      fg3m: row.fg3m ?? 0,
+      fg3a: row.fg3a ?? 0,
+      ftm: row.ftm ?? 0,
+      fta: row.fta ?? 0,
+      tov: row.tov ?? 0,
+      foul: row.foul ?? 0,
+    },
+  };
+}
+
 function buildTeamCardSnapshot(payload) {
   // TSW-005: sanitizeLeagueTeam's output has a leagueId field; standalone
   // getPublicTeam's team shape doesn't — used as the discriminator here.
@@ -364,6 +454,32 @@ async function refreshGameCardPostsForGame(gameId) {
   await Promise.all(posts.map((post) => resolveGameCardPayload(post, { refresh: true })));
 }
 
+// Social backlog rank 2: the game_card refresh above has a twin here. A stat
+// correction on a completed game refreezes its box score (OPT-012), and a
+// per-game player card already in The Pulse must follow or it shows a wrong
+// stat line forever. Called from the same post-response trigger.
+async function refreshPlayerGameCardPostsForGame(gameId) {
+  const posts = await listPlayerGameCardPostsByGameId(gameId);
+  if (posts.length === 0) return;
+
+  let payload;
+  try {
+    payload = await getPublicGame(String(gameId));
+  } catch {
+    return;
+  }
+
+  for (const post of posts) {
+    const snapshot = buildPlayerGameCardSnapshot(payload, {
+      playerId: post.playerGameCard.playerId,
+      leaguePlayerId: post.playerGameCard.leaguePlayerId,
+    });
+    // A player who lost their whole line to a correction keeps the snapshot
+    // they were published with rather than rendering an empty card.
+    if (snapshot) persistCardSnapshot(post, 'playerGameCard', snapshot);
+  }
+}
+
 const YOUTUBE_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
 function isSafeYouTubeUrl(url) {
@@ -421,6 +537,22 @@ function resolveMilestoneCardPayload(post) {
   };
 }
 
+// Snapshot-only, like milestone: the source is a FROZEN box score, so there is
+// nothing to live-resolve. Corrections arrive through
+// refreshPlayerGameCardPostsForGame instead.
+function resolvePlayerGameCardPayload(post) {
+  return {
+    image: null,
+    video: null,
+    gameCard: null,
+    playerCard: null,
+    playerGameCard: post.playerGameCard.cardSnapshot ?? null,
+    teamCard: null,
+    highlightClip: null,
+    milestoneCard: null,
+  };
+}
+
 async function resolvePostPayload(post) {
   if (post.type === 'image') {
     return resolveImagePayload(post);
@@ -436,6 +568,10 @@ async function resolvePostPayload(post) {
 
   if (post.type === 'player_card') {
     return resolvePlayerCardPayload(post);
+  }
+
+  if (post.type === 'player_game_card') {
+    return resolvePlayerGameCardPayload(post);
   }
 
   if (post.type === 'team_card') {
@@ -736,6 +872,61 @@ async function createPlayerCardPostForUser(userId, input) {
   });
 
   return sanitizePost(post, userId);
+}
+
+// Social backlog rank 2. Same public-game / public-league gate as
+// createGameCardPostForUser, plus: the game must be COMPLETE, because the whole
+// point is the frozen box score.
+async function createPlayerGameCardPostForUser(userId, input) {
+  const payload = createPlayerGameCardPostSchema.parse(input);
+  const isLeaguePlayer = Boolean(payload.leagueTeamId && payload.leaguePlayerId);
+
+  const game = await findGameById(payload.gameId);
+  if (!game || !isPubliclyViewableGame(game)) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  if (game.gameContext === 'league' && !(await isLeaguePublic(game.leagueId))) {
+    throw new ApiError(404, 'Game not found');
+  }
+
+  if (game.status !== 'completed') {
+    throw new ApiError(400, 'Only a completed game has a final stat line to share');
+  }
+
+  const publicPayload = await getPublicGame(String(payload.gameId));
+  const snapshot = buildPlayerGameCardSnapshot(publicPayload, {
+    playerId: payload.playerId ?? null,
+    leaguePlayerId: payload.leaguePlayerId ?? null,
+  });
+  if (!snapshot) {
+    throw new ApiError(404, 'That player has no stat line in this game');
+  }
+
+  try {
+    const post = await createPost({
+      creatorUserId: userId,
+      type: 'player_game_card',
+      caption: sanitizeCaption(payload.caption),
+      playerGameCard: {
+        gameId: payload.gameId,
+        teamId: isLeaguePlayer ? null : payload.teamId,
+        playerId: isLeaguePlayer ? null : payload.playerId,
+        leagueTeamId: isLeaguePlayer ? payload.leagueTeamId : null,
+        leaguePlayerId: isLeaguePlayer ? payload.leaguePlayerId : null,
+        cardSnapshot: snapshot,
+      },
+    });
+
+    return sanitizePost(post, userId);
+  } catch (error) {
+    // E11000 from the partial unique index: someone already shared this exact
+    // performance. Same treatment highlight_clip gives a re-shared event.
+    if (error?.code === 11000) {
+      throw new ApiError(409, 'This performance has already been shared');
+    }
+    throw error;
+  }
 }
 
 async function createTeamCardPostForUser(userId, input) {
@@ -1371,6 +1562,7 @@ module.exports = {
   createVideoPostForUser,
   createGameCardPostForUser,
   createPlayerCardPostForUser,
+  createPlayerGameCardPostForUser,
   createTeamCardPostForUser,
   createHighlightClipPostForUser,
   deletePostForUser,
@@ -1381,9 +1573,11 @@ module.exports = {
   listDiscoverablePlayers,
   sanitizePost,
   refreshGameCardPostsForGame,
+  refreshPlayerGameCardPostsForGame,
   // TSW-004/TSW-005: exported for direct unit testing of the snapshot shapes.
   buildGameCardSnapshot,
   buildPlayerCardSnapshot,
+  buildPlayerGameCardSnapshot,
   buildTeamCardSnapshot,
   buildMilestoneCardSnapshot,
   // Auto Feed Generation (docs/auto-feed.md).

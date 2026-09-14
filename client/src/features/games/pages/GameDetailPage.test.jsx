@@ -1338,3 +1338,108 @@ describe('GameDetailPage', () => {
     );
   });
 });
+
+// Social backlog rank 2 — the per-game player stat card, shared from the row.
+describe('GameDetailPage — per-game player card', () => {
+  function payload({ status = 'completed', players, boxScorePlayers } = {}) {
+    return {
+      game: {
+        id: 'game-1',
+        title: 'vs Wildcats',
+        status,
+        trackingMode: 'one_sided',
+        scheduledAt: '2026-03-12T18:00:00.000Z',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        opponent: 'Wildcats',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'TSW Team',
+        logo: { url: 'https://example.com/team-logo.png' },
+        colors: ['#112233'],
+        entitlements: { canViewReplay: false, canViewShotMaps: false },
+        players: players || [
+          { id: 'p1', displayName: 'Alex', isActive: true, jerseyNumber: 5, avatarUrl: null },
+          { id: 'p2', displayName: 'Jordan', isActive: true, jerseyNumber: 7, avatarUrl: null },
+        ],
+      },
+      teamEntitlements: { canViewReplay: false, canViewShotMaps: false },
+      boxScore: {
+        players: boxScorePlayers || [
+          { playerId: 'p1', displayName: 'Alex', points: 24, reb: 8, ast: 5, fg3m: 3 },
+          { playerId: 'p2', displayName: 'Jordan', points: 0, reb: 0, ast: 0 },
+        ],
+        teamTotals: { points: 24 },
+        opponentTotals: { points: 18 },
+      },
+      gameSummary: { teamPoints: 24, opponentPoints: 18, hasOpponentScore: true },
+      recap: { statusLabel: 'Final', opponent: { name: 'Wildcats' }, teamStats: {} },
+    };
+  }
+
+  beforeEach(() => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1', name: 'Alex' } });
+    feedApiMocks.createPlayerGameCardPost = vi.fn().mockResolvedValue({
+      post: { id: 'post-9', type: 'player_game_card' },
+    });
+  });
+
+  async function renderStats(data) {
+    apiMocks.getById.mockResolvedValue(data);
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/games/game-1']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByRole('tab', { name: 'Stats' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
+  }
+
+  test('offers the row action for a player who produced something', async () => {
+    await renderStats(payload());
+
+    expect(screen.getByRole('button', { name: /share alex/i })).toBeInTheDocument();
+  });
+
+  test('hides the row action for a player who recorded nothing', async () => {
+    await renderStats(payload());
+
+    expect(screen.queryByRole('button', { name: /share jordan/i })).not.toBeInTheDocument();
+  });
+
+  test('hides the row action entirely while the game is still live', async () => {
+    await renderStats(payload({ status: 'in_progress' }));
+
+    expect(screen.queryByRole('button', { name: /share alex/i })).not.toBeInTheDocument();
+  });
+
+  test('posts the selected line to The Pulse', async () => {
+    await renderStats(payload());
+
+    fireEvent.click(screen.getByRole('button', { name: /share alex/i }));
+    fireEvent.click(screen.getByRole('button', { name: /post to pulse/i }));
+
+    await waitFor(() =>
+      expect(feedApiMocks.createPlayerGameCardPost).toHaveBeenCalledWith({
+        gameId: 'game-1',
+        teamId: 'team-1',
+        playerId: 'p1',
+      })
+    );
+  });
+
+  test('reports the server message when a line has already been shared', async () => {
+    feedApiMocks.createPlayerGameCardPost.mockRejectedValue(
+      new Error('This performance has already been shared')
+    );
+    await renderStats(payload());
+
+    fireEvent.click(screen.getByRole('button', { name: /share alex/i }));
+    fireEvent.click(screen.getByRole('button', { name: /post to pulse/i }));
+
+    expect(await screen.findByText(/already been shared/i)).toBeInTheDocument();
+  });
+});

@@ -42,6 +42,13 @@ async function createPlayerCard(req, res) {
   res.status(201).json({ post });
 }
 
+async function createPlayerGameCard(req, res) {
+  const userId = requireAuthUserId(req);
+  await assertFeedPostingAllowed(userId);
+  const post = await service.createPlayerGameCardPostForUser(userId, req.body);
+  res.status(201).json({ post });
+}
+
 async function createTeamCard(req, res) {
   const userId = requireAuthUserId(req);
   await assertFeedPostingAllowed(userId);
@@ -91,6 +98,7 @@ module.exports = {
   rejectMediaUpload,
   createGameCard,
   createPlayerCard,
+  createPlayerGameCard,
   createTeamCard,
   createHighlightClip,
   remove,

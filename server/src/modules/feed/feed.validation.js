@@ -2,6 +2,8 @@ const { z } = require('zod');
 
 const captionSchema = z.string().trim().max(280).optional().nullable();
 
+const mongoIdSchema = z.string().regex(/^[a-f0-9]{24}$/, 'Invalid id format');
+
 // TSW-005: gameId alone identifies league games too (Game.leagueId is set on
 // the same doc) — no separate league field needed for game_card.
 const createGameCardPostSchema = z.object({
@@ -26,6 +28,33 @@ const createPlayerCardPostSchema = z
     { message: 'Provide either (teamId, playerId) or (leagueTeamId, leaguePlayerId), not both' }
   );
 
+// Social backlog rank 2: a per-game player line. Same standalone-or-league
+// XOR as createPlayerCardPostSchema, plus the game the line comes from.
+const createPlayerGameCardPostSchema = z
+  .object({
+    gameId: mongoIdSchema,
+    teamId: mongoIdSchema.optional(),
+    playerId: mongoIdSchema.optional(),
+    leagueTeamId: mongoIdSchema.optional(),
+    leaguePlayerId: mongoIdSchema.optional(),
+    caption: captionSchema,
+  })
+  .refine(
+    (data) =>
+      (Boolean(data.teamId) && Boolean(data.playerId)) !==
+      (Boolean(data.leagueTeamId) && Boolean(data.leaguePlayerId)),
+    { message: 'Provide either (teamId, playerId) or (leagueTeamId, leaguePlayerId), not both' }
+  )
+  // The XOR above only ever compares COMPLETE pairs, so a stray half slips
+  // past it: {teamId, leagueTeamId, leaguePlayerId} reads as false !== true.
+  // These two make each pair all-or-nothing.
+  .refine((data) => Boolean(data.teamId) === Boolean(data.playerId), {
+    message: 'teamId and playerId must be provided together',
+  })
+  .refine((data) => Boolean(data.leagueTeamId) === Boolean(data.leaguePlayerId), {
+    message: 'leagueTeamId and leaguePlayerId must be provided together',
+  });
+
 const createTeamCardPostSchema = z
   .object({
     teamId: z.string().min(1).optional(),
@@ -35,8 +64,6 @@ const createTeamCardPostSchema = z
   .refine((data) => Boolean(data.teamId) !== Boolean(data.leagueTeamId), {
     message: 'Provide either teamId or leagueTeamId, not both',
   });
-
-const mongoIdSchema = z.string().regex(/^[a-f0-9]{24}$/, 'Invalid id format');
 
 const createHighlightClipPostSchema = z.object({
   gameId: mongoIdSchema,
@@ -62,6 +89,7 @@ const discoverablePlayersSchema = z.object({
 module.exports = {
   createGameCardPostSchema,
   createPlayerCardPostSchema,
+  createPlayerGameCardPostSchema,
   createTeamCardPostSchema,
   createHighlightClipPostSchema,
   listFeedSchema,

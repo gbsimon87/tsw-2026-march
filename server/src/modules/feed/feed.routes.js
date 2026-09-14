@@ -18,6 +18,7 @@ feedRouter.post('/image', asyncHandler(controller.rejectMediaUpload));
 feedRouter.post('/video', asyncHandler(controller.rejectMediaUpload));
 feedRouter.post('/game-card', asyncHandler(controller.createGameCard));
 feedRouter.post('/player-card', asyncHandler(controller.createPlayerCard));
+feedRouter.post('/player-game-card', asyncHandler(controller.createPlayerGameCard));
 feedRouter.post('/team-card', asyncHandler(controller.createTeamCard));
 feedRouter.post('/highlight-clip', asyncHandler(controller.createHighlightClip));
 feedRouter.delete('/:postId', asyncHandler(controller.remove));

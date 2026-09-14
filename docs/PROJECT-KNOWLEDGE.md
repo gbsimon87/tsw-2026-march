@@ -230,11 +230,29 @@ missing public-page data. See [`api.md`](./api.md) for endpoints and
 
 ## Feed And Public Profiles
 
-`Post` supports image, video, game-card, player-card, team-card, highlight, and
-milestone posts. Manual post creation is entitlement-gated. Automatic posts
-use a non-login system account and are restricted to finalized public-league
-games. Making a league private removes its system-generated posts, not users'
-manual posts.
+`Post` supports image, video, game-card, player-card, player-game-card,
+team-card, highlight, and milestone posts. Manual post creation is
+entitlement-gated. Automatic posts use a non-login system account and are
+restricted to finalized public-league games. Making a league private removes its
+system-generated posts, not users' manual posts.
+
+`player_game_card` is one player's line from one **completed** game, as distinct
+from `player_card`'s season averages. It is created only from the box score on
+the game detail page (`POST /feed/player-game-card`), is deduped globally to one
+post per (game, player) by two partial unique indexes — the same rule
+`highlight_clip` applies per event, so a duplicate returns 409, not 500 — and
+carries a denormalised `cardSnapshot` like the other card types. Because its
+source is the frozen box score it has no live-resolve fallback; a stat
+correction reaches an already-published card through
+`refreshPlayerGameCardPostsForGame`, which rides the same post-response trigger
+as the game-card refresh (`scheduleFeedCardRefreshForGame`).
+
+Player photos on that card come from the avatar of the account that **claimed**
+the player — TSW stores no player photo of its own, so unclaimed players get a
+styled initials plate, and the snapshot's `imageFallback` field records which
+was used so a team crest is never passed off as a face. `getGameForUser`
+resolves those avatars in one `$in`, and only for a completed game, so the 15s
+in-progress poll does not pay for a lookup it cannot use.
 
 **Pulse media safety hold — 11 September 2026, 12:31 BST:** creation of new raw
 image and video posts is temporarily disabled in both the client and API. The

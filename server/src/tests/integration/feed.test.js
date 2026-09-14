@@ -5,6 +5,7 @@ jest.mock('../../modules/feed/feed.service', () => ({
   createImagePostForUser: jest.fn(),
   createGameCardPostForUser: jest.fn(),
   createPlayerCardPostForUser: jest.fn(),
+  createPlayerGameCardPostForUser: jest.fn(),
   createTeamCardPostForUser: jest.fn(),
   deletePostForUser: jest.fn(),
   listShareableGames: jest.fn(),
@@ -35,6 +36,16 @@ describe('feed routes', () => {
     const response = await request(app).post('/api/v1/feed/game-card').send({ gameId: 'g1' });
 
     expect(response.statusCode).toBe(403);
+  });
+
+  test('requires auth for POST /api/v1/feed/player-game-card', async () => {
+    const app = createApp();
+    const response = await request(app)
+      .post('/api/v1/feed/player-game-card')
+      .send({ gameId: '507f1f77bcf86cd799439015' });
+
+    expect(response.statusCode).toBe(403);
+    expect(feedService.createPlayerGameCardPostForUser).not.toHaveBeenCalled();
   });
 
   test('allows unauthenticated access to shareable lists', async () => {

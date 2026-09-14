@@ -20,6 +20,7 @@ import { GameRecapPanel } from '../components/GameRecapPanel';
 import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { ShareImageButton } from '../../feed/components/ShareImageButton';
+import { buildPlayerGameCard, hasShareableLine } from '../../feed/components/cards/playerGameCard';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
@@ -276,6 +277,12 @@ export function GameDetailPage() {
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [feedPostState, setFeedPostState] = useState('');
   const [clipShareState, setClipShareState] = useState({});
+  // Social backlog rank 2: ONE page-level ShareImageButton driven by the
+  // selected box-score row. A control per row would mount a 1080x1350
+  // off-screen export node per player for html2canvas to walk.
+  const [shareRow, setShareRow] = useState(null);
+  const [shareChooserOpen, setShareChooserOpen] = useState(false);
+  const [playerCardShareState, setPlayerCardShareState] = useState('');
   const [highlightReelShareState, setHighlightReelShareState] = useState('');
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
@@ -468,6 +475,72 @@ export function GameDetailPage() {
     },
   ];
 
+  // Social backlog rank 2: the share control lives in its own column so the
+  // print view can keep boxScoreColumns untouched. Completed games only — the
+  // card is built from the FROZEN box score, and a mid-game line is not a
+  // result worth putting on social.
+  function shareColumn(side) {
+    const sideTeam = isDualTeam ? participants?.[side] : team;
+    const isLeagueSourced = game.gameContext === 'league';
+
+    return {
+      id: 'share',
+      label: '',
+      align: 'right',
+      render: (row) => {
+        if (!hasShareableLine(row)) {
+          return null;
+        }
+
+        const card = buildPlayerGameCard({
+          data,
+          row,
+          rosterPlayer: playersById.get(row.playerId),
+          side,
+        });
+
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              setShareRow({
+                card,
+                teamId: isDualTeam
+                  ? (sideTeam?.teamId ?? null)
+                  : isLeagueSourced
+                    ? null
+                    : (team?.id ?? null),
+                leagueTeamId: isDualTeam
+                  ? (sideTeam?.leagueTeamId ?? null)
+                  : isLeagueSourced
+                    ? (team?.id ?? null)
+                    : null,
+              });
+              setPlayerCardShareState('');
+            }}
+            aria-label={`Share ${row.displayName}'s game card`}
+            title={`Share ${row.displayName}'s game card`}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:border-[#F4A300] hover:bg-amber-50"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+              <path d="M12 3v13M8 7l4-4 4 4" />
+            </svg>
+          </button>
+        );
+      },
+    };
+  }
+
+  const shareableColumns = (side) =>
+    game.status === 'completed' ? [...boxScoreColumns, shareColumn(side)] : boxScoreColumns;
+
   const statsContent = (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -488,7 +561,7 @@ export function GameDetailPage() {
           Box Score: {statsView.label}
         </div>
         <StatsTable
-          columns={boxScoreColumns}
+          columns={shareableColumns('home')}
           rows={statsView.rows}
           tableClassName="w-max text-sm"
         />
@@ -511,9 +584,56 @@ export function GameDetailPage() {
             Box Score: {statsView.secondaryLabel}
           </div>
           <StatsTable
-            columns={boxScoreColumns}
+            columns={shareableColumns('away')}
             rows={statsView.secondaryRows}
             tableClassName="w-max text-sm"
+          />
+        </div>
+      ) : null}
+
+      {shareRow ? (
+        <div className="flex flex-col items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
+          <p className="mr-auto text-sm font-semibold text-slate-900">
+            {shareRow.card.playerName} — {shareRow.card.stats.points} PTS, {shareRow.card.stats.reb}{' '}
+            REB, {shareRow.card.stats.ast} AST
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShareChooserOpen(true)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            >
+              Download image
+            </button>
+            <button
+              type="button"
+              onClick={postPlayerGameCard}
+              disabled={playerCardShareState === 'loading' || playerCardShareState === 'shared'}
+              className="rounded-lg bg-[#1B4332] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#123328] disabled:opacity-50"
+            >
+              {playerCardShareState === 'shared' ? 'Shared' : 'Post to Pulse'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShareRow(null);
+                setPlayerCardShareState('');
+              }}
+              className="rounded-lg px-2 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+            >
+              Dismiss
+            </button>
+          </div>
+          {playerCardShareState && !['loading', 'shared'].includes(playerCardShareState) ? (
+            <p role="alert" className="text-xs font-medium text-red-600">
+              {playerCardShareState}
+            </p>
+          ) : null}
+          <ShareImageButton
+            type="player_game_card"
+            playerGameCard={shareRow.card}
+            open={shareChooserOpen}
+            onOpenChange={setShareChooserOpen}
           />
         </div>
       ) : null}
@@ -621,6 +741,27 @@ export function GameDetailPage() {
 
     const returnUrl = `/games/${gameId}?composeFeedGame=1`;
     navigate(`/login?redirectTo=${encodeURIComponent(returnUrl)}`);
+  }
+
+  async function postPlayerGameCard() {
+    if (!shareRow) return;
+    setPlayerCardShareState('loading');
+    try {
+      await feedApi.createPlayerGameCardPost({
+        gameId,
+        ...(shareRow.card.leaguePlayerId
+          ? { leagueTeamId: shareRow.leagueTeamId, leaguePlayerId: shareRow.card.leaguePlayerId }
+          : { teamId: shareRow.teamId, playerId: shareRow.card.playerId }),
+      });
+      setPlayerCardShareState('shared');
+      trackEvent('game_player_card_shared', { game_id: gameId });
+    } catch (err) {
+      // TSW-001: surface the server's own message (the 409 "already been
+      // shared" in particular) rather than collapsing every failure into one
+      // generic string that hides which gate refused.
+      console.error('postPlayerGameCard failed', { gameId, requestId: err.requestId, err });
+      setPlayerCardShareState(err.message || 'Failed to share');
+    }
   }
 
   async function shareHighlightClip(eventId) {

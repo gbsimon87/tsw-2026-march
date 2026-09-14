@@ -6,6 +6,7 @@ import { FullScreenGameCard } from './posts/FullScreenGameCard';
 import { FullScreenHighlightClipPost } from './posts/FullScreenHighlightClipPost';
 import { FullScreenImagePost } from './posts/FullScreenImagePost';
 import { FullScreenPlayerCard } from './posts/FullScreenPlayerCard';
+import { FullScreenPlayerGameCard } from './posts/FullScreenPlayerGameCard';
 import { FullScreenTeamCard } from './posts/FullScreenTeamCard';
 import { FullScreenVideoPost } from './posts/FullScreenVideoPost';
 import { MilestonePost } from './posts/MilestonePost';
@@ -24,6 +25,8 @@ function FullScreenSlide({ post, onDelete, observeSlide, onPrepareInstagram }) {
     content = <FullScreenGameCard gameCard={post.gameCard} />;
   } else if (post.type === 'player_card') {
     content = <FullScreenPlayerCard playerCard={post.playerCard} />;
+  } else if (post.type === 'player_game_card') {
+    content = <FullScreenPlayerGameCard playerGameCard={post.playerGameCard} />;
   } else if (post.type === 'team_card') {
     content = <FullScreenTeamCard teamCard={post.teamCard} />;
   } else if (post.type === 'highlight_clip') {

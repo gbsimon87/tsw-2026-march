@@ -1,7 +1,13 @@
 import { forwardRef } from 'react';
 
 import CloudinaryImage from '../../../media/CloudinaryImage';
-import { buildInitials, formatAverage, formatPercentage } from '../posts/cardUtils';
+import {
+  buildInitials,
+  formatAverage,
+  formatCompactDate,
+  formatPercentage,
+} from '../posts/cardUtils';
+import { pickContextStat } from './playerGameCard';
 import { GameCardPost } from '../posts/GameCardPost';
 import { SocialPresetCard } from './SocialPresetCard';
 import { SOCIAL_EXPORT_PRESETS, socialExportPreset } from './socialExportPresets';
@@ -410,6 +416,44 @@ function PlayerExport({ playerCard }) {
   );
 }
 
+// Social backlog rank 2. Same honours-board furniture as PlayerExport, but the
+// record inscribed is ONE game, not a season: the kicker says so, the serial
+// carries the result, and the identity sub-line carries the matchup and date —
+// the three things a viewer needs before the caption to understand what they
+// are looking at.
+function PlayerGameExport({ playerGameCard }) {
+  const accent = readableAccent(playerGameCard?.teamColors);
+  const imageSrc = playerGameCard?.playerImage?.url || playerGameCard?.teamLogo?.url || null;
+  const context = pickContextStat(playerGameCard.stats);
+  const matchup = [playerGameCard.teamName, playerGameCard.opponentName]
+    .filter(Boolean)
+    .join(' vs ');
+
+  return (
+    <Board kicker="Game performance" serial={playerGameCard.resultLabel || ''}>
+      <Identity
+        accent={accent}
+        imageSrc={imageSrc}
+        imageAlt={`${playerGameCard.playerName} share card portrait`}
+        initials={buildInitials(playerGameCard.playerName, 'PL')}
+        headline={playerGameCard.playerName}
+        sub={[matchup, formatCompactDate(playerGameCard.playedOn)].filter(Boolean).join(' \u00b7 ')}
+      />
+      <Spacer />
+      <Ledger
+        rowHeight={166}
+        valueSize={114}
+        rows={[
+          { label: 'Points', value: playerGameCard.stats?.points ?? 0, lead: true },
+          { label: 'Rebounds', value: playerGameCard.stats?.reb ?? 0 },
+          { label: 'Assists', value: playerGameCard.stats?.ast ?? 0 },
+          { label: context.label, value: context.value },
+        ]}
+      />
+    </Board>
+  );
+}
+
 // The frame is deliberately quiet: a gilt bead and a wordmark, so the card is
 // the only thing competing for attention in the feed it lands in.
 function GameExport({ gameCard }) {
@@ -516,9 +560,14 @@ function TeamExport({ teamCard }) {
 // Each composition declares the scale html2canvas must capture it at. The
 // existing game-card post stays exactly 1080x1350 for the Instagram handoff;
 // the new story and link compositions render directly at their target size.
-function renderCard({ type, gameCard, playerCard, teamCard, format = 'post' }) {
+function renderCard({ type, gameCard, playerCard, playerGameCard, teamCard, format = 'post' }) {
   if (format !== 'post' && SOCIAL_EXPORT_PRESETS[format]) {
-    const cardData = { game_card: gameCard, player_card: playerCard, team_card: teamCard }[type];
+    const cardData = {
+      game_card: gameCard,
+      player_card: playerCard,
+      player_game_card: playerGameCard,
+      team_card: teamCard,
+    }[type];
     if (!cardData) return null;
     const preset = socialExportPreset(format);
     return {
@@ -528,6 +577,7 @@ function renderCard({ type, gameCard, playerCard, teamCard, format = 'post' }) {
           type={type}
           gameCard={gameCard}
           playerCard={playerCard}
+          playerGameCard={playerGameCard}
           teamCard={teamCard}
         />
       ),
@@ -548,6 +598,14 @@ function renderCard({ type, gameCard, playerCard, teamCard, format = 'post' }) {
   if (type === 'player_card' && playerCard) {
     return {
       card: <PlayerExport playerCard={playerCard} />,
+      width: EXPORT_WIDTH,
+      height: EXPORT_HEIGHT,
+      captureScale: BOARD_CAPTURE_SCALE,
+    };
+  }
+  if (type === 'player_game_card' && playerGameCard) {
+    return {
+      card: <PlayerGameExport playerGameCard={playerGameCard} />,
       width: EXPORT_WIDTH,
       height: EXPORT_HEIGHT,
       captureScale: BOARD_CAPTURE_SCALE,

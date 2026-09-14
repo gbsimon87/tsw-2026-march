@@ -11,7 +11,12 @@ import {
   GAME_FRAME_HEIGHT,
   GAME_FRAME_WIDTH,
 } from './shareExportTheme';
-import { gameCardFixture, playerCardFixture, teamCardFixture } from '../posts/cardFixtures';
+import {
+  gameCardFixture,
+  playerCardFixture,
+  playerGameCardFixture,
+  teamCardFixture,
+} from '../posts/cardFixtures';
 import { GameCardPost } from '../posts/GameCardPost';
 
 const playerCard = {
@@ -244,5 +249,100 @@ describe('ShareableCardExport', () => {
   it('renders nothing for an unknown type', () => {
     const { container } = renderExport({ type: 'nope' });
     expect(container.firstChild).toBeNull();
+  });
+});
+
+// Social backlog rank 2 — the per-game player stat card. Deliberately a
+// different composition from the season-average player spotlight above.
+describe('ShareableCardExport — player_game_card', () => {
+  it('inscribes the game line, not the season averages', () => {
+    const { getByText, queryByText } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: playerGameCardFixture,
+    });
+
+    expect(getByText('Game performance')).toBeInTheDocument();
+    expect(queryByText('Season averages')).not.toBeInTheDocument();
+    expect(getByText('Jordan Miles')).toBeInTheDocument();
+    expect(getByText('Points')).toBeInTheDocument();
+    expect(getByText('24')).toBeInTheDocument();
+    expect(getByText('8')).toBeInTheDocument();
+    expect(getByText('5')).toBeInTheDocument();
+  });
+
+  it('names the opponent and the result the viewer needs for context', () => {
+    const { getByText } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: playerGameCardFixture,
+    });
+
+    expect(getByText(/TSW Blue vs Falcons/)).toBeInTheDocument();
+    expect(getByText('W 70–61')).toBeInTheDocument();
+  });
+
+  it('adds the picked context stat as a fourth row', () => {
+    const { getByText } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: playerGameCardFixture,
+    });
+
+    // fg3m of 3 clears the threshold, so threes win the slot.
+    expect(getByText('3-pointers')).toBeInTheDocument();
+  });
+
+  it('omits the result line when the opponent score was never tracked', () => {
+    const { queryByText } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: { ...playerGameCardFixture, resultLabel: null },
+    });
+
+    expect(queryByText(/^[WLD] /)).not.toBeInTheDocument();
+  });
+
+  it('falls back to initials with no photo and no team logo', () => {
+    const { getByText } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: { ...playerGameCardFixture, playerImage: null, teamLogo: null },
+    });
+
+    expect(getByText('JM')).toBeInTheDocument();
+  });
+
+  it('frames the 4:5 export at exactly 1080x1350', () => {
+    const { container } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: playerGameCardFixture,
+    });
+    const root = container.firstChild;
+
+    expect(root).toHaveStyle({ width: `${EXPORT_WIDTH}px`, height: `${EXPORT_HEIGHT}px` });
+  });
+
+  it.each([
+    ['story', 1080, 1920],
+    ['link', 1200, 630],
+  ])('frames the %s export at exactly %ix%i', (format, width, height) => {
+    const { container } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: playerGameCardFixture,
+      format,
+    });
+    const root = container.firstChild;
+
+    expect(root).toHaveStyle({ width: `${width}px`, height: `${height}px` });
+    expect(root.dataset.exportWidth).toBe(String(width));
+    expect(root.dataset.exportHeight).toBe(String(height));
+    expect(root.querySelector('[data-safe-content]')).not.toBeNull();
+  });
+
+  it.each(['story', 'link'])('keeps a long name un-clamped in the %s export', (format) => {
+    const longName = 'Bartholomew Fitzwilliam-Montgomery III';
+    const { getAllByText } = renderExport({
+      type: 'player_game_card',
+      playerGameCard: { ...playerGameCardFixture, playerName: longName },
+      format,
+    });
+
+    expect(getAllByText(longName)[0]).toHaveStyle({ overflowWrap: 'anywhere' });
   });
 });

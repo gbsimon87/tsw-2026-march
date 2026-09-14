@@ -2,6 +2,7 @@ import { GameCardPost } from './posts/GameCardPost';
 import { HighlightClipPostCard } from './posts/HighlightClipPostCard';
 import { ImagePostCard } from './posts/ImagePostCard';
 import { PlayerCardPost } from './posts/PlayerCardPost';
+import { PlayerGameCardPost } from './posts/PlayerGameCardPost';
 import { MilestonePost } from './posts/MilestonePost';
 import { ShareImageButton } from './ShareImageButton';
 import { buildInstagramDraft } from '../../social/instagramDraftHandoff';
@@ -68,6 +69,18 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
           <PlayerCardPost playerCard={post.playerCard} />
           <div className="flex justify-end">
             <ShareImageButton type="player_card" playerCard={post.playerCard} />
+          </div>
+        </div>
+      </div>
+    );
+  } else if (post.type === 'player_game_card') {
+    content = (
+      <div className="space-y-3">
+        {post.caption ? <p className="text-sm text-slate-700">{post.caption}</p> : null}
+        <div className="space-y-3">
+          <PlayerGameCardPost playerGameCard={post.playerGameCard} />
+          <div className="flex justify-end">
+            <ShareImageButton type="player_game_card" playerGameCard={post.playerGameCard} />
           </div>
         </div>
       </div>

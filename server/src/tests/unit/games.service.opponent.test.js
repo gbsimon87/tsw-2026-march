@@ -35,6 +35,10 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
   scheduleLeagueAggregateRecompute: jest.fn(),
 }));
 
+jest.mock('../../modules/auth/auth.repository', () => ({
+  findUsersByIds: jest.fn(() => Promise.resolve([])),
+}));
+
 jest.mock('mongoose', () => ({
   Schema: Object.assign(
     function Schema() {
@@ -52,6 +56,7 @@ jest.mock('mongoose', () => ({
 }));
 
 const { findTeamByIdAndOwner, findTeamById } = require('../../modules/teams/teams.repository');
+const { findUsersByIds } = require('../../modules/auth/auth.repository');
 const {
   createGame,
   listGamesByOwner,
@@ -235,5 +240,71 @@ describe('games service opponent support', () => {
 
     expect(result.canManageGame).toBe(true);
     expect(result.game.ownerUserId).toBeUndefined();
+  });
+
+  // Social backlog rank 2: a per-game player card needs the player's face, and
+  // the only photo TSW holds is the avatar of the account that claimed them.
+  describe('claimed-player avatars on the game detail payload', () => {
+    function completedGameWith(players) {
+      findTeamByIdAndOwner.mockResolvedValue({ _id: 'team-1', name: 'Team', players });
+      findTeamById.mockResolvedValue({ _id: 'team-1', name: 'Team', players });
+      findGameById.mockResolvedValue({
+        _id: 'game-1',
+        ownerUserId: 'user-1',
+        teamId: 'team-1',
+        title: 'Completed Game',
+        opponent: 'Sharks',
+        status: 'completed',
+        events: [],
+      });
+    }
+
+    test('exposes the claimed account avatar on the player', async () => {
+      completedGameWith([
+        { _id: 'p1', displayName: 'Jordan Lee', claimedByUserId: 'user-9', isActive: true },
+      ]);
+      findUsersByIds.mockResolvedValue([
+        { _id: 'user-9', avatar: { url: 'https://cdn/jordan.png' } },
+      ]);
+
+      const result = await getGameForUser('user-1', 'game-1');
+
+      expect(result.team.players[0].avatarUrl).toBe('https://cdn/jordan.png');
+    });
+
+    test('leaves an unclaimed player without an avatar', async () => {
+      completedGameWith([
+        { _id: 'p1', displayName: 'Jordan Lee', claimedByUserId: null, isActive: true },
+      ]);
+
+      const result = await getGameForUser('user-1', 'game-1');
+
+      expect(result.team.players[0].avatarUrl).toBeNull();
+      expect(findUsersByIds).not.toHaveBeenCalled();
+    });
+
+    // GameDetailPage re-polls an in-progress game every 15s. The avatars are
+    // only needed for a completed game's stat card, so a live game must not pay
+    // for the lookup on every poll.
+    test('skips the lookup entirely while a game is still in progress', async () => {
+      findTeamByIdAndOwner.mockResolvedValue({
+        _id: 'team-1',
+        name: 'Team',
+        players: [{ _id: 'p1', displayName: 'Jordan Lee', claimedByUserId: 'user-9' }],
+      });
+      findGameById.mockResolvedValue({
+        _id: 'game-1',
+        ownerUserId: 'user-1',
+        teamId: 'team-1',
+        title: 'Live Game',
+        status: 'in_progress',
+        events: [],
+      });
+
+      const result = await getGameForUser('user-1', 'game-1');
+
+      expect(findUsersByIds).not.toHaveBeenCalled();
+      expect(result.team.players[0].avatarUrl).toBeNull();
+    });
   });
 });

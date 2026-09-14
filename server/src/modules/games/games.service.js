@@ -7,6 +7,7 @@ const { logger } = require('../../config/logger');
 const { env } = require('../../config/env');
 const { captureUserEventDetached } = require('../analytics/analytics.service');
 const { findTeamByIdAndOwner, findTeamById } = require('../teams/teams.repository');
+const { findUsersByIds } = require('../auth/auth.repository');
 const {
   createGame,
   listGamesByOwner,
@@ -141,17 +142,75 @@ function sanitizeLogo(logo) {
   };
 }
 
-function sanitizePlayer(player) {
-  const id = player._id || player.id || player.sourcePlayerId || player.leaguePlayerId;
+// One derivation of a player's public id, shared by sanitizePlayer and the
+// avatar decoration below so the two can never key off different fields.
+function playerKey(player) {
+  return String(player._id || player.id || player.sourcePlayerId || player.leaguePlayerId);
+}
 
+function sanitizePlayer(player) {
   return {
-    id: String(id),
+    id: playerKey(player),
     leaguePlayerId: player.leaguePlayerId ? String(player.leaguePlayerId) : null,
     displayName: player.displayName,
     jerseyNumber: player.jerseyNumber ?? null,
     position: player.position ?? null,
     isActive: Boolean(player.isActive),
+    // Social backlog rank 2: filled in by decorateRostersWithAvatars for a
+    // COMPLETED game only. Deliberately not derived here — claimedByUserId must
+    // not reach a public payload (same rule sanitizePublicPlayer follows), so
+    // the claim is resolved to a URL server-side and the id never leaves.
+    avatarUrl: null,
   };
+}
+
+// Social backlog rank 2: a per-game player stat card needs the player's face,
+// and the only photo TSW holds is the avatar of the account that claimed them.
+// Deliberately NOT part of resolveGameTeamContext: GameDetailPage re-polls an
+// in-progress game every 15s, and this card is a post-game asset, so a live
+// game must never pay for the lookup. One $in via findUsersByIds, not one
+// findUserById per player.
+async function decorateRostersWithAvatars(game, { team, opponentTeam, participants, teamDoc }) {
+  if (game.status !== 'completed') return;
+
+  // Raw sources still carry claimedByUserId; the sanitized rosters above do not.
+  // Union them rather than branching on tracking mode — whichever the game
+  // actually populated is the one that contributes.
+  const rawRosters = [
+    teamDoc?.players,
+    game.rosterSnapshot,
+    game.homeRosterSnapshot,
+    game.awayRosterSnapshot,
+  ];
+  const claimByPlayerKey = new Map();
+  for (const roster of rawRosters) {
+    for (const player of roster || []) {
+      if (player?.claimedByUserId) claimByPlayerKey.set(playerKey(player), player.claimedByUserId);
+    }
+  }
+  if (claimByPlayerKey.size === 0) return;
+
+  const users = await findUsersByIds([...claimByPlayerKey.values()]);
+  const avatarByUserId = new Map(
+    users.map((user) => [String(user._id), transformCloudinaryUrl(user.avatar?.url || null)])
+  );
+
+  // team.players and participants[side].players are the same arrays by
+  // reference for a dual-team game, so mutating once covers both views.
+  const sanitizedRosters = [
+    team?.players,
+    opponentTeam?.players,
+    participants?.home?.players,
+    participants?.away?.players,
+  ];
+  for (const roster of sanitizedRosters) {
+    for (const player of roster || []) {
+      const claimedByUserId = claimByPlayerKey.get(String(player.id));
+      player.avatarUrl = claimedByUserId
+        ? avatarByUserId.get(String(claimedByUserId)) || null
+        : null;
+    }
+  }
 }
 
 function sanitizeParticipant(participant) {
@@ -227,13 +286,20 @@ function scheduleTeamSummaryRecomputeForGame(game) {
 function scheduleFeedCardRefreshForGame(gameId) {
   if (!gameId) return;
   setImmediate(() => {
-    const { refreshGameCardPostsForGame } = require('../feed/feed.service');
-    refreshGameCardPostsForGame(gameId).catch((error) => {
+    const {
+      refreshGameCardPostsForGame,
+      // Social backlog rank 2: a per-game player card snapshots the frozen box
+      // score, which this same event refreezes (OPT-012) — so it goes stale in
+      // exactly the cases a game card does, and refreshes alongside it.
+      refreshPlayerGameCardPostsForGame,
+    } = require('../feed/feed.service');
+    const log = (error) =>
       logger.error(
         { err: error, gameId: String(gameId) },
         'Post-response feed card refresh failed'
       );
-    });
+    refreshGameCardPostsForGame(gameId).catch(log);
+    refreshPlayerGameCardPostsForGame(gameId).catch(log);
   });
 }
 
@@ -1814,6 +1880,7 @@ async function getGameForUser(userId, gameId) {
     userId,
     game
   );
+  await decorateRostersWithAvatars(game, { team, opponentTeam, participants, teamDoc });
   // OPT-012: serve the frozen box score/summary for completed games instead of
   // replaying the events array on every read. Falls back to live compute when
   // absent (in-progress games, or completed games from before this field

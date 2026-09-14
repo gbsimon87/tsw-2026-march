@@ -5,8 +5,10 @@ import {
   buildGameCardDisplay,
   buildInitials,
   formatAverage,
+  formatCompactDate,
   formatPercentage,
 } from '../posts/cardUtils';
+import { pickContextStat } from './playerGameCard';
 import { COLORS, DISPLAY_FONT, MONO_FONT, readableAccent } from './shareExportTheme';
 import { socialExportPreset } from './socialExportPresets';
 
@@ -211,7 +213,64 @@ function PersonContent({ type, card, compact, width }) {
   );
 }
 
-export function SocialPresetCard({ format, type, gameCard, playerCard, teamCard }) {
+// Social backlog rank 2: its own branch rather than a third fork inside
+// PersonContent, because the subject is a single game — the sub-line carries the
+// matchup, result and date, and the stat row is a real line, not an average.
+function PlayerGameContent({ card, compact, width }) {
+  const accent = readableAccent(card.teamColors);
+  const context = pickContextStat(card.stats);
+  const markSize = compact ? 170 : 260;
+  const sub = [
+    [card.teamName, card.opponentName].filter(Boolean).join(' vs '),
+    card.resultLabel,
+    formatCompactDate(card.playedOn),
+  ]
+    .filter(Boolean)
+    .join(' \u00b7 ');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? '24px' : '64px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? '28px' : '40px' }}>
+        <Mark
+          src={card.playerImage?.url || card.teamLogo?.url}
+          name={card.playerName}
+          size={markSize}
+          accent={accent}
+        />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Name width={width - markSize - 40} lines={compact ? 3 : 4} max={compact ? 64 : 92}>
+            {card.playerName}
+          </Name>
+          <div
+            style={{
+              marginTop: compact ? '10px' : '24px',
+              font: `600 ${compact ? 22 : 32}px ${MONO_FONT}`,
+              color: COLORS.tan,
+              overflowWrap: 'anywhere',
+              textTransform: 'uppercase',
+            }}
+          >
+            {sub}
+          </div>
+        </div>
+      </div>
+      <div
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: compact ? 16 : 28 }}
+      >
+        {[
+          ['PTS', card.stats?.points ?? 0],
+          ['REB', card.stats?.reb ?? 0],
+          ['AST', card.stats?.ast ?? 0],
+          [context.label, context.value],
+        ].map(([label, value]) => (
+          <Stat key={label} label={label} value={value} compact={compact} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function SocialPresetCard({ format, type, gameCard, playerCard, playerGameCard, teamCard }) {
   const preset = socialExportPreset(format);
   const compact = format === 'link';
   const card = type === 'player_card' ? playerCard : teamCard;
@@ -222,7 +281,9 @@ export function SocialPresetCard({ format, type, gameCard, playerCard, teamCard 
       ? gameCard?.gameUrl
       : type === 'player_card'
         ? playerCard?.playerUrl
-        : teamCard?.teamUrl;
+        : type === 'player_game_card'
+          ? playerGameCard?.gameUrl
+          : teamCard?.teamUrl;
   const sourceUrl = sourcePath?.startsWith('/')
     ? `thesportyway.com${sourcePath}`
     : 'thesportyway.com';
@@ -271,10 +332,18 @@ export function SocialPresetCard({ format, type, gameCard, playerCard, teamCard 
           }}
         >
           The Sporty Way /{' '}
-          {type === 'game_card' ? 'Game recap' : type === 'player_card' ? 'Player' : 'Team'}
+          {type === 'game_card'
+            ? 'Game recap'
+            : type === 'player_card'
+              ? 'Player'
+              : type === 'player_game_card'
+                ? 'Game performance'
+                : 'Team'}
         </div>
         {type === 'game_card' ? (
           <GameContent gameCard={gameCard} compact={compact} width={contentWidth} />
+        ) : type === 'player_game_card' ? (
+          <PlayerGameContent card={playerGameCard} compact={compact} width={contentWidth} />
         ) : (
           <PersonContent type={type} card={card} compact={compact} width={contentWidth} />
         )}
