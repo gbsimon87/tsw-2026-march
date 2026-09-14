@@ -277,7 +277,7 @@ function Ledger({ rows, rowHeight, valueSize }) {
   );
 }
 
-function Board({ kicker, serial, children }) {
+function Board({ kicker, serial, footnote = null, children }) {
   return (
     <div
       style={{
@@ -373,6 +373,24 @@ function Board({ kicker, serial, children }) {
               The Sporty Way
             </div>
           </div>
+          {/* Optional so the game, player and team exports already in the wild
+              keep the footer they were signed off with. */}
+          {footnote ? (
+            <div
+              style={{
+                marginTop: '16px',
+                fontFamily: MONO_FONT,
+                fontWeight: 500,
+                fontSize: '22px',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: COLORS.tan,
+                flexShrink: 0,
+              }}
+            >
+              {footnote}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -450,6 +468,67 @@ function PlayerGameExport({ playerGameCard }) {
           { label: context.label, value: context.value },
         ]}
       />
+    </Board>
+  );
+}
+
+// Social backlog rank 3. The achievement takes the display slot a player's name
+// occupies on the other boards, because that is what the post is about; the
+// player and team qualify it underneath. The source game is inscribed below as
+// the provenance for the claim.
+export const MILESTONE_FAMILY_KICKERS = {
+  career_threshold: 'Career milestone',
+  single_game_feat: 'Standout game',
+  first: 'First',
+};
+
+function MilestoneExport({ milestoneCard }) {
+  const accent = readableAccent(milestoneCard?.teamColors);
+  // buildMilestoneCardSnapshot stores these as plain strings, not the { url }
+  // objects the other card types carry.
+  const imageSrc = milestoneCard?.playerAvatarUrl || milestoneCard?.teamLogo || null;
+  const player = [
+    milestoneCard.playerName,
+    typeof milestoneCard.jerseyNumber === 'number' ? `#${milestoneCard.jerseyNumber}` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <Board
+      kicker={MILESTONE_FAMILY_KICKERS[milestoneCard.family] || 'Milestone'}
+      serial={formatCompactDate(milestoneCard.achievedAt)}
+      footnote="@TheSportyWay \u00b7 Full story in profile"
+    >
+      <Identity
+        accent={accent}
+        imageSrc={imageSrc}
+        imageAlt={`${milestoneCard.playerName} milestone portrait`}
+        initials={buildInitials(milestoneCard.playerName, 'PL')}
+        headline={milestoneCard.label}
+        sub={[player, milestoneCard.teamName].filter(Boolean).join(' \u00b7 ')}
+      />
+      <Spacer />
+      {milestoneCard.gameTitle ? (
+        <div style={{ flexShrink: 0 }}>
+          <GiltBead />
+          <div
+            style={{
+              padding: '34px 0',
+              fontFamily: MONO_FONT,
+              fontWeight: 500,
+              fontSize: '27px',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: COLORS.tan,
+              overflowWrap: 'break-word',
+            }}
+          >
+            {milestoneCard.gameTitle}
+          </div>
+          <GiltBead />
+        </div>
+      ) : null}
     </Board>
   );
 }
@@ -560,12 +639,21 @@ function TeamExport({ teamCard }) {
 // Each composition declares the scale html2canvas must capture it at. The
 // existing game-card post stays exactly 1080x1350 for the Instagram handoff;
 // the new story and link compositions render directly at their target size.
-function renderCard({ type, gameCard, playerCard, playerGameCard, teamCard, format = 'post' }) {
+function renderCard({
+  type,
+  gameCard,
+  playerCard,
+  playerGameCard,
+  milestoneCard,
+  teamCard,
+  format = 'post',
+}) {
   if (format !== 'post' && SOCIAL_EXPORT_PRESETS[format]) {
     const cardData = {
       game_card: gameCard,
       player_card: playerCard,
       player_game_card: playerGameCard,
+      milestone: milestoneCard,
       team_card: teamCard,
     }[type];
     if (!cardData) return null;
@@ -578,6 +666,7 @@ function renderCard({ type, gameCard, playerCard, playerGameCard, teamCard, form
           gameCard={gameCard}
           playerCard={playerCard}
           playerGameCard={playerGameCard}
+          milestoneCard={milestoneCard}
           teamCard={teamCard}
         />
       ),
@@ -606,6 +695,14 @@ function renderCard({ type, gameCard, playerCard, playerGameCard, teamCard, form
   if (type === 'player_game_card' && playerGameCard) {
     return {
       card: <PlayerGameExport playerGameCard={playerGameCard} />,
+      width: EXPORT_WIDTH,
+      height: EXPORT_HEIGHT,
+      captureScale: BOARD_CAPTURE_SCALE,
+    };
+  }
+  if (type === 'milestone' && milestoneCard) {
+    return {
+      card: <MilestoneExport milestoneCard={milestoneCard} />,
       width: EXPORT_WIDTH,
       height: EXPORT_HEIGHT,
       captureScale: BOARD_CAPTURE_SCALE,

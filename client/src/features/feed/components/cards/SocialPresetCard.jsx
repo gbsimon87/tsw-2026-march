@@ -9,6 +9,7 @@ import {
   formatPercentage,
 } from '../posts/cardUtils';
 import { pickContextStat } from './playerGameCard';
+import { MILESTONE_FAMILY_KICKERS } from './ShareableCardExport';
 import { COLORS, DISPLAY_FONT, MONO_FONT, readableAccent } from './shareExportTheme';
 import { socialExportPreset } from './socialExportPresets';
 
@@ -270,7 +271,76 @@ function PlayerGameContent({ card, compact, width }) {
   );
 }
 
-export function SocialPresetCard({ format, type, gameCard, playerCard, playerGameCard, teamCard }) {
+// Social backlog rank 3: the achievement is the headline here too, so it takes
+// the Name slot rather than sitting under the player like a stat would.
+function MilestoneContent({ card, compact, width }) {
+  const accent = readableAccent(card.teamColors);
+  const markSize = compact ? 170 : 260;
+  const sub = [
+    [card.playerName, typeof card.jerseyNumber === 'number' ? `#${card.jerseyNumber}` : null]
+      .filter(Boolean)
+      .join(' '),
+    card.teamName,
+    formatCompactDate(card.achievedAt),
+  ]
+    .filter(Boolean)
+    .join(' \u00b7 ');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? '24px' : '48px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? '28px' : '40px' }}>
+        {/* Plain strings on this snapshot, not { url } objects. */}
+        <Mark
+          src={card.playerAvatarUrl || card.teamLogo}
+          name={card.playerName}
+          size={markSize}
+          accent={accent}
+        />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Name width={width - markSize - 40} lines={compact ? 3 : 4} max={compact ? 60 : 88}>
+            {card.label}
+          </Name>
+          <div
+            style={{
+              marginTop: compact ? '10px' : '24px',
+              font: `600 ${compact ? 22 : 32}px ${MONO_FONT}`,
+              color: COLORS.tan,
+              overflowWrap: 'anywhere',
+              textTransform: 'uppercase',
+            }}
+          >
+            {sub}
+          </div>
+        </div>
+      </div>
+      {card.gameTitle ? (
+        <div
+          style={{
+            borderTop: `3px solid ${COLORS.gold}`,
+            paddingTop: compact ? '10px' : '22px',
+            font: `600 ${compact ? 20 : 27}px ${MONO_FONT}`,
+            color: COLORS.tan,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {card.gameTitle}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function SocialPresetCard({
+  format,
+  type,
+  gameCard,
+  playerCard,
+  playerGameCard,
+  milestoneCard,
+  teamCard,
+}) {
   const preset = socialExportPreset(format);
   const compact = format === 'link';
   const card = type === 'player_card' ? playerCard : teamCard;
@@ -283,7 +353,9 @@ export function SocialPresetCard({ format, type, gameCard, playerCard, playerGam
         ? playerCard?.playerUrl
         : type === 'player_game_card'
           ? playerGameCard?.gameUrl
-          : teamCard?.teamUrl;
+          : type === 'milestone'
+            ? milestoneCard?.gameUrl
+            : teamCard?.teamUrl;
   const sourceUrl = sourcePath?.startsWith('/')
     ? `thesportyway.com${sourcePath}`
     : 'thesportyway.com';
@@ -338,12 +410,16 @@ export function SocialPresetCard({ format, type, gameCard, playerCard, playerGam
               ? 'Player'
               : type === 'player_game_card'
                 ? 'Game performance'
-                : 'Team'}
+                : type === 'milestone'
+                  ? MILESTONE_FAMILY_KICKERS[milestoneCard?.family] || 'Milestone'
+                  : 'Team'}
         </div>
         {type === 'game_card' ? (
           <GameContent gameCard={gameCard} compact={compact} width={contentWidth} />
         ) : type === 'player_game_card' ? (
           <PlayerGameContent card={playerGameCard} compact={compact} width={contentWidth} />
+        ) : type === 'milestone' ? (
+          <MilestoneContent card={milestoneCard} compact={compact} width={contentWidth} />
         ) : (
           <PersonContent type={type} card={card} compact={compact} width={contentWidth} />
         )}

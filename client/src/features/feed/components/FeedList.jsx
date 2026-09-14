@@ -56,6 +56,16 @@ function FullScreenSlide({ post, onDelete, observeSlide, onPrepareInstagram }) {
           />
         </div>
       ) : null}
+      {post.type === 'milestone' && post.milestoneCard && onPrepareInstagram ? (
+        <div className="absolute bottom-36 right-4 z-20">
+          <ShareImageButton
+            type="milestone"
+            milestoneCard={post.milestoneCard}
+            showShare={false}
+            onPrepareInstagram={(file) => onPrepareInstagram(buildInstagramDraft(post, file))}
+          />
+        </div>
+      ) : null}
     </FullScreenPost>
   );
 }

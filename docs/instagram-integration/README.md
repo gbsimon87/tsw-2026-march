@@ -4,8 +4,8 @@ This folder is the living record for TSW's Instagram publishing integration. Upd
 the implementation, Meta configuration, operational process, or delivery status changes.
 
 **Status:** test-account OAuth, demo game-card approval, and guarded one-shot delivery are
-implemented, and an operator can hand a Pulse game card straight to the review screen; delivery
-remains disabled by default
+implemented, and an operator can hand a Pulse game card or milestone card straight to the review
+screen; delivery remains disabled by default
 
 **Started:** 19 August 2026  
 **Branch:** `feat/instagram-publishing`, based on `dev`
@@ -34,8 +34,8 @@ The implementation currently provides:
 - encrypted database storage for one official Instagram connection;
 - token-expiry health, refresh auditing, and a controlled encryption-key rotation command; and
 - an operator screen at `/admin/social/instagram` with a durable demo game-card review queue;
-- an operator-only hand-off that renders a Pulse game card to 1080x1350 in the browser and
-  prefills that review screen with it, its caption, and a link to the game page; and
+- an operator-only hand-off that renders a Pulse game card or milestone card to 1080x1350 in the
+  browser and prefills that review screen with it, its caption, and a link to the game page; and
 - a separately gated, one-shot delivery worker with durable retries and ambiguous-outcome handling.
 
 There is no direct HTTP publishing endpoint. Operators can queue an approved demo post only when
@@ -141,6 +141,13 @@ the related product backlog remains in [`../ideas.md`](../ideas.md).
 - **5 September 2026:** added explicit delivery queueing and a one-shot worker using the encrypted
   OAuth credential. Pre-publish failures retry durably; uncertain publish outcomes stop in
   `reconciliation_required` rather than risking duplication.
+- **14 September 2026:** the hand-off is no longer game-card-only. `buildInstagramDraft` used to
+  read `post.gameCard` directly for both the attribution URL and the source label, so a milestone
+  handed over with no attribution and a "Team vs Opponent" label. Each post type now declares where
+  its provenance lives and how to name it; a type with no entry hands over a usable draft rather
+  than throwing. Milestone posts gained a share/export path at the same time (4:5, 9:16 and
+  1200x630), labelled "<player> · <achievement>" and attributed to the game the milestone was
+  earned in. Game-card behaviour is unchanged, and its existing tests pin that.
 - **5 September 2026:** added an operator-only Instagram button beside the Pulse share button. It
   renders the exact feed game card to a 1080x1350 PNG in the browser and carries it, the source
   post id and the Pulse caption to `/admin/social/instagram`, where the existing form is prefilled.

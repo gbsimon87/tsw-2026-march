@@ -100,7 +100,25 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
   } else if (post.type === 'highlight_clip') {
     content = <HighlightClipPostCard highlightClip={post.highlightClip} caption={post.caption} />;
   } else if (post.type === 'milestone') {
-    content = <MilestonePost post={post} />;
+    content = (
+      <div className="space-y-3">
+        {post.caption ? <p className="text-sm text-slate-700">{post.caption}</p> : null}
+        <div className="space-y-3">
+          <MilestonePost post={post} />
+          <div className="flex justify-end">
+            <ShareImageButton
+              type="milestone"
+              milestoneCard={post.milestoneCard}
+              onPrepareInstagram={
+                onPrepareInstagram
+                  ? (file) => onPrepareInstagram(buildInstagramDraft(post, file))
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

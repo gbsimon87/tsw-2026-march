@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { FeedList } from './FeedList';
+import { milestoneCardFixture } from './posts/cardFixtures';
 
 const TOUCH_QUERY = '(hover: none) and (pointer: coarse)';
 
@@ -90,5 +92,49 @@ describe('FeedList desktop layout', () => {
 
     expect(container.querySelectorAll('[data-feed-slide]')).toHaveLength(posts.length);
     expect(queryByTestId('feed-desktop-grid')).not.toBeInTheDocument();
+  });
+});
+
+// Social backlog rank 3: the full-screen slide's operator-only Instagram
+// affordance was game_card-only.
+describe('FeedList full-screen slide — milestone', () => {
+  let restoreMatchMedia = () => {};
+
+  afterEach(() => {
+    restoreMatchMedia();
+    restoreMatchMedia = () => {};
+  });
+
+  const milestonePost = {
+    id: 'post-m1',
+    type: 'milestone',
+    caption: null,
+    createdAt: '2026-03-12T20:00:00.000Z',
+    creator: { id: 'user-1', name: 'Alex' },
+    canDelete: false,
+    milestoneCard: milestoneCardFixture,
+  };
+
+  function renderSlides(props = {}) {
+    restoreMatchMedia = stubPointerDevice(true);
+    return render(
+      <MemoryRouter>
+        <FeedList posts={[milestonePost]} onDelete={() => {}} onNearEnd={() => {}} {...props} />
+      </MemoryRouter>
+    );
+  }
+
+  test('offers the Instagram hand-off to an operator', () => {
+    const { getByRole } = renderSlides({ onPrepareInstagram: () => {} });
+
+    expect(getByRole('button', { name: /prepare for instagram/i })).toBeInTheDocument();
+  });
+
+  test('shows no share affordance to a plain viewer', () => {
+    const { queryByRole } = renderSlides();
+
+    expect(queryByRole('button', { name: /prepare for instagram/i })).not.toBeInTheDocument();
+    // The slide has never carried the generic share button for anyone.
+    expect(queryByRole('button', { name: /share as image/i })).not.toBeInTheDocument();
   });
 });

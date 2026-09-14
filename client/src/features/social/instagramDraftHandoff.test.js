@@ -131,3 +131,56 @@ describe('pending draft hand-off', () => {
     expect(takePendingInstagramDraft()).toBeNull();
   });
 });
+
+// Social backlog rank 3: the hand-off used to reach straight into post.gameCard.
+// Milestones carry their provenance on milestoneCard instead.
+describe('buildInstagramDraft — milestone posts', () => {
+  const milestonePost = {
+    id: '507f1f77bcf86cd799439013',
+    caption: null,
+    milestoneCard: {
+      label: '1,000 career points',
+      playerName: 'Jordan Miles',
+      teamName: 'TSW Blue',
+      gameUrl: '/games/g9',
+    },
+  };
+
+  it('attributes a milestone to the game it was earned in', () => {
+    expect(buildInstagramDraft(milestonePost, file, ORIGIN).attributionUrl).toBe(
+      'https://dev.thesportyway.com/games/g9'
+    );
+  });
+
+  it('labels the draft with the player and the achievement', () => {
+    expect(buildInstagramDraft(milestonePost, file, ORIGIN).sourceLabel).toBe(
+      'Jordan Miles · 1,000 career points'
+    );
+  });
+
+  it('still refuses a non-HTTPS origin', () => {
+    expect(buildInstagramDraft(milestonePost, file, 'http://localhost:5173').attributionUrl).toBe(
+      ''
+    );
+  });
+
+  it('falls back to the achievement alone when the player is unknown', () => {
+    expect(
+      buildInstagramDraft(
+        { ...milestonePost, milestoneCard: { ...milestonePost.milestoneCard, playerName: null } },
+        file,
+        ORIGIN
+      ).sourceLabel
+    ).toBe('1,000 career points');
+  });
+
+  it('names a post type it cannot describe rather than throwing', () => {
+    expect(buildInstagramDraft({ id: 'p1', caption: 'Hi', type: 'image' }, file, ORIGIN)).toEqual({
+      file,
+      sourcePostId: 'p1',
+      sourceLabel: 'TSW post',
+      caption: 'Hi',
+      attributionUrl: '',
+    });
+  });
+});

@@ -90,4 +90,26 @@ export const teamCardFixture = {
   },
 };
 
+// Player Milestones: note teamLogo and playerAvatarUrl are plain STRINGS here,
+// not the { url } objects every other card type uses — buildMilestoneCardSnapshot
+// runs them through transformCloudinaryUrl directly.
+export const milestoneCardFixture = {
+  milestoneId: 'm1',
+  milestoneKey: 'career_points_1000',
+  family: 'career_threshold',
+  label: '1,000 career points',
+  value: 1000,
+  statKey: 'points',
+  achievedAt: '2026-03-12T19:20:00.000Z',
+  playerName: 'Jordan Miles',
+  jerseyNumber: 7,
+  playerAvatarUrl: null,
+  teamName: 'TSW Blue',
+  teamLogo: 'https://example.com/team-logo.png',
+  teamColors: ['#112233', '#d4af37', '#38bdf8'],
+  gameId: 'g1',
+  gameTitle: 'TSW Blue vs Falcons',
+  gameUrl: '/games/g1',
+};
+
 export const recapFixture = gameCardFixture.recap;

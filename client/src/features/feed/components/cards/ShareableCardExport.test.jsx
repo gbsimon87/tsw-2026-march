@@ -14,6 +14,7 @@ import {
 import {
   gameCardFixture,
   playerCardFixture,
+  milestoneCardFixture,
   playerGameCardFixture,
   teamCardFixture,
 } from '../posts/cardFixtures';
@@ -344,5 +345,143 @@ describe('ShareableCardExport — player_game_card', () => {
     });
 
     expect(getAllByText(longName)[0]).toHaveStyle({ overflowWrap: 'anywhere' });
+  });
+});
+
+// Social backlog rank 3 — the milestone export. The achievement is the
+// headline; the player qualifies it.
+describe('ShareableCardExport — milestone', () => {
+  it('makes the achievement the headline, not the player name', () => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+    });
+
+    expect(getByText('1,000 career points')).toBeInTheDocument();
+    expect(getByText(/Jordan Miles/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['career_threshold', 'Career milestone'],
+    ['single_game_feat', 'Standout game'],
+    ['first', 'First'],
+  ])('labels the %s family as "%s"', (family, kicker) => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: { ...milestoneCardFixture, family },
+    });
+
+    expect(getByText(kicker)).toBeInTheDocument();
+  });
+
+  it('falls back to a generic kicker for an unknown family', () => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: { ...milestoneCardFixture, family: 'something_new' },
+    });
+
+    expect(getByText('Milestone')).toBeInTheDocument();
+  });
+
+  it('dates the card from when the milestone was achieved', () => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+    });
+
+    expect(getByText(/Mar 12/)).toBeInTheDocument();
+  });
+
+  it('names the team and the source game', () => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+    });
+
+    expect(getByText(/Jordan Miles #7 · TSW Blue/)).toBeInTheDocument();
+    expect(getByText('TSW Blue vs Falcons')).toBeInTheDocument();
+  });
+
+  it('carries the TSW handle and a CTA', () => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+    });
+
+    expect(getByText(/@TheSportyWay/)).toBeInTheDocument();
+  });
+
+  // The snapshot stores these as bare strings, so the renderer must not assume
+  // the { url } shape the other card types use.
+  it('uses the snapshotted player avatar when there is one', () => {
+    const { getByAltText } = renderExport({
+      type: 'milestone',
+      milestoneCard: {
+        ...milestoneCardFixture,
+        playerAvatarUrl: 'https://example.com/jordan.png',
+      },
+    });
+
+    expect(getByAltText(/Jordan Miles/)).toHaveAttribute('src', 'https://example.com/jordan.png');
+  });
+
+  it('falls back to the team logo string when there is no avatar', () => {
+    const { getByAltText } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+    });
+
+    expect(getByAltText(/Jordan Miles/)).toHaveAttribute(
+      'src',
+      'https://example.com/team-logo.png'
+    );
+  });
+
+  it('falls back to initials with neither avatar nor logo', () => {
+    const { getByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: { ...milestoneCardFixture, playerAvatarUrl: null, teamLogo: null },
+    });
+
+    expect(getByText('JM')).toBeInTheDocument();
+  });
+
+  it('frames the 4:5 export at exactly 1080x1350', () => {
+    const { container } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+    });
+
+    expect(container.firstChild).toHaveStyle({
+      width: `${EXPORT_WIDTH}px`,
+      height: `${EXPORT_HEIGHT}px`,
+    });
+  });
+
+  it.each([
+    ['story', 1080, 1920],
+    ['link', 1200, 630],
+  ])('frames the %s export at exactly %ix%i', (format, width, height) => {
+    const { container } = renderExport({
+      type: 'milestone',
+      milestoneCard: milestoneCardFixture,
+      format,
+    });
+    const root = container.firstChild;
+
+    expect(root).toHaveStyle({ width: `${width}px`, height: `${height}px` });
+    expect(root.dataset.exportWidth).toBe(String(width));
+    expect(root.querySelector('[data-safe-content]')).not.toBeNull();
+  });
+
+  it.each(['story', 'link'])('keeps a long achievement un-clamped in the %s export', (format) => {
+    const longLabel = 'Five thousand career points and counting for the season';
+    const { getAllByText } = renderExport({
+      type: 'milestone',
+      milestoneCard: { ...milestoneCardFixture, label: longLabel },
+      format,
+    });
+
+    expect(getAllByText(longLabel)[0]).toHaveStyle({ overflowWrap: 'anywhere' });
   });
 });

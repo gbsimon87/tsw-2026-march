@@ -54,12 +54,44 @@ export function buildCaptionWithAttribution(caption, attributionUrl) {
 // `sourceLabel` travels with the draft because the review panel's source picker
 // only lists the 50 most recent feed posts. An older card would otherwise hand
 // over an id matching no <option>, leaving the required select blank.
+// Social backlog rank 3: the hand-off used to read post.gameCard directly, so a
+// milestone handed over with no attribution and a "Team vs Opponent" label.
+// Each post type says where its provenance lives and how to name it; anything
+// without an entry hands over a usable draft rather than throwing.
+const DRAFT_SOURCES = {
+  game_card: {
+    card: (post) => post.gameCard,
+    label: (card) => buildGameCardLabel(card),
+  },
+  milestone: {
+    card: (post) => post.milestoneCard,
+    // The achievement is the point, so it leads; the player qualifies it.
+    label: (card) => [card?.playerName, card?.label].filter(Boolean).join(' \u00b7 '),
+  },
+};
+
+// Older callers pass a post whose type is implied by which card field is set,
+// so fall back to sniffing rather than requiring `type`.
+function resolveDraftSource(post) {
+  const key = DRAFT_SOURCES[post?.type]
+    ? post.type
+    : post?.milestoneCard
+      ? 'milestone'
+      : 'game_card';
+  const source = DRAFT_SOURCES[key];
+  const card = source?.card(post) ?? null;
+  return { card, label: (card && source?.label(card)) || 'TSW post' };
+}
+
 export function buildInstagramDraft(post, file, origin = window.location.origin) {
-  const attributionUrl = buildAttributionUrl(post.gameCard, origin);
+  const { card, label } = resolveDraftSource(post);
+  // Every card type's provenance is a game page — the one anonymously readable
+  // route — so one attribution builder still covers them all.
+  const attributionUrl = buildAttributionUrl(card, origin);
   return {
     file,
     sourcePostId: post.id,
-    sourceLabel: buildGameCardLabel(post.gameCard),
+    sourceLabel: label,
     caption: buildCaptionWithAttribution(post.caption, attributionUrl),
     attributionUrl,
   };

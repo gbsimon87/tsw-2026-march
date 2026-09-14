@@ -16,17 +16,17 @@ acquisition gated by season timing. That state argues for **not losing the
 leagues already here**, then **converting the next season window**, ahead of
 anything that assumes scale the product does not yet have.
 
-|  Rank | Do this                                      | Where     | Size  | Why it is worth more than the rest right now                                                                                                                                               |
-| ----: | -------------------------------------------- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **1** | Error monitoring                             | P4        | S     | The cheapest item on this page, and everything else is guesswork without it. Billing and outbound Instagram publishing are both about to go live with no way to see a failure.             |
-| **2** | Offline-tolerant live tracking               | P1        | L     | At this league count a single lost game is a meaningful share of all data in the product — and it is the churn event for the volunteer who lost it. Reliability outranks features.         |
-| **3** | Social attribution and join landing          | Social #5 | XS    | A season's worth of social effort is about to be spent. Without first-touch attribution there is no way to tell which half worked, and every later social item inherits that blindness.    |
-| **4** | Milestone export                             | Social #3 | S     | The remaining asset players share about themselves; Social #2 shipped. The `PlayerMilestone` ledger is already frozen and queryable, so this is the highest share-per-hour work available. |
-| **5** | Crawler-visible link previews                | P8        | M     | Every TSW link shared to WhatsApp, Instagram, or Facebook previews identically today. This silently taxes every share the items above generate.                                            |
-| **6** | Job runner, then notifications               | P2 → P3   | M → L | Nothing brings a user back between games. This is the retention floor, and the job runner also unblocks digests, reminders, token renewal, and delivery retries.                           |
-| **7** | Personalized Pulse                           | Product   | M     | Follows for users, leagues, and league teams already exist and nothing ranks the feed by them. Unusually cheap for the engagement it should return.                                        |
-| **8** | End-to-end coverage of checkout and tracking | P5        | M     | Before live payments, not after. These are the two flows where a silent regression costs money or data.                                                                                    |
-| **9** | Account deletion                             | P6        | M     | UK/GDPR erasure, owed before player data scales further. Not urgent this month; not deferrable past launch.                                                                                |
+|  Rank | Do this                                      | Where     | Size  | Why it is worth more than the rest right now                                                                                                                                                                   |
+| ----: | -------------------------------------------- | --------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | Error monitoring                             | P4        | S     | The cheapest item on this page, and everything else is guesswork without it. Billing and outbound Instagram publishing are both about to go live with no way to see a failure.                                 |
+| **2** | Offline-tolerant live tracking               | P1        | L     | At this league count a single lost game is a meaningful share of all data in the product — and it is the churn event for the volunteer who lost it. Reliability outranks features.                             |
+| **3** | Social attribution and join landing          | Social #5 | XS    | A season's worth of social effort is about to be spent. Without first-touch attribution there is no way to tell which half worked, and every later social item inherits that blindness.                        |
+| **4** | Caption, keyword, and tag assistant          | Social #4 | S     | Social #2 and #3 both shipped, so the two player-facing assets now exist but go out with whatever the feed post already said. Generated copy is what turns them into posts an operator does not have to write. |
+| **5** | Crawler-visible link previews                | P8        | M     | Every TSW link shared to WhatsApp, Instagram, or Facebook previews identically today. This silently taxes every share the items above generate.                                                                |
+| **6** | Job runner, then notifications               | P2 → P3   | M → L | Nothing brings a user back between games. This is the retention floor, and the job runner also unblocks digests, reminders, token renewal, and delivery retries.                                               |
+| **7** | Personalized Pulse                           | Product   | M     | Follows for users, leagues, and league teams already exist and nothing ranks the feed by them. Unusually cheap for the engagement it should return.                                                            |
+| **8** | End-to-end coverage of checkout and tracking | P5        | M     | Before live payments, not after. These are the two flows where a silent regression costs money or data.                                                                                                        |
+| **9** | Account deletion                             | P6        | M     | UK/GDPR erasure, owed before player data scales further. Not urgent this month; not deferrable past launch.                                                                                                    |
 
 **Season-timed, not now:** season awards and the post-game coach report are worth
 building against a season boundary, so schedule them toward season end rather
@@ -128,9 +128,9 @@ tests; the latter two show a text-safe guide in preview. The Instagram panel
 carries a caption field and an attribution URL that rides in the caption. The
 remaining gaps are:
 
-- any export path for milestones or YouTube-backed highlight clips, though both
-  render in the Pulse — `renderCard` handles `game_card`, `player_card`,
-  `player_game_card`, and `team_card` only;
+- any export path for YouTube-backed highlight clips, though they render in the
+  Pulse — `renderCard` handles `game_card`, `player_card`, `player_game_card`,
+  `milestone`, and `team_card`;
 - generated copy: the caption is whatever the feed post already said, with an
   attribution link appended. No hook, hashtags, handles, or alt text;
 - a carousel pack, batch export, or templated social video.
@@ -147,7 +147,7 @@ Open Graph previews remain rank 12 and P8.
 | -----: | ----------------------------------- | ----------- | ------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 |  **1** | Remaining export presets            | High        | Medium | M    | The 4:5 preset ships. Add **1080x1920 Story/Reel/TikTok** and **1200x630 link preview** through the same renderer, each with a visible safe-area overlay in preview, no clipped long names, and the same kind of framing test the game card already has.                                                              | Complete          |
 |  **2** | Per-game player stat card           | High        | Low    | S    | From a completed game's frozen box score, export a card with player photo, name, team, opponent, result/date, and a legible PTS/REB/AST line plus one context stat. Do not reuse the season-average player spotlight for this job. Shipped with a Pulse `player_game_card` post type alongside the export.            | Complete          |
-|  **3** | Milestone social export             | High        | Low    | S    | Add a milestone type to `renderCard`/`ShareableCardExport`; use the already-snapshotted player avatar, make the achievement the headline, and include team, source game, date, TSW handle, and one CTA.                                                                                                               | Not started       |
+|  **3** | Milestone social export             | High        | Low    | S    | Add a milestone type to `renderCard`/`ShareableCardExport`; use the already-snapshotted player avatar, make the achievement the headline, and include team, source game, date, TSW handle, and one CTA. Shipped with the Instagram hand-off generalised beyond game cards.                                            | Complete          |
 |  **4** | Caption, keyword, and tag assistant | High        | Low    | S    | Generate editable copy from verified data: hook, one-sentence context, question/CTA, 3-5 relevant hashtags, player/team handles when recorded, and alt text. The attributed permalink half already exists in `instagramDraftHandoff.js`. One-click copy buttons; never invent a stat or handle.                       | Not started       |
 |  **5** | Social attribution and join landing | High        | Low    | XS   | Persist first-touch UTM/referrer values, distinguish Instagram and TikTok, create source-specific links, and send new visitors to a useful public page or registration rather than a login dead end. Track `social_asset_exported`, `social_share_opened`, landing, signup, and league-enquiry events.                | Not started       |
 |  **6** | Completed-game social kit           | High        | Medium | M    | A single button prepares a final-score card, top-performer card, box-score carousel, 9:16 Story result, suggested caption, alt text, and tagged public link. The operator can preview and download individually or as a ZIP.                                                                                          | Not started       |
@@ -188,8 +188,8 @@ These apply to every new asset, not just the first three items.
 
 1. **Measure first:** rank 5. Every item after it is unevaluable without
    attribution, and it is the smallest thing here.
-2. **Cheap high-share assets:** rank 3 (rank 2 is complete). It reads from data
-   that is already frozen and needs no new pipeline.
+2. **Cheap high-share assets:** ranks 2 and 3 are complete. Both read from data
+   that was already frozen and needed no new pipeline.
 3. **Reach:** P8, then rank 12, so the links those assets carry preview properly
    wherever they land. Rank 1 export presets are complete.
 4. **Weekly engine:** ranks 4, 6, and 7 — this supplies most of a 12-week
