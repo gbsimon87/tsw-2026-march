@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
+const { AGE_CATEGORIES, MARKETING_STATUSES } = require('../shared/socialIdentity');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -9,6 +10,40 @@ const logoSchema = new mongoose.Schema(
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     mimeType: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+// Social backlog rank 9. Mirrors the sub-documents in leagues.repository.js —
+// the field names are repeated the way logoSchema already is, but both files
+// take their enums from modules/shared/socialIdentity.js, which is also where
+// every rule that reads them lives.
+const marketingPermissionSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: MARKETING_STATUSES, default: 'unrecorded' },
+    recordedAt: { type: Date, default: null },
+    recordedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    note: { type: String, trim: true, default: null },
+  },
+  { _id: false }
+);
+
+const socialIdentitySchema = new mongoose.Schema(
+  {
+    instagramHandle: { type: String, trim: true, default: null },
+    tiktokHandle: { type: String, trim: true, default: null },
+    marketing: { type: marketingPermissionSchema, default: () => ({}) },
+  },
+  { _id: false }
+);
+
+const playerSocialIdentitySchema = new mongoose.Schema(
+  {
+    instagramHandle: { type: String, trim: true, default: null },
+    tiktokHandle: { type: String, trim: true, default: null },
+    marketing: { type: marketingPermissionSchema, default: () => ({}) },
+    ageCategory: { type: String, enum: AGE_CATEGORIES, default: 'unspecified' },
+    guardianConsentAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -33,6 +68,7 @@ const playerSchema = new mongoose.Schema(
     position: { type: String, enum: ['PG', 'SG', 'SF', 'PF', 'C'], default: null },
     isActive: { type: Boolean, default: true },
     claimedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    social: { type: playerSocialIdentitySchema, default: () => ({}) },
   },
   { _id: true }
 );
@@ -85,6 +121,9 @@ const teamSchema = new mongoose.Schema(
     billingEmail: { type: String, default: null },
     lastWebhookEventId: { type: String, default: null },
     processedWebhookEventIds: { type: [String], default: [] },
+    // A standalone team has no league above it, so its owner is the party who
+    // records marketing permission for its own content and players.
+    social: { type: socialIdentitySchema, default: () => ({}) },
   },
   { timestamps: true }
 );

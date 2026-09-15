@@ -34,11 +34,16 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
             <GameCardPost gameCard={post.gameCard} />
             <div className="flex justify-end">
               <ShareImageButton
+                marketingPostId={post.id}
                 type="game_card"
                 gameCard={post.gameCard}
+                captionLead={post.caption}
                 onPrepareInstagram={
                   onPrepareInstagram
-                    ? (file) => onPrepareInstagram(buildInstagramDraft(post, file))
+                    ? (file, marketing) =>
+                        onPrepareInstagram(
+                          buildInstagramDraft(post, file, window.location.origin, marketing)
+                        )
                     : undefined
                 }
               />
@@ -68,7 +73,12 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
         <div className="space-y-3">
           <PlayerCardPost playerCard={post.playerCard} />
           <div className="flex justify-end">
-            <ShareImageButton type="player_card" playerCard={post.playerCard} />
+            <ShareImageButton
+              marketingPostId={post.id}
+              type="player_card"
+              playerCard={post.playerCard}
+              captionLead={post.caption}
+            />
           </div>
         </div>
       </div>
@@ -80,7 +90,12 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
         <div className="space-y-3">
           <PlayerGameCardPost playerGameCard={post.playerGameCard} />
           <div className="flex justify-end">
-            <ShareImageButton type="player_game_card" playerGameCard={post.playerGameCard} />
+            <ShareImageButton
+              marketingPostId={post.id}
+              type="player_game_card"
+              playerGameCard={post.playerGameCard}
+              captionLead={post.caption}
+            />
           </div>
         </div>
       </div>
@@ -92,7 +107,12 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
         <div className="space-y-3">
           <TeamCardPost teamCard={post.teamCard} />
           <div className="flex justify-end">
-            <ShareImageButton type="team_card" teamCard={post.teamCard} />
+            <ShareImageButton
+              marketingPostId={post.id}
+              type="team_card"
+              teamCard={post.teamCard}
+              captionLead={post.caption}
+            />
           </div>
         </div>
       </div>
@@ -107,11 +127,16 @@ export function FeedPostCard({ post, onDelete, onPrepareInstagram }) {
           <MilestonePost post={post} />
           <div className="flex justify-end">
             <ShareImageButton
+              marketingPostId={post.id}
               type="milestone"
               milestoneCard={post.milestoneCard}
+              captionLead={post.caption}
               onPrepareInstagram={
                 onPrepareInstagram
-                  ? (file) => onPrepareInstagram(buildInstagramDraft(post, file))
+                  ? (file, marketing) =>
+                      onPrepareInstagram(
+                        buildInstagramDraft(post, file, window.location.origin, marketing)
+                      )
                   : undefined
               }
             />

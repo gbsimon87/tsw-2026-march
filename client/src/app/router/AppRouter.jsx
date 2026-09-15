@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { arrivedFromSocial } from '../../features/analytics/attribution';
+import { safeInternalPath } from '../../lib/safeRedirect';
 import { AppLayout } from '../../layouts/AppLayout';
 import { HomePage } from '../../pages/HomePage';
 import { NotFoundPage } from '../../pages/NotFoundPage';
@@ -174,15 +176,32 @@ const BillingCancelPage = lazy(() =>
   }))
 );
 
+// Social backlog rank 5: where a signed-out visitor is sent when they hit a
+// gated route.
+//
+// This used to be a bare `/login`, which lost two things at once. The intended
+// destination was dropped, so someone who followed a link to a specific page
+// signed in and landed somewhere else entirely. And a visitor arriving from a
+// social post — who by definition does not have an account yet — was shown a
+// login form, which is the dead end this item names. `redirectTo` fixes the
+// first for everyone; the `/register` swap fixes the second for the people the
+// campaign is actually for.
+export function signedOutDestination(pathname, search = '', fromSocial = arrivedFromSocial()) {
+  const target = safeInternalPath(`${pathname}${search}`);
+  const base = fromSocial ? '/register' : '/login';
+  return target ? `${base}?redirectTo=${encodeURIComponent(target)}` : base;
+}
+
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return <SportsLoader label="Loading session" fullPage />;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={signedOutDestination(location.pathname, location.search)} replace />;
   }
 
   return children;
@@ -190,9 +209,12 @@ function ProtectedRoute({ children }) {
 
 function PlatformOperatorRoute({ children }) {
   const { user, isLoading } = useAuth();
+  const location = useLocation();
 
   if (isLoading) return <SportsLoader label="Loading session" fullPage />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    return <Navigate to={signedOutDestination(location.pathname, location.search)} replace />;
+  }
   if (!user.roles?.includes('platform_operator')) return <Navigate to="/admin" replace />;
   return children;
 }

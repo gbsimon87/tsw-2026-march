@@ -42,7 +42,15 @@ const {
   canFinalizeLeagueGame,
   scheduleLeagueAggregateRecompute,
 } = require('../leagues/leagues.service');
-const { findLeagueTeamById, findLeagueById } = require('../leagues/leagues.repository');
+const {
+  findLeagueTeamById,
+  findLeagueById,
+  listLeaguePlayers,
+} = require('../leagues/leagues.repository');
+const {
+  mergeMarketingPermissions,
+  resolveMarketingPermission,
+} = require('../shared/socialIdentity');
 const {
   SPORTS,
   CLOCK_STATUSES,
@@ -1872,6 +1880,61 @@ function buildSlimGameEventDelta(userId, game, context) {
   };
 }
 
+// Social backlog rank 9 — the permission block every export built from a game
+// reads: the final-score card, the player cards, the carousel and the kit.
+//
+// The roster lookups are skipped until a game is COMPLETED. A game in progress
+// is polled every 15s by GameDetailPage and offers no export, so paying two
+// roster queries per poll would buy nothing; the organisation's own record is
+// already loaded either way, so an operator still sees "permission not
+// recorded" before the final whistle.
+async function buildGameMarketing(game, { league, teamDoc, participants }) {
+  const completed = game.status === 'completed';
+
+  if (game.gameContext === 'league') {
+    const leagueDoc = league || (await findLeagueById(game.leagueId).catch(() => null));
+    const leagueTeamIds = [game.homeLeagueTeamId, game.awayLeagueTeamId].filter(Boolean);
+    const teams = completed
+      ? (
+          await Promise.all(leagueTeamIds.map((id) => findLeagueTeamById(id).catch(() => null)))
+        ).filter(Boolean)
+      : [];
+    const players = completed
+      ? (await Promise.all(leagueTeamIds.map((id) => listLeaguePlayers(id).catch(() => [])))).flat()
+      : [];
+
+    return resolveMarketingPermission({
+      org: leagueDoc,
+      teams,
+      subjects: players,
+      scope: 'league',
+    });
+  }
+
+  // Standalone. A dual-team standalone game names two clubs that may be owned
+  // by two different people, so both records have to say yes.
+  const teamDocs = participants
+    ? (
+        await Promise.all(
+          [game.homeTeamId, game.awayTeamId]
+            .filter(Boolean)
+            .map((id) => findTeamById(id).catch(() => null))
+        )
+      ).filter(Boolean)
+    : [teamDoc].filter(Boolean);
+
+  return mergeMarketingPermissions(
+    teamDocs.map((team) =>
+      resolveMarketingPermission({
+        org: team,
+        teams: [team],
+        subjects: completed ? team.players || [] : [],
+        scope: 'team',
+      })
+    )
+  );
+}
+
 async function getGameForUser(userId, gameId) {
   const game = await assertGameAccess(userId, gameId);
   const responseTime = new Date();
@@ -1936,8 +1999,11 @@ async function getGameForUser(userId, gameId) {
 
   const canManageRoster = await canManageGameRoster(userId, game);
 
+  const marketing = await buildGameMarketing(game, { league, teamDoc, participants });
+
   return {
     serverTime: responseTime.toISOString(),
+    marketing,
     game: sanitizeGame(game, {
       includeOwnerUserId: Boolean(userId),
       includePremiumMedia: Boolean(viewEntitlements.canViewReplay),

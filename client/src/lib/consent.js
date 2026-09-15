@@ -1,4 +1,4 @@
-// Analytics consent (UK PUECR / GDPR). See docs/analytics-plan.md §3.
+// Analytics consent (UK PUECR / GDPR). See docs/posthog.md §5.2.
 //
 // No analytics event leaves the browser before a current, positive decision.
 // PostHog is also opted out and kept in memory-only mode until that decision.

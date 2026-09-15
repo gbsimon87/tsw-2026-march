@@ -58,6 +58,7 @@ describe('useShareImage', () => {
     });
 
     expect(click).toHaveBeenCalledTimes(1);
+    expect(globalThis.URL.revokeObjectURL).not.toHaveBeenCalled();
     expect(result.current.status).toBe('success');
   });
 

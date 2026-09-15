@@ -556,6 +556,25 @@ async function seedLeague(blueprint, demoUser) {
     return null;
   }
 
+  // Only the fictional demo league is pre-cleared for social exports. Keep the
+  // original record on repeat runs so seeding does not rewrite its date.
+  if (
+    !DRY_RUN &&
+    blueprint.slug === 'demo-league' &&
+    league.social?.marketing?.status !== 'granted'
+  ) {
+    league.social = {
+      ...(league.social?.toObject?.() || league.social || {}),
+      marketing: {
+        status: 'granted',
+        recordedAt: new Date(),
+        recordedByUserId: ownerUserId,
+        note: 'Fictional demo content approved for TSW marketing.',
+      },
+    };
+    await league.save();
+  }
+
   const leagueTeamsWithPlayers = [];
   let playerCreatedCount = 0;
 

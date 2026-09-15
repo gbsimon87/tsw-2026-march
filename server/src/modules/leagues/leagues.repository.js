@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { claimWebhookEvent, releaseWebhookEvent } = require('../../utils/webhookIdempotency');
 const { applyIdCursor } = require('../../utils/pagination');
 const { DEFAULT_GAME_FORMAT, SPORTS } = require('../shared/gameClock');
+const { AGE_CATEGORIES, MARKETING_STATUSES } = require('../shared/socialIdentity');
 
 const logoSchema = new mongoose.Schema(
   {
@@ -10,6 +11,49 @@ const logoSchema = new mongoose.Schema(
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     mimeType: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+// Social backlog rank 9. The same sub-document hangs off the League, each
+// LeagueTeam and each LeaguePlayer, and off the standalone Team and its
+// embedded players (teams.repository.js). The rules that read it live in
+// modules/shared/socialIdentity.js — nothing here decides anything.
+const marketingPermissionSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: MARKETING_STATUSES,
+      default: 'unrecorded',
+    },
+    // Stamped by the server on the transition, never supplied by the client:
+    // a consent record whose author the client picked is not a record.
+    recordedAt: { type: Date, default: null },
+    recordedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    note: { type: String, trim: true, default: null },
+  },
+  { _id: false }
+);
+
+const socialIdentitySchema = new mongoose.Schema(
+  {
+    instagramHandle: { type: String, trim: true, default: null },
+    tiktokHandle: { type: String, trim: true, default: null },
+    marketing: { type: marketingPermissionSchema, default: () => ({}) },
+  },
+  { _id: false }
+);
+
+// Players carry two fields an organisation does not: docs/ideas.md > Constraints
+// requires a parent or guardian record before a minor is featured, and
+// 'unspecified' is the honest default for a roster nobody has been through.
+const playerSocialIdentitySchema = new mongoose.Schema(
+  {
+    instagramHandle: { type: String, trim: true, default: null },
+    tiktokHandle: { type: String, trim: true, default: null },
+    marketing: { type: marketingPermissionSchema, default: () => ({}) },
+    ageCategory: { type: String, enum: AGE_CATEGORIES, default: 'unspecified' },
+    guardianConsentAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -95,6 +139,9 @@ const leagueSchema = new mongoose.Schema(
     billingEmail: { type: String, default: null },
     processedWebhookEventIds: { type: [String], default: [] },
     lastWebhookEventId: { type: String, default: null },
+    // The league's own handles, and the permission every export of this
+    // league's content is gated on (social backlog rank 9).
+    social: { type: socialIdentitySchema, default: () => ({}) },
   },
   { timestamps: true }
 );
@@ -118,6 +165,9 @@ const leagueTeamSchema = new mongoose.Schema(
     logo: { type: logoSchema, default: null },
     colors: { type: [String], default: [] },
     status: { type: String, enum: ['active', 'archived'], default: 'active', index: true },
+    // A team records its own handles so a post can tag the club. Permission
+    // itself is the LEAGUE's to give — a team cannot grant past its league.
+    social: { type: socialIdentitySchema, default: () => ({}) },
   },
   { timestamps: true }
 );
@@ -143,6 +193,9 @@ const leaguePlayerSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // An individual can only ever withdraw from the league's permission, or
+    // add the guardian record a minor needs. See socialIdentity.js.
+    social: { type: playerSocialIdentitySchema, default: () => ({}) },
   },
   { timestamps: true }
 );

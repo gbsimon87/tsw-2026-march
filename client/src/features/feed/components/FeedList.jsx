@@ -49,20 +49,26 @@ function FullScreenSlide({ post, onDelete, observeSlide, onPrepareInstagram }) {
       {post.type === 'game_card' && post.gameCard && onPrepareInstagram ? (
         <div className="absolute bottom-36 right-4 z-20">
           <ShareImageButton
+            marketingPostId={post.id}
             type="game_card"
             gameCard={post.gameCard}
             showShare={false}
-            onPrepareInstagram={(file) => onPrepareInstagram(buildInstagramDraft(post, file))}
+            onPrepareInstagram={(file, marketing) =>
+              onPrepareInstagram(buildInstagramDraft(post, file, window.location.origin, marketing))
+            }
           />
         </div>
       ) : null}
       {post.type === 'milestone' && post.milestoneCard && onPrepareInstagram ? (
         <div className="absolute bottom-36 right-4 z-20">
           <ShareImageButton
+            marketingPostId={post.id}
             type="milestone"
             milestoneCard={post.milestoneCard}
             showShare={false}
-            onPrepareInstagram={(file) => onPrepareInstagram(buildInstagramDraft(post, file))}
+            onPrepareInstagram={(file, marketing) =>
+              onPrepareInstagram(buildInstagramDraft(post, file, window.location.origin, marketing))
+            }
           />
         </div>
       ) : null}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { contactApi } from '../features/contact/contactApi';
+import { trackEvent } from '../features/analytics/trackEvent';
 import { DarkPageHeader } from '../components/DarkPageHeader';
 
 const ROLES = [
@@ -96,6 +97,11 @@ function ContactForm() {
         message: form.message.trim() || undefined,
       });
       setStatus('success');
+      // Social backlog rank 5: the end of the acquisition funnel a social post
+      // is trying to reach. Fired AFTER the request succeeds, and carrying only
+      // the two closed enums — the name, email, club and message are
+      // contact-form fields and never leave the browser (docs/posthog.md §8).
+      trackEvent('league_enquiry_submitted', { interest: form.interest, role: form.role });
     } catch (err) {
       setServerError(err.message || 'Something went wrong. Please try again.');
       setStatus('idle');

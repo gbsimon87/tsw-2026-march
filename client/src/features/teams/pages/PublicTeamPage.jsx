@@ -448,7 +448,17 @@ export function PublicTeamPage() {
           <TeamCardPost teamCard={teamCardPreview} interactive={false} />
         </div>
         <div className="flex justify-end">
-          <ShareImageButton type="team_card" teamCard={teamCardPreview} />
+          <ShareImageButton
+            type="team_card"
+            teamCard={teamCardPreview}
+            shareSource="team_profile"
+            marketing={data.marketing}
+            refreshMarketing={async () => {
+              const fresh = await teamsApi.getPublicById(teamId);
+              setData(fresh);
+              return fresh.marketing;
+            }}
+          />
         </div>
       </section>
 

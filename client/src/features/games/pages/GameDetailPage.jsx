@@ -20,7 +20,10 @@ import { GameRecapPanel } from '../components/GameRecapPanel';
 import { ScoringTimelineChart } from '../components/ScoringTimelineChart';
 import { RecapShotSnapshot } from '../components/RecapShotSnapshot';
 import { ShareImageButton } from '../../feed/components/ShareImageButton';
+import { buildGameCardFromPayload } from '../../feed/components/cards/gameCard';
 import { buildPlayerGameCard, hasShareableLine } from '../../feed/components/cards/playerGameCard';
+import { GameSocialKitModal } from '../../social/components/GameSocialKitModal';
+import { HighlightReceiptModal } from '../../social/components/HighlightReceiptModal';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
@@ -96,6 +99,22 @@ function FeedIcon() {
     <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
       <path
         d="M4 14.5V5.5a1 1 0 0 1 1-1h7.2a1 1 0 0 1 .6.2l2.2 1.7a1 1 0 0 1 .4.8v7.3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1ZM7 8h5.5M7 11h5.5M7 14h3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Social backlog rank 6: a stack of cards, because the kit is a pack of assets
+// rather than one image — it should not read as another share button.
+function SocialKitIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M7 3.5h8a1 1 0 0 1 1 1v8M4.5 6.5h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
@@ -284,6 +303,9 @@ export function GameDetailPage() {
   const [shareChooserOpen, setShareChooserOpen] = useState(false);
   const [playerCardShareState, setPlayerCardShareState] = useState('');
   const [highlightReelShareState, setHighlightReelShareState] = useState('');
+  // Social backlog rank 6: the whole kit for a finished game, in one modal.
+  const [socialKitOpen, setSocialKitOpen] = useState(false);
+  const [highlightReceiptOpen, setHighlightReceiptOpen] = useState(false);
 
   const isFeedComposerOpen = searchParams.get('composeFeedGame') === '1';
   const isPrintMode = searchParams.get('print') === '1';
@@ -294,12 +316,15 @@ export function GameDetailPage() {
     isLoading,
     isError,
     error: queryError,
+    refetch,
   } = useQuery({
     queryKey: ['game', gameId],
     queryFn: () => gamesApi.getById(gameId),
     enabled: Boolean(gameId),
     refetchInterval: (query) => (query.state.data?.game?.status === 'in_progress' ? 15_000 : false),
   });
+
+  const refreshMarketing = async () => (await refetch()).data?.marketing ?? null;
 
   useEffect(() => {
     if (isError) {
@@ -517,9 +542,10 @@ export function GameDetailPage() {
                     : null,
               });
               setPlayerCardShareState('');
+              setShareChooserOpen(true);
             }}
-            aria-label={`Share ${row.displayName}'s game card`}
-            title={`Share ${row.displayName}'s game card`}
+            aria-label={`Download or share ${row.displayName}'s game card`}
+            title={`Download or share ${row.displayName}'s game card`}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:border-[#F4A300] hover:bg-amber-50"
           >
             <svg
@@ -530,7 +556,7 @@ export function GameDetailPage() {
               strokeWidth="1.8"
             >
               <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-              <path d="M12 3v13M8 7l4-4 4 4" />
+              <path d="M12 3v13M8 12l4 4 4-4" />
             </svg>
           </button>
         );
@@ -632,6 +658,9 @@ export function GameDetailPage() {
           <ShareImageButton
             type="player_game_card"
             playerGameCard={shareRow.card}
+            shareSource="game_detail"
+            marketing={data.marketing}
+            refreshMarketing={refreshMarketing}
             open={shareChooserOpen}
             onOpenChange={setShareChooserOpen}
           />
@@ -851,20 +880,9 @@ export function GameDetailPage() {
       }
     : null;
   // Mirrors server's buildGameCardSnapshot (feed.service.js) so the shareable
-  // image matches what an auto/manual game_card feed post would render.
-  const gameCard = {
-    gameId: game.id,
-    gameUrl: `/games/${game.id}`,
-    teamId: team?.id ?? null,
-    teamName: isDualTeam
-      ? `${getParticipantName(participants, 'home')} vs ${getParticipantName(participants, 'away')}`
-      : (team?.name ?? null),
-    teamLogo: isDualTeam ? (participants?.home?.logo ?? null) : (team?.logo ?? null),
-    teamColors: team?.colors ?? [],
-    opponent: isDualTeam ? null : recap?.opponent?.name || game?.opponent || null,
-    participants: isDualTeam ? participants : null,
-    recap,
-  };
+  // image matches what an auto/manual game_card feed post would render. Shared
+  // with the social kit, which builds the same card from the same payload.
+  const gameCard = buildGameCardFromPayload(data);
 
   const printContent = (
     <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 text-slate-900">
@@ -995,11 +1013,54 @@ export function GameDetailPage() {
                 </span>
                 <span className="text-[11px] font-medium">Pulse</span>
               </button>
+              {/* Social backlog rank 6. Completed games only — the kit is built
+                  from the frozen box score, and a mid-game score is not a
+                  result worth posting. */}
+              {game.status === 'completed' ? (
+                <button
+                  type="button"
+                  onClick={() => setSocialKitOpen(true)}
+                  aria-label="Open the social kit"
+                  title="Open the social kit"
+                  className="flex flex-col items-center gap-1 rounded-lg text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F4A300]"
+                >
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white transition hover:border-[#F4A300]/60 hover:bg-slate-50">
+                    <SocialKitIcon />
+                  </span>
+                  <span className="text-[11px] font-medium">Kit</span>
+                </button>
+              ) : null}
               <div className="flex justify-end">
-                <ShareImageButton type="game_card" gameCard={gameCard} />
+                <ShareImageButton
+                  type="game_card"
+                  gameCard={gameCard}
+                  shareSource="game_detail"
+                  marketing={data.marketing}
+                  refreshMarketing={refreshMarketing}
+                />
               </div>
             </>
           }
+        />
+      ) : null}
+
+      {game.status === 'completed' ? (
+        <GameSocialKitModal
+          open={socialKitOpen}
+          onClose={() => setSocialKitOpen(false)}
+          data={data}
+          marketing={data.marketing}
+          refreshMarketing={refreshMarketing}
+        />
+      ) : null}
+
+      {game.status === 'completed' && data.highlights?.length ? (
+        <HighlightReceiptModal
+          open={highlightReceiptOpen}
+          onClose={() => setHighlightReceiptOpen(false)}
+          data={data}
+          marketing={data.marketing}
+          refreshMarketing={refreshMarketing}
         />
       ) : null}
 
@@ -1048,6 +1109,9 @@ export function GameDetailPage() {
                   onCloseHighlightReel={closeHighlightReel}
                   onShareHighlightReel={shareHighlightReel}
                   highlightReelShareState={highlightReelShareState}
+                  onOpenHighlightReceipt={
+                    game.status === 'completed' ? () => setHighlightReceiptOpen(true) : null
+                  }
                 />
               ),
             },

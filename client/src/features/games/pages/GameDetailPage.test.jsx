@@ -1105,6 +1105,11 @@ describe('GameDetailPage', () => {
       })
     );
     expect(screen.getByRole('button', { name: 'Shared' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export vertical clip' }));
+    expect(
+      await screen.findByRole('dialog', { name: 'Highlight + stat receipt' })
+    ).toBeInTheDocument();
   });
 
   test('renders a simplified print mode layout', async () => {
@@ -1402,6 +1407,16 @@ describe('GameDetailPage — per-game player card', () => {
     await renderStats(payload());
 
     expect(screen.getByRole('button', { name: /share alex/i })).toBeInTheDocument();
+  });
+
+  test('opens the image chooser from the box-score row in one click', async () => {
+    await renderStats({
+      ...payload(),
+      marketing: { canFeature: true, scope: 'team', restrictedPlayerIds: [], handles: {} },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /share alex/i }));
+    expect(await screen.findByRole('dialog', { name: 'Share an image' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share or download PNG' })).toBeInTheDocument();
   });
 
   test('hides the row action for a player who recorded nothing', async () => {

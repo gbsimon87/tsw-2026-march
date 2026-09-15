@@ -18,6 +18,7 @@ import { FollowButton } from '../../follows/components/FollowButton';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { buildSeasonFormByTeam } from '../seasonTrends';
+import { LeaderboardCardsModal } from '../../social/components/LeaderboardCardsModal';
 
 function formatPercentage(value) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '--';
@@ -181,6 +182,7 @@ const DPOY_COLUMNS = [
 export function PublicLeaguePage() {
   const { leagueSlug } = useParams();
   const [selectedSeasonId, setSelectedSeasonId] = useState(null);
+  const [leaderboardCardsOpen, setLeaderboardCardsOpen] = useState(false);
   const {
     data: league,
     isLoading: isLeagueLoading,
@@ -191,6 +193,7 @@ export function PublicLeaguePage() {
     data: leadersData,
     isLoading: isLeadersLoading,
     isError: isLeadersError,
+    refetch: refetchLeaders,
   } = useQuery({
     queryKey: ['publicLeagueLeaders', leagueSlug, activeSeasonId],
     queryFn: () => leaguesApi.getPublicLeagueLeaders(leagueSlug, activeSeasonId),
@@ -199,6 +202,9 @@ export function PublicLeaguePage() {
 
   const leaders = leadersData?.leaders || [];
   const dpoyLeaders = leadersData?.dpoyLeaders || [];
+  // Social backlog rank 8: ranked server-side over every qualified player, not
+  // re-sorted from `leaders` — that array is the fantasy top ten.
+  const categoryLeaders = leadersData?.categoryLeaders || [];
   const isLoading = isLeagueLoading || isLeadersLoading;
   const error = isLeagueError || isLeadersError ? 'Failed to load league' : '';
   const seasons = useMemo(() => league?.seasons || [], [league]);
@@ -302,16 +308,29 @@ export function PublicLeaguePage() {
       </section>
 
       <section className="rounded-2xl bg-white border border-slate-200 p-6 md:p-8">
-        <header className="border-b border-slate-100 pb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
-            Leaderboard
-          </p>
-          <h2
-            className="mt-1 text-2xl text-slate-900"
-            style={{ fontFamily: "'Archivo Black', sans-serif" }}
-          >
-            MVP Standings
-          </h2>
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1B4332]">
+              Leaderboard
+            </p>
+            <h2
+              className="mt-1 text-2xl text-slate-900"
+              style={{ fontFamily: "'Archivo Black', sans-serif" }}
+            >
+              MVP Standings
+            </h2>
+          </div>
+          {/* Social backlog rank 8. Hidden entirely when no category has three
+              qualified players: an empty modal is worse than no button. */}
+          {categoryLeaders.some((category) => category.rows?.length) ? (
+            <button
+              type="button"
+              onClick={() => setLeaderboardCardsOpen(true)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-[#F4A300] hover:bg-amber-50"
+            >
+              Leaderboard cards
+            </button>
+          ) : null}
         </header>
         {leaders.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">No stats recorded yet.</p>
@@ -393,6 +412,18 @@ export function PublicLeaguePage() {
           )}
         </div>
       </section>
+
+      <LeaderboardCardsModal
+        open={leaderboardCardsOpen}
+        onClose={() => setLeaderboardCardsOpen(false)}
+        league={league}
+        categoryLeaders={categoryLeaders}
+        standings={league.standings || []}
+        formByTeam={seasonFormByTeam}
+        seasonLabel={selectedSeason?.label || league.seasonLabel || ''}
+        marketing={leadersData?.marketing}
+        refreshMarketing={async () => (await refetchLeaders()).data?.marketing ?? null}
+      />
     </main>
   );
 }

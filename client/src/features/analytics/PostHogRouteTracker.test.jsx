@@ -12,6 +12,8 @@ const posthogLibMocks = vi.hoisted(() => ({
   identifyPostHogUser: vi.fn(() => true),
   resetPostHogUser: vi.fn(),
   setPostHogCommonContext: vi.fn(),
+  registerPostHogAttribution: vi.fn(),
+  capturePostHogEvent: vi.fn(),
 }));
 
 const authMocks = vi.hoisted(() => ({
@@ -108,13 +110,23 @@ describe('PostHogRouteTracker', () => {
 
     // Audit M7: leaguePlan/leagueSubscriptionStatus props were dropped (server no
     // longer serializes user.leagueBilling; they reported 'free' for everyone).
-    expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith('user-1', {
-      auth_provider: 'google',
-      email_verified: true,
-      onboarding_status: 'completed',
-      onboarding_roles: [],
-      is_internal: false,
-    });
+    expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith(
+      'user-1',
+      {
+        auth_provider: 'google',
+        email_verified: true,
+        onboarding_status: 'completed',
+        onboarding_roles: [],
+        is_internal: false,
+      },
+      // Social backlog rank 5: $set_once attribution. jsdom has no referrer and
+      // no query string, so a test arrival is a direct one.
+      {
+        first_touch_source: 'direct',
+        first_touch_medium: 'none',
+        first_touch_campaign: 'none',
+      }
+    );
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('leaguePlan');
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('email');
     expect(posthogLibMocks.identifyPostHogUser.mock.calls[0][1]).not.toHaveProperty('name');
@@ -136,7 +148,13 @@ describe('PostHogRouteTracker', () => {
       </MemoryRouter>
     );
 
-    expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith('user-1', expect.any(Object));
+    expect(posthogLibMocks.identifyPostHogUser).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(Object),
+      // Social backlog rank 5: first-touch attribution rides in the $set_once
+      // bag so a later session cannot overwrite the channel that found them.
+      expect.any(Object)
+    );
 
     authMocks.authState = {
       isLoading: false,

@@ -21,6 +21,13 @@ async function list(req, res) {
   res.status(200).json(result);
 }
 
+// Social backlog rank 9: read on demand by an export surface, not folded into
+// the feed list — see getPostMarketing.
+async function postMarketing(req, res) {
+  const result = await service.getPostMarketing(req.params.postId);
+  res.status(200).json(result);
+}
+
 function rejectMediaUpload() {
   throw new ApiError(
     403,
@@ -95,6 +102,7 @@ async function listShareableTeams(req, res) {
 
 module.exports = {
   list,
+  postMarketing,
   rejectMediaUpload,
   createGameCard,
   createPlayerCard,

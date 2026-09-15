@@ -609,6 +609,148 @@ describe('league player stats materialisation (OPT-011)', () => {
       teamSlug: 'alpha',
     });
   });
+
+  // Social backlog rank 8.
+  describe('category leaders', () => {
+    function statRow(leaguePlayerId, displayName, overrides = {}) {
+      return {
+        leagueTeamId: 'team-a',
+        leaguePlayerId,
+        displayName,
+        gamesCount: 4,
+        points: 40,
+        reb: 20,
+        ast: 12,
+        stl: 4,
+        blk: 0,
+        tov: 4,
+        foul: 0,
+        ftm: 0,
+        fta: 0,
+        fg2m: 20,
+        fg2a: 40,
+        fg3m: 0,
+        fg3a: 0,
+        oreb: 8,
+        dreb: 12,
+        ...overrides,
+      };
+    }
+
+    function arrangeLeague(rows) {
+      findLeagueBySlug.mockResolvedValue({
+        _id: 'league-1',
+        slug: 'test-league',
+        isPublic: true,
+        status: 'active',
+      });
+      listLeagueTeams.mockResolvedValue([buildLeagueTeam('team-a', 'Alpha')]);
+      listLeaguePlayers.mockResolvedValue(
+        rows.map((row) => ({
+          _id: row.leaguePlayerId,
+          leaguePlayerId: row.leaguePlayerId,
+          displayName: row.displayName,
+          jerseyNumber: null,
+          position: null,
+          claimedByUserId: null,
+          isActive: true,
+        }))
+      );
+      listLeaguePlayerStats.mockResolvedValue(rows);
+    }
+
+    test('ranks each category over EVERY player, not the fantasy top ten', async () => {
+      // A volume scorer who does nothing else sits low on fantasy score, so a
+      // client ranking the `leaders` array by PPG would publish the wrong name
+      // as the league's leading scorer.
+      const rows = [
+        statRow('lp1', 'All Rounder', { points: 40, reb: 40, ast: 40, stl: 20 }),
+        statRow('lp2', 'Bucket Getter', { points: 120, reb: 0, ast: 0, stl: 0, tov: 40 }),
+        statRow('lp3', 'Third Wheel', { points: 20, reb: 8, ast: 4 }),
+      ];
+      arrangeLeague(rows);
+
+      const { leaders, categoryLeaders } = await getPublicLeagueLeaders('test-league', 10);
+      const points = categoryLeaders.find((category) => category.key === 'points');
+
+      expect(leaders[0].displayName).toBe('All Rounder');
+      expect(points.rows[0].displayName).toBe('Bucket Getter');
+      expect(points.rows.map((row) => row.displayName)).toEqual([
+        'Bucket Getter',
+        'All Rounder',
+        'Third Wheel',
+      ]);
+    });
+
+    test('returns points, rebounds and assists, each capped at five', async () => {
+      const rows = Array.from({ length: 7 }, (_, index) =>
+        statRow(`lp${index}`, `Player ${index}`, { points: 40 + index })
+      );
+      arrangeLeague(rows);
+
+      const { categoryLeaders } = await getPublicLeagueLeaders('test-league', 10);
+
+      expect(categoryLeaders.map((category) => category.key)).toEqual([
+        'points',
+        'rebounds',
+        'assists',
+      ]);
+      for (const category of categoryLeaders) {
+        expect(category.rows).toHaveLength(5);
+        expect(category.qualifiedCount).toBe(7);
+      }
+    });
+
+    test('suppresses a category with fewer than three qualified players', async () => {
+      // Two players is not a top five; it is a list of everyone who did the
+      // thing. qualifiedCount still says why the rows are empty.
+      arrangeLeague([
+        statRow('lp1', 'One', { ast: 12 }),
+        statRow('lp2', 'Two', { ast: 8 }),
+        statRow('lp3', 'Three', { ast: 0 }),
+      ]);
+
+      const { categoryLeaders } = await getPublicLeagueLeaders('test-league', 10);
+      const assists = categoryLeaders.find((category) => category.key === 'assists');
+
+      expect(assists.qualifiedCount).toBe(2);
+      expect(assists.rows).toEqual([]);
+      // Points was recorded for all three, so that category still stands.
+      expect(categoryLeaders.find((category) => category.key === 'points').rows).toHaveLength(3);
+    });
+
+    test('breaks a tie on games played, then on name, so the order is stable', async () => {
+      arrangeLeague([
+        statRow('lp1', 'Zoe Ward', { gamesCount: 2, points: 20 }),
+        statRow('lp2', 'Adam Cole', { gamesCount: 2, points: 20 }),
+        statRow('lp3', 'Cara Pace', { gamesCount: 6, points: 60 }),
+      ]);
+
+      const { categoryLeaders } = await getPublicLeagueLeaders('test-league', 10);
+      const points = categoryLeaders.find((category) => category.key === 'points');
+
+      // All three average 10.0 PPG; the longest sample leads, then A before Z.
+      expect(points.rows.map((row) => row.displayName)).toEqual([
+        'Cara Pace',
+        'Adam Cole',
+        'Zoe Ward',
+      ]);
+    });
+
+    test('carries the games played behind every average', async () => {
+      arrangeLeague([
+        statRow('lp1', 'One'),
+        statRow('lp2', 'Two'),
+        statRow('lp3', 'Three', { gamesCount: 1, points: 30, reb: 5, ast: 3 }),
+      ]);
+
+      const { categoryLeaders } = await getPublicLeagueLeaders('test-league', 10);
+      const points = categoryLeaders.find((category) => category.key === 'points');
+
+      // A 30-point night tops the list, and the card can say it was one game.
+      expect(points.rows[0]).toMatchObject({ displayName: 'Three', gamesCount: 1, ppg: 30 });
+    });
+  });
 });
 
 describe('unified profile assembly (public player profiles)', () => {

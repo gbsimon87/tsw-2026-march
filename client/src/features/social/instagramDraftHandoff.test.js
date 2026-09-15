@@ -23,6 +23,9 @@ const post = {
 
 const ORIGIN = 'https://dev.thesportyway.com';
 
+// What buildTaggedUrl adds for the hand-off's single destination.
+const INSTAGRAM_TAGS = '?utm_source=instagram&utm_medium=organic_social&utm_campaign=launch_2026q3';
+
 beforeEach(() => {
   takePendingInstagramDraft();
 });
@@ -78,26 +81,61 @@ describe('buildCaptionWithAttribution', () => {
 });
 
 describe('buildInstagramDraft', () => {
-  it('carries the file, source id, a human label, the caption and attribution', () => {
-    expect(buildInstagramDraft(post, file, ORIGIN)).toEqual({
+  it('carries the file, source id, a human label, generated copy and attribution', () => {
+    const draft = buildInstagramDraft(post, file, ORIGIN);
+
+    expect(draft).toMatchObject({
       file,
       sourcePostId: '507f1f77bcf86cd799439011',
       sourceLabel: 'TSW Blue vs Falcons',
-      caption: 'What a finish.\n\nFull box score → https://dev.thesportyway.com/games/g1',
-      attributionUrl: 'https://dev.thesportyway.com/games/g1',
+      // Social backlog rank 5: the hand-off tags its one destination, so a
+      // visit arriving from the published post is attributable.
+      attributionUrl: `${ORIGIN}/games/g1${INSTAGRAM_TAGS}`,
     });
+    // Social backlog rank 4: a caption a human deliberately wrote still leads,
+    // and the rest of the formula now follows it instead of stopping there.
+    expect(draft.caption.startsWith('What a finish.\n')).toBe(true);
+    expect(draft.caption).toContain(`Full box score → ${ORIGIN}/games/g1${INSTAGRAM_TAGS}`);
+    expect(draft.caption).toContain('#Basketball');
+    expect(draft.altText).toBe('Final score card: TSW Blue 70, Falcons 61.');
   });
 
-  it('falls back to the bare link when the post had no caption', () => {
-    expect(buildInstagramDraft({ ...post, caption: null }, file, ORIGIN).caption).toBe(
-      'Full box score → https://dev.thesportyway.com/games/g1'
-    );
+  it('generates the caption an auto card never had', () => {
+    // feed.service.js writes `caption: null` for every auto-generated card, so
+    // this — not the hand-written case above — is the common one.
+    const draft = buildInstagramDraft({ ...post, caption: null }, file, ORIGIN);
+
+    expect(draft.caption.startsWith('FINAL: TSW Blue 70–61 Falcons\n')).toBe(true);
+    expect(draft.caption).toContain(`Full box score → ${ORIGIN}/games/g1${INSTAGRAM_TAGS}`);
   });
 
-  it('leaves the caption empty when neither a caption nor a link exists', () => {
-    expect(
-      buildInstagramDraft({ ...post, caption: null }, file, 'http://localhost:5173').caption
-    ).toBe('');
+  it('still generates copy when no HTTPS origin supplies a link', () => {
+    const draft = buildInstagramDraft({ ...post, caption: null }, file, 'http://localhost:5173');
+
+    expect(draft.caption).toContain('FINAL: TSW Blue 70–61 Falcons');
+    expect(draft.caption).not.toContain('Full box score');
+  });
+
+  it('drops a stale caption that names a newly restricted performer', () => {
+    const restrictedPost = {
+      ...post,
+      caption: 'Jordan Blake carried the game',
+      gameCard: {
+        ...post.gameCard,
+        recap: {
+          ...post.gameCard.recap,
+          topPerformers: [
+            { playerId: 'p1', displayName: 'Jordan Blake', points: 28, reb: 9, ast: 6 },
+          ],
+        },
+      },
+    };
+    const draft = buildInstagramDraft(restrictedPost, file, ORIGIN, {
+      canFeature: true,
+      restrictedPlayerIds: ['p1'],
+    });
+    expect(draft.caption).not.toContain('Jordan Blake');
+    expect(draft.altText).not.toContain('Jordan Blake');
   });
 });
 
@@ -148,7 +186,7 @@ describe('buildInstagramDraft — milestone posts', () => {
 
   it('attributes a milestone to the game it was earned in', () => {
     expect(buildInstagramDraft(milestonePost, file, ORIGIN).attributionUrl).toBe(
-      'https://dev.thesportyway.com/games/g9'
+      `${ORIGIN}/games/g9${INSTAGRAM_TAGS}`
     );
   });
 
@@ -179,7 +217,10 @@ describe('buildInstagramDraft — milestone posts', () => {
       file,
       sourcePostId: 'p1',
       sourceLabel: 'TSW post',
+      // Nothing renderable to caption, so the operator's own words carry over
+      // untouched rather than a generated line about a card that is not there.
       caption: 'Hi',
+      altText: '',
       attributionUrl: '',
     });
   });

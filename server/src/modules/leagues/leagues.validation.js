@@ -1,5 +1,10 @@
 const { z } = require('zod');
 const { playerPositionSchema } = require('../teams/teams.validation');
+const {
+  playerSocialIdentityUpdateSchema,
+  socialHandlesUpdateSchema,
+  socialIdentityUpdateSchema,
+} = require('../shared/socialIdentity.validation');
 
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color');
 const defaultGameFormatSchema = z.object({
@@ -25,6 +30,7 @@ const updateLeagueSchema = z
     seasonLabel: z.string().trim().max(80).nullable().optional(),
     isPublic: z.boolean().optional(),
     defaultGameFormat: defaultGameFormatSchema.optional(),
+    social: socialIdentityUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
@@ -41,6 +47,7 @@ const updateLeagueTeamSchema = z
     name: z.string().trim().min(1).max(120).optional(),
     slug: z.string().trim().min(1).max(120).optional(),
     colors: z.array(hexColorSchema).max(3).optional(),
+    social: socialHandlesUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
@@ -58,6 +65,7 @@ const updateLeaguePlayerSchema = z
     jerseyNumber: z.number().int().min(0).max(999).nullable().optional(),
     position: playerPositionSchema.nullable().optional(),
     isActive: z.boolean().optional(),
+    social: playerSocialIdentityUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

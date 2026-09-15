@@ -361,6 +361,13 @@ export function PublicPlayerPage() {
         <div className="flex justify-end">
           <ShareImageButton
             type="player_card"
+            shareSource="player_profile"
+            marketing={data.marketing}
+            refreshMarketing={async () => {
+              const fresh = await teamsApi.getPublicPlayerById(teamId, playerId);
+              setData(fresh);
+              return fresh.marketing;
+            }}
             playerCard={{
               playerUrl: `/teams/${teamId}/players/${playerId}`,
               playerName: playerLabel,

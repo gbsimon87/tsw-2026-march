@@ -44,6 +44,20 @@ browser and the API, and the live Render dashboard has still not been checked
 by hand. Three `tsw_probe_local` events exist in Dev from debugging the
 ingestion endpoint; they are not real traffic.
 
+**Added since, still unverified (social backlog ranks 5-6, 14 September 2026):**
+`social_landing_viewed`, `share_initiated`, `share_completed` and
+`league_enquiry_submitted` are implemented and contract-tested, but no
+definition exists in Dev and no payload has been inspected. The share events
+gained `game_kit`, `carousel_slide` and `leaderboard_card` target types (and a
+`league_page` source) with the completed-game kit, the box-score carousel and
+the league leaderboard cards; include all of them when the definitions are
+written. They join the
+verification work in items 1-5 above — do not mark any of them verified before
+§16 has been run against a real browser. First-touch attribution also now rides
+on every browser event as a super property and on the person via `$set_once`;
+§16.2 should confirm no `utm_*` value reaches PostHog outside the three
+`first_touch_*` properties.
+
 **Blocked on a decision, not on engineering:**
 
 - the historical URL-exposure deletion (§13.4) — 2,095 Dev and 606 Prod
@@ -769,6 +783,34 @@ pattern plus event context cannot answer.
 The password-request event must not reveal whether the email exists. A public
 failure event must not become an account-enumeration dataset.
 
+**Campaign attribution.** §5.1 permits campaign fields only as an allow-list:
+"allow-list individual campaign fields and validate them; do not preserve the
+whole query string." `client/src/features/analytics/attribution.js` is that
+allow-list, and it owns both the link builder and the parser so a tagged link
+and the value read back cannot drift apart.
+
+| Event                   | Capture when                                                              | Owner   | Properties                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `social_landing_viewed` | Once per session, on the first page of a tagged or social-referred entry. | Browser | `first_touch_source`, `first_touch_medium`, `first_touch_campaign`, `is_tagged`, `route_pattern`. No raw URL. |
+
+`first_touch_source`, `first_touch_medium` and `first_touch_campaign` are also
+registered as super properties on every browser event, and set on the person
+with `$set_once` at identify — first touch means the channel that ORIGINALLY
+found someone, so a later session must not overwrite it.
+
+Only a closed vocabulary travels. An unrecognised `utm_source` is treated as no
+tag at all rather than passed through, and only the referring HOST is mapped to
+a source — never the referrer URL, which is on the §8 never-send list. A direct
+or search arrival is described in the super properties but emits no
+`social_landing_viewed`: it is not a landing a campaign can claim.
+
+Storage of first touch is consent-gated. It is held in memory for the session
+always (reading the current URL is not storage), and written to `localStorage`
+only once the visitor accepts — the same memory-until-accepted shape §5.2
+requires of PostHog's own identifier. Declining costs the return-visit
+attribution, which is the correct trade until the §5.2 exception question has
+had legal review.
+
 ### 11.3 Onboarding
 
 | Event                       | Capture when                                         | Owner  | Properties                                                                  |
@@ -852,6 +894,26 @@ PostHog definition.
 
 Migrate existing clip/reel-specific names deliberately. Keep old charts labelled
 as legacy; do not silently combine events with different meanings.
+
+As implemented for the social asset backlog, both events also carry an optional
+`format` (`post`, `story`, `link`) so an export preset can be compared against
+the others, and `source` covers `pulse`, `game_detail`, `player_profile`,
+`team_profile`, `admin_social`. `target_type` also accepts `game_kit`,
+`carousel_slide` and `leaderboard_card`, and `source` also accepts
+`league_page`: the completed-game social kit downloads several images as one
+ZIP and fires ONE event for the kit, so a kit download counts once rather than
+inflating the per-card numbers beside it, while `carousel_slide` records a
+single box-score slide downloaded on its own. Both are emitted from `useShareImage`, not from
+the button: only that hook knows whether the OS share sheet or the download
+fallback was used, and reporting one method on `share_initiated` and another on
+`share_completed` would make the method breakdown unreadable. `share_initiated`
+therefore means the share was actually attempted, after the PNG rendered; a
+failed render emits neither event, because nothing was ever offered to the
+operating system.
+
+| Event                      | Capture when                         | Owner   | Properties                                                                                                                                           |
+| -------------------------- | ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `league_enquiry_submitted` | The contact form's request succeeds. | Browser | `interest`, `role`. Both closed enums, nothing else — the name, email, club name and message are §8 contact-form fields and never leave the browser. |
 
 ### 11.8 Billing and entitlements
 

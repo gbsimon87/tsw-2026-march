@@ -50,6 +50,14 @@ GET    /public/opponents/:opponentSlug              public
 Team colors accept up to three hex values. Positions are `PG`, `SG`, `SF`,
 `PF`, or `C`. Logo MIME types: JPEG, PNG, WebP.
 
+`PATCH /teams/:teamId` accepts `social` with optional `instagramHandle`,
+`tiktokHandle`, `marketingStatus` (`unrecorded`, `granted`, `declined`), and
+`marketingNote`. Only the team owner can update it. The player PATCH accepts
+the same fields plus `ageCategory` (`unspecified`, `adult`, `minor`) and
+`guardianConsent` (boolean). Setting consent to `true` records the server time;
+`false` clears it. Owner-facing team responses include the saved `social`
+record for the team and each player.
+
 ## Games
 
 ```text
@@ -176,6 +184,17 @@ Dismissal issue keys must be URL-encoded when restored. Permission rules are in
 [`permissions.md`](./permissions.md); health checks are in
 [`data-completeness.md`](./data-completeness.md).
 
+`PATCH /leagues/:leagueId` accepts the same organisation `social` fields as a
+standalone team. A league manager may edit handles, but only the league owner
+may change `marketingStatus`. `PATCH /leagues/:leagueId/teams/:leagueTeamId`
+accepts handles only: the league's record governs permission. The league-player
+PATCH accepts the same player `social` fields as a standalone team player.
+Authenticated league and team detail responses include the relevant raw
+`social` records for admin forms. Handle values are stored without `@`; the
+server normalises a leading `@` and validates Instagram's 30-character and
+TikTok's 24-character limits. `recordedAt`, `recordedByUserId`, and
+`guardianConsentAt` are set by the server and cannot be sent in an update.
+
 ## Public League Data
 
 ```text
@@ -190,6 +209,36 @@ GET    /public/leagues/:leagueSlug/teams/:teamSlug/players/:leaguePlayerId
 GET    /public/players/:userId                      public
 GET    /public/milestones/players/:leaguePlayerId   public, cursor-paginated
 ```
+
+`/leaders` returns `{ leaders, dpoyLeaders, categoryLeaders }`. The first two
+are the top ten by fantasy and defensive score. `categoryLeaders` was added for
+the shareable leaderboard cards (social backlog rank 8) and is
+`[{ key, statKey, label, abbreviation, qualifiedCount, rows }]` for points,
+rebounds and assists — each ranked over **every** qualified player, not the
+fantasy top ten, and capped at five. `rows` is empty when `qualifiedCount` is
+below three, so a caller can tell "not enough players" from "no stats at all".
+
+Public league, team, player, leader, and game-detail responses used by social
+exports include a live `marketing` block:
+
+```json
+{
+  "scope": "league",
+  "orgId": "...",
+  "orgName": "...",
+  "canFeature": false,
+  "reason": "permission_not_recorded",
+  "restrictedPlayerIds": [],
+  "handles": {}
+}
+```
+
+`reason` can also be `granted` or `permission_declined`. A granted organisation can
+still have `restrictedPlayerIds` for individually declined players or minors
+without a guardian record. `handles` is keyed by entity ID and contains only
+cleared Instagram/TikTok handles, formatted with `@`. Public responses never
+include raw permission dates, recorder IDs, or player age categories. A missing
+organisation grant blocks named exports by default.
 
 Public league-player and unified user-profile payloads include
 `milestones: { recent, total }`. The standalone milestone endpoint accepts

@@ -118,6 +118,12 @@ Completed on 5 September 2026 against the development test professional account,
 in-browser hand-off from The Pulse rather than a manually exported file. Record the non-secret
 outcome in `platform-knowledge.md`.
 
+**Alt text is a manual step on every publish.** The draft panel generates alt text and offers a copy
+button, but the adapter sends only `image_url` and `caption`, so nothing carries it to Meta. After a
+delivery publishes, set it on the post in the Instagram app (Edit → Edit alt text). See the caption
+assistant section of [`ideas.md`](../ideas.md#caption-assistant--what-still-needs-a-person) for what
+closing this would take.
+
 ## 7. Prepare the Meta App Review submission
 
 Everything so far has worked because the test account sits in the app's **test roles**, which

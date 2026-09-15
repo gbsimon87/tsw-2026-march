@@ -135,7 +135,13 @@ describe('InstagramSocialPostPanel', () => {
 
       expect(await screen.findByText(/exact game card you shared from The Pulse/i)).toBeVisible();
       expect(screen.getByText('demo-lions-tsw.png')).toBeInTheDocument();
-      expect(screen.getByLabelText(/Instagram caption/)).toHaveValue('Demo final score.');
+      // Social backlog rank 4: the operator's own line still leads, with the
+      // generated context, CTA and tags underneath it.
+      const captionField = screen.getByLabelText(/Instagram caption/);
+      // Read before submitting: a successful create clears the form.
+      const submittedCaption = captionField.value;
+      expect(submittedCaption.startsWith('Demo final score.\n')).toBe(true);
+      expect(submittedCaption).toContain('#DemoLions');
 
       // The declarations are still the operator's to make: nothing is prefilled
       // here, and the draft cannot be created until both are ticked.
@@ -150,7 +156,28 @@ describe('InstagramSocialPostPanel', () => {
       const formData = instagramMocks.createPost.mock.calls[0][0];
       expect(formData.get('file')).toBe(preparedFile);
       expect(formData.get('sourcePostId')).toBe(candidate.id);
-      expect(formData.get('caption')).toBe('Demo final score.');
+      expect(formData.get('caption')).toBe(submittedCaption);
+    });
+
+    test('offers generated alt text to copy, and does not submit it with the draft', async () => {
+      instagramMocks.createPost.mockResolvedValue({ post: socialPost() });
+      setPendingInstagramDraft(buildInstagramDraft(candidate, preparedFile));
+
+      render(<InstagramSocialPostPanel />);
+
+      // TSW's publishing adapter sends only image_url and caption, so alt text
+      // is here to be copied into Instagram rather than sent with the draft.
+      expect(
+        await screen.findByText(/Final score card: Demo Lions 0, Demo Bears 0\./)
+      ).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Copy alt text' })).toBeEnabled();
+
+      fireEvent.click(screen.getByLabelText(/This image contains labelled demo content/i));
+      fireEvent.click(screen.getByLabelText(/TSW has the right to publish/i));
+      fireEvent.submit(screen.getByRole('button', { name: 'Create review draft' }).closest('form'));
+
+      await waitFor(() => expect(instagramMocks.createPost).toHaveBeenCalledOnce());
+      expect(instagramMocks.createPost.mock.calls[0][0].get('altText')).toBeNull();
     });
 
     test('does not mark the file input required once an image is already attached', async () => {

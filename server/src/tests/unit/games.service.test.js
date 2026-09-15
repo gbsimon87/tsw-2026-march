@@ -72,6 +72,9 @@ jest.mock('../../modules/leagues/leagues.service', () => ({
 jest.mock('../../modules/leagues/leagues.repository', () => ({
   findLeagueTeamById: jest.fn(() => Promise.resolve(null)),
   findLeagueById: jest.fn(() => Promise.resolve(null)),
+  // Social backlog rank 9: buildGameMarketing reads the rosters of a completed
+  // league game to find anyone the league's permission does not cover.
+  listLeaguePlayers: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('mongoose', () => ({

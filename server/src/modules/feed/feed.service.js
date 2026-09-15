@@ -619,6 +619,52 @@ async function sanitizePost(post, viewerUserId = null, { creator: prefetchedCrea
   }
 }
 
+// Social backlog rank 9 — the export guard's answer for one feed post.
+//
+// Deliberately NOT part of the feed list payload. Consent has to be read at the
+// moment of export (a card snapshot that remembered "granted" would keep
+// publishing someone who has since withdrawn), and resolving it for twenty
+// posts nobody is about to share would undo OPT-017/PERF-003 on the Pulse's
+// hot path. The share surfaces ask for one post when their modal opens.
+//
+// Every branch reuses the public payload that already carries a `marketing`
+// block, so there is no second copy of the resolution rules here.
+async function getPostMarketing(postId) {
+  ensureObjectId(postId, 'postId');
+  const post = await findPostById(postId);
+  if (!post) {
+    throw new ApiError(404, 'Post not found');
+  }
+
+  // image/video/highlight_clip posts export no card, so they have nothing to
+  // gate. Null says "not applicable", which is not the same as "permitted".
+  const load = async () => {
+    if (post.type === 'game_card' && post.gameCard?.gameId) {
+      return getPublicGame(String(post.gameCard.gameId));
+    }
+    if (post.type === 'player_game_card' && post.playerGameCard?.gameId) {
+      return getPublicGame(String(post.playerGameCard.gameId));
+    }
+    if (post.type === 'player_card') {
+      return post.playerCard?.leaguePlayerId
+        ? getPublicLeaguePlayerById(String(post.playerCard.leaguePlayerId))
+        : getPublicPlayer(String(post.playerCard.teamId), String(post.playerCard.playerId));
+    }
+    if (post.type === 'team_card') {
+      return post.teamCard?.leagueTeamId
+        ? getPublicLeagueTeamById(String(post.teamCard.leagueTeamId))
+        : getPublicTeam(String(post.teamCard.teamId));
+    }
+    if (post.type === 'milestone' && post.milestoneCard?.leaguePlayerId) {
+      return getPublicLeaguePlayerById(String(post.milestoneCard.leaguePlayerId));
+    }
+    return null;
+  };
+
+  const payload = await load().catch(() => null);
+  return { postId: String(post._id), marketing: payload?.marketing ?? null };
+}
+
 async function listFeedPosts(viewerUserId, options = {}) {
   const limit = Math.min(options.limit || 20, 50);
   if (options.cursor) {
@@ -1557,6 +1603,7 @@ async function reverseAutoPostsForLeague(leagueId) {
 }
 
 module.exports = {
+  getPostMarketing,
   listFeedPosts,
   createImagePostForUser,
   createVideoPostForUser,

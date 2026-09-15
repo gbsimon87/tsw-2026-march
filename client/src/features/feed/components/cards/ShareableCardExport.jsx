@@ -1,12 +1,14 @@
 import { forwardRef } from 'react';
 
-import CloudinaryImage from '../../../media/CloudinaryImage';
 import {
   buildInitials,
   formatAverage,
   formatCompactDate,
   formatPercentage,
 } from '../posts/cardUtils';
+import { Board, GiltBead, Identity, Ledger, Spacer } from './boardExportParts';
+import { CarouselSlideExport, canRenderSlide } from './CarouselSlideExport';
+import { LeaderboardCardExport } from './LeaderboardCardExport';
 import { pickContextStat } from './playerGameCard';
 import { GameCardPost } from '../posts/GameCardPost';
 import { SocialPresetCard } from './SocialPresetCard';
@@ -20,16 +22,7 @@ import {
   GAME_CAPTURE_SCALE,
   GAME_FRAME_HEIGHT,
   GAME_FRAME_WIDTH,
-  HAIRLINE,
-  IDENTITY_GAP,
-  IDENTITY_MEASURE,
-  INNER_WIDTH,
-  MONO_ADVANCE,
   MONO_FONT,
-  PLATE_SIZE,
-  RULE,
-  fitDisplaySize,
-  fitLineSize,
   readableAccent,
 } from './shareExportTheme';
 
@@ -57,350 +50,6 @@ const EXPORT_STYLE = {
 
 // The identity block is a fixed height so a long name can never push the
 // ledger and footer off the board — the name sizes down to fit it instead.
-const INLAY_BLOCK = 56; // inlay rule plus the margins around it
-const SUB_BLOCK = 32;
-
-function GiltBead() {
-  return (
-    <>
-      <div style={{ height: '2px', backgroundColor: COLORS.goldLeaf }} />
-      <div style={{ height: '4px', backgroundColor: COLORS.gold }} />
-    </>
-  );
-}
-
-function Plate({ src, alt, initials, accent }) {
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width: `${PLATE_SIZE}px`,
-        height: `${PLATE_SIZE}px`,
-        flex: `0 0 ${PLATE_SIZE}px`,
-        borderRadius: '10px',
-        overflow: 'hidden',
-        backgroundColor: COLORS.field,
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '6px',
-          backgroundColor: COLORS.gold,
-          zIndex: 2,
-        }}
-      />
-      {src ? (
-        <CloudinaryImage
-          src={src}
-          alt={alt}
-          width={PLATE_SIZE}
-          height={PLATE_SIZE}
-          srcSetWidths={[256, 512]}
-          sizes={`${PLATE_SIZE}px`}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: DISPLAY_FONT,
-            fontSize: '92px',
-            color: COLORS.board,
-            backgroundColor: accent,
-          }}
-        >
-          {initials}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Identity({ accent, imageSrc, imageAlt, initials, headline, sub }) {
-  const nameBox = PLATE_SIZE - INLAY_BLOCK - (sub ? SUB_BLOCK : 0);
-  const name = fitDisplaySize(headline, {
-    measure: IDENTITY_MEASURE,
-    maxLines: 3,
-    maxHeight: nameBox,
-  });
-  const subSize = fitLineSize(sub, { measure: IDENTITY_MEASURE, max: 25, min: 16, tracking: 0.2 });
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: `${IDENTITY_GAP}px`,
-        marginTop: '54px',
-        height: `${PLATE_SIZE}px`,
-        flexShrink: 0,
-      }}
-    >
-      <Plate src={imageSrc} alt={imageAlt} initials={initials} accent={accent} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div
-          style={{
-            fontFamily: DISPLAY_FONT,
-            fontSize: `${name.fontSize}px`,
-            lineHeight: 0.86,
-            letterSpacing: '-0.02em',
-            textTransform: 'uppercase',
-            color: COLORS.paper,
-            overflowWrap: 'break-word',
-            display: '-webkit-box',
-            WebkitLineClamp: name.lines,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
-          {headline}
-        </div>
-        <div
-          style={{
-            width: '118px',
-            height: '6px',
-            margin: '28px 0 22px',
-            backgroundColor: accent,
-          }}
-        />
-        {sub ? (
-          <div
-            style={{
-              fontFamily: MONO_FONT,
-              fontWeight: 500,
-              fontSize: `${subSize}px`,
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-              color: COLORS.tan,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {sub}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-// A team name shares its row with the score, so it gets whatever width the
-// figure leaves and sizes down to fit two lines of it.
-function nameRowFit(row, rowHeight, valueSize) {
-  const valueWidth = valueSize * (MONO_ADVANCE - 0.04) * String(row.value).length;
-  return fitDisplaySize(row.label, {
-    measure: INNER_WIDTH - 32 - valueWidth - 24,
-    maxLines: 2,
-    maxHeight: rowHeight - 60,
-    lineHeight: 1,
-    max: 52,
-  });
-}
-
-// Rows are a fixed height per card type rather than flex-distributed: a
-// two-row score would otherwise stretch into two enormous voids, while the
-// four-row team summary sat right. Sizes are tuned so each type fills the frame.
-function Ledger({ rows, rowHeight, valueSize }) {
-  return (
-    <div style={{ flexShrink: 0 }}>
-      <GiltBead />
-      {rows.map((row, index) => (
-        <div
-          key={row.label}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '32px',
-            height: `${rowHeight}px`,
-            borderBottom: index === rows.length - 1 ? 'none' : RULE,
-          }}
-        >
-          {row.isName ? (
-            <div
-              style={{
-                fontFamily: DISPLAY_FONT,
-                fontSize: `${nameRowFit(row, rowHeight, valueSize).fontSize}px`,
-                lineHeight: 1,
-                letterSpacing: '-0.01em',
-                textTransform: 'uppercase',
-                color: row.muted ? COLORS.tan : COLORS.paper,
-                overflowWrap: 'break-word',
-                display: '-webkit-box',
-                WebkitLineClamp: nameRowFit(row, rowHeight, valueSize).lines,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {row.label}
-            </div>
-          ) : (
-            <div
-              style={{
-                fontFamily: MONO_FONT,
-                fontWeight: 500,
-                fontSize: '25px',
-                letterSpacing: '0.24em',
-                textTransform: 'uppercase',
-                color: COLORS.tan,
-              }}
-            >
-              {row.label}
-            </div>
-          )}
-          <div
-            style={{
-              fontFamily: MONO_FONT,
-              fontWeight: 600,
-              fontSize: `${valueSize}px`,
-              lineHeight: 0.8,
-              letterSpacing: '-0.04em',
-              fontVariantNumeric: 'tabular-nums',
-              color: row.muted ? COLORS.tan : row.lead ? COLORS.gold : COLORS.paper,
-            }}
-          >
-            {row.value}
-          </div>
-        </div>
-      ))}
-      <GiltBead />
-    </div>
-  );
-}
-
-function Board({ kicker, serial, footnote = null, children }) {
-  return (
-    <div
-      style={{
-        width: `${EXPORT_WIDTH}px`,
-        height: `${EXPORT_HEIGHT}px`,
-        backgroundColor: COLORS.ink,
-        padding: '36px',
-      }}
-    >
-      <div
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: '100%',
-          borderRadius: '20px',
-          overflow: 'hidden',
-          backgroundColor: COLORS.board,
-        }}
-      >
-        <div
-          style={{
-            position: 'relative',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '0 66px 56px',
-          }}
-        >
-          <div style={{ margin: '0 -66px 52px' }}>
-            <div style={{ height: '3px', backgroundColor: COLORS.goldLeaf }} />
-            <div style={{ height: '9px', backgroundColor: COLORS.gold }} />
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              justifyContent: 'space-between',
-              gap: '24px',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: MONO_FONT,
-                fontWeight: 600,
-                fontSize: '23px',
-                letterSpacing: '0.3em',
-                textTransform: 'uppercase',
-                color: COLORS.gold,
-              }}
-            >
-              {kicker}
-            </div>
-            {serial ? (
-              <div
-                style={{
-                  fontFamily: MONO_FONT,
-                  fontWeight: 500,
-                  fontSize: '23px',
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  color: COLORS.tan,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {serial}
-              </div>
-            ) : null}
-          </div>
-          <div style={{ height: '1px', marginTop: '26px', backgroundColor: HAIRLINE }} />
-
-          {children}
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '18px',
-              marginTop: '56px',
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ width: '16px', height: '16px', backgroundColor: COLORS.gold }} />
-            <div
-              style={{
-                fontFamily: DISPLAY_FONT,
-                fontSize: '26px',
-                letterSpacing: '0.26em',
-                textTransform: 'uppercase',
-                color: COLORS.paper,
-              }}
-            >
-              The Sporty Way
-            </div>
-          </div>
-          {/* Optional so the game, player and team exports already in the wild
-              keep the footer they were signed off with. */}
-          {footnote ? (
-            <div
-              style={{
-                marginTop: '16px',
-                fontFamily: MONO_FONT,
-                fontWeight: 500,
-                fontSize: '22px',
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: COLORS.tan,
-                flexShrink: 0,
-              }}
-            >
-              {footnote}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Spacer() {
-  return <div style={{ flex: 1, minHeight: '36px' }} />;
-}
-
 function PlayerExport({ playerCard }) {
   const accent = readableAccent(playerCard?.teamColors);
   const imageSrc = playerCard?.playerImage?.url || playerCard?.teamLogo?.url || null;
@@ -646,8 +295,36 @@ function renderCard({
   playerGameCard,
   milestoneCard,
   teamCard,
+  carouselSlide,
+  leaderboardCard,
   format = 'post',
 }) {
+  // Social backlog rank 8. The leaderboard card has its own 4:5 AND 9:16
+  // compositions on the shared board, so it never reaches SocialPresetCard.
+  if (type === 'leaderboard_card' && leaderboardCard?.rows?.length) {
+    const preset = socialExportPreset(format === 'story' ? 'story' : 'post');
+    return {
+      card: <LeaderboardCardExport leaderboardCard={leaderboardCard} format={format} />,
+      width: preset.width,
+      height: preset.height,
+      // Matches what each preset already does elsewhere: the 4:5 board is
+      // composed at 1080x1350 and captured at 2x for crispness, while the 9:16
+      // preset is composed at its exact target size and captured at 1x.
+      captureScale: format === 'story' ? 1 : BOARD_CAPTURE_SCALE,
+      safeArea: preset.safeArea,
+    };
+  }
+  // Social backlog rank 7. A slide is composed at the board's own 1080x1350 and
+  // has no story or link variant: a carousel is a 4:5 format by definition, so
+  // the preset branch below is deliberately not consulted for it.
+  if (type === 'carousel_slide' && canRenderSlide(carouselSlide)) {
+    return {
+      card: <CarouselSlideExport carouselSlide={carouselSlide} />,
+      width: EXPORT_WIDTH,
+      height: EXPORT_HEIGHT,
+      captureScale: BOARD_CAPTURE_SCALE,
+    };
+  }
   if (format !== 'post' && SOCIAL_EXPORT_PRESETS[format]) {
     const cardData = {
       game_card: gameCard,

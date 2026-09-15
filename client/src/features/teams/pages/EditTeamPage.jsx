@@ -4,6 +4,8 @@ import { PageHeader } from '../../../components/PageHeader';
 import placeholderLogo from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { teamsApi } from '../api/teamsApi';
+import { MarketingPermissionPanel } from '../../social/components/MarketingPermissionPanel';
+import { PlayerSocialPanel } from '../../social/components/PlayerSocialPanel';
 
 const POSITION_OPTIONS = ['', 'PG', 'SG', 'SF', 'PF', 'C'];
 const EMPTY_COLOR = '#000000';
@@ -88,6 +90,8 @@ export function EditTeamPage() {
   const [isRosterExpanded, setIsRosterExpanded] = useState(false);
   const [error, setError] = useState('');
   const [logoError, setLogoError] = useState('');
+  const [socialError, setSocialError] = useState('');
+  const [isSavingSocial, setIsSavingSocial] = useState(false);
   const [claimRequests, setClaimRequests] = useState([]);
   const [reviewingClaimId, setReviewingClaimId] = useState('');
 
@@ -217,6 +221,25 @@ export function EditTeamPage() {
     } finally {
       setActivePlayerId('');
     }
+  }
+
+  async function onSaveSocial(social) {
+    setSocialError('');
+    setIsSavingSocial(true);
+    try {
+      const response = await teamsApi.update(teamId, { social });
+      setTeam(response.team);
+    } catch (submitError) {
+      setSocialError(submitError.message || 'Failed to save social identity');
+    } finally {
+      setIsSavingSocial(false);
+    }
+  }
+
+  async function onSavePlayerSocial(playerId, payload) {
+    const response = await teamsApi.updatePlayer(teamId, playerId, payload);
+    setTeam(response.team);
+    setPlayers(hydratePlayers(response.team?.players));
   }
 
   async function onRemovePlayer(playerId) {
@@ -516,6 +539,18 @@ export function EditTeamPage() {
         </section>
       </form>
 
+      {team ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <MarketingPermissionPanel
+            social={team.social}
+            scopeLabel="team"
+            saving={isSavingSocial}
+            error={socialError}
+            onSave={onSaveSocial}
+          />
+        </section>
+      ) : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Player profile requests</h2>
@@ -673,6 +708,19 @@ export function EditTeamPage() {
                 </div>
               );
             })}
+            {players.length > 0 ? (
+              <div className="space-y-3 border-t border-slate-200 pt-4">
+                <h3 className="font-semibold text-slate-900">Player social identities</h3>
+                {players.map((player) => (
+                  <PlayerSocialPanel
+                    key={player.id}
+                    player={player}
+                    onSave={onSavePlayerSocial}
+                    disabled={Boolean(activePlayerId)}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

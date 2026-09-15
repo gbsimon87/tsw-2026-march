@@ -19,6 +19,18 @@ const apiMocks = vi.hoisted(() => ({
   createGameCardPost: vi.fn(),
   createPlayerCardPost: vi.fn(),
   createTeamCardPost: vi.fn(),
+  // Social backlog rank 9: the export guard asks for this post's permission
+  // before a share surface will produce anything.
+  getPostMarketing: vi.fn(async () => ({
+    marketing: {
+      canFeature: true,
+      reason: 'granted',
+      scope: 'league',
+      orgName: 'Southside Hoops',
+      restrictedPlayerIds: [],
+      handles: {},
+    },
+  })),
 }));
 
 const authMocks = vi.hoisted(() => ({
@@ -259,15 +271,19 @@ describe('FeedPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Prepare for Instagram' }));
 
     expect(await screen.findByText('Instagram admin')).toBeInTheDocument();
-    expect(takePendingInstagramDraft()).toEqual({
+    const draft = takePendingInstagramDraft();
+    expect(draft).toMatchObject({
       file,
       sourcePostId: '507f1f77bcf86cd799439011',
       sourceLabel: 'TSW Blue vs Falcons',
-      caption: 'Demo final score.',
       // jsdom's origin is http, which the server rejects for attribution, so the
       // hand-off contributes no URL rather than one that would 400 on submit.
       attributionUrl: '',
     });
+    // Social backlog rank 4: the card's own caption leads the generated copy,
+    // and the alt text rides along for the operator to paste.
+    expect(draft.caption.startsWith('Demo final score.\n')).toBe(true);
+    expect(draft.altText).toBe('Final score card: TSW Blue 70, Falcons 61.');
   });
 
   test('opens composer automatically from compose query param', async () => {

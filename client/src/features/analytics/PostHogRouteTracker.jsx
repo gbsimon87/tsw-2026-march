@@ -7,10 +7,18 @@ import {
   capturePostHogPageView,
   identifyPostHogUser,
   initPostHog,
+  registerPostHogAttribution,
   resetPostHogUser,
   setPostHogCommonContext,
 } from '../../lib/posthog';
 import { useScrollDepth } from './useScrollDepth';
+import {
+  attributionProperties,
+  captureFirstTouch,
+  isCampaignLanding,
+  persistFirstTouchOnConsent,
+} from './attribution';
+import { trackEvent } from './trackEvent';
 import { getRoutePattern } from './routePatterns';
 
 function getSafeUserProperties(user) {
@@ -30,8 +38,16 @@ export function PostHogRouteTracker() {
   const maxScrollDepthRef = useRef(0);
   const identifiedUserIdRef = useRef('');
   const [consentRevision, setConsentRevision] = useState(0);
+  const landingReportedRef = useRef(false);
   const routePattern = useMemo(() => getRoutePattern(location.pathname), [location.pathname]);
   const routeKey = location.pathname;
+
+  // Social backlog rank 5. Read during the FIRST render, not in an effect: an
+  // effect runs after the router has had a chance to redirect, and a redirect
+  // replaces the URL — taking `?utm_source=instagram` with it. Reading the
+  // current URL costs no storage, so this needs no consent decision; only
+  // persisting it does, which captureFirstTouch gates for itself.
+  const [firstTouch] = useState(() => captureFirstTouch());
 
   const onScrollDepthReached = useCallback((depth) => {
     maxScrollDepthRef.current = Math.max(maxScrollDepthRef.current, depth);
@@ -85,6 +101,17 @@ export function PostHogRouteTracker() {
       is_authenticated: Boolean(user?.id),
     };
 
+    // Social backlog rank 5. Register before the pageview so the very first
+    // event of an attributed session already carries its channel. Both calls
+    // are no-ops until PostHog is initialised and consented, and re-running
+    // them after a consent change is how an accepted visitor gets attributed
+    // without a reload.
+    const attribution = attributionProperties(firstTouch);
+    if (attribution) {
+      registerPostHogAttribution(attribution);
+      persistFirstTouchOnConsent();
+    }
+
     if (capturePostHogPageView(pageProps)) {
       activePageRef.current = {
         key: pageKey,
@@ -92,10 +119,22 @@ export function PostHogRouteTracker() {
         startedAt: performance.now(),
         left: false,
       };
+
+      // Once per session, on the page the visitor actually arrived at. A second
+      // landing event from a later route would make the funnel's first step
+      // count navigations instead of arrivals.
+      if (!landingReportedRef.current && isCampaignLanding(firstTouch)) {
+        landingReportedRef.current = true;
+        trackEvent('social_landing_viewed', {
+          ...attribution,
+          is_tagged: firstTouch.is_tagged,
+          route_pattern: routePattern,
+        });
+      }
     } else {
       activePageRef.current = null;
     }
-  }, [consentRevision, leaveActivePage, location.pathname, routePattern, user?.id]);
+  }, [consentRevision, firstTouch, leaveActivePage, location.pathname, routePattern, user?.id]);
 
   useEffect(() => {
     if (isLoading) {
@@ -116,7 +155,15 @@ export function PostHogRouteTracker() {
       // is a no-op before consent, and setting the ref regardless would make
       // the consentRevision re-run below think the work was already done —
       // leaving a signed-in user anonymous for the rest of the session.
-      if (identifyPostHogUser(user.id, getSafeUserProperties(user))) {
+      // Attribution goes in the $set_once bag: the channel that first found
+      // this person is fixed, however they arrive in later sessions.
+      if (
+        identifyPostHogUser(
+          user.id,
+          getSafeUserProperties(user),
+          attributionProperties(firstTouch) || undefined
+        )
+      ) {
         identifiedUserIdRef.current = user.id;
       }
       return;
@@ -129,7 +176,7 @@ export function PostHogRouteTracker() {
     setPostHogCommonContext({ isAuthenticated: false, isInternal: false, isDemo: false });
     // consentRevision re-runs this after the visitor accepts, so someone
     // already signed in is identified without needing a page reload.
-  }, [isLoading, user, consentRevision]);
+  }, [isLoading, user, consentRevision, firstTouch]);
 
   return null;
 }

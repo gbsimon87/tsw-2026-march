@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { AppRouter } from './AppRouter';
+import { AppRouter, signedOutDestination } from './AppRouter';
 
 function renderWithProviders(children) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -224,5 +224,28 @@ describe('AppRouter', () => {
         '/register?redirectTo=%2Fpulse%3Fcompose%3D1'
       );
     });
+  });
+});
+
+// Social backlog rank 5: the "login dead end" the item names. A gated route
+// used to send every signed-out visitor to a bare `/login`, losing where they
+// were going and showing a login form to people who have no account.
+describe('signedOutDestination', () => {
+  test('carries the intended destination through sign-in', () => {
+    expect(signedOutDestination('/teams', '', false)).toBe('/login?redirectTo=%2Fteams');
+    expect(signedOutDestination('/admin/leagues/l1', '?tab=roster', false)).toBe(
+      '/login?redirectTo=%2Fadmin%2Fleagues%2Fl1%3Ftab%3Droster'
+    );
+  });
+
+  test('offers registration to a visitor who arrived from a social post', () => {
+    expect(signedOutDestination('/teams', '', true)).toBe('/register?redirectTo=%2Fteams');
+  });
+
+  test('refuses to carry an off-site destination', () => {
+    // safeInternalPath rejects protocol-relative and backslash-smuggled forms,
+    // so a crafted path degrades to the plain form rather than an open redirect.
+    expect(signedOutDestination('//evil.example', '', false)).toBe('/login');
+    expect(signedOutDestination('/\\evil.example', '', false)).toBe('/login');
   });
 });

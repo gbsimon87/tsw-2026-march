@@ -3,6 +3,8 @@ import { feedApi } from '../../feed/api/feedApi';
 import { buildGameCardLabel } from '../../feed/components/posts/cardUtils';
 import { GameCardPost } from '../../feed/components/posts/GameCardPost';
 import { instagramApi } from '../api/instagramApi';
+import { buildCaptionKit, buildCardAttributionUrl } from '../captionAssistant';
+import { CopyButton } from './CopyButton';
 import { takePendingInstagramDraft } from '../instagramDraftHandoff';
 
 const STATUS_LABELS = {
@@ -89,6 +91,21 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
     return options;
   }, [candidates, preparedDraft]);
   const filePreviewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file]);
+
+  // Social backlog rank 4. A hand-off from The Pulse arrives with its copy
+  // already generated; an operator who picked a source here and uploaded the PNG
+  // themselves gets the same copy generated from the card they selected.
+  const captionKit = useMemo(() => {
+    if (!selectedCandidate) return null;
+    return buildCaptionKit(selectedCandidate, {
+      attributionUrl: buildCardAttributionUrl(selectedCandidate.gameCard, window.location.origin),
+      lead: selectedCandidate.caption,
+    });
+  }, [selectedCandidate]);
+  const generatedCaption = captionKit?.caption || preparedDraft?.caption || '';
+  // The prepared draft wins: its card can be older than the 50 the picker lists,
+  // in which case there is no candidate to regenerate from.
+  const altText = preparedDraft?.altText || captionKit?.altText || '';
 
   useEffect(
     () => () => {
@@ -288,6 +305,34 @@ export function InstagramSocialPostPanel({ publishingEnabled = false }) {
             />
             <span className="mt-1 block text-xs text-slate-500">{caption.length}/2200</span>
           </label>
+          <div className="-mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCaption(generatedCaption)}
+              disabled={!generatedCaption || caption === generatedCaption}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+            >
+              Generate caption from this card
+            </button>
+            <CopyButton value={caption} label="caption" />
+          </div>
+
+          {/* Alt text is not part of the caption, and TSW's publishing adapter
+              does not send Instagram's `alt_text` container field, so this is
+              here to be copied into the app rather than sent with the draft. */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-slate-800">Alt text</p>
+              <CopyButton value={altText} label="alt text" />
+            </div>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {altText || 'Select a source card to generate alt text.'}
+            </p>
+            <p className="text-xs text-slate-500">
+              Paste into Instagram&apos;s accessibility field when you publish. It is not part of
+              the caption and is not sent with this draft.
+            </p>
+          </div>
 
           <label className="block text-sm font-medium text-slate-800">
             Attribution link (optional)

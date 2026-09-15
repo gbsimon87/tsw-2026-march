@@ -178,7 +178,8 @@ describe('posthog lib', () => {
     resetPostHogUser();
 
     expect(posthogMocks.capture).toHaveBeenCalledWith('$pageview', { path: '/feed' });
-    expect(posthogMocks.identify).toHaveBeenCalledWith('user-1', { plan: 'pro' });
+    // The third argument is PostHog's $set_once bag; this caller passed none.
+    expect(posthogMocks.identify).toHaveBeenCalledWith('user-1', { plan: 'pro' }, undefined);
     expect(posthogMocks.reset).toHaveBeenCalledTimes(1);
   });
 

@@ -43,30 +43,48 @@ export function useShareImage() {
     }
   }, []);
 
+  // Social backlog rank 5. Both share events are emitted from here rather than
+  // from the button, because only this function knows which path was taken —
+  // and reporting one method on `share_initiated` and a different one on
+  // `share_completed` would make the method breakdown unreadable.
+  //
+  // `share_initiated` therefore means "the share was actually attempted", after
+  // the PNG rendered. A render that fails emits neither event, which is the
+  // honest reading: nothing was ever offered to the operating system.
   const shareImage = useCallback(
-    async (node, fileName) => {
+    async (node, fileName, onShareEvent) => {
+      const report = (event, properties) => onShareEvent?.(event, properties);
+
       const file = await createImageFile(node, fileName);
-      if (!file) return;
+      if (!file) return null;
       // createImageFile settles on 'success' for the hand-off's sake; the share
       // is still in flight, so stay busy until the sheet resolves.
       setStatus('generating');
 
       const canShareFiles =
         typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
+      const method = canShareFiles && typeof navigator.share === 'function' ? 'native' : 'download';
 
-      if (canShareFiles && typeof navigator.share === 'function') {
+      report('share_initiated', { method });
+
+      if (method === 'native') {
         try {
           await navigator.share({ files: [file] });
           setStatus('success');
+          // A native share sheet cannot prove a recipient received anything —
+          // only that it opened. docs/posthog.md §11.7 requires that meaning to
+          // be stated in the PostHog definition, not silently assumed here.
+          report('share_completed', { method });
+          return method;
         } catch (error) {
-          // User dismissed the share sheet — not an error.
+          // User dismissed the share sheet — not an error, and not a share.
           if (error && error.name === 'AbortError') {
             setStatus('idle');
           } else {
             setStatus('error');
           }
+          return null;
         }
-        return;
       }
 
       // Download fallback (desktop / unsupported).
@@ -75,8 +93,10 @@ export function useShareImage() {
       anchor.href = url;
       anchor.download = fileName;
       anchor.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
       setStatus('success');
+      report('share_completed', { method });
+      return method;
     },
     [createImageFile]
   );

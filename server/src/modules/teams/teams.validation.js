@@ -1,5 +1,10 @@
 const { z } = require('zod');
 
+const {
+  playerSocialIdentityUpdateSchema,
+  socialIdentityUpdateSchema,
+} = require('../shared/socialIdentity.validation');
+
 const playerPositionSchema = z.enum(['PG', 'SG', 'SF', 'PF', 'C']);
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color');
 const optionalTrimmedString = z
@@ -71,6 +76,7 @@ const updateTeamSchema = z
     colors: z.array(hexColorSchema).max(3).optional(),
     homeVenue: homeVenueSchema.optional(),
     removeLogo: z.boolean().optional(),
+    social: socialIdentityUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
@@ -84,6 +90,7 @@ const updatePlayerSchema = z
     jerseyNumber: z.number().int().min(0).max(999).nullable().optional(),
     position: playerPositionSchema.nullable().optional(),
     isActive: z.boolean().optional(),
+    social: playerSocialIdentityUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

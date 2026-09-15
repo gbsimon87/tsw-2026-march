@@ -62,6 +62,8 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
+import { MarketingPermissionPanel } from '../../social/components/MarketingPermissionPanel';
+import { PlayerSocialPanel } from '../../social/components/PlayerSocialPanel';
 
 export function AdminLeagueTeamPage() {
   const { leagueId, leagueTeamId } = useParams();
@@ -86,6 +88,8 @@ export function AdminLeagueTeamPage() {
   const [playerJerseyNumber, setPlayerJerseyNumber] = useState('');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
+  const [socialError, setSocialError] = useState('');
+  const [isSavingSocial, setIsSavingSocial] = useState(false);
 
   useEffect(() => {
     Promise.all([leaguesApi.getTeam(leagueId, leagueTeamId), leaguesApi.getById(leagueId)])
@@ -166,6 +170,19 @@ export function AdminLeagueTeamPage() {
     } catch (submitError) {
       setError(submitError.message || 'Failed to update player');
       throw submitError;
+    }
+  }
+
+  async function onSaveSocial(social) {
+    setSocialError('');
+    setIsSavingSocial(true);
+    try {
+      const response = await leaguesApi.updateTeam(leagueId, leagueTeamId, { social });
+      setTeam((current) => ({ ...current, social: response.team.social }));
+    } catch (submitError) {
+      setSocialError(submitError.message || 'Failed to save social handles');
+    } finally {
+      setIsSavingSocial(false);
     }
   }
 
@@ -435,6 +452,19 @@ export function AdminLeagueTeamPage() {
         </p>
       ) : null}
 
+      {canEditTeamName ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <MarketingPermissionPanel
+            social={team.social}
+            scopeLabel="team"
+            handlesOnly
+            saving={isSavingSocial}
+            error={socialError}
+            onSave={onSaveSocial}
+          />
+        </section>
+      ) : null}
+
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         <div
           className="grid border-b border-slate-200"
@@ -470,6 +500,16 @@ export function AdminLeagueTeamPage() {
                   onSavePlayer={updatePlayer}
                 />
               </div>
+              {canEditRoster ? (
+                <section className="space-y-3" aria-label="Player social identities">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Player social identities
+                  </h3>
+                  {(team.roster || []).map((player) => (
+                    <PlayerSocialPanel key={player.id} player={player} onSave={updatePlayer} />
+                  ))}
+                </section>
+              ) : null}
               {canEditRoster ? (
                 <form
                   onSubmit={addPlayer}

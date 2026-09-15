@@ -8,6 +8,11 @@ const {
   finalizeTeamStatSummary,
 } = require('../shared/statSummary');
 const {
+  applySocialUpdate,
+  resolveMarketingPermission,
+  sanitizeSocialForAdmin,
+} = require('../shared/socialIdentity');
+const {
   createTeam,
   listTeamsByOwner,
   findTeamByIdAndOwner,
@@ -83,10 +88,27 @@ function sanitizeTeam(team) {
       position: normalizePlayerPosition(player.position),
       isActive: Boolean(player.isActive),
       isClaimed: Boolean(player.claimedByUserId),
+      // Social backlog rank 9: owner-facing only — this shape is returned by
+      // the authenticated team endpoints, never by getPublicTeam below.
+      social: sanitizeSocialForAdmin(player, { withAge: true }),
     })),
+    social: sanitizeSocialForAdmin(team),
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
   };
+}
+
+// Social backlog rank 9. A standalone team has no league above it, so the team
+// itself is the organisation whose owner records permission. Resolved from the
+// live document on every request — see buildLeagueMarketing for why a snapshot
+// would be the wrong place for consent.
+function buildTeamMarketing(team, players = []) {
+  return resolveMarketingPermission({
+    org: team,
+    teams: [team],
+    subjects: players,
+    scope: 'team',
+  });
 }
 
 function normalizeHexColor(value) {
@@ -620,6 +642,7 @@ async function getPublicTeam(teamId) {
       entitlements: resolveForTeam(team).entitlements,
       players,
     },
+    marketing: buildTeamMarketing(team, team.players || []),
     // OPT-013: materialised read (indexed find); falls back to computing from
     // the games/team already loaded above on a miss (no re-fetch needed).
     summary: await getTeamSeasonSummary(team._id, { team, games }),
@@ -662,6 +685,7 @@ async function getPublicPlayer(teamId, playerId) {
       homeVenue: sanitizeVenue(team.homeVenue),
       entitlements,
     },
+    marketing: buildTeamMarketing(team, [player]),
     player: sanitizePublicPlayer(player),
     summary: buildPublicPlayerSummary(gameRows),
     games: gameRows,
@@ -945,6 +969,12 @@ async function updateTeamForUser(userId, teamId, payload) {
     team.homeVenue = normalizeVenue(payload.homeVenue);
   }
 
+  // findTeamByIdAndOwner above already restricts this to the owner, who is the
+  // party that attests to holding permission for this team's players.
+  if (payload.social) {
+    applySocialUpdate(team, payload.social, { actorUserId: userId });
+  }
+
   if (payload.removeLogo && team.logo?.publicId) {
     const previousLogoPublicId = team.logo.publicId;
     team.logo = null;
@@ -1091,6 +1121,10 @@ async function updatePlayerOnTeam(userId, teamId, playerId, payload) {
 
   if (Object.prototype.hasOwnProperty.call(payload, 'isActive')) {
     player.isActive = payload.isActive;
+  }
+
+  if (payload.social) {
+    applySocialUpdate(player, payload.social, { actorUserId: userId, withAge: true });
   }
 
   await saveTeam(team);

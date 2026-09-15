@@ -15,6 +15,7 @@ import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
 import { GameFormatFields } from '../../games/components/GameFormatFields';
 import { DEFAULT_GAME_FORMAT } from '../../games/gameClock';
+import { MarketingPermissionPanel } from '../../social/components/MarketingPermissionPanel';
 
 const LEAGUE_EXPORT_DATASETS = [
   { value: 'all', label: 'Everything' },
@@ -154,6 +155,7 @@ export function AdminLeaguePage() {
   const [leagueNameInput, setLeagueNameInput] = useState('');
   const [isEditingLeagueName, setIsEditingLeagueName] = useState(false);
   const [isUpdatingLeague, setIsUpdatingLeague] = useState(false);
+  const [socialError, setSocialError] = useState('');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
   const [leagueManagers, setLeagueManagers] = useState([]);
@@ -498,6 +500,19 @@ export function AdminLeaguePage() {
       });
     } catch (submitError) {
       setError(submitError.message || 'Failed to update default game format');
+    } finally {
+      setIsUpdatingLeague(false);
+    }
+  }
+
+  async function onSaveSocial(social) {
+    setSocialError('');
+    setIsUpdatingLeague(true);
+    try {
+      const response = await leaguesApi.update(league.id, { social });
+      setLeague((current) => ({ ...current, social: response.league.social }));
+    } catch (submitError) {
+      setSocialError(submitError.message || 'Failed to save social identity');
     } finally {
       setIsUpdatingLeague(false);
     }
@@ -1382,6 +1397,17 @@ export function AdminLeaguePage() {
                 Current visibility:{' '}
                 <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
               </p>
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <MarketingPermissionPanel
+                  social={league.social}
+                  scopeLabel="league"
+                  canRecordPermission={isOwner}
+                  saving={isUpdatingLeague}
+                  error={socialError}
+                  onSave={onSaveSocial}
+                />
+              </div>
 
               <div id="season" className="mt-8 scroll-mt-6 border-t border-slate-200 pt-6">
                 <GameFormatFields

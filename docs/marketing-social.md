@@ -68,16 +68,16 @@ stop using it.
 The social plan should be honest about the difference between app-generated,
 app-sourced, and manual assets.
 
-| Current asset                      | What exists                                                                           | Social limitation                                                                                                 | Immediate use                                                          |
-| ---------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Game card                          | Final score, teams, date, top-performer sentence, and summary stats                   | Share export reuses an in-app card; it has no format selector, social hook, tagged link, or 9:16 version          | Instagram single image or first carousel slide; TikTok photo post      |
-| Player card                        | Player photo/fallback, team, jersey number, and season PPG/RPG/APG                    | It is a season spotlight, not a single-game stat line; a team logo can visually substitute for a missing portrait | Use for “player profile” content, not “Player of the Game”             |
-| Team card                          | Team identity, total points, and shooting percentages                                 | No record, league rank, recent form headline, or social context                                                   | Occasional team snapshot; not a weekly pillar yet                      |
-| Milestone card                     | Automatically derived milestone, player/team identity, and source game in the Pulse   | Not included in `ShareableCardExport`; the available player avatar is not rendered on the milestone card          | Screenshot/export manually until milestone parity is built             |
-| Highlight clip                     | Up to five eligible timestamped YouTube moments can be generated for a finalised game | The feed uses a landscape YouTube embed and does not export a vertical clip with text, result, or CTA             | Use only when permission and a usable source video exist               |
-| Box score, shot map, recap, replay | Rich basketball detail on the game page                                               | Screenshot-friendly, but not packaged as a social carousel                                                        | Feed a reusable 3-4 slide breakdown template                           |
-| Season trends                      | Last-five and season time-series views                                                | No purpose-built social export                                                                                    | Use for occasional player-progress posts once the sample is meaningful |
-| Live tracker                       | A visually clear tap-to-record interaction                                            | Requires a short screen recording and simple crop                                                                 | Best low-effort Reel/TikTok product demo                               |
+| Current asset                      | What exists                                                                                                 | Social limitation                                                                                                 | Immediate use                                                          |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Game card                          | Final score, teams, date, top-performer sentence, and summary stats                                         | Share export reuses an in-app card; it has no format selector, social hook, tagged link, or 9:16 version          | Instagram single image or first carousel slide; TikTok photo post      |
+| Player card                        | Player photo/fallback, team, jersey number, and season PPG/RPG/APG                                          | It is a season spotlight, not a single-game stat line; a team logo can visually substitute for a missing portrait | Use for “player profile” content, not “Player of the Game”             |
+| Team card                          | Team identity, total points, and shooting percentages                                                       | No record, league rank, recent form headline, or social context                                                   | Occasional team snapshot; not a weekly pillar yet                      |
+| Milestone card                     | Automatically derived milestone, player/team identity, and source game in the Pulse                         | Not included in `ShareableCardExport`; the available player avatar is not rendered on the milestone card          | Screenshot/export manually until milestone parity is built             |
+| Highlight clip                     | Timestamped YouTube moments and a ten-second vertical stat-receipt export from a matching local source file | A YouTube embed itself cannot supply downloadable video; the operator must supply and credit the original file    | Use only when permission and a usable source video exist               |
+| Box score, shot map, recap, replay | Rich basketball detail on the game page                                                                     | Screenshot-friendly, but not packaged as a social carousel                                                        | Feed a reusable 3-4 slide breakdown template                           |
+| Season trends                      | Last-five and season time-series views                                                                      | No purpose-built social export                                                                                    | Use for occasional player-progress posts once the sample is meaningful |
+| Live tracker                       | A visually clear tap-to-record interaction                                                                  | Requires a short screen recording and simple crop                                                                 | Best low-effort Reel/TikTok product demo                               |
 
 The existing share renderer targets a 1080x1350 DOM node but captures at twice
 scale. Treat the file as a high-resolution 4:5 image for now; do not claim exact
@@ -182,7 +182,7 @@ Example:
 
 > London basketball player stat line: 28 PTS, 9 REB, 6 AST. The fourth-quarter
 > run made the difference. What stands out most — the scoring or the all-round
-> line? Save the box score. #LondonBasketball #UKBasketball
+> line? Save the box score. #LondonBasketball
 
 For TikTok, put the exact subject phrase in the on-screen headline and first
 caption line, such as “London basketball player stats” or “How to track a
@@ -239,10 +239,10 @@ reuse the same ordered images. “IG Reel + TikTok video” means upload the sam
 
 ### Week 6 — 21-27 September: Join Highlights To Evidence
 
-| Date/platform                                           | Post and contents                                                                            | Audience/purpose                                              | Hook                                             | Caption structure                                                        | Automation/manual                                   |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------- |
-| **Tue 22 Sep, 19:00** — IG Reel + TikTok                | 8-12 second consented/demo highlight; open with player/stat, show play, close on final score | Players/fans; test whether the “receipt” adds value to a clip | **“The clip — and the stat line behind it.”**    | Play description → verified line/result → credit source → share CTA      | Current timestamp/partial vertical edit; **25 min** |
-| **Fri 25 Sep, 12:30** — IG carousel + TikTok photo post | Public table, game card, and player leaders as one coherent league-weekend output            | Organisers; demonstrate professionalism through output        | **“What should players see by Monday morning?”** | Three expected outputs → ask organisers what takes longest → enquiry CTA | Current/partial; **20 min**                         |
+| Date/platform                                           | Post and contents                                                                            | Audience/purpose                                              | Hook                                             | Caption structure                                                        | Automation/manual                                          |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| **Tue 22 Sep, 19:00** — IG Reel + TikTok                | 8-12 second consented/demo highlight; open with player/stat, show play, close on final score | Players/fans; test whether the “receipt” adds value to a clip | **“The clip — and the stat line behind it.”**    | Play description → verified line/result → credit source → share CTA      | Rank 10 export from local source; review and post manually |
+| **Fri 25 Sep, 12:30** — IG carousel + TikTok photo post | Public table, game card, and player leaders as one coherent league-weekend output            | Organisers; demonstrate professionalism through output        | **“What should players see by Monday morning?”** | Three expected outputs → ask organisers what takes longest → enquiry CTA | Current/partial; **20 min**                                |
 
 ### Week 7 — 28 September-4 October: Leaders And Progress
 
@@ -327,12 +327,14 @@ Use **3-5** per post: one location, one or two community/competition terms, one
 content term, and optionally the brand. Check that each is active and relevant in
 the app before adding it.
 
-| Post                     | Example set                                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| London game/player       | `#LondonBasketball #UKBasketball #GrassrootsBasketball #BasketballStats`                                            |
-| Analysis                 | `#UKBasketball #BasketballAnalysis #ShotChart #BasketballStats`                                                     |
-| Organiser                | `#UKBasketball #GrassrootsBasketball #SportsTechnology #LeagueManagement`                                           |
-| University/local variant | Replace the broad location with the real borough, city, university, or competition tag; do not stack all locations. |
+| Post                                                        | Example set                                                                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| London game/player                                          | `#LondonBasketball #GrassrootsBasketball #BasketballStats`                                                          |
+| Analysis                                                    |
+| `#BasketballAnalysis #ShotChart #BasketballStats`           |
+| Organiser                                                   |
+| `#GrassrootsBasketball #SportsTechnology #LeagueManagement` |
+| University/local variant                                    | Replace the broad location with the real borough, city, university, or competition tag; do not stack all locations. |
 
 `#TheSportyWay` can catalogue brand posts but should not be expected to generate
 discovery. Do not use generic blocks such as `#fyp #viral #explorepage` unless the

@@ -9,6 +9,11 @@ const {
   createEmptyPlayerStatLine,
   applyEventToPlayerStatLine,
 } = require('../shared/statSummary');
+const {
+  applySocialUpdate,
+  resolveMarketingPermission,
+  sanitizeSocialForAdmin,
+} = require('../shared/socialIdentity');
 const { TEAM_SIDES } = require('../shared/stats.constants');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { captureUserEventDetached } = require('../analytics/analytics.service');
@@ -188,6 +193,10 @@ function sanitizeLeague(league, options = {}) {
     billing: normalizeLeagueBilling(league),
     createdAt: league.createdAt,
     updatedAt: league.updatedAt,
+    // Social backlog rank 9. The full record — who recorded the permission and
+    // when — is owner-facing only; public payloads carry the resolved
+    // `marketing` block instead (buildLeagueMarketing below).
+    ...(options.includeSocialRecord ? { social: sanitizeSocialForAdmin(league) } : {}),
     ...(options.includeTeams ? { teams: options.includeTeams } : {}),
     ...(options.includeStandings ? { standings: options.includeStandings } : {}),
     ...(options.includeGames ? { games: options.includeGames } : {}),
@@ -228,6 +237,12 @@ function sanitizeLeaguePlayer(player, usersById = new Map(), options = {}) {
     claimedUserId: player.claimedByUserId ? String(player.claimedByUserId) : null,
     claimedBadgeLabel: player.claimedByUserId ? 'Claimed profile' : null,
     avatarUrl: transformCloudinaryUrl(claimedUser?.avatar?.url || null),
+    // Age category and guardian consent never leave an owner-facing payload:
+    // publishing "minor" beside a name is a worse disclosure than the one the
+    // permission exists to prevent.
+    ...(options.includeSocialRecord
+      ? { social: sanitizeSocialForAdmin(player, { withAge: true }) }
+      : {}),
     ...(options.includePrivateClaim
       ? {
           claimedBy: player.claimedByUserId
@@ -290,6 +305,7 @@ function sanitizeLeagueTeam(team, options = {}) {
     status: team.status,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
+    ...(options.includeSocialRecord ? { social: sanitizeSocialForAdmin(team) } : {}),
     ...(options.includeRosterCounts
       ? {
           rosterCount: options.includeRosterCounts.rosterCount,
@@ -319,6 +335,19 @@ function sanitizeLeagueManager(manager, usersById = new Map()) {
     userEmail: user?.email || null,
     createdAt: manager.createdAt,
   };
+}
+
+// Social backlog rank 9. Every public league payload an export surface reads
+// carries this block, resolved from the LIVE documents on each request —
+// consent that was persisted into a card snapshot would keep publishing a
+// player who has since withdrawn.
+function buildLeagueMarketing(league, { teams = [], players = [] } = {}) {
+  return resolveMarketingPermission({
+    org: league,
+    teams,
+    subjects: players,
+    scope: 'league',
+  });
 }
 
 async function assertLeagueExists(leagueId) {
@@ -756,8 +785,10 @@ async function getLeagueForUser(userId, leagueId, requestedSeasonId) {
   });
 
   return sanitizeLeague(league, {
+    includeSocialRecord: true,
     includeTeams: teams.map((team) =>
       sanitizeLeagueTeam(team, {
+        includeSocialRecord: true,
         includeMembers: managersByTeamId.get(String(team._id)) || [],
       })
     ),
@@ -795,6 +826,7 @@ async function getPublicLeagueBySlug(slug, viewerUserId = null, requestedSeasonI
     // Powers the public season selector (docs/league-seasons.md
     // decision #9) without a second round trip from the client.
     seasons: seasons.map(sanitizeSeason),
+    marketing: buildLeagueMarketing(league, { teams }),
   };
 }
 
@@ -810,6 +842,13 @@ async function updateLeagueForUser(userId, leagueId, payload) {
 
   if (payload.defaultGameFormat && role !== 'owner') {
     throw new ApiError(403, 'Only the league owner can change the default game format');
+  }
+
+  // Recording marketing permission is an attestation that the league holds
+  // consent from its players and their guardians. That is the owner's to make,
+  // not a league manager's — the same line the default game format sits on.
+  if (payload.social?.marketingStatus !== undefined && role !== 'owner') {
+    throw new ApiError(403, 'Only the league owner can record marketing permission');
   }
 
   if (payload.name) {
@@ -836,6 +875,10 @@ async function updateLeagueForUser(userId, leagueId, payload) {
     league.defaultGameFormat = payload.defaultGameFormat;
   }
 
+  if (payload.social) {
+    applySocialUpdate(league, payload.social, { actorUserId: userId });
+  }
+
   const wasPublic = Boolean(league.isPublic);
   if (Object.prototype.hasOwnProperty.call(payload, 'isPublic')) {
     league.isPublic = Boolean(payload.isPublic);
@@ -859,7 +902,7 @@ async function updateLeagueForUser(userId, leagueId, payload) {
     });
   }
 
-  return sanitizeLeague(league);
+  return sanitizeLeague(league, { includeSocialRecord: true });
 }
 
 async function archiveLeagueForUser(userId, leagueId) {
@@ -979,8 +1022,12 @@ async function getLeagueTeamForUser(userId, leagueId, leagueTeamId) {
       : null;
 
   return sanitizeLeagueTeam(team, {
+    includeSocialRecord: true,
     includeRoster: players.map((player) =>
-      sanitizeLeaguePlayer(player, usersById, { includePrivateClaim: true })
+      sanitizeLeaguePlayer(player, usersById, {
+        includePrivateClaim: true,
+        includeSocialRecord: true,
+      })
     ),
     includeMembers: members.map((member) => sanitizeLeagueMember(member, usersById)),
     includeJoinRequests: joinRequests.map((request) =>
@@ -1054,6 +1101,7 @@ async function getPublicLeagueTeamBySlug(
 
   return {
     league: sanitizeLeague(league),
+    marketing: buildLeagueMarketing(league, { teams: [team], players }),
     team: sanitizeLeagueTeam(team, {
       includeRoster: players.map((player) => sanitizeLeaguePlayer(player, usersById)),
       includeGames: teamGames,
@@ -1376,6 +1424,7 @@ async function getPublicLeaguePlayerBySlug(
 
   return {
     league: sanitizeLeague(league),
+    marketing: buildLeagueMarketing(league, { teams: [team], players: [player] }),
     team: sanitizeLeagueTeam(team),
     player: sanitizedPlayer,
     summary: buildLeaguePlayerSummary(gameRows),
@@ -1413,8 +1462,11 @@ async function getPublicLeagueTeamById(leagueTeamId) {
     return (game.events || []).filter(eventFilter);
   });
 
+  const league = await findLeagueById(team.leagueId);
+
   return {
     team: sanitizeLeagueTeam(team),
+    marketing: buildLeagueMarketing(league, { teams: [team] }),
     summary: { gamesCount: completedTeamGames.length, ...summarizeEvents(ownEvents) },
   };
 }
@@ -1445,6 +1497,10 @@ async function getPublicLeaguePlayerById(leaguePlayerId) {
 
   return {
     team: sanitizeLeagueTeam(team),
+    marketing: buildLeagueMarketing(await findLeagueById(team.leagueId), {
+      teams: [team],
+      players: [player],
+    }),
     player: sanitizeLeaguePlayer(player),
     summary: buildLeaguePlayerSummary(gameRows),
     milestones: await getMilestoneSummaryForLeaguePlayer(team.leagueId, player),
@@ -1470,11 +1526,16 @@ async function updateLeagueTeamForLeague(userId, leagueId, leagueTeamId, payload
   if (payload.colors) {
     team.colors = payload.colors.map(normalizeHexColor).filter(Boolean);
   }
+  if (payload.social) {
+    // Handles only — updateLeagueTeamSchema rejects a marketing status here,
+    // because the league above this team is the party that grants permission.
+    applySocialUpdate(team, payload.social, { actorUserId: userId });
+  }
 
   await saveLeagueTeam(team);
   // OPT-010: team rename changes the teamName in standings rows.
   scheduleLeagueAggregateRecompute(leagueId, league.currentSeasonId);
-  return sanitizeLeagueTeam(team);
+  return sanitizeLeagueTeam(team, { includeSocialRecord: true });
 }
 
 async function archiveLeagueTeamForLeague(userId, leagueId, leagueTeamId) {
@@ -1668,9 +1729,12 @@ async function updateLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerId
   if (Object.prototype.hasOwnProperty.call(payload, 'isActive')) {
     player.isActive = Boolean(payload.isActive);
   }
+  if (payload.social) {
+    applySocialUpdate(player, payload.social, { actorUserId: userId, withAge: true });
+  }
 
   await saveLeaguePlayer(player);
-  return sanitizeLeaguePlayer(player);
+  return sanitizeLeaguePlayer(player, new Map(), { includeSocialRecord: true });
 }
 
 async function removeLeaguePlayer(userId, leagueId, leagueTeamId, leaguePlayerId) {
@@ -2826,6 +2890,58 @@ async function canEditCompletedLeagueGame(userId, game) {
   return managerChecks.some(Boolean);
 }
 
+// Social backlog rank 8: per-category league leaders, for the shareable
+// leaderboard cards.
+//
+// These CANNOT be derived on the client from the `leaders` array. That array is
+// the top ten by FANTASY score, so a high-volume scorer who does little else
+// never appears in it — ranking it by PPG would quietly publish the wrong name
+// as the league's leading scorer. Ranking happens here, over every qualified
+// player, where the full set already exists in memory.
+const LEADER_CATEGORIES = [
+  { key: 'points', statKey: 'ppg', label: 'Points per game', abbreviation: 'PPG' },
+  { key: 'rebounds', statKey: 'rpg', label: 'Rebounds per game', abbreviation: 'RPG' },
+  { key: 'assists', statKey: 'apg', label: 'Assists per game', abbreviation: 'APG' },
+];
+
+const CATEGORY_LEADER_LIMIT = 5;
+
+// Below this, a "top five" is a list of the only people who did the thing, and
+// publishing it flatters a league rather than describing it.
+const MIN_QUALIFIED_LEADERS = 3;
+
+// One game is enough to appear, because a per-game average from one game is
+// still a true fact about that game — but every row carries `gamesCount` so the
+// card can show it, which is what stops a single hot night reading as a season.
+const LEADER_MIN_GAMES = 1;
+
+function buildCategoryLeaders(allLeaders) {
+  return LEADER_CATEGORIES.map((category) => {
+    const qualified = allLeaders.filter(
+      (row) => row.gamesCount >= LEADER_MIN_GAMES && row[category.statKey] > 0
+    );
+
+    const rows = [...qualified]
+      .sort(
+        (a, b) =>
+          b[category.statKey] - a[category.statKey] ||
+          // A tie on the average goes to whoever sustained it over more games,
+          // then alphabetically so the order is stable between requests.
+          b.gamesCount - a.gamesCount ||
+          a.displayName.localeCompare(b.displayName)
+      )
+      .slice(0, CATEGORY_LEADER_LIMIT);
+
+    return {
+      ...category,
+      qualifiedCount: qualified.length,
+      // Suppressed rather than short: the caller can tell "not enough players"
+      // from "no stats at all" by reading qualifiedCount.
+      rows: qualified.length >= MIN_QUALIFIED_LEADERS ? rows : [],
+    };
+  });
+}
+
 async function getPublicLeagueLeaders(
   leagueSlug,
   limit = 10,
@@ -2890,7 +3006,15 @@ async function getPublicLeagueLeaders(
     .sort((a, b) => b.defensiveScore - a.defensiveScore)
     .slice(0, limit);
 
-  return { leaders, dpoyLeaders };
+  return {
+    leaders,
+    dpoyLeaders,
+    categoryLeaders: buildCategoryLeaders(allLeaders),
+    // Social backlog rank 9: the leaderboard cards name up to five people per
+    // category, so the export guard needs this league's permission and the
+    // ids of anyone inside it who is not covered by it.
+    marketing: buildLeagueMarketing(league, { teams, players: allPlayers }),
+  };
 }
 
 module.exports = {

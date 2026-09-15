@@ -28,6 +28,12 @@ export const feedApi = {
   createHighlightClipPost(payload) {
     return apiClient.post('/feed/highlight-clip', payload);
   },
+  // Social backlog rank 9: the export guard's answer for ONE post, fetched when
+  // a share surface opens rather than carried by the feed list — consent has to
+  // be read at the moment of export, not at the moment the post was rendered.
+  getPostMarketing(postId) {
+    return apiClient.get(`/feed/${postId}/marketing`);
+  },
   deletePost(postId) {
     return apiClient.delete(`/feed/${postId}`);
   },

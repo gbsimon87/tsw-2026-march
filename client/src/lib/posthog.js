@@ -162,6 +162,23 @@ export function capturePostHogEvent(event, properties) {
   return true;
 }
 
+/**
+ * Social backlog rank 5. Registers first-touch attribution as super properties
+ * so EVERY later event carries the channel that found this person, without each
+ * call site having to thread it through. Registered rather than sent once,
+ * because the question is "which channel produces users who go on to track a
+ * game", and that is a property of the whole funnel, not of one landing event.
+ *
+ * Registration writes to PostHog's own persistence, which is memory-only until
+ * consent — so this is safe to call before a decision and simply does not
+ * survive the tab.
+ */
+export function registerPostHogAttribution(properties) {
+  if (!initialized || !isPostHogEnabled() || !properties) return false;
+  posthog.register(properties);
+  return true;
+}
+
 export function setPostHogCommonContext({ isAuthenticated, isInternal, isDemo }) {
   if (!initialized || !isPostHogEnabled()) return;
   posthog.register({
@@ -175,7 +192,7 @@ export function setPostHogCommonContext({ isAuthenticated, isInternal, isDemo })
  * Returns true when the user was actually identified, so callers can tell
  * "identified" from "skipped, try again after consent".
  */
-export function identifyPostHogUser(userId, properties) {
+export function identifyPostHogUser(userId, properties, setOnceProperties) {
   if (!initialized || !isPostHogEnabled() || !userId) {
     return false;
   }
@@ -188,7 +205,10 @@ export function identifyPostHogUser(userId, properties) {
     return false;
   }
 
-  posthog.identify(userId, properties);
+  // The third argument is PostHog's $set_once bag: first-touch attribution must
+  // describe the channel that ORIGINALLY found this person, so a later session
+  // arriving from somewhere else must not overwrite it.
+  posthog.identify(userId, properties, setOnceProperties);
   return true;
 }
 

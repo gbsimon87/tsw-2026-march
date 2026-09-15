@@ -3,7 +3,7 @@ import { trackEvent } from './trackEvent';
 // Where a signup CTA was clicked. `source` is what makes the acquisition funnel
 // attributable — without it we know people signed up, but not what prompted
 // them. Keep these values stable: renaming one after it has history breaks any
-// funnel built on it (docs/analytics-plan.md §4).
+// funnel built on it (docs/posthog.md §7.3).
 export const SIGNUP_SOURCE = {
   NAV: 'nav',
   HOME: 'home',

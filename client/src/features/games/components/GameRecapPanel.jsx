@@ -114,6 +114,7 @@ export function GameRecapPanel({
   onCloseHighlightReel = null,
   onShareHighlightReel = null,
   highlightReelShareState = '',
+  onOpenHighlightReceipt = null,
 }) {
   const featuredHighlights = selectFeaturedHighlights(highlights);
   const highlightReelClipCount = buildHighlightReelSegments(highlights).length;
@@ -141,6 +142,15 @@ export function GameRecapPanel({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {onOpenHighlightReceipt ? (
+                <button
+                  type="button"
+                  onClick={onOpenHighlightReceipt}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  Export vertical clip
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={onOpenHighlightReel}

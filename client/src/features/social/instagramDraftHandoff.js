@@ -1,4 +1,12 @@
 import { buildGameCardLabel } from '../feed/components/posts/cardUtils';
+import { buildTaggedUrl } from '../analytics/attribution';
+import { guardCard } from './exportGuard';
+import {
+  CAPTION_ATTRIBUTION_LEAD_IN,
+  CAPTION_MAX_CHARACTERS,
+  buildCaptionKit,
+  buildCardAttributionUrl,
+} from './captionAssistant';
 
 // One-shot hand-off of a rendered Pulse game card to the Instagram admin page.
 //
@@ -9,31 +17,18 @@ import { buildGameCardLabel } from '../feed/components/posts/cardUtils';
 // lives exactly as long as the SPA navigation it was created for, and a reload
 // clears it — which is correct, because the File cannot survive one either.
 //
-// Shape: { file, sourcePostId, sourceLabel, caption, attributionUrl }.
+// Shape: { file, sourcePostId, sourceLabel, caption, altText, attributionUrl }.
 let pendingDraft = null;
 
 // The game page is one of the few anonymously readable routes (see OPT-019 on
 // games.routes.js), so a link to it works for someone arriving logged out.
 //
-// The server rejects a non-HTTPS attribution URL, and a local origin is http,
-// so a dev hand-off contributes no URL rather than one that 400s on submit.
-// Attribution is optional, and the operator can still type one.
+// Social backlog rank 4 moved the builder itself into captionAssistant.js,
+// where it also covers the player and team pages the other card types name.
+// This stays as the game-card-shaped entry point its callers already use.
 export function buildAttributionUrl(gameCard, origin) {
-  if (!gameCard?.gameUrl || !origin?.startsWith('https://')) return '';
-  try {
-    return new URL(gameCard.gameUrl, origin).toString();
-  } catch {
-    return '';
-  }
+  return buildCardAttributionUrl(gameCard, origin);
 }
-
-// Matches the server schema and Instagram's own container limit.
-const CAPTION_MAX_CHARACTERS = 2200;
-
-// Says what is on the other end rather than just dropping a bare address: the
-// linked page carries the full box score, not a copy of the card. Change this
-// one line to change the voice of every hand-off.
-const CAPTION_ATTRIBUTION_LEAD_IN = 'Full box score →';
 
 // The attribution URL is a provenance record and is never sent to Meta — only
 // the caption reaches the container — so the link has to ride in the caption to
@@ -60,10 +55,12 @@ export function buildCaptionWithAttribution(caption, attributionUrl) {
 // without an entry hands over a usable draft rather than throwing.
 const DRAFT_SOURCES = {
   game_card: {
+    field: 'gameCard',
     card: (post) => post.gameCard,
     label: (card) => buildGameCardLabel(card),
   },
   milestone: {
+    field: 'milestoneCard',
     card: (post) => post.milestoneCard,
     // The achievement is the point, so it leads; the player qualifies it.
     label: (card) => [card?.playerName, card?.label].filter(Boolean).join(' \u00b7 '),
@@ -80,19 +77,41 @@ function resolveDraftSource(post) {
       : 'game_card';
   const source = DRAFT_SOURCES[key];
   const card = source?.card(post) ?? null;
-  return { card, label: (card && source?.label(card)) || 'TSW post' };
+  return { key, source, card, label: (card && source?.label(card)) || 'TSW post' };
 }
 
-export function buildInstagramDraft(post, file, origin = window.location.origin) {
-  const { card, label } = resolveDraftSource(post);
+export function buildInstagramDraft(post, file, origin = window.location.origin, marketing) {
+  const { key, source, card } = resolveDraftSource(post);
+  const guarded = marketing ? guardCard(key, card, marketing) : { card, restrictedCount: 0 };
+  if (marketing && !guarded.guard?.canExport) return null;
+  const safeCard = guarded.card;
+  const label = (safeCard && source?.label(safeCard)) || 'TSW post';
   // Every card type's provenance is a game page — the one anonymously readable
   // route — so one attribution builder still covers them all.
-  const attributionUrl = buildAttributionUrl(card, origin);
+  //
+  // Social backlog rank 5: this hand-off has exactly one destination, so the
+  // link is tagged for it unconditionally. Without the tag, a visit arriving
+  // from the published post is indistinguishable from any other referral.
+  const attributionUrl = buildTaggedUrl(buildCardAttributionUrl(safeCard, origin), {
+    source: 'instagram',
+  });
+  // Social backlog rank 4: the hand-off used to carry whatever the feed post
+  // already said, which for every AUTO card (feed.service.js writes
+  // `caption: null` for those) was nothing at all. It now carries generated
+  // copy, and a caption a human deliberately wrote still leads it.
+  const safeLead = guarded.restrictedCount ? '' : post.caption;
+  const safePost = { ...post, [source.field]: safeCard };
+  const kit = buildCaptionKit(safePost, { attributionUrl, lead: safeLead });
+
   return {
     file,
     sourcePostId: post.id,
     sourceLabel: label,
-    caption: buildCaptionWithAttribution(post.caption, attributionUrl),
+    caption: kit ? kit.caption : buildCaptionWithAttribution(safeLead, attributionUrl),
+    // Alt text is not part of the caption, and TSW's publishing adapter does
+    // not send Instagram's `alt_text` container field (the draft model has no
+    // place to store it), so this rides along for the operator to paste.
+    altText: kit?.altText || '',
     attributionUrl,
   };
 }

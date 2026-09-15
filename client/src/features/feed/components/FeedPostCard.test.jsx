@@ -9,6 +9,22 @@ vi.mock('../hooks/useShareImage', () => ({
   useShareImage: () => ({ createImageFile, shareImage: vi.fn(), status: 'idle' }),
 }));
 
+// Social backlog rank 9: a share surface asks this endpoint what the league
+// permitted before it will render anything for publication.
+const feedApiMocks = vi.hoisted(() => ({
+  getPostMarketing: vi.fn(async () => ({
+    marketing: {
+      canFeature: true,
+      reason: 'granted',
+      scope: 'league',
+      orgName: 'Southside Hoops',
+      restrictedPlayerIds: [],
+      handles: {},
+    },
+  })),
+}));
+vi.mock('../api/feedApi', () => ({ feedApi: feedApiMocks }));
+
 import { FeedPostCard } from './FeedPostCard';
 import { milestoneCardFixture } from './posts/cardFixtures';
 

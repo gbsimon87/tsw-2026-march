@@ -10,6 +10,9 @@ feedRouter.get('/discoverable/players', asyncHandler(controller.listDiscoverable
 feedRouter.get('/shareable/games', asyncHandler(controller.listShareableGames));
 feedRouter.get('/shareable/players', asyncHandler(controller.listShareablePlayers));
 feedRouter.get('/shareable/teams', asyncHandler(controller.listShareableTeams));
+// Public: the export guard's answer for one post, read when a share surface
+// opens. See getPostMarketing in feed.service.js.
+feedRouter.get('/:postId/marketing', asyncHandler(controller.postMarketing));
 
 feedRouter.use(authMiddleware);
 // Safety hold, 2026-09-11: fail before parsing multipart data. These routes stay
