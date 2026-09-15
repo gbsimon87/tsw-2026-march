@@ -44,16 +44,31 @@ browser and the API, and the live Render dashboard has still not been checked
 by hand. Three `tsw_probe_local` events exist in Dev from debugging the
 ingestion endpoint; they are not real traffic.
 
-**Added since, still unverified (social backlog ranks 5-6, 14 September 2026):**
+**Social backlog setup updated through MCP on 15 September 2026:**
 `social_landing_viewed`, `share_initiated`, `share_completed` and
-`league_enquiry_submitted` are implemented and contract-tested, but no
-definition exists in Dev and no payload has been inspected. The share events
+`league_enquiry_submitted` now have definitions in Dev project `247334`, with
+descriptions, tags, and `verified: false`. The landing and enquiry definitions
+were created; the already-ingested share definitions were updated. The share events
 gained `game_kit`, `carousel_slide` and `leaderboard_card` target types (and a
-`league_page` source) with the completed-game kit, the box-score carousel and
-the league leaderboard cards; include all of them when the definitions are
-written. They join the
-verification work in items 1-5 above — do not mark any of them verified before
-§16 has been run against a real browser. First-touch attribution also now rides
+`league_page` source); the definitions also include `player_game_card`,
+`milestone`, and the `post`/`story`/`link` formats.
+
+Four captured share payloads from 14 September 2026 were inspected through
+MCP: initiation/completion pairs for `player_game_card` and `carousel_slide`,
+both `download` / `game_detail` / `post`. Completion carried
+`result=succeeded`; `app_env=development`, schema version 1, and first touch
+`direct` / `none` / `none` matched the contract. A sensitive-key check found
+only the public SDK project capture key, SDK rate-limit metadata, and a
+referring-domain sentinel without URL/path syntax. No contact content or raw
+URL-bearing key was found in these samples.
+
+Landing and enquiry events have not been received. Tagged/referrer landings,
+other asset types/formats, signup attribution, cancellation/failure paths, and
+successful enquiries remain part of the browser verification work in items
+1–5 above. All four definitions remain unverified until that coverage is
+complete. Production was not changed.
+
+First-touch attribution also now rides
 on every browser event as a super property and on the person via `$set_once`;
 §16.2 should confirm no `utm_*` value reaches PostHog outside the three
 `first_touch_*` properties.

@@ -156,6 +156,40 @@ Open Graph previews remain rank 12 and P8.
 | **13** | Templated stat-video renderer       | Medium      | High   | L    | Deferred; see **Not Now**. Turn any final score, player line, milestone, or leaderboard into a 6-10 second MP4 using two or three transitions. No timeline editor.                                                                                                                                                    | Not started       |
 | **14** | Social content inbox                | Medium      | High   | L    | Deferred; see **Not Now**. Rank new assets by notability, show permission status, mark used/skipped, filter by league/date/type, retain caption/export history.                                                                                                                                                       | Not started       |
 
+### Social Assets — Manual Setup Checklist
+
+Ranks 1–10 are complete for now. The incomplete rows above remain for future
+work; the remaining setup and publishing actions are:
+
+- [ ] **Render:** Deploy the latest client and server to development, then
+      production after checking the exports.
+- [ ] **Database:** Verify the new per-game player-card indexes exist;
+      production does not create indexes automatically.
+- [ ] **Demo account:** Confirm the deployed Demo League has marketing
+      permission granted; reseed the intended demo database if needed.
+- [x] **PostHog Dev:** Create definitions for `social_landing_viewed`,
+      `share_initiated`, `share_completed`, and `league_enquiry_submitted`.
+      Include the new card/kit types, formats, and sources listed in
+      [`posthog.md`](./posthog.md#117-highlights-and-sharing).
+      Completed through MCP on 15 September 2026 in **Dev — The Sporty Way**
+      (project `247334`); all four remain unverified pending browser coverage.
+- [ ] **PostHog Dev:** Test tagged visits, downloads, signup, and enquiries;
+      inspect Live events before marking definitions verified.
+      Existing `player_game_card` and `carousel_slide` PNG download payloads
+      from 14 September were inspected through MCP and match the contract.
+      Tagged landings, other export paths, signup attribution, and enquiries
+      still need testing; landing and enquiry events have not been received.
+- [ ] **Social profiles:** Confirm the TSW handle and campaign name; add
+      separate tagged bio links for Instagram and TikTok.
+- [ ] **TSW admin:** Record confirmed handles, organisation permission, player
+      declines, and guardian consent where needed.
+- [ ] **Browser check:** Download PNGs, a ZIP kit, and a highlight clip on the
+      deployed site; inspect the finished files.
+- [ ] **Before posting:** Review captions, tags, consent, and video credit;
+      paste alt text into the platform manually.
+- [ ] **If enabling Instagram publishing:** Complete the remaining
+      [Meta review and production setup checklist](./instagram-integration/manual-actions.md).
+
 ### Caption Assistant — What Still Needs A Person
 
 Rank 4 ships in `client/src/features/social/captionAssistant.js` (pure builders)
