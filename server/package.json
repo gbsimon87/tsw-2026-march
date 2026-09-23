@@ -7,7 +7,7 @@
     "dev-host": "npm run dev -- --host",
     "start": "ENV_FILE=../env/server/.env.production node src/server.js",
     "seed": "SEED_CONFIRM_DB=${SEED_CONFIRM_DB:-tsw_2026_dev} ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed.js",
-    "seed:demo": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed-demo-account.js",
+    "seed:demo": "SEED_CONFIRM_DB=${SEED_CONFIRM_DB:-tsw_2026_dev} ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/seed.js --demo",
     "instagram:verify": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/verify-instagram-connection.js",
     "instagram:operator": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/set-instagram-operator.js",
     "instagram:ensure-indexes": "ENV_FILE=${ENV_FILE:-../env/server/.env.development} node src/scripts/ensure-instagram-indexes.js",

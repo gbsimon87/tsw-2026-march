@@ -92,15 +92,15 @@ pnpm check-secrets
 pnpm format
 ```
 
-Create or refresh the additive demo account with:
+Add missing fictional development data using the same `seed.js` with `--demo`:
 
 ```bash
-pnpm --filter server exec node src/scripts/seed-demo-account.js --dry-run
+pnpm --filter server seed:demo --dry-run
 pnpm --filter server seed:demo
 ```
 
 See [`docs/demo-data-generation.md`](docs/demo-data-generation.md) before using
-the demo seed in a shared environment.
+the seed. Both modes refuse production; `pnpm seed` clears the development database.
 
 ## Documentation
 

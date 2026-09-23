@@ -165,8 +165,10 @@ work; the remaining setup and publishing actions are:
       production after checking the exports.
 - [ ] **Database:** Verify the new per-game player-card indexes exist;
       production does not create indexes automatically.
-- [ ] **Demo account:** Confirm the deployed Demo League has marketing
-      permission granted; reseed the intended demo database if needed.
+- [ ] **Demo account (development only):** Preview/add fictional data with
+      `pnpm --filter server seed:demo --dry-run`, then `pnpm --filter server seed:demo`.
+      Both use the single development-only `seed.js`; see [seed modes and logins](./demo-data-generation.md).
+      Record production permissions through the admin UI; never seed production.
 - [x] **PostHog Dev:** Create definitions for `social_landing_viewed`,
       `share_initiated`, `share_completed`, and `league_enquiry_submitted`.
       Include the new card/kit types, formats, and sources listed in
@@ -383,9 +385,10 @@ resolved `marketing` block, never a child's age category or the raw record.
 Manual steps:
 
 - **Reseed the fictional Demo League** with `pnpm --filter server seed:demo`
-  against the intended development database. The seed grants that league
-  permission idempotently; it does not grant permission to the other seeded
-  leagues or to any real league.
+  against the confirmed development database. The single `seed.js` grants
+  permission when creating Demo League; additive reruns preserve recorded
+  decisions. Other demo leagues illustrate unrecorded and declined permission.
+  See [development seed modes](./demo-data-generation.md). Never seed production.
 - **Record a real organisation's permission only after confirming it.** The
   owner checks the attestation that includes players and guardians, then records
   permission. A player can still decline individually; a player marked under 18
