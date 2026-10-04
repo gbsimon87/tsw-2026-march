@@ -3,6 +3,8 @@ const { connectDb, disconnectDb } = require('./config/db');
 const { env } = require('./config/env');
 const { logger } = require('./config/logger');
 const { shutdownAnalytics } = require('./modules/analytics/analytics.service');
+const { isMuxConfigured } = require('./modules/video/mux.client');
+const { startVideoCleanupSweep, stopVideoCleanupSweep } = require('./modules/video/video.cleanup');
 
 async function bootstrap() {
   await connectDb();
@@ -11,6 +13,14 @@ async function bootstrap() {
   const server = app.listen(env.PORT, '0.0.0.0', () => {
     logger.info({ port: env.PORT }, 'API server listening');
   });
+
+  // Mux game video (ruling E4): durable provider cleanup + stale-upload
+  // reconciliation on a bounded, lease-claimed, unref'd interval. Started
+  // here only — never from app.js, which tests load.
+  if (isMuxConfigured()) {
+    startVideoCleanupSweep();
+    logger.info('Video cleanup sweep started');
+  }
 
   registerGracefulShutdown(server);
 }
@@ -33,10 +43,16 @@ function registerGracefulShutdown(server) {
     }, 10000);
     forceExit.unref();
 
+    // No new video cleanup sweep ticks while draining; an in-flight run
+    // finishes its current job (claiming no more) before the DB closes. An
+    // interrupted job's lease expires and it is claimed again after restart.
+    const videoSweepStopped = stopVideoCleanupSweep();
+
     try {
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      await videoSweepStopped;
       // Flush batched analytics before the process goes away, otherwise a
       // restart or deploy silently discards whatever is still queued.
       await shutdownAnalytics();
