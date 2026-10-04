@@ -3,6 +3,7 @@ const { STAT_TYPES, SHOT_ZONE_IDS, TEAM_SIDES } = require('../shared/stats.const
 const { applyIdCursor } = require('../../utils/pagination');
 const { SPORTS, DEFAULT_GAME_FORMAT, createReadyClock } = require('../shared/gameClock');
 const { COURT_LAYOUT_IDS, CURRENT_COURT_LAYOUT_ID } = require('../shared/courtLayouts');
+const { GAME_VIDEO_STATUSES } = require('../shared/gameVideo');
 
 const gameFormatSchema = new mongoose.Schema(
   {
@@ -136,6 +137,12 @@ const shotEventSchema = new mongoose.Schema(
       required: false,
     },
     videoTimestamp: { type: Number, min: 0, required: false },
+    // Mux game video P6: which recording videoTimestamp was taken against —
+    // `mux:<generationId>` or `youtube:<videoId>` (shared/gameVideo.js).
+    // Stamped by games.service whenever videoTimestamp is written, cleared with
+    // it, never accepted from a client. Absent on legacy events, which resolve
+    // to the game's current YouTube link.
+    videoTimelineId: { type: String, required: false },
     segmentKind: { type: String, enum: ['regulation', 'overtime'], required: true },
     segmentNumber: { type: Number, min: 1, required: true },
     clockMillisecondsRemaining: { type: Number, min: 0, required: true },
@@ -170,6 +177,48 @@ const aiSummarySchema = new mongoose.Schema(
     provider: { type: String, trim: true, default: null },
     model: { type: String, trim: true, default: null },
     generatedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
+// Mux game video (docs/media-provider-analysis.md; plan Task 2). One hosted
+// video per game; `videoUrl` remains the YouTube link. Ids are written only by
+// the video module and never serialised to clients (sanitizeGameVideo).
+//
+// OPT-026: `video` is written ONLY by conditional updateOne/findOneAndUpdate on
+// `video.*` paths, filtered by _id + video.generationId + the expected
+// uploadId/assetId/status, and those writes do NOT bump `__v`. A webhook that
+// lands mid-tracking must not turn the tracker's next event save into a 409
+// (OPT-015), and no saveGame path ever assigns `video`, so a stat save from a
+// doc loaded before the webhook never writes a stale `video` back (Mongoose
+// only $sets modified paths; the init-time null default is not one).
+// Durable cleanup/deletion state lives outside Game, keyed by upload attempt.
+const gameVideoSchema = new mongoose.Schema(
+  {
+    provider: { type: String, enum: ['mux'], required: true },
+    status: { type: String, enum: GAME_VIDEO_STATUSES, required: true },
+    // Random per upload attempt (createGameVideoGenerationId). Scopes every
+    // conditional write and names the event timeline `mux:<generationId>`.
+    generationId: { type: String, required: true },
+    // Non-secret, integer, unique across generations (nextGameVideoVersion,
+    // then $inc per write) — clients key playback queries on it.
+    version: {
+      type: Number,
+      required: true,
+      min: 0,
+      validate: { validator: Number.isInteger, message: 'video.version must be an integer' },
+    },
+    uploadId: { type: String, default: null },
+    assetId: { type: String, default: null },
+    playbackId: { type: String, default: null },
+    durationSeconds: { type: Number, min: 0, default: null },
+    errorMessage: { type: String, default: null },
+    uploadedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    uploadStartedAt: { type: Date, default: null },
+    readyAt: { type: Date, default: null },
+    // Earlier timelines the uploader confirmed are the same recording
+    // ("same recording" at upload, P6); their timestamps play on this video.
+    equivalentTimelines: { type: [String], default: [] },
   },
   { _id: false }
 );
@@ -250,6 +299,7 @@ const gameSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     opponent: { type: String, trim: true, default: null },
     videoUrl: { type: String, trim: true, default: null },
+    video: { type: gameVideoSchema, default: null },
     status: {
       type: String,
       // Schedule Builder: 'scheduled' is a future fixture — created by the bulk

@@ -2150,3 +2150,213 @@ describe('games service activation analytics', () => {
     });
   });
 });
+
+// P6 (rulings.md): the video timeline an event's videoTimestamp belongs to is
+// stamped by the server from the game's current video at write time, so a
+// later YouTube -> Mux replacement can tell old timestamps apart.
+describe('games service video timeline stamping (P6)', () => {
+  const USER_ID = '64b7f0c2a1b2c3d4e5f60701';
+  const GAME_ID = '64b7f0c2a1b2c3d4e5f60702';
+  const TEAM_ID = '64b7f0c2a1b2c3d4e5f60703';
+  const PLAYER_ID = '64b7f0c2a1b2c3d4e5f60704';
+  const EVENT_ID = '64b7f0c2a1b2c3d4e5f60705';
+  const YOUTUBE_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  const YOUTUBE_TIMELINE = 'youtube:dQw4w9WgXcQ';
+  const GENERATION_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  const MUX_TIMELINE = `mux:${GENERATION_ID}`;
+  const READY_MUX = {
+    provider: 'mux',
+    status: 'ready',
+    generationId: GENERATION_ID,
+    version: 2,
+    playbackId: 'pb-1',
+    durationSeconds: 5400,
+    equivalentTimelines: [],
+  };
+  const teamPlayers = buildPlayers([{ _id: PLAYER_ID, displayName: 'Alex', isActive: true }]);
+  const SHOT = {
+    ...EVENT_CLOCK,
+    playerId: PLAYER_ID,
+    statType: STAT_TYPES.FG2_MADE,
+    zoneId: 'PAINT',
+    x: 50,
+    y: 20,
+  };
+
+  function buildVideoGame(overrides = {}) {
+    return {
+      _id: GAME_ID,
+      ownerUserId: USER_ID,
+      gameContext: 'standalone',
+      trackingMode: 'one_sided',
+      gameFormat: GAME_FORMAT,
+      teamId: TEAM_ID,
+      rosterSnapshot: [],
+      events: buildEvents([]),
+      status: 'in_progress',
+      videoUrl: null,
+      video: null,
+      startingLineupPlayerIds: [],
+      currentLineupPlayerIds: [],
+      createdAt: new Date('2026-03-12T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-12T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  function buildGameWithEvent(eventFields, overrides = {}) {
+    return buildVideoGame({
+      events: buildEvents([{ _id: EVENT_ID, ...SHOT, ...eventFields }]),
+      ...overrides,
+    });
+  }
+
+  async function append(game, payload) {
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    await appendEventForUser(USER_ID, GAME_ID, payload);
+    return game.events[game.events.length - 1];
+  }
+
+  async function update(game, patch) {
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    await updateEventForUser(USER_ID, GAME_ID, EVENT_ID, patch);
+    return game.events.id(EVENT_ID);
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    findTeamById.mockResolvedValue({ _id: TEAM_ID, players: teamPlayers });
+    findTeamByIdAndOwner.mockResolvedValue({ _id: TEAM_ID, players: teamPlayers });
+  });
+
+  describe('appendEventForUser', () => {
+    test('stamps the YouTube timeline when YouTube is the current video', async () => {
+      const event = await append(buildVideoGame({ videoUrl: YOUTUBE_URL }), {
+        ...SHOT,
+        videoTimestamp: 12,
+      });
+      expect(event.videoTimestamp).toBe(12);
+      expect(event.videoTimelineId).toBe(YOUTUBE_TIMELINE);
+    });
+
+    test('stamps the Mux generation when a ready Mux video is playable', async () => {
+      const event = await append(buildVideoGame({ videoUrl: YOUTUBE_URL, video: READY_MUX }), {
+        ...SHOT,
+        videoTimestamp: 12,
+      });
+      expect(event.videoTimelineId).toBe(MUX_TIMELINE);
+    });
+
+    test('ignores a client-supplied timeline id', async () => {
+      const onYouTube = await append(buildVideoGame({ videoUrl: YOUTUBE_URL }), {
+        ...SHOT,
+        videoTimestamp: 12,
+        videoTimelineId: 'mux:forged',
+      });
+      expect(onYouTube.videoTimelineId).toBe(YOUTUBE_TIMELINE);
+
+      const noVideo = await append(buildVideoGame(), {
+        ...SHOT,
+        videoTimestamp: 12,
+        videoTimelineId: 'mux:forged',
+      });
+      expect(noVideo.videoTimestamp).toBe(12);
+      expect(noVideo.videoTimelineId).toBeUndefined();
+    });
+
+    test('an event without a video timestamp is not bound to a timeline', async () => {
+      const event = await append(buildVideoGame({ videoUrl: YOUTUBE_URL, video: READY_MUX }), {
+        ...SHOT,
+        videoTimelineId: 'mux:forged',
+      });
+      expect(event.videoTimestamp).toBeUndefined();
+      expect(event.videoTimelineId).toBeUndefined();
+    });
+
+    test('dual-team appends are stamped too', async () => {
+      const homePlayers = [1, 2, 3, 4, 5].map((n) =>
+        buildLeagueSnapshotPlayer(`home-snap-${n}`, `Home ${n}`)
+      );
+      const awayPlayers = [1, 2, 3, 4, 5].map((n) =>
+        buildLeagueSnapshotPlayer(`away-snap-${n}`, `Away ${n}`)
+      );
+      const game = buildDualLeagueGame({
+        _id: GAME_ID,
+        ownerUserId: USER_ID,
+        videoUrl: YOUTUBE_URL,
+        video: READY_MUX,
+        homeRosterSnapshot: homePlayers,
+        awayRosterSnapshot: awayPlayers,
+        homeCurrentLineupPlayerIds: homePlayers.map((player) => player._id),
+        awayCurrentLineupPlayerIds: awayPlayers.map((player) => player._id),
+      });
+      const event = await append(game, {
+        ...EVENT_CLOCK,
+        teamSide: 'home',
+        playerId: 'home-snap-1',
+        statType: STAT_TYPES.FG2_MADE,
+        videoTimestamp: 40,
+        videoTimelineId: 'youtube:forged',
+      });
+      expect(event.videoTimestamp).toBe(40);
+      expect(event.videoTimelineId).toBe(MUX_TIMELINE);
+    });
+  });
+
+  describe('updateEventForUser', () => {
+    test('re-stamps the current timeline when the timestamp changes', async () => {
+      const game = buildGameWithEvent(
+        { videoTimestamp: 12, videoTimelineId: YOUTUBE_TIMELINE },
+        { videoUrl: YOUTUBE_URL, video: READY_MUX }
+      );
+      const event = await update(game, { videoTimestamp: 30 });
+      expect(event.videoTimestamp).toBe(30);
+      expect(event.videoTimelineId).toBe(MUX_TIMELINE);
+    });
+
+    test('binds a legacy event when its timestamp is set', async () => {
+      const game = buildGameWithEvent({}, { videoUrl: YOUTUBE_URL });
+      const event = await update(game, { videoTimestamp: 30 });
+      expect(event.videoTimelineId).toBe(YOUTUBE_TIMELINE);
+    });
+
+    test('clearing the timestamp clears the binding', async () => {
+      const game = buildGameWithEvent(
+        { videoTimestamp: 12, videoTimelineId: YOUTUBE_TIMELINE },
+        { videoUrl: YOUTUBE_URL }
+      );
+      const event = await update(game, { videoTimestamp: null });
+      expect(event.videoTimestamp).toBeUndefined();
+      expect(event.videoTimelineId).toBeUndefined();
+    });
+
+    test('an edit that does not touch the timestamp keeps the original binding', async () => {
+      const game = buildGameWithEvent(
+        { videoTimestamp: 12, videoTimelineId: YOUTUBE_TIMELINE },
+        { videoUrl: YOUTUBE_URL, video: READY_MUX }
+      );
+      const event = await update(game, { statType: STAT_TYPES.FG3_MADE });
+      expect(event.videoTimestamp).toBe(12);
+      expect(event.videoTimelineId).toBe(YOUTUBE_TIMELINE);
+    });
+
+    test('ignores a client-supplied timeline id', async () => {
+      const kept = await update(
+        buildGameWithEvent(
+          { videoTimestamp: 12, videoTimelineId: YOUTUBE_TIMELINE },
+          { videoUrl: YOUTUBE_URL }
+        ),
+        { videoTimelineId: 'mux:forged' }
+      );
+      expect(kept.videoTimelineId).toBe(YOUTUBE_TIMELINE);
+
+      const restamped = await update(buildGameWithEvent({}, { videoUrl: YOUTUBE_URL }), {
+        videoTimestamp: 30,
+        videoTimelineId: 'mux:forged',
+      });
+      expect(restamped.videoTimelineId).toBe(YOUTUBE_TIMELINE);
+    });
+  });
+});

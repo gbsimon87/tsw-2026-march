@@ -104,3 +104,133 @@ describe('Game schema — dead indexes removed (OPT-007)', () => {
     expect(Game.schema.path('trackingMode')._index).toBe(true);
   });
 });
+
+// Mux game video (docs/superpowers/plans/2026-10-04-mux-game-video.md, Task 2;
+// rulings P6/E1/E2). Real Mongoose validation via validateSync — no database.
+describe('Game.video schema (Mux game video)', () => {
+  const GAME_ID = '64b7f0c2a1b2c3d4e5f60718';
+  const OWNER_ID = '64b7f0c2a1b2c3d4e5f60719';
+  const UPLOADER_ID = '64b7f0c2a1b2c3d4e5f6071a';
+
+  function buildGame(overrides = {}) {
+    return new Game({
+      _id: GAME_ID,
+      ownerUserId: OWNER_ID,
+      title: 'Video schema game',
+      ...overrides,
+    });
+  }
+
+  function without(object, key) {
+    const copy = { ...object };
+    delete copy[key];
+    return copy;
+  }
+
+  const readyVideo = {
+    provider: 'mux',
+    status: 'ready',
+    generationId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+    version: 1_759_600_000_000,
+    uploadId: 'up-1',
+    assetId: 'as-1',
+    playbackId: 'pb-1',
+    durationSeconds: 5400,
+    uploadedByUserId: UPLOADER_ID,
+    equivalentTimelines: ['youtube:dQw4w9WgXcQ'],
+  };
+
+  test('declares the hosted video sub-document', () => {
+    expect(Game.schema.path('video.provider').enumValues).toEqual(['mux']);
+    expect(Game.schema.path('video.status').enumValues).toEqual([
+      'uploading',
+      'processing',
+      'ready',
+      'errored',
+    ]);
+    for (const field of ['uploadId', 'assetId', 'playbackId', 'errorMessage', 'generationId']) {
+      expect(Game.schema.path(`video.${field}`).instance).toBe('String');
+    }
+    expect(Game.schema.path('video.durationSeconds').instance).toBe('Number');
+    expect(Game.schema.path('video.version').instance).toBe('Number');
+    expect(Game.schema.path('video.equivalentTimelines').instance).toBe('Array');
+  });
+
+  test('defaults to null and validates without a video', () => {
+    const game = buildGame();
+    expect(game.video).toBeNull();
+    expect(game.validateSync()).toBeUndefined();
+  });
+
+  test('a complete ready video validates and keeps every field', () => {
+    const game = buildGame({ video: readyVideo });
+    expect(game.validateSync()).toBeUndefined();
+    expect(game.video.generationId).toBe(readyVideo.generationId);
+    expect(game.video.version).toBe(readyVideo.version);
+    expect([...game.video.equivalentTimelines]).toEqual(['youtube:dQw4w9WgXcQ']);
+  });
+
+  test('equivalentTimelines defaults to an empty list', () => {
+    const game = buildGame({ video: without(readyVideo, 'equivalentTimelines') });
+    expect([...game.video.equivalentTimelines]).toEqual([]);
+  });
+
+  test('rejects an unknown provider/status and a video missing its generation or version', () => {
+    expect(buildGame({ video: { ...readyVideo, provider: 'vimeo' } }).validateSync()).toBeDefined();
+    expect(buildGame({ video: { ...readyVideo, status: 'deleted' } }).validateSync()).toBeDefined();
+    expect(
+      buildGame({ video: without(readyVideo, 'generationId') }).validateSync().errors[
+        'video.generationId'
+      ]
+    ).toBeDefined();
+    expect(
+      buildGame({ video: without(readyVideo, 'version') }).validateSync().errors['video.version']
+    ).toBeDefined();
+    expect(
+      buildGame({ video: { ...readyVideo, version: 1.5 } }).validateSync().errors['video.version']
+    ).toBeDefined();
+    expect(
+      buildGame({ video: { ...readyVideo, durationSeconds: -1 } }).validateSync().errors[
+        'video.durationSeconds'
+      ]
+    ).toBeDefined();
+  });
+
+  // E1: video.* is written only by conditional updates that do not bump __v,
+  // so a stat save from a doc loaded before a webhook landed must not carry
+  // the stale `video` back to the database.
+  test('a stat save on a loaded game never writes video (E1)', () => {
+    for (const stored of [{}, { video: null }, { video: readyVideo }]) {
+      const game = Game.hydrate({
+        _id: GAME_ID,
+        ownerUserId: OWNER_ID,
+        title: 'Loaded',
+        events: [],
+        __v: 4,
+        ...stored,
+      });
+      game.events.push({
+        statType: 'FG2_MADE',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        clockMillisecondsRemaining: 600000,
+        videoTimestamp: 12,
+        videoTimelineId: 'youtube:dQw4w9WgXcQ',
+      });
+      game.eventCount = 1;
+      expect(game.isModified('video')).toBe(false);
+      const [, update] = game.$__delta();
+      const writtenPaths = Object.values(update).flatMap((operator) => Object.keys(operator));
+      expect(writtenPaths).toContain('events');
+      expect(writtenPaths.filter((p) => p === 'video' || p.startsWith('video.'))).toEqual([]);
+    }
+  });
+});
+
+describe('Game events video timeline binding (P6)', () => {
+  test('events declare an optional videoTimelineId', () => {
+    const eventSchema = Game.schema.path('events').schema;
+    expect(eventSchema.path('videoTimelineId').instance).toBe('String');
+    expect(eventSchema.path('videoTimelineId').isRequired).toBeFalsy();
+  });
+});

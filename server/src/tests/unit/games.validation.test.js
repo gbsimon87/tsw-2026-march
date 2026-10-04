@@ -1,6 +1,7 @@
 const {
   createGameSchema,
   appendEventSchema,
+  updateEventSchema,
   clockCommandSchema,
 } = require('../../modules/games/games.validation');
 
@@ -137,5 +138,33 @@ describe('games validation', () => {
         videoUrl: 'https://vimeo.com/123456',
       })
     ).toThrow('Video URL must be a valid YouTube link');
+  });
+
+  // P6: the video timeline an event belongs to is stamped by the server from
+  // the game's current video; a client can never choose it.
+  test('strips a client-supplied videoTimelineId from every event write', () => {
+    const shot = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
+      playerId: 'player-1',
+      statType: 'FG2_MADE',
+      zoneId: 'PAINT',
+      x: 50,
+      y: 20,
+      videoTimestamp: 12,
+      videoTimelineId: 'mux:forged',
+    });
+    expect(shot.videoTimestamp).toBe(12);
+    expect(shot).not.toHaveProperty('videoTimelineId');
+
+    const opponent = appendEventSchema.parse({
+      ...CLOCK_SNAPSHOT,
+      statType: 'OPP_REB',
+      videoTimestamp: 12,
+      videoTimelineId: 'mux:forged',
+    });
+    expect(opponent).not.toHaveProperty('videoTimelineId');
+
+    const patch = updateEventSchema.parse({ videoTimestamp: 30, videoTimelineId: 'mux:forged' });
+    expect(patch).toEqual({ videoTimestamp: 30 });
   });
 });

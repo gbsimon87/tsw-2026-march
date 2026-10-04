@@ -26,6 +26,7 @@ const {
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { LEGACY_COURT_LAYOUT_ID, resolveCourtLayoutId } = require('../shared/courtLayouts');
+const { getCurrentVideoTimelineId } = require('../shared/gameVideo');
 const {
   getBillingSummary,
   getLeagueBillingSummary,
@@ -2093,6 +2094,16 @@ function getTeamDocForSide(game, participants, side, fallbackTeamDoc) {
   return side === TEAM_SIDES.HOME ? participants.home.teamDoc : participants.away.teamDoc;
 }
 
+// Mux game video P6: a videoTimestamp is always written together with the
+// timeline it was captured against — the game's current video at write time.
+// The binding is server-derived only; a client-sent videoTimelineId is never
+// read (games.validation.js strips it too).
+function buildEventVideoFields(game, videoTimestamp) {
+  if (typeof videoTimestamp !== 'number') return {};
+  const videoTimelineId = getCurrentVideoTimelineId(game);
+  return videoTimelineId ? { videoTimestamp, videoTimelineId } : { videoTimestamp };
+}
+
 function insertEvent(game, eventPayload, insertBeforeEventId) {
   if (!insertBeforeEventId) {
     game.events.push(eventPayload);
@@ -2233,9 +2244,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
         zoneId: payload.zoneId,
         x: payload.x,
         y: payload.y,
-        ...(typeof payload.videoTimestamp === 'number'
-          ? { videoTimestamp: payload.videoTimestamp }
-          : {}),
+        ...buildEventVideoFields(game, payload.videoTimestamp),
         segmentKind: eventSnapshot.segmentKind,
         segmentNumber: eventSnapshot.segmentNumber,
         clockMillisecondsRemaining: eventSnapshot.clockMillisecondsRemaining,
@@ -2317,9 +2326,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
       zoneId: payload.zoneId,
       x: payload.x,
       y: payload.y,
-      ...(typeof payload.videoTimestamp === 'number'
-        ? { videoTimestamp: payload.videoTimestamp }
-        : {}),
+      ...buildEventVideoFields(game, payload.videoTimestamp),
       segmentKind: eventSnapshot.segmentKind,
       segmentNumber: eventSnapshot.segmentNumber,
       clockMillisecondsRemaining: eventSnapshot.clockMillisecondsRemaining,
@@ -2561,7 +2568,12 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (patch.zoneId !== undefined) event.zoneId = patch.zoneId;
   if (patch.x !== undefined) event.x = patch.x;
   if (patch.y !== undefined) event.y = patch.y;
-  if (patch.videoTimestamp !== undefined) event.videoTimestamp = patch.videoTimestamp ?? undefined;
+  if (patch.videoTimestamp !== undefined) {
+    // P6: re-stamp against the current video, or clear with the timestamp.
+    const videoFields = buildEventVideoFields(game, patch.videoTimestamp);
+    event.videoTimestamp = videoFields.videoTimestamp;
+    event.videoTimelineId = videoFields.videoTimelineId;
+  }
   if (patch.segmentKind !== undefined) {
     if (!validateSnapshot(game.gameFormat, patch)) {
       throw new ApiError(400, 'Event period and clock time are invalid for this game');
