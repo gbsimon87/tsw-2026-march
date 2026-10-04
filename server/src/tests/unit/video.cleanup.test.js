@@ -131,6 +131,7 @@ beforeEach(() => {
   mockRepository.releaseStoredMinutes.mockResolvedValue({});
   mockRepository.claimDueCleanupJobs.mockResolvedValue([]);
   mockRepository.listStaleUploadAttempts.mockResolvedValue([]);
+  mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
   mockMux.isMuxConfigured.mockReturnValue(true);
 });
 
@@ -292,6 +293,125 @@ describe('processCleanupJob — ownership (E3: nothing without an owning attempt
       expect.objectContaining({ retryable: true, nextAttemptAt: expect.any(Date) })
     );
     expect(result.status).toBe('retry');
+  });
+});
+
+describe('processCleanupJob — reference recheck (T4 removal order: enqueue before detach)', () => {
+  // Callers persist the job BEFORE detaching/replacing Game.video (R3), so a
+  // job can exist while its generation is still attached. The worker must
+  // never delete media the Game still references.
+  const deleteJob = (overrides) =>
+    job({ kind: 'delete_asset', targetId: 'as-9', reason: 'video_removed', ...overrides });
+
+  test('cancel_upload whose generation is still referenced → deferred, no Mux call', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+
+    const result = await cleanup.processCleanupJob(job({ attempts: 2 }), { now: NOW });
+
+    expect(mockRepository.isGameVideoGenerationReferenced).toHaveBeenCalledWith({
+      gameId: GAME_ID,
+      generationId: GENERATION_ID,
+    });
+    expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
+    expect(mockRepository.completeCleanupJob).not.toHaveBeenCalled();
+    expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      leaseOwner: LEASE_OWNER,
+      retryable: true,
+      nextAttemptAt: new Date(NOW.getTime() + cleanup.CLEANUP_REFERENCED_DEFER_MS),
+      error: 'still_referenced',
+    });
+    expect(cleanup.CLEANUP_REFERENCED_DEFER_MS).toBeLessThanOrEqual(
+      cleanup.CLEANUP_BASE_RETRY_DELAY_MS
+    );
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      {
+        jobId: JOB_ID,
+        kind: 'cancel_upload',
+        gameId: GAME_ID,
+        attemptId: ATTEMPT_ID,
+        targetId: 'up-1',
+        attempts: 2,
+      },
+      'Video cleanup deferred: media still referenced by its game'
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: 'retry' });
+  });
+
+  test('delete_asset whose generation is still referenced → deferred, the asset is not deleted', async () => {
+    mockRepository.findUploadAttemptById.mockResolvedValue(attempt({ assetId: 'as-9' }));
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+
+    const result = await cleanup.processCleanupJob(deleteJob(), { now: NOW });
+
+    expect(mockMux.deleteAsset).not.toHaveBeenCalled();
+    expect(mockRepository.takeUploadAttemptStoredMinutes).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: 'retry' });
+  });
+
+  test('not referenced (detached, replaced, or the game no longer exists) → proceeds to Mux', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
+    mockMux.cancelDirectUpload.mockResolvedValue({ outcome: 'cancelled' });
+
+    const result = await cleanup.processCleanupJob(job(), { now: NOW });
+
+    expect(mockMux.cancelDirectUpload).toHaveBeenCalledWith('up-1');
+    const order = [
+      mockRepository.findUploadAttemptById.mock.invocationCallOrder[0],
+      mockRepository.isGameVideoGenerationReferenced.mock.invocationCallOrder[0],
+      mockMux.cancelDirectUpload.mock.invocationCallOrder[0],
+    ];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(result).toEqual({ status: 'done', outcome: 'cancelled' });
+  });
+
+  test('still referenced when the budget is exhausted → terminal failure, never a deletion', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+
+    const result = await cleanup.processCleanupJob(
+      job({ attempts: cleanup.CLEANUP_MAX_ATTEMPTS }),
+      { now: NOW }
+    );
+
+    expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
+    expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ retryable: true, nextAttemptAt: null, error: 'still_referenced' })
+    );
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ exhausted: true, lastError: 'still_referenced' }),
+      'Video cleanup job failed permanently'
+    );
+    expect(result).toEqual({ status: 'failed' });
+  });
+
+  test('a failed reference read is retried with normal backoff, never read as "unreferenced"', async () => {
+    const error = new Error('connection lost');
+    mockRepository.isGameVideoGenerationReferenced.mockRejectedValue(error);
+
+    const result = await cleanup.processCleanupJob(job({ attempts: 1 }), {
+      now: NOW,
+      random: () => 0.5,
+    });
+
+    expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
+    expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retryable: true,
+        nextAttemptAt: new Date(NOW.getTime() + cleanup.CLEANUP_BASE_RETRY_DELAY_MS),
+        error,
+      })
+    );
+    expect(result).toEqual({ status: 'retry' });
+  });
+
+  test('ownership is proven before the reference read', async () => {
+    mockRepository.findUploadAttemptById.mockResolvedValue(null);
+
+    await cleanup.processCleanupJob(job(), { now: NOW });
+
+    expect(mockRepository.isGameVideoGenerationReferenced).not.toHaveBeenCalled();
+    expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
   });
 });
 

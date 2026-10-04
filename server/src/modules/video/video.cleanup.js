@@ -12,6 +12,13 @@
 // deployment — owns the target (uploadId for cancel_upload, assetId for
 // delete_asset). Callers must record an asset id on the attempt before
 // enqueueing its delete_asset. Nothing without an owning attempt is touched.
+//
+// Reference recheck (T4 removal order): callers persist a job BEFORE they
+// detach/replace Game.video (R3), so a job can exist while its generation is
+// still attached. Before any Mux call the worker rechecks the Game; while it
+// still carries the attempt's generation the job is deferred (short backoff,
+// counted against the attempt budget) — referenced media is never deleted.
+// A game that no longer exists is not referencing anything.
 const crypto = require('crypto');
 const { logger } = require('../../config/logger');
 const muxClient = require('./mux.client');
@@ -30,8 +37,12 @@ const RECONCILE_GRACE_MS = 24 * 60 * 60 * 1000;
 const RECONCILE_LIMIT = 25;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const RECONCILED_ERROR_MESSAGE = 'Reconciled: stale upload no longer referenced by its game';
+// The caller that enqueued normally detaches within milliseconds; a job still
+// referenced after the budget (≈ 10 × this) is left terminal-failed, not deleted.
+const CLEANUP_REFERENCED_DEFER_MS = 30 * 1000;
 
 const OWNERSHIP_NOT_PROVEN = 'ownership_not_proven';
+const STILL_REFERENCED = 'still_referenced';
 
 // A failure the job must not retry (ownership not proven, unexpected outcome).
 function nonRetryable(code) {
@@ -40,6 +51,16 @@ function nonRetryable(code) {
 
 // Mux client errors carry `retryable`; anything else (database, network) is
 // treated as transient and retried within the attempt budget.
+// Retryable, but on a short fixed delay instead of the exponential backoff.
+function stillReferenced() {
+  return Object.assign(new Error(STILL_REFERENCED), {
+    name: 'VideoCleanupError',
+    code: STILL_REFERENCED,
+    retryable: true,
+    deferMs: CLEANUP_REFERENCED_DEFER_MS,
+  });
+}
+
 function isRetryable(error) {
   return error?.retryable !== false;
 }
@@ -84,6 +105,21 @@ async function findOwningAttempt(job) {
     throw nonRetryable(OWNERSHIP_NOT_PROVEN);
   }
   return attempt;
+}
+
+// A read failure propagates (retryable) — never treated as "not referenced".
+async function assertNotReferenced(job, attempt) {
+  const referenced = await repository.isGameVideoGenerationReferenced({
+    gameId: attempt.gameId,
+    generationId: attempt.generationId,
+  });
+  if (referenced) {
+    logger.info(
+      { ...jobLogFields(job), attempts: job.attempts },
+      'Video cleanup deferred: media still referenced by its game'
+    );
+    throw stillReferenced();
+  }
 }
 
 async function complete(job, outcome, now) {
@@ -164,7 +200,12 @@ async function processDeleteAsset(job, attempt, now) {
 async function recordFailure(job, error, now, random) {
   const retryable = isRetryable(error);
   const exhausted = retryable && job.attempts >= CLEANUP_MAX_ATTEMPTS;
-  const nextAttemptAt = retryable && !exhausted ? cleanupRetryAt(job.attempts, now, random) : null;
+  let nextAttemptAt = null;
+  if (retryable && !exhausted) {
+    nextAttemptAt = error?.deferMs
+      ? new Date(now.getTime() + error.deferMs)
+      : cleanupRetryAt(job.attempts, now, random);
+  }
   try {
     const updated = await repository.failCleanupJobAttempt({
       jobId: job._id,
@@ -207,6 +248,7 @@ async function processCleanupJob(job, { now = new Date(), random = Math.random }
       throw nonRetryable('unknown_job_kind');
     }
     const attempt = await findOwningAttempt(job);
+    await assertNotReferenced(job, attempt);
     return job.kind === 'cancel_upload'
       ? await processCancelUpload(job, attempt, now)
       : await processDeleteAsset(job, attempt, now);
@@ -500,6 +542,7 @@ module.exports = {
   RECONCILE_LIMIT,
   SWEEP_INTERVAL_MS,
   RECONCILED_ERROR_MESSAGE,
+  CLEANUP_REFERENCED_DEFER_MS,
   cleanupRetryAt,
   processCleanupJob,
   runCleanupBatch,
