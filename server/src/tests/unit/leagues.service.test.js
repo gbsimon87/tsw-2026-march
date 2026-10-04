@@ -898,6 +898,30 @@ describe('private league visibility on public-slug routes (OPT-024)', () => {
     const league = await getPublicLeagueBySlug('secret-league', null);
     expect(league.slug).toBe('secret-league');
   });
+
+  // Mux game video P1/P4: the operator grant and its quotas are internal; no
+  // league payload (public or owner) exposes them.
+  test.each([null, 'owner-1'])(
+    'league payload never carries videoHosting (viewer %s)',
+    async (viewer) => {
+      seedPrivateLeague({
+        isPublic: true,
+        videoHosting: {
+          enabled: true,
+          maxStoredMinutes: 600,
+          maxConcurrentUploads: 1,
+          maxCreatesPerDay: 3,
+          publicClips: { status: 'granted', updatedAt: new Date(), updatedBy: 'operator-1' },
+        },
+      });
+
+      const league = await getPublicLeagueBySlug('secret-league', viewer);
+      const json = JSON.stringify(league);
+      expect(json).not.toContain('videoHosting');
+      expect(json).not.toContain('maxStoredMinutes');
+      expect(json).not.toContain('publicClips');
+    }
+  );
 });
 
 describe('getPublicLeaguePlayerBySlug — claimedUserId is public-league-only (Follow System v1)', () => {

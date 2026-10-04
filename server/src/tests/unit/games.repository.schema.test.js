@@ -225,6 +225,35 @@ describe('Game.video schema (Mux game video)', () => {
       expect(writtenPaths.filter((p) => p === 'video' || p.startsWith('video.'))).toEqual([]);
     }
   });
+
+  // The one exception (OPT-026): hydrating a stored video that LACKS
+  // equivalentTimelines applies the [] default, and Mongoose then $sets that
+  // default on the next save — a stale stat save would overwrite a newer
+  // generation's list (or fail on a since-nulled video). video.repository
+  // therefore persists equivalentTimelines on every write, so a stored video
+  // always carries it and this path never arises from TSW's own writes.
+  test('a stored video without equivalentTimelines would leak the default into a stat save (E1)', () => {
+    const game = Game.hydrate({
+      _id: GAME_ID,
+      ownerUserId: OWNER_ID,
+      title: 'Loaded',
+      events: [],
+      __v: 4,
+      video: without(readyVideo, 'equivalentTimelines'),
+    });
+    game.events.push({
+      statType: 'FG2_MADE',
+      segmentKind: 'regulation',
+      segmentNumber: 1,
+      clockMillisecondsRemaining: 600000,
+    });
+    game.eventCount = 1;
+    const [, update] = game.$__delta();
+    const writtenPaths = Object.values(update).flatMap((operator) => Object.keys(operator));
+    expect(writtenPaths.filter((p) => p === 'video' || p.startsWith('video.'))).toEqual([
+      'video.equivalentTimelines',
+    ]);
+  });
 });
 
 describe('Game events video timeline binding (P6)', () => {

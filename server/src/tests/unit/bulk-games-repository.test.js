@@ -54,7 +54,7 @@ describe('deleteReplaceableLeagueGames', () => {
     jest.restoreAllMocks();
   });
 
-  it('scopes the delete to eventless scheduled games in the given league and season', async () => {
+  it('scopes the delete to eventless, video-less scheduled games in the given league and season', async () => {
     const deleteMany = jest.spyOn(Game, 'deleteMany').mockResolvedValue({ deletedCount: 4 });
 
     const deleted = await deleteReplaceableLeagueGames(leagueId, seasonId);
@@ -65,7 +65,21 @@ describe('deleteReplaceableLeagueGames', () => {
       seasonId,
       status: 'scheduled',
       $or: [{ events: { $size: 0 } }, { events: { $exists: false } }],
+      video: null,
     });
+  });
+
+  // Mux game video R3: a bulk delete would bypass the upload-attempt cleanup
+  // queue and strand the hosted media (still billed, tokens still valid), so a
+  // fixture carrying hosted media is never "replaceable". `video: null`
+  // matches both an explicit null and a missing field (pre-video games).
+  it('never deletes a game that carries hosted media', async () => {
+    const deleteMany = jest.spyOn(Game, 'deleteMany').mockResolvedValue({ deletedCount: 0 });
+
+    await deleteReplaceableLeagueGames(leagueId, seasonId);
+
+    const [filter] = deleteMany.mock.calls[0];
+    expect(filter.video).toBeNull();
   });
 
   it('never targets in-progress or completed games', async () => {

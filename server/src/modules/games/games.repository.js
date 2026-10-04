@@ -185,13 +185,19 @@ const aiSummarySchema = new mongoose.Schema(
 // video per game; `videoUrl` remains the YouTube link. Ids are written only by
 // the video module and never serialised to clients (sanitizeGameVideo).
 //
-// OPT-026: `video` is written ONLY by conditional updateOne/findOneAndUpdate on
-// `video.*` paths, filtered by _id + video.generationId + the expected
-// uploadId/assetId/status, and those writes do NOT bump `__v`. A webhook that
-// lands mid-tracking must not turn the tracker's next event save into a 409
-// (OPT-015), and no saveGame path ever assigns `video`, so a stat save from a
-// doc loaded before the webhook never writes a stale `video` back (Mongoose
-// only $sets modified paths; the init-time null default is not one).
+// OPT-026: `video` is written ONLY by the conditional findOneAndUpdate helpers
+// in modules/video/video.repository.js (attachGameVideo / updateGameVideo /
+// detachGameVideo), filtered by _id + video.generationId + the expected
+// uploadId/assetId/status, with runValidators, and those writes do NOT bump
+// `__v`. A webhook that lands mid-tracking must not turn the tracker's next
+// event save into a 409 (OPT-015), and no saveGame path ever assigns `video`.
+// A stat save from a doc loaded before the webhook therefore writes no `video`
+// path back — with one caveat: Mongoose $sets defaults it applied while
+// hydrating, so a stored video MISSING `equivalentTimelines` would get the []
+// default written back by any later save (clobbering a newer generation's
+// list, or failing on a since-nulled video). Every video write persists
+// `equivalentTimelines` explicitly so a stored video always carries it; the
+// top-level `video: null` default is not affected (a stored null is kept).
 // Durable cleanup/deletion state lives outside Game, keyed by upload attempt.
 const gameVideoSchema = new mongoose.Schema(
   {
@@ -600,18 +606,25 @@ async function insertManyGames(docs) {
 // Schedule Builder: only a future fixture that nobody has started is safe to
 // replace. A game carrying any recorded event, or one already in progress or
 // completed, is real history and is never deleted by a schedule rebuild.
+// Mux game video R3: nor is a game carrying hosted media — a bulk delete
+// bypasses the upload-attempt cleanup queue and would strand a billed asset
+// whose tokens still work. `video: null` matches null and a missing field.
 async function deleteReplaceableLeagueGames(leagueId, seasonId) {
   const result = await Game.deleteMany({
     leagueId,
     seasonId,
     status: 'scheduled',
     $or: [{ events: { $size: 0 } }, { events: { $exists: false } }],
+    video: null,
   });
 
   return result?.deletedCount ?? 0;
 }
 
 module.exports = {
+  // Exported for modules/video/video.repository.js, the only writer of
+  // `video` (OPT-026). Other modules go through the functions below.
+  Game,
   createGame,
   insertManyGames,
   deleteReplaceableLeagueGames,

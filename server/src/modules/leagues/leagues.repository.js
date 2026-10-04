@@ -67,6 +67,44 @@ const gameFormatSchema = new mongoose.Schema(
   { _id: false }
 );
 
+function nonNegativeInteger(field) {
+  return {
+    type: Number,
+    min: 0,
+    validate: { validator: Number.isInteger, message: `${field} must be an integer` },
+  };
+}
+
+// Mux game video P4: the League's recorded permission to publish its footage
+// as public clips. 'unrecorded' (default) means no public Mux clip, ever; only
+// the operator script (scripts/set-league-video-hosting.js) writes it.
+const leagueVideoPublicClipsSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ['unrecorded', 'granted', 'withdrawn'],
+      default: 'unrecorded',
+    },
+    updatedAt: { type: Date, default: null },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  },
+  { _id: false }
+);
+
+// Mux game video P1: the operator grant for hosted uploads and its quotas
+// (enforced atomically by video.repository reserveUploadSlot). Closed by
+// default. Internal: no league serializer exposes it.
+const leagueVideoHostingSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    maxStoredMinutes: { ...nonNegativeInteger('maxStoredMinutes'), default: 0 },
+    maxConcurrentUploads: { ...nonNegativeInteger('maxConcurrentUploads'), default: 1 },
+    maxCreatesPerDay: { ...nonNegativeInteger('maxCreatesPerDay'), default: 3 },
+    publicClips: { type: leagueVideoPublicClipsSchema, default: () => ({}) },
+  },
+  { _id: false }
+);
+
 const leagueSchema = new mongoose.Schema(
   {
     ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -142,6 +180,7 @@ const leagueSchema = new mongoose.Schema(
     // The league's own handles, and the permission every export of this
     // league's content is gated on (social backlog rank 9).
     social: { type: socialIdentitySchema, default: () => ({}) },
+    videoHosting: { type: leagueVideoHostingSchema, default: () => ({}) },
   },
   { timestamps: true }
 );
