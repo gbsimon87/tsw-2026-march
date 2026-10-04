@@ -396,6 +396,8 @@ describe('VideoCleanupJob', () => {
       $set: {
         status: 'pending',
         attempts: 0,
+        deferrals: 0,
+        firstDeferredAt: null,
         nextAttemptAt: NOW,
         leaseOwner: null,
         leaseExpiresAt: null,
@@ -429,6 +431,8 @@ describe('VideoCleanupJob', () => {
       deployment: 'test:tsw_2026_test',
       status: 'pending',
       attempts: 0,
+      deferrals: 0,
+      firstDeferredAt: null,
       nextAttemptAt: NOW,
       leaseOwner: null,
       leaseExpiresAt: null,
@@ -607,6 +611,73 @@ describe('VideoCleanupJob', () => {
         lastError: null,
       },
     });
+  });
+
+  test('cleanup jobs default to no deferrals', () => {
+    const job = new VideoCleanupJob({
+      kind: 'cancel_upload',
+      targetId: 'up-1',
+      attemptId: ATTEMPT_ID,
+      gameId: GAME_ID,
+      reason: 'replaced',
+      deployment: 'test:tsw_2026_test',
+    });
+    expect(job.validateSync()).toBeUndefined();
+    expect(job.deferrals).toBe(0);
+    expect(job.firstDeferredAt).toBeNull();
+  });
+
+  test("deferCleanupJob: back to pending, refunds the claim's attempt, counts the deferral (one pipeline update)", async () => {
+    const findOneAndUpdate = jest
+      .spyOn(VideoCleanupJob, 'findOneAndUpdate')
+      .mockResolvedValue({ _id: JOB_ID, status: 'pending', deferrals: 1 });
+    const nextAttemptAt = new Date('2026-10-04T12:00:30.000Z');
+
+    await expect(
+      videoRepository.deferCleanupJob({
+        jobId: JOB_ID,
+        leaseOwner: 'worker-a',
+        nextAttemptAt,
+        now: NOW,
+      })
+    ).resolves.toEqual({ _id: JOB_ID, status: 'pending', deferrals: 1 });
+
+    const [filter, update, options] = findOneAndUpdate.mock.calls[0];
+    expect(filter).toEqual({ _id: JOB_ID, status: 'leased', leaseOwner: 'worker-a' });
+    expect(update).toEqual([
+      {
+        $set: {
+          status: 'pending',
+          nextAttemptAt,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          lastError: 'still_referenced',
+          // claimDueCleanupJobs already counted this claim; a deferral is not a try.
+          attempts: { $max: [0, { $subtract: ['$attempts', 1] }] },
+          deferrals: { $add: [{ $ifNull: ['$deferrals', 0] }, 1] },
+          firstDeferredAt: { $ifNull: ['$firstDeferredAt', { $literal: NOW }] },
+        },
+      },
+    ]);
+    expect(options).toEqual({ new: true, lean: true });
+  });
+
+  test('deferCleanupJob returns null when this worker lost the lease', async () => {
+    jest.spyOn(VideoCleanupJob, 'findOneAndUpdate').mockResolvedValue(null);
+    await expect(
+      videoRepository.deferCleanupJob({
+        jobId: JOB_ID,
+        leaseOwner: 'worker-a',
+        nextAttemptAt: NOW,
+        now: NOW,
+      })
+    ).resolves.toBeNull();
+  });
+
+  test('deferCleanupJob needs a Date for the next attempt', async () => {
+    await expect(
+      videoRepository.deferCleanupJob({ jobId: JOB_ID, leaseOwner: 'w', nextAttemptAt: null })
+    ).rejects.toThrow(TypeError);
   });
 
   test('failCleanupJobAttempt reschedules a retryable failure', async () => {

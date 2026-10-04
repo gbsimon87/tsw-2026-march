@@ -538,6 +538,71 @@ describe('createGameVideoUpload', () => {
     });
   });
 
+  test('attach THROWS (it may have applied) → best-effort detach of the fresh generation, then abandon', async () => {
+    mockRepository.attachGameVideo.mockRejectedValue(new Error('socket hang up'));
+
+    await expect(create()).rejects.toThrow('socket hang up');
+
+    expect(mockRepository.detachGameVideo).toHaveBeenCalledWith({
+      gameId: GAME_ID,
+      generationId: NEW_GENERATION,
+    });
+    expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'cancel_upload',
+        targetId: 'up-new',
+        reason: 'create_failed',
+      })
+    );
+    expect(mockRepository.transitionUploadAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ attemptId: ATTEMPT_ID, toStatus: 'rejected' })
+    );
+    expect(mockRepository.releaseUploadSlot).toHaveBeenCalledTimes(1);
+    // Detach first, so the worker's reference recheck does not defer the cancel.
+    expectAscending(
+      callOrder(
+        mockRepository.detachGameVideo,
+        mockRepository.enqueueCleanupJob,
+        mockRepository.transitionUploadAttempt,
+        mockCleanup.kickCleanup
+      )
+    );
+  });
+
+  test('attach throws and the best-effort detach fails too → still abandoned, logged, original error', async () => {
+    mockRepository.attachGameVideo.mockRejectedValue(new Error('socket hang up'));
+    mockRepository.detachGameVideo.mockRejectedValue(new Error('db down'));
+
+    await expect(create()).rejects.toThrow('socket hang up');
+
+    expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledTimes(1);
+    expect(mockRepository.releaseUploadSlot).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ attemptId: ATTEMPT_ID, generationId: NEW_GENERATION }),
+      'Video attach failed and the fresh generation could not be detached'
+    );
+  });
+
+  test('attach returns null (condition did not hold, nothing applied) → no detach', async () => {
+    mockRepository.attachGameVideo.mockResolvedValue(null);
+
+    await create().catch(() => {});
+
+    expect(mockRepository.detachGameVideo).not.toHaveBeenCalled();
+  });
+
+  test('old-cleanup enqueue fails before any attach → no detach either', async () => {
+    mockGamesService.assertGameAccess.mockResolvedValue(game({ video: oldVideo() }));
+    mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
+      attempt({ _id: OLD_ATTEMPT_ID, generationId: OLD_GENERATION, uploadId: 'up-old' })
+    );
+    mockRepository.enqueueCleanupJob.mockRejectedValueOnce(new Error('db down'));
+
+    await create().catch(() => {});
+
+    expect(mockRepository.detachGameVideo).not.toHaveBeenCalled();
+  });
+
   test('attach lost a race → cancel the NEW upload, attempt superseded, slot released, kick, 409', async () => {
     mockRepository.attachGameVideo.mockResolvedValue(null);
 
@@ -651,14 +716,14 @@ describe('cancelGameVideoUpload', () => {
   const cancel = () =>
     videoService.cancelGameVideoUpload({ userId: USER_ID, gameId: GAME_ID, attemptId: ATTEMPT_ID });
 
-  test('requires writable access and league owner/manager (not the hosting allowance)', async () => {
+  test('requires game access and league owner/manager — no billing check, no hosting allowance', async () => {
     mockRepository.findUploadAttemptById.mockResolvedValue(attempt({ status: 'reserved' }));
 
     await cancel();
 
-    expect(mockGamesService.assertGameAccess).toHaveBeenCalledWith(USER_ID, GAME_ID, {
-      requireWritable: true,
-    });
+    // Access only (canAccessGame semantics, 404 for unrelated users), NOT
+    // requireWritable: a lapsed League must still be able to take media down.
+    expect(mockGamesService.assertGameAccess).toHaveBeenCalledWith(USER_ID, GAME_ID);
     expect(mockPolicy.resolveVideoManagerAccess).toHaveBeenCalledWith({
       userId: USER_ID,
       game: game(),
@@ -1034,5 +1099,104 @@ describe('game deletion helpers', () => {
     await videoService.finishGameVideoCleanupAfterDeletion(null);
     expect(mockRepository.transitionUploadAttempt).not.toHaveBeenCalled();
     expect(mockCleanup.kickCleanup).not.toHaveBeenCalled();
+  });
+});
+
+// ─── takedown authorization (controller ruling) ──────────────────────────────
+
+describe('cancel/remove authorization: takedown never requires writable billing', () => {
+  const LAPSED = new ApiError(402, 'An active League subscription is required to make changes');
+
+  beforeEach(() => {
+    // A lapsed League: access passes, the writable (billing) check would 402.
+    mockGamesService.assertGameAccess.mockImplementation(async (_userId, _gameId, options) => {
+      if (options?.requireWritable) throw LAPSED;
+      return game({
+        video: oldVideo({ status: 'ready', assetId: 'as-old' }),
+      });
+    });
+    mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
+      attempt({
+        _id: OLD_ATTEMPT_ID,
+        generationId: OLD_GENERATION,
+        status: 'ready',
+        assetId: 'as-old',
+      })
+    );
+    mockRepository.findUploadAttemptById.mockResolvedValue(
+      attempt({ status: 'uploading', uploadId: 'up-1' })
+    );
+  });
+
+  test('lapsed League owner can remove hosted media (takedown + stop Mux storage)', async () => {
+    await expect(
+      videoService.removeGameVideo({ userId: USER_ID, gameId: GAME_ID })
+    ).resolves.toEqual({ video: null });
+    expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'delete_asset', targetId: 'as-old' })
+    );
+    expect(mockRepository.detachGameVideo).toHaveBeenCalled();
+  });
+
+  test('lapsed League owner can cancel an in-flight upload', async () => {
+    await expect(
+      videoService.cancelGameVideoUpload({
+        userId: USER_ID,
+        gameId: GAME_ID,
+        attemptId: ATTEMPT_ID,
+      })
+    ).resolves.toEqual({ cancelled: true });
+    expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'cancel_upload', targetId: 'up-1' })
+    );
+  });
+
+  test('unrelated user → 404 from the access check; nothing read or written', async () => {
+    mockGamesService.assertGameAccess.mockRejectedValue(new ApiError(404, 'Game not found'));
+
+    await expect(
+      videoService.removeGameVideo({ userId: USER_ID, gameId: GAME_ID })
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      videoService.cancelGameVideoUpload({
+        userId: USER_ID,
+        gameId: GAME_ID,
+        attemptId: ATTEMPT_ID,
+      })
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(mockPolicy.resolveVideoManagerAccess).not.toHaveBeenCalled();
+    expect(mockRepository.enqueueCleanupJob).not.toHaveBeenCalled();
+    expect(mockRepository.detachGameVideo).not.toHaveBeenCalled();
+  });
+
+  test('team manager (game access, not a league manager) → 403 not_league_manager', async () => {
+    mockPolicy.resolveVideoManagerAccess.mockResolvedValue({
+      allowed: false,
+      reason: 'not_league_manager',
+    });
+
+    await expect(
+      videoService.removeGameVideo({ userId: USER_ID, gameId: GAME_ID })
+    ).rejects.toMatchObject({ statusCode: 403, details: { reason: 'not_league_manager' } });
+    await expect(
+      videoService.cancelGameVideoUpload({
+        userId: USER_ID,
+        gameId: GAME_ID,
+        attemptId: ATTEMPT_ID,
+      })
+    ).rejects.toMatchObject({ statusCode: 403, details: { reason: 'not_league_manager' } });
+    expect(mockRepository.enqueueCleanupJob).not.toHaveBeenCalled();
+  });
+
+  test('no user → 401 before the access check (the null-user path would return any game)', async () => {
+    await expect(
+      videoService.removeGameVideo({ userId: null, gameId: GAME_ID })
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(mockGamesService.assertGameAccess).not.toHaveBeenCalled();
+  });
+
+  test('upload creation still requires writable billing (402 for a lapsed League)', async () => {
+    await expect(create()).rejects.toMatchObject({ statusCode: 402 });
+    expect(mockMux.createDirectUpload).not.toHaveBeenCalled();
   });
 });

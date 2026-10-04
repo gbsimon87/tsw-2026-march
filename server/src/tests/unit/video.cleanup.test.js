@@ -15,6 +15,7 @@ const mockRepository = {
   listDueCleanupJobs: jest.fn(),
   completeCleanupJob: jest.fn(),
   failCleanupJobAttempt: jest.fn(),
+  deferCleanupJob: jest.fn(),
   releaseUploadSlot: jest.fn(),
   releaseStoredMinutes: jest.fn(),
 };
@@ -299,14 +300,26 @@ describe('processCleanupJob — ownership (E3: nothing without an owning attempt
 describe('processCleanupJob — reference recheck (T4 removal order: enqueue before detach)', () => {
   // Callers persist the job BEFORE detaching/replacing Game.video (R3), so a
   // job can exist while its generation is still attached. The worker must
-  // never delete media the Game still references.
+  // never delete media the Game still references. A deferral is not a try: it
+  // does not spend the job's Mux retry budget (deferCleanupJob refunds the
+  // claim), and a separate deferral window bounds a forever-referenced job.
   const deleteJob = (overrides) =>
     job({ kind: 'delete_asset', targetId: 'as-9', reason: 'video_removed', ...overrides });
 
-  test('cancel_upload whose generation is still referenced → deferred, no Mux call', async () => {
+  beforeEach(() => {
+    mockRepository.deferCleanupJob.mockImplementation(async ({ nextAttemptAt }) => ({
+      _id: JOB_ID,
+      status: 'pending',
+      nextAttemptAt,
+    }));
+  });
+
+  test('cancel_upload whose generation is still referenced → deferred (budget untouched), no Mux call', async () => {
     mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
 
-    const result = await cleanup.processCleanupJob(job({ attempts: 2 }), { now: NOW });
+    const result = await cleanup.processCleanupJob(job({ attempts: 2, deferrals: 0 }), {
+      now: NOW,
+    });
 
     expect(mockRepository.isGameVideoGenerationReferenced).toHaveBeenCalledWith({
       gameId: GAME_ID,
@@ -314,16 +327,13 @@ describe('processCleanupJob — reference recheck (T4 removal order: enqueue bef
     });
     expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
     expect(mockRepository.completeCleanupJob).not.toHaveBeenCalled();
-    expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith({
+    expect(mockRepository.failCleanupJobAttempt).not.toHaveBeenCalled();
+    expect(mockRepository.deferCleanupJob).toHaveBeenCalledWith({
       jobId: JOB_ID,
       leaseOwner: LEASE_OWNER,
-      retryable: true,
       nextAttemptAt: new Date(NOW.getTime() + cleanup.CLEANUP_REFERENCED_DEFER_MS),
-      error: 'still_referenced',
+      now: NOW,
     });
-    expect(cleanup.CLEANUP_REFERENCED_DEFER_MS).toBeLessThanOrEqual(
-      cleanup.CLEANUP_BASE_RETRY_DELAY_MS
-    );
     expect(mockLogger.info).toHaveBeenCalledWith(
       {
         jobId: JOB_ID,
@@ -331,7 +341,7 @@ describe('processCleanupJob — reference recheck (T4 removal order: enqueue bef
         gameId: GAME_ID,
         attemptId: ATTEMPT_ID,
         targetId: 'up-1',
-        attempts: 2,
+        deferrals: 1,
       },
       'Video cleanup deferred: media still referenced by its game'
     );
@@ -350,6 +360,87 @@ describe('processCleanupJob — reference recheck (T4 removal order: enqueue bef
     expect(result).toEqual({ status: 'retry' });
   });
 
+  test('deferrals do not spend the retry budget: a job at MAX attempts is still deferred, not failed', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+
+    const result = await cleanup.processCleanupJob(
+      job({ attempts: cleanup.CLEANUP_MAX_ATTEMPTS, deferrals: 3, firstDeferredAt: NOW }),
+      { now: NOW }
+    );
+
+    expect(mockRepository.failCleanupJobAttempt).not.toHaveBeenCalled();
+    expect(mockRepository.deferCleanupJob).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ status: 'retry' });
+  });
+
+  test('deferral delay grows from the base and is capped', () => {
+    const { cleanupDeferAt, CLEANUP_REFERENCED_DEFER_MS, CLEANUP_MAX_DEFER_DELAY_MS } = cleanup;
+    const delay = (deferrals) => cleanupDeferAt(deferrals, NOW).getTime() - NOW.getTime();
+    expect(delay(0)).toBe(CLEANUP_REFERENCED_DEFER_MS);
+    expect(delay(1)).toBe(CLEANUP_REFERENCED_DEFER_MS * 2);
+    expect(delay(50)).toBe(CLEANUP_MAX_DEFER_DELAY_MS);
+    expect(CLEANUP_MAX_DEFER_DELAY_MS).toBeLessThanOrEqual(15 * 60 * 1000);
+  });
+
+  test('still referenced past the deferral window → terminal failure with a distinct log, never a deletion', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+    const firstDeferredAt = new Date(NOW.getTime() - cleanup.CLEANUP_MAX_DEFERRAL_MS);
+
+    const result = await cleanup.processCleanupJob(
+      job({ attempts: 1, deferrals: 40, firstDeferredAt }),
+      { now: NOW }
+    );
+
+    expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
+    expect(mockRepository.deferCleanupJob).not.toHaveBeenCalled();
+    expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith({
+      jobId: JOB_ID,
+      leaseOwner: LEASE_OWNER,
+      retryable: false,
+      nextAttemptAt: null,
+      error: 'still_referenced_expired',
+    });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      {
+        jobId: JOB_ID,
+        kind: 'cancel_upload',
+        gameId: GAME_ID,
+        attemptId: ATTEMPT_ID,
+        targetId: 'up-1',
+        deferrals: 40,
+        firstDeferredAt,
+      },
+      'Video cleanup abandoned: media still referenced after the deferral window'
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'Video cleanup job failed permanently'
+    );
+    expect(result).toEqual({ status: 'failed' });
+  });
+
+  test('a deferral that lost the lease reports lost_lease', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+    mockRepository.deferCleanupJob.mockResolvedValue(null);
+
+    await expect(cleanup.processCleanupJob(job(), { now: NOW })).resolves.toEqual({
+      status: 'lost_lease',
+    });
+  });
+
+  test('a failed deferral write is logged and the lease simply expires', async () => {
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+    mockRepository.deferCleanupJob.mockRejectedValue(new Error('db down'));
+
+    await expect(cleanup.processCleanupJob(job(), { now: NOW })).resolves.toEqual({
+      status: 'error',
+    });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: JOB_ID }),
+      'Video cleanup could not record a deferral'
+    );
+  });
+
   test('not referenced (detached, replaced, or the game no longer exists) → proceeds to Mux', async () => {
     mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
     mockMux.cancelDirectUpload.mockResolvedValue({ outcome: 'cancelled' });
@@ -363,29 +454,11 @@ describe('processCleanupJob — reference recheck (T4 removal order: enqueue bef
       mockMux.cancelDirectUpload.mock.invocationCallOrder[0],
     ];
     expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(mockRepository.deferCleanupJob).not.toHaveBeenCalled();
     expect(result).toEqual({ status: 'done', outcome: 'cancelled' });
   });
 
-  test('still referenced when the budget is exhausted → terminal failure, never a deletion', async () => {
-    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
-
-    const result = await cleanup.processCleanupJob(
-      job({ attempts: cleanup.CLEANUP_MAX_ATTEMPTS }),
-      { now: NOW }
-    );
-
-    expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
-    expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ retryable: true, nextAttemptAt: null, error: 'still_referenced' })
-    );
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ exhausted: true, lastError: 'still_referenced' }),
-      'Video cleanup job failed permanently'
-    );
-    expect(result).toEqual({ status: 'failed' });
-  });
-
-  test('a failed reference read is retried with normal backoff, never read as "unreferenced"', async () => {
+  test('a failed reference read is retried with normal backoff (a real try), never read as "unreferenced"', async () => {
     const error = new Error('connection lost');
     mockRepository.isGameVideoGenerationReferenced.mockRejectedValue(error);
 
@@ -395,6 +468,7 @@ describe('processCleanupJob — reference recheck (T4 removal order: enqueue bef
     });
 
     expect(mockMux.cancelDirectUpload).not.toHaveBeenCalled();
+    expect(mockRepository.deferCleanupJob).not.toHaveBeenCalled();
     expect(mockRepository.failCleanupJobAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
         retryable: true,

@@ -171,8 +171,9 @@ async function resolveUploadAllowance({ userId, game } = {}) {
  * Who may cancel an upload or remove hosted media (T4): the league owner or an
  * active league manager — the P1 uploader set — WITHOUT the hosting gates
  * (env flag, grant, game status), so media can always be removed even after
- * hosting is switched off. The caller also runs
- * `assertGameAccess(userId, gameId, { requireWritable: true })`.
+ * hosting is switched off. The caller also runs `assertGameAccess(userId,
+ * gameId)` — game access only, NOT requireWritable (controller ruling: a
+ * lapsed League must still be able to take media down).
  * Reasons are UPLOAD_ALLOWANCE_REASONS values (unauthenticated,
  * not_league_game, league_not_found, not_league_manager).
  *

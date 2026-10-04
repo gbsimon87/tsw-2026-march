@@ -148,7 +148,12 @@ const videoCleanupJobSchema = new mongoose.Schema(
     reason: { type: String, required: true, maxlength: 64 },
     deployment: { type: String, required: true },
     status: { type: String, enum: CLEANUP_JOB_STATUSES, default: 'pending', required: true },
+    // Claims that tried the job (Mux or database). Deferrals while the job's
+    // generation is still attached are NOT tries and are refunded
+    // (deferCleanupJob); they are counted and bounded separately.
     attempts: nonNegativeInteger('attempts', { default: 0 }),
+    deferrals: nonNegativeInteger('deferrals', { default: 0 }),
+    firstDeferredAt: { type: Date, default: null },
     nextAttemptAt: { type: Date, default: null },
     leaseOwner: { type: String, default: null },
     leaseExpiresAt: { type: Date, default: null },
@@ -385,6 +390,8 @@ function resetFailedCleanupJob({ kind, targetId, now }) {
       $set: {
         status: 'pending',
         attempts: 0,
+        deferrals: 0,
+        firstDeferredAt: null,
         nextAttemptAt: now,
         leaseOwner: null,
         leaseExpiresAt: null,
@@ -427,6 +434,8 @@ async function enqueueCleanupJob({ kind, targetId, attemptId, gameId, reason, no
           deployment,
           status: 'pending',
           attempts: 0,
+          deferrals: 0,
+          firstDeferredAt: null,
           nextAttemptAt: now,
           leaseOwner: null,
           leaseExpiresAt: null,
@@ -569,6 +578,34 @@ async function failCleanupJobAttempt({ jobId, leaseOwner, retryable, nextAttempt
       },
     },
     WRITE_OPTIONS
+  );
+}
+
+// The job's generation is still attached to its Game (the caller enqueued
+// before detaching, R3): put it back to pending at nextAttemptAt WITHOUT
+// spending the retry budget — the claim's `attempts` increment is refunded —
+// and count the deferral (`deferrals`, `firstDeferredAt` set once). One
+// pipeline update, so refund and count land atomically with the lease release.
+// → job | null (this worker no longer holds the lease)
+async function deferCleanupJob({ jobId, leaseOwner, nextAttemptAt, now = new Date() }) {
+  if (!(nextAttemptAt instanceof Date)) throw new TypeError('nextAttemptAt must be a Date');
+  return VideoCleanupJob.findOneAndUpdate(
+    leasedBy(jobId, leaseOwner),
+    [
+      {
+        $set: {
+          status: 'pending',
+          nextAttemptAt,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          lastError: 'still_referenced',
+          attempts: decrementFloor('attempts', 1),
+          deferrals: { $add: [{ $ifNull: ['$deferrals', 0] }, 1] },
+          firstDeferredAt: { $ifNull: ['$firstDeferredAt', { $literal: now }] },
+        },
+      },
+    ],
+    { new: true, lean: true }
   );
 }
 
@@ -937,6 +974,7 @@ module.exports = {
   listDueCleanupJobs,
   completeCleanupJob,
   failCleanupJobAttempt,
+  deferCleanupJob,
   summarizeCleanupError,
   countPendingCleanupJobs,
   // webhook idempotency

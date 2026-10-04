@@ -16,9 +16,12 @@
 // Reference recheck (T4 removal order): callers persist a job BEFORE they
 // detach/replace Game.video (R3), so a job can exist while its generation is
 // still attached. Before any Mux call the worker rechecks the Game; while it
-// still carries the attempt's generation the job is deferred (short backoff,
-// counted against the attempt budget) — referenced media is never deleted.
-// A game that no longer exists is not referencing anything.
+// still carries the attempt's generation the job is deferred — referenced
+// media is never deleted. A deferral is not a try: it does not spend the Mux
+// retry budget (deferCleanupJob refunds the claim) but has its own window
+// (CLEANUP_MAX_DEFERRAL_MS from the first deferral), after which a job whose
+// media is STILL attached ends terminal-failed with a distinct log. A game
+// that no longer exists is not referencing anything.
 const crypto = require('crypto');
 const { logger } = require('../../config/logger');
 const muxClient = require('./mux.client');
@@ -37,12 +40,17 @@ const RECONCILE_GRACE_MS = 24 * 60 * 60 * 1000;
 const RECONCILE_LIMIT = 25;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const RECONCILED_ERROR_MESSAGE = 'Reconciled: stale upload no longer referenced by its game';
-// The caller that enqueued normally detaches within milliseconds; a job still
-// referenced after the budget (≈ 10 × this) is left terminal-failed, not deleted.
+// The caller that enqueued normally detaches within milliseconds, so the first
+// deferral is short; it doubles per deferral up to the cap. A job still
+// referenced a day after its first deferral (a detach that never happened —
+// the media is in use) is left terminal-failed, never deleted; re-enqueueing
+// (a later removal) resets it.
 const CLEANUP_REFERENCED_DEFER_MS = 30 * 1000;
+const CLEANUP_MAX_DEFER_DELAY_MS = 15 * 60 * 1000;
+const CLEANUP_MAX_DEFERRAL_MS = 24 * 60 * 60 * 1000;
 
 const OWNERSHIP_NOT_PROVEN = 'ownership_not_proven';
-const STILL_REFERENCED = 'still_referenced';
+const STILL_REFERENCED_EXPIRED = 'still_referenced_expired';
 
 // A failure the job must not retry (ownership not proven, unexpected outcome).
 function nonRetryable(code) {
@@ -51,16 +59,6 @@ function nonRetryable(code) {
 
 // Mux client errors carry `retryable`; anything else (database, network) is
 // treated as transient and retried within the attempt budget.
-// Retryable, but on a short fixed delay instead of the exponential backoff.
-function stillReferenced() {
-  return Object.assign(new Error(STILL_REFERENCED), {
-    name: 'VideoCleanupError',
-    code: STILL_REFERENCED,
-    retryable: true,
-    deferMs: CLEANUP_REFERENCED_DEFER_MS,
-  });
-}
-
 function isRetryable(error) {
   return error?.retryable !== false;
 }
@@ -76,6 +74,14 @@ function cleanupRetryAt(attempts, now, random = Math.random) {
   );
   const jitteredDelay = Math.round(baseDelay * (0.8 + random() * 0.4));
   return new Date(now.getTime() + Math.min(CLEANUP_MAX_RETRY_DELAY_MS, jitteredDelay));
+}
+
+function cleanupDeferAt(deferrals, now) {
+  const delay = Math.min(
+    CLEANUP_MAX_DEFER_DELAY_MS,
+    CLEANUP_REFERENCED_DEFER_MS * 2 ** Math.max(0, Math.min(deferrals || 0, 30))
+  );
+  return new Date(now.getTime() + delay);
 }
 
 function newLeaseOwner() {
@@ -107,18 +113,56 @@ async function findOwningAttempt(job) {
   return attempt;
 }
 
-// A read failure propagates (retryable) — never treated as "not referenced".
-async function assertNotReferenced(job, attempt) {
-  const referenced = await repository.isGameVideoGenerationReferenced({
+// A read failure propagates (a retryable try) — never "not referenced".
+async function isStillReferenced(attempt) {
+  return repository.isGameVideoGenerationReferenced({
     gameId: attempt.gameId,
     generationId: attempt.generationId,
   });
-  if (referenced) {
+}
+
+// The job's media is still attached: defer without spending the retry budget,
+// or — past the deferral window — fail it terminally (the media is in use, so
+// this is not an orphan alert like 'failed permanently').
+async function deferReferencedJob(job, now) {
+  const deferrals = job.deferrals || 0;
+  const firstDeferredAt = job.firstDeferredAt ? new Date(job.firstDeferredAt) : null;
+  try {
+    if (firstDeferredAt && now.getTime() - firstDeferredAt.getTime() >= CLEANUP_MAX_DEFERRAL_MS) {
+      const failed = await repository.failCleanupJobAttempt({
+        jobId: job._id,
+        leaseOwner: job.leaseOwner,
+        retryable: false,
+        nextAttemptAt: null,
+        error: STILL_REFERENCED_EXPIRED,
+      });
+      if (!failed) return { status: 'lost_lease' };
+      logger.warn(
+        { ...jobLogFields(job), deferrals, firstDeferredAt },
+        'Video cleanup abandoned: media still referenced after the deferral window'
+      );
+      return { status: 'failed' };
+    }
+
+    const deferred = await repository.deferCleanupJob({
+      jobId: job._id,
+      leaseOwner: job.leaseOwner,
+      nextAttemptAt: cleanupDeferAt(deferrals, now),
+      now,
+    });
+    if (!deferred) return { status: 'lost_lease' };
     logger.info(
-      { ...jobLogFields(job), attempts: job.attempts },
+      { ...jobLogFields(job), deferrals: deferrals + 1 },
       'Video cleanup deferred: media still referenced by its game'
     );
-    throw stillReferenced();
+    return { status: 'retry' };
+  } catch (error) {
+    // The lease expires and the job is claimed again.
+    logger.error(
+      { ...jobLogFields(job), err: repository.summarizeCleanupError(error) },
+      'Video cleanup could not record a deferral'
+    );
+    return { status: 'error' };
   }
 }
 
@@ -200,12 +244,7 @@ async function processDeleteAsset(job, attempt, now) {
 async function recordFailure(job, error, now, random) {
   const retryable = isRetryable(error);
   const exhausted = retryable && job.attempts >= CLEANUP_MAX_ATTEMPTS;
-  let nextAttemptAt = null;
-  if (retryable && !exhausted) {
-    nextAttemptAt = error?.deferMs
-      ? new Date(now.getTime() + error.deferMs)
-      : cleanupRetryAt(job.attempts, now, random);
-  }
+  const nextAttemptAt = retryable && !exhausted ? cleanupRetryAt(job.attempts, now, random) : null;
   try {
     const updated = await repository.failCleanupJobAttempt({
       jobId: job._id,
@@ -248,7 +287,7 @@ async function processCleanupJob(job, { now = new Date(), random = Math.random }
       throw nonRetryable('unknown_job_kind');
     }
     const attempt = await findOwningAttempt(job);
-    await assertNotReferenced(job, attempt);
+    if (await isStillReferenced(attempt)) return await deferReferencedJob(job, now);
     return job.kind === 'cancel_upload'
       ? await processCancelUpload(job, attempt, now)
       : await processDeleteAsset(job, attempt, now);
@@ -543,7 +582,10 @@ module.exports = {
   SWEEP_INTERVAL_MS,
   RECONCILED_ERROR_MESSAGE,
   CLEANUP_REFERENCED_DEFER_MS,
+  CLEANUP_MAX_DEFER_DELAY_MS,
+  CLEANUP_MAX_DEFERRAL_MS,
   cleanupRetryAt,
+  cleanupDeferAt,
   processCleanupJob,
   runCleanupBatch,
   previewCleanupBatch,

@@ -196,6 +196,22 @@ async function abandonNewUpload(attempt, uploadId, toStatus, reason) {
   kickCleanup();
 }
 
+async function detachFreshGenerationQuietly(attempt) {
+  try {
+    await repository.detachGameVideo({
+      gameId: attempt.gameId,
+      generationId: attempt.generationId,
+    });
+  } catch (error) {
+    // Reconcile/removal recovers: the Game would show an 'uploading' video
+    // whose cancel job defers until it is removed.
+    logger.warn(
+      { ...attemptLogFields(attempt), err: repository.summarizeCleanupError(error) },
+      'Video attach failed and the fresh generation could not be detached'
+    );
+  }
+}
+
 // ─── Create ──────────────────────────────────────────────────────────────────
 
 async function reserveAttempt({ userId, game, allowance, sameRecording }) {
@@ -325,6 +341,11 @@ async function createGameVideoUpload({ userId, gameId, origin, sameRecording = f
       },
     });
   } catch (error) {
+    // The write may have applied before the error (e.g. a lost reply). Undo
+    // it conditionally on our own fresh generation — safe: nothing else can
+    // carry it, its URL was never disclosed, and it is never re-attached
+    // (OPT-028) — so the abandoned cancel is not deferred as "referenced".
+    await detachFreshGenerationQuietly(attempt);
     await abandonNewUpload(attempt, upload.id, 'rejected', 'create_failed');
     throw error;
   }
@@ -353,10 +374,16 @@ async function createGameVideoUpload({ userId, gameId, origin, sameRecording = f
 
 // ─── Cancel / remove ─────────────────────────────────────────────────────────
 
-// Writable access (assertGameAccess) plus league owner/manager. Not gated on
-// the hosting allowance: media must stay removable after hosting is disabled.
+// Takedown authorization (controller ruling): authenticated + game access +
+// league owner/active league manager. Deliberately NOT writable billing and
+// NOT the hosting allowance — a lapsed League or a disabled grant must still
+// be able to take media down and stop Mux storage. assertGameAccess without
+// requireWritable applies exactly canAccessGame's rules (owner, standalone
+// dual-team side owner, canManageLeagueGame) and 404s an unrelated user; the
+// explicit userId guard matters because its null-user path returns any game.
 async function assertVideoManager(userId, gameId) {
-  const game = await gamesService.assertGameAccess(userId, gameId, { requireWritable: true });
+  if (!userId) throw new ApiError(401, 'Unauthorized');
+  const game = await gamesService.assertGameAccess(userId, gameId);
   const access = await resolveVideoManagerAccess({ userId, game });
   if (!access.allowed) {
     throw videoError(403, 'Only league owners and managers can change game video.', access.reason);
