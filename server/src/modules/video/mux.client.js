@@ -96,9 +96,17 @@ function getAsset(assetId) {
 }
 
 /**
- * @returns {Promise<{outcome:'cancelled'} | {outcome:'completed', assetId:string} | {outcome:'gone'}>}
- * 'completed' means the upload already produced an asset: the caller must
- * delete that asset. Any other failure throws MuxApiError.
+ * @returns {Promise<
+ *   {outcome:'cancelled'} | {outcome:'completed', assetId:string} |
+ *   {outcome:'expired'} | {outcome:'gone'}>}
+ * 'cancelled': Mux cancelled the upload (or it was already cancelled).
+ * 'completed': the upload already produced an asset (any status carrying an
+ *   asset_id): the caller must delete that asset.
+ * 'expired': upload is timed_out/errored with no asset; nothing to clean up.
+ * 'gone': 404.
+ * Mux only allows cancel in `waiting`; a refusal (400/403/409/422...) is
+ * classified from the upload's own status. A `waiting` upload after a refusal
+ * is a transient race and throws a retryable MuxApiError. Anything else throws.
  */
 async function cancelDirectUpload(uploadId) {
   try {
@@ -106,9 +114,9 @@ async function cancelDirectUpload(uploadId) {
     return { outcome: 'cancelled' };
   } catch (error) {
     if (error.status === 404) return { outcome: 'gone' };
-    if (error.status !== 400) throw error;
+    const refused = error.status >= 400 && error.status < 500 && ![401, 429].includes(error.status);
+    if (!refused) throw error;
   }
-  // 400 means "not cancellable in its current state"; find out which state.
   let upload;
   try {
     upload = await getDirectUpload(uploadId);
@@ -116,15 +124,14 @@ async function cancelDirectUpload(uploadId) {
     if (error.status === 404) return { outcome: 'gone' };
     throw error;
   }
-  if (upload?.status === 'asset_created' && upload.asset_id) {
-    return { outcome: 'completed', assetId: upload.asset_id };
-  }
+  if (upload?.asset_id) return { outcome: 'completed', assetId: upload.asset_id };
   if (upload?.status === 'cancelled') return { outcome: 'cancelled' };
+  if (upload?.status === 'timed_out' || upload?.status === 'errored') return { outcome: 'expired' };
   throw new MuxApiError(
     `Mux upload could not be cancelled (status ${upload?.status ?? 'unknown'})`,
     {
-      status: 400,
-      retryable: false,
+      status: upload?.status === 'waiting' ? 409 : 400,
+      retryable: upload?.status === 'waiting',
     }
   );
 }

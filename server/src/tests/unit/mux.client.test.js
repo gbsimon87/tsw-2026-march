@@ -90,14 +90,60 @@ describe('mux.client', () => {
       expect(await mux.cancelDirectUpload('up1')).toEqual({ outcome: 'cancelled' });
     });
 
-    test('other 400 (upload in unknown state) throws, not swallowed', async () => {
+    test('completed with assetId when 403 "no longer possible" and upload has an asset', async () => {
+      fetch
+        .mockResolvedValueOnce(
+          res(403, { error: { messages: ['Cancellation no longer possible'] } })
+        )
+        .mockResolvedValueOnce(
+          res(200, { data: { id: 'up1', status: 'asset_created', asset_id: 'a9' } })
+        );
+      expect(await mux.cancelDirectUpload('up1')).toEqual({ outcome: 'completed', assetId: 'a9' });
+    });
+
+    test('any status carrying asset_id resolves to completed', async () => {
+      fetch
+        .mockResolvedValueOnce(res(409, {}))
+        .mockResolvedValueOnce(res(200, { data: { id: 'up1', status: 'weird', asset_id: 'a3' } }));
+      expect(await mux.cancelDirectUpload('up1')).toEqual({ outcome: 'completed', assetId: 'a3' });
+    });
+
+    test.each(['timed_out', 'errored'])(
+      '%s upload without asset is expired (terminal no-op)',
+      async (status) => {
+        fetch
+          .mockResolvedValueOnce(res(403, {}))
+          .mockResolvedValueOnce(res(200, { data: { id: 'up1', status } }));
+        expect(await mux.cancelDirectUpload('up1')).toEqual({ outcome: 'expired' });
+      }
+    );
+
+    test('waiting after a refused cancel throws retryable', async () => {
       fetch
         .mockResolvedValueOnce(res(400, {}))
-        .mockResolvedValueOnce(res(200, { data: { id: 'up1', status: 'errored' } }));
+        .mockResolvedValueOnce(res(200, { data: { id: 'up1', status: 'waiting' } }));
+      await expect(mux.cancelDirectUpload('up1')).rejects.toMatchObject({ retryable: true });
+    });
+
+    test('unknown status after refusal throws non-retryable', async () => {
+      fetch
+        .mockResolvedValueOnce(res(400, {}))
+        .mockResolvedValueOnce(res(200, { data: { id: 'up1', status: 'mystery' } }));
+      await expect(mux.cancelDirectUpload('up1')).rejects.toMatchObject({ retryable: false });
+    });
+
+    test('401 and 429 are not treated as refusals and do not query the upload', async () => {
+      fetch.mockResolvedValueOnce(res(401, {}));
       await expect(mux.cancelDirectUpload('up1')).rejects.toMatchObject({
-        status: 400,
+        status: 401,
         retryable: false,
       });
+      fetch.mockResolvedValueOnce(res(429, {}));
+      await expect(mux.cancelDirectUpload('up1')).rejects.toMatchObject({
+        status: 429,
+        retryable: true,
+      });
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     test('gone on 404', async () => {
