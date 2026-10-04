@@ -919,6 +919,58 @@ async function canAccessGame(userId, game) {
   return false;
 }
 
+// Mux game video. Lazy requires: video.service depends on this module, and
+// video.policy requires it lazily too (see the note at the top of video.policy).
+function videoService() {
+  return require('../video/video.service');
+}
+
+const VIDEO_UPLOAD_FLAG_REASONS = Object.freeze({
+  NOT_WRITABLE: 'game_not_writable',
+  UNAVAILABLE: 'allowance_unavailable',
+});
+
+async function isGameBillingWritable(userId, game) {
+  try {
+    await assertGameBillingWriteAllowed(userId, game);
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && [402, 403].includes(error.statusCode)) return false;
+    throw error;
+  }
+}
+
+// E8: `videoUpload: { allowed, reason }` for an AUTHENTICATED viewer — the P1
+// allowance (video.policy; reasons are UPLOAD_ALLOWANCE_REASONS) plus writable
+// game access, the same pair POST /games/:id/video/uploads enforces. The
+// allowance runs first because with hosting disabled it answers without a
+// read. `canAccess`: the caller already knows the viewer can access the game.
+// `league`: the League document the caller already loaded (its live billing
+// decides writability without a second read). A UI hint only — the upload
+// endpoint re-checks — so a failed read fails closed rather than failing the
+// whole game payload.
+async function resolveVideoUploadFlag(userId, game, { canAccess, league = null } = {}) {
+  try {
+    const { resolveUploadAllowance } = require('../video/video.policy');
+    const allowance = await resolveUploadAllowance({ userId, game });
+    if (!allowance.allowed) return { allowed: false, reason: allowance.reason };
+    const writable =
+      canAccess &&
+      (league
+        ? resolveForLeague(league).entitlements.canManageLeague === true
+        : await isGameBillingWritable(userId, game));
+    return writable
+      ? { allowed: true, reason: null }
+      : { allowed: false, reason: VIDEO_UPLOAD_FLAG_REASONS.NOT_WRITABLE };
+  } catch (error) {
+    logger.warn(
+      { err: error, gameId: String(game._id) },
+      'Video upload allowance could not be resolved'
+    );
+    return { allowed: false, reason: VIDEO_UPLOAD_FLAG_REASONS.UNAVAILABLE };
+  }
+}
+
 function buildParticipantFromStandaloneTeam(team, side) {
   return {
     side,
@@ -1943,7 +1995,10 @@ async function buildGameMarketing(game, { league, teamDoc, participants, strict 
   );
 }
 
-async function getGameForUser(userId, gameId) {
+// `includeVideoUpload: false` is for the per-stat event response (one-sided
+// append), which must not pay for the E8 flag's reads on every stat; the
+// client merges that response over the full payload, keeping the flag.
+async function getGameForUser(userId, gameId, { includeVideoUpload = true } = {}) {
   const game = await assertGameAccess(userId, gameId);
   const responseTime = new Date();
   if (game.clock) game.clock = normalizeClock(game.clock.toObject?.() || game.clock, responseTime);
@@ -2009,6 +2064,12 @@ async function getGameForUser(userId, gameId) {
 
   const marketing = await buildGameMarketing(game, { league, teamDoc, participants });
 
+  // E8: never for anonymous viewers (getPublicGame passes a null user here).
+  const videoUpload =
+    userId && includeVideoUpload
+      ? { videoUpload: await resolveVideoUploadFlag(userId, game, { canAccess: true, league }) }
+      : {};
+
   return {
     serverTime: responseTime.toISOString(),
     marketing,
@@ -2063,6 +2124,7 @@ async function getGameForUser(userId, gameId) {
     aiSummary,
     canEditCompletedGame: canEditCompleted,
     canManageRoster,
+    ...videoUpload,
   };
 }
 
@@ -2089,6 +2151,9 @@ async function getPublicGame(gameId, viewerUserId = null) {
       result.canManageGame = await canAccessGame(viewerUserId, rawGame);
       result.canShareHighlights =
         result.canManageGame || isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
+      result.videoUpload = await resolveVideoUploadFlag(viewerUserId, rawGame, {
+        canAccess: result.canManageGame,
+      });
     }
   }
   return result;
@@ -2359,7 +2424,7 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     // OPT-012: refreeze the box score/summary to match the edited events.
     await refreezeGameBoxScoreIfCompleted(userId, game);
   }
-  return getGameForUser(userId, gameId);
+  return getGameForUser(userId, gameId, { includeVideoUpload: false });
 }
 
 async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
@@ -2631,7 +2696,16 @@ async function deleteGameForUser(userId, gameId) {
     game.gameContext === 'standalone' && game.trackingMode === 'one_sided';
   const teamId = game.teamId;
 
+  // Mux game video (R3): persist provider cleanup for the hosted video BEFORE
+  // the row goes — a failed read/enqueue throws and aborts the delete. The
+  // attempt is retired (quota released) and the worker kicked after it.
+  const videoCleanup = game.video
+    ? await videoService().queueGameVideoCleanupForDeletion(game)
+    : null;
+
   await game.deleteOne();
+
+  if (videoCleanup) await videoService().finishGameVideoCleanupAfterDeletion(videoCleanup);
 
   if (wasLeagueGame) {
     scheduleLeagueAggregateRecompute(leagueId, seasonId);
@@ -2735,6 +2809,7 @@ module.exports = {
   canAccessStandaloneDualGame,
   canEditStandaloneDualGame,
   canAccessGame,
+  assertGameAccess,
   buildGameMarketing,
   resolveDualGameParticipants,
   resolveRosterTargetForGame,

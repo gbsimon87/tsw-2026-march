@@ -8,7 +8,8 @@
 //
 // Nothing here signs tokens, mounts routes or touches YouTube behaviour (E12).
 //
-// Consumers: T4 upload (resolveUploadAllowance), T6 playback
+// Consumers: T4 upload (resolveUploadAllowance) and cancel/remove
+// (resolveVideoManagerAccess), T6 playback
 // (resolveFullGamePlaybackAccess, resolveClipPlaybackAccess), T7 Pulse
 // (canPublishMuxClips, isEventSubjectRestricted).
 //
@@ -115,6 +116,13 @@ async function viewerCanAccessGame(userId, game) {
 
 const deniedUpload = (reason) => ({ allowed: false, reason, billingResource: null, limits: null });
 
+// League owner or ACTIVE league manager only — team managers are excluded in
+// v1 (the canFinalizeLeagueGame level, read from the League we hold).
+async function isLeagueOwnerOrManager(league, game, userId) {
+  if (String(league.ownerUserId) === String(userId)) return true;
+  return Boolean(await findActiveLeagueManager(game.leagueId, userId));
+}
+
 /**
  * P1 conditions 1, 2, 4 and 5 for a hosted (Mux) upload.
  *
@@ -143,11 +151,7 @@ async function resolveUploadAllowance({ userId, game } = {}) {
 
   const league = await findLeagueVideoPolicyById(game.leagueId);
   if (!league) return deniedUpload(R.LEAGUE_NOT_FOUND);
-
-  // League owner or ACTIVE league manager only — team managers are excluded
-  // in v1 (the canFinalizeLeagueGame level, read from the League we hold).
-  const isOwner = String(league.ownerUserId) === String(userId);
-  if (!isOwner && !(await findActiveLeagueManager(game.leagueId, userId))) {
+  if (!(await isLeagueOwnerOrManager(league, game, userId))) {
     return deniedUpload(R.NOT_LEAGUE_MANAGER);
   }
 
@@ -161,6 +165,32 @@ async function resolveUploadAllowance({ userId, game } = {}) {
     billingResource: { type: 'league', id: String(game.leagueId) },
     limits: readHostingLimits(league.videoHosting),
   };
+}
+
+/**
+ * Who may cancel an upload or remove hosted media (T4): the league owner or an
+ * active league manager — the P1 uploader set — WITHOUT the hosting gates
+ * (env flag, grant, game status), so media can always be removed even after
+ * hosting is switched off. The caller also runs
+ * `assertGameAccess(userId, gameId, { requireWritable: true })`.
+ * Reasons are UPLOAD_ALLOWANCE_REASONS values (unauthenticated,
+ * not_league_game, league_not_found, not_league_manager).
+ *
+ * @param {object} input
+ * @param {string|ObjectId|null} input.userId
+ * @param {object} input.game Game document or lean object
+ * @returns {Promise<{allowed: boolean, reason: string|null}>}
+ */
+async function resolveVideoManagerAccess({ userId, game } = {}) {
+  const R = UPLOAD_ALLOWANCE_REASONS;
+  if (!userId) return { allowed: false, reason: R.UNAUTHENTICATED };
+  if (!isLeagueGame(game)) return { allowed: false, reason: R.NOT_LEAGUE_GAME };
+  const league = await findLeagueVideoPolicyById(game.leagueId);
+  if (!league) return { allowed: false, reason: R.LEAGUE_NOT_FOUND };
+  if (!(await isLeagueOwnerOrManager(league, game, userId))) {
+    return { allowed: false, reason: R.NOT_LEAGUE_MANAGER };
+  }
+  return { allowed: true, reason: null };
 }
 
 // ─── Narrow live billing read ────────────────────────────────────────────────
@@ -404,6 +434,7 @@ module.exports = {
   FULL_GAME_ACCESS_REASONS,
   CLIP_ACCESS_REASONS,
   resolveUploadAllowance,
+  resolveVideoManagerAccess,
   resolveGameReplayEntitlement,
   resolveFullGamePlaybackAccess,
   resolveClipPlaybackAccess,

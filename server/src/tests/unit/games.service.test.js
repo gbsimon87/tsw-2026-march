@@ -77,6 +77,22 @@ jest.mock('../../modules/leagues/leagues.repository', () => ({
   listLeaguePlayers: jest.fn(() => Promise.resolve([])),
 }));
 
+// Mux game video Task 4: games.service lazily requires the video policy (E8
+// videoUpload flag) and video.service (game deletion cleanup). Closed by
+// default, as with MUX_UPLOADS_ENABLED unset.
+jest.mock('../../modules/video/video.policy', () => ({
+  resolveUploadAllowance: jest.fn(async () => ({
+    allowed: false,
+    reason: 'hosting_disabled',
+    billingResource: null,
+    limits: null,
+  })),
+}));
+jest.mock('../../modules/video/video.service', () => ({
+  queueGameVideoCleanupForDeletion: jest.fn(async () => null),
+  finishGameVideoCleanupAfterDeletion: jest.fn(async () => undefined),
+}));
+
 jest.mock('mongoose', () => ({
   Schema: Object.assign(
     function Schema() {
@@ -120,6 +136,8 @@ const {
   updateEventForUser,
   finishGameForUser,
   getGameForUser,
+  getPublicGame,
+  deleteGameForUser,
   setGameLineup,
   updateClockForUser,
   computeGameFinalScore,
@@ -2445,5 +2463,208 @@ describe('buildGameMarketing (consumed by video.policy)', () => {
         { participants: {}, strict: true }
       )
     ).rejects.toThrow('db down');
+  });
+});
+
+describe('games service hosted video (Mux Task 4)', () => {
+  const USER_ID = '64b7f0c2a1b2c3d4e5f60731';
+  const GAME_ID = '64b7f0c2a1b2c3d4e5f60732';
+  const LEAGUE_ID = '64b7f0c2a1b2c3d4e5f60733';
+  const TEAM_ID = '64b7f0c2a1b2c3d4e5f60734';
+  const PLAYER_ID = '64b7f0c2a1b2c3d4e5f60735';
+  const ATTEMPT_ID = '64b7f0c2a1b2c3d4e5f60736';
+  const GENERATION_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  const ALLOWED = {
+    allowed: true,
+    reason: null,
+    billingResource: { type: 'league', id: LEAGUE_ID },
+    limits: { maxStoredMinutes: 600, maxConcurrentUploads: 1, maxCreatesPerDay: 3 },
+  };
+  const videoPolicy = require('../../modules/video/video.policy');
+  const videoService = require('../../modules/video/video.service');
+
+  function leagueGame(overrides = {}) {
+    return buildDualLeagueGame({
+      _id: GAME_ID,
+      ownerUserId: USER_ID,
+      leagueId: LEAGUE_ID,
+      events: buildEvents([]),
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    canManageLeagueGame.mockImplementation(() => false);
+    videoPolicy.resolveUploadAllowance.mockImplementation(async () => ({
+      allowed: false,
+      reason: 'hosting_disabled',
+      billingResource: null,
+      limits: null,
+    }));
+  });
+
+  describe('videoUpload flag (E8)', () => {
+    test('authenticated getGameForUser carries the allowance decision', async () => {
+      const game = leagueGame();
+      findGameById.mockResolvedValue(game);
+
+      const result = await getGameForUser(USER_ID, GAME_ID);
+
+      expect(videoPolicy.resolveUploadAllowance).toHaveBeenCalledWith({ userId: USER_ID, game });
+      expect(result.videoUpload).toEqual({ allowed: false, reason: 'hosting_disabled' });
+    });
+
+    test('allowed + writable (live League billing from the context already loaded) → allowed', async () => {
+      findGameById.mockResolvedValue(leagueGame());
+      videoPolicy.resolveUploadAllowance.mockResolvedValue(ALLOWED);
+
+      const result = await getGameForUser(USER_ID, GAME_ID);
+
+      expect(result.videoUpload).toEqual({ allowed: true, reason: null });
+    });
+
+    test('allowed by the grant but the League cannot be edited (lapsed) → game_not_writable', async () => {
+      findGameById.mockResolvedValue(leagueGame());
+      findLeagueById.mockResolvedValue({
+        _id: LEAGUE_ID,
+        plan: 'free',
+        subscriptionStatus: 'canceled',
+        billingSource: 'stripe',
+      });
+      videoPolicy.resolveUploadAllowance.mockResolvedValue(ALLOWED);
+
+      const result = await getGameForUser(USER_ID, GAME_ID);
+
+      expect(result.videoUpload).toEqual({ allowed: false, reason: 'game_not_writable' });
+    });
+
+    test('a failed allowance read fails closed instead of failing the game payload', async () => {
+      findGameById.mockResolvedValue(leagueGame());
+      videoPolicy.resolveUploadAllowance.mockRejectedValue(new Error('db down'));
+
+      const result = await getGameForUser(USER_ID, GAME_ID);
+
+      expect(result.videoUpload).toEqual({ allowed: false, reason: 'allowance_unavailable' });
+    });
+
+    test('anonymous getPublicGame never carries videoUpload', async () => {
+      findGameById.mockResolvedValue(leagueGame());
+
+      const result = await getPublicGame(GAME_ID);
+
+      expect(result).not.toHaveProperty('videoUpload');
+      expect(videoPolicy.resolveUploadAllowance).not.toHaveBeenCalled();
+    });
+
+    test('authenticated getPublicGame carries videoUpload for the viewer', async () => {
+      findGameById.mockResolvedValue(leagueGame());
+      videoPolicy.resolveUploadAllowance.mockResolvedValue(ALLOWED);
+
+      const result = await getPublicGame(GAME_ID, USER_ID);
+
+      expect(result.canManageGame).toBe(true);
+      expect(videoPolicy.resolveUploadAllowance).toHaveBeenCalledTimes(1);
+      expect(videoPolicy.resolveUploadAllowance).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: USER_ID })
+      );
+      expect(result.videoUpload).toEqual({ allowed: true, reason: null });
+    });
+
+    test('authenticated getPublicGame viewer without game access → game_not_writable even if the grant allows', async () => {
+      findGameById.mockResolvedValue(leagueGame({ ownerUserId: '64b7f0c2a1b2c3d4e5f60799' }));
+      videoPolicy.resolveUploadAllowance.mockResolvedValue(ALLOWED);
+
+      const result = await getPublicGame(GAME_ID, USER_ID);
+
+      expect(result.canManageGame).toBe(false);
+      expect(result.videoUpload).toEqual({ allowed: false, reason: 'game_not_writable' });
+    });
+
+    test('the per-stat event response (one-sided append) does not pay for the flag', async () => {
+      const players = buildPlayers([{ _id: PLAYER_ID, displayName: 'Alex', isActive: true }]);
+      const game = {
+        _id: GAME_ID,
+        ownerUserId: USER_ID,
+        gameContext: 'standalone',
+        trackingMode: 'one_sided',
+        gameFormat: GAME_FORMAT,
+        teamId: TEAM_ID,
+        rosterSnapshot: [],
+        events: buildEvents([]),
+        status: 'in_progress',
+        videoUrl: null,
+        video: null,
+        startingLineupPlayerIds: [],
+        currentLineupPlayerIds: [],
+      };
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      findTeamById.mockResolvedValue({ _id: TEAM_ID, players });
+      findTeamByIdAndOwner.mockResolvedValue({ _id: TEAM_ID, players });
+
+      const result = await appendEventForUser(USER_ID, GAME_ID, {
+        ...EVENT_CLOCK,
+        playerId: PLAYER_ID,
+        statType: STAT_TYPES.FG2_MADE,
+        zoneId: 'PAINT',
+        x: 50,
+        y: 20,
+      });
+
+      expect(result).not.toHaveProperty('videoUpload');
+      expect(videoPolicy.resolveUploadAllowance).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteGameForUser (R3: cleanup persisted before the delete)', () => {
+    function deletableGame(overrides = {}) {
+      const game = leagueGame(overrides);
+      game.deleteOne = jest.fn(async () => undefined);
+      return game;
+    }
+
+    test('a game with hosted video: enqueue → deleteOne → retire + kick', async () => {
+      const game = deletableGame({
+        video: { provider: 'mux', status: 'ready', generationId: GENERATION_ID, version: 2 },
+      });
+      const owner = { _id: ATTEMPT_ID, generationId: GENERATION_ID };
+      findGameById.mockResolvedValue(game);
+      videoService.queueGameVideoCleanupForDeletion.mockResolvedValue(owner);
+
+      await deleteGameForUser(USER_ID, GAME_ID);
+
+      expect(videoService.queueGameVideoCleanupForDeletion).toHaveBeenCalledWith(game);
+      expect(videoService.finishGameVideoCleanupAfterDeletion).toHaveBeenCalledWith(owner);
+      const order = [
+        videoService.queueGameVideoCleanupForDeletion.mock.invocationCallOrder[0],
+        game.deleteOne.mock.invocationCallOrder[0],
+        videoService.finishGameVideoCleanupAfterDeletion.mock.invocationCallOrder[0],
+      ];
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+    });
+
+    test('enqueue failure aborts the delete (the game and its media stay)', async () => {
+      const game = deletableGame({
+        video: { provider: 'mux', status: 'ready', generationId: GENERATION_ID, version: 2 },
+      });
+      findGameById.mockResolvedValue(game);
+      videoService.queueGameVideoCleanupForDeletion.mockRejectedValue(new Error('db down'));
+
+      await expect(deleteGameForUser(USER_ID, GAME_ID)).rejects.toThrow('db down');
+      expect(game.deleteOne).not.toHaveBeenCalled();
+      expect(videoService.finishGameVideoCleanupAfterDeletion).not.toHaveBeenCalled();
+    });
+
+    test('a game without hosted video skips the video module entirely', async () => {
+      const game = deletableGame();
+      findGameById.mockResolvedValue(game);
+
+      await deleteGameForUser(USER_ID, GAME_ID);
+
+      expect(game.deleteOne).toHaveBeenCalled();
+      expect(videoService.queueGameVideoCleanupForDeletion).not.toHaveBeenCalled();
+      expect(videoService.finishGameVideoCleanupAfterDeletion).not.toHaveBeenCalled();
+    });
   });
 });

@@ -277,6 +277,61 @@ describe('resolveUploadAllowance (P1 conditions 1, 2, 4, 5)', () => {
 
 // ─── Narrow billing read ─────────────────────────────────────────────────────
 
+describe('resolveVideoManagerAccess (T4 cancel/remove: owner or active league manager)', () => {
+  test('league owner is allowed — even with hosting disabled and the grant closed', async () => {
+    mockEnv.MUX_UPLOADS_ENABLED = false;
+    mockMux.isMuxConfigured.mockReturnValue(false);
+    mockLeaguesRepository.findLeagueVideoPolicyById.mockResolvedValue(
+      leagueDoc({ videoHosting: hosting({ enabled: false }) })
+    );
+
+    await expect(
+      policy.resolveVideoManagerAccess({ userId: OWNER_ID, game: leagueGame() })
+    ).resolves.toEqual({ allowed: true, reason: null });
+    expect(mockLeaguesRepository.findActiveLeagueManager).not.toHaveBeenCalled();
+  });
+
+  test('an active league manager is allowed; a scheduled game does not matter', async () => {
+    mockLeaguesRepository.findActiveLeagueManager.mockResolvedValue({ _id: 'm' });
+
+    await expect(
+      policy.resolveVideoManagerAccess({
+        userId: MANAGER_ID,
+        game: leagueGame({ status: 'scheduled' }),
+      })
+    ).resolves.toEqual({ allowed: true, reason: null });
+    expect(mockLeaguesRepository.findActiveLeagueManager).toHaveBeenCalledWith(
+      LEAGUE_ID,
+      MANAGER_ID
+    );
+  });
+
+  test.each([
+    ['unauthenticated', { userId: null, game: leagueGame() }, 'unauthenticated'],
+    ['standalone game', { userId: OWNER_ID, game: standaloneGame() }, 'not_league_game'],
+    ['team manager / stranger', { userId: STRANGER_ID, game: leagueGame() }, 'not_league_manager'],
+  ])('%s → denied (%s)', async (_label, input, reason) => {
+    await expect(policy.resolveVideoManagerAccess(input)).resolves.toEqual({
+      allowed: false,
+      reason,
+    });
+  });
+
+  test('missing league → league_not_found', async () => {
+    mockLeaguesRepository.findLeagueVideoPolicyById.mockResolvedValue(null);
+    await expect(
+      policy.resolveVideoManagerAccess({ userId: OWNER_ID, game: leagueGame() })
+    ).resolves.toEqual({ allowed: false, reason: 'league_not_found' });
+  });
+
+  test('a failed read propagates (infrastructure error, not a "no")', async () => {
+    mockLeaguesRepository.findLeagueVideoPolicyById.mockRejectedValue(new Error('db down'));
+    await expect(
+      policy.resolveVideoManagerAccess({ userId: OWNER_ID, game: leagueGame() })
+    ).rejects.toThrow('db down');
+  });
+});
+
 describe('resolveGameReplayEntitlement (narrow live billing read, R1)', () => {
   test('the real catalog: Starter grants replay', () => {
     expect(entitlementsForPlan('starter').canViewReplay).toBe(true);
@@ -806,6 +861,7 @@ describe('module shape', () => {
         'resolveFullGamePlaybackAccess',
         'resolveGameReplayEntitlement',
         'resolveUploadAllowance',
+        'resolveVideoManagerAccess',
       ].sort()
     );
   });

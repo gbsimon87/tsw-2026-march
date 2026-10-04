@@ -27,7 +27,7 @@ const {
 const { ObjectId } = mongoose.Schema.Types;
 
 const UPLOAD_ATTEMPT_STATUSES = [
-  'reserved', // quota reserved, Game.video attached, Mux not yet called
+  'reserved', // quota reserved, Mux not yet called (Game.video not yet attached)
   'uploading', // Mux direct upload created (uploadId known)
   'processing', // Mux asset created (assetId known)
   'ready',
@@ -794,6 +794,13 @@ function normalizeTimelines(timelines = []) {
 // generation in one of allowReplaceStatuses. The version is minted from
 // previousVersion (the replaced video's, if any) via nextGameVideoVersion.
 // The full subdoc — equivalentTimelines included — is written explicitly.
+//
+// OPT-028 INVARIANT: only ever attach the generation of a FRESHLY reserved
+// upload attempt (createUploadAttempt in the same request) — never re-attach
+// a generation the Game no longer carries. Reconciliation and the cleanup
+// worker treat "generation not referenced by its Game" as permanent (once a
+// generation is detached/replaced it can be cancelled and its media deleted);
+// re-attaching one would point the Game at media already queued for deletion.
 // → game document | null (condition failed: someone else attached/replaced)
 async function attachGameVideo({
   gameId,
