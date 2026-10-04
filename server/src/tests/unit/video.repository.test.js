@@ -384,7 +384,14 @@ describe('VideoCleanupJob', () => {
     expect(job).toEqual({ _id: JOB_ID, status: 'pending' });
     expect(findOneAndUpdate).toHaveBeenCalledTimes(1);
     const [filter, update, options] = findOneAndUpdate.mock.calls[0];
-    expect(filter).toEqual({ kind: 'delete_asset', targetId: 'as-1', status: 'failed' });
+    // Scoped to this deployment like claims (E3): a restored/copied database
+    // never resets another deployment's job.
+    expect(filter).toEqual({
+      kind: 'delete_asset',
+      targetId: 'as-1',
+      status: 'failed',
+      deployment: 'test:tsw_2026_test',
+    });
     expect(update).toEqual({
       $set: {
         status: 'pending',
@@ -407,7 +414,11 @@ describe('VideoCleanupJob', () => {
 
     expect(job.status).toBe('done');
     const [filter, update, options] = findOneAndUpdate.mock.calls[1];
-    expect(filter).toEqual({ kind: 'delete_asset', targetId: 'as-1' });
+    expect(filter).toEqual({
+      kind: 'delete_asset',
+      targetId: 'as-1',
+      deployment: 'test:tsw_2026_test',
+    });
     expect(Object.keys(update)).toEqual(['$setOnInsert']);
     expect(update.$setOnInsert).toEqual({
       kind: 'delete_asset',
@@ -441,9 +452,23 @@ describe('VideoCleanupJob', () => {
       _id: JOB_ID,
       status: 'pending',
     });
-    expect(findOne).toHaveBeenCalledWith({ kind: 'delete_asset', targetId: 'as-1' }, null, {
-      lean: true,
-    });
+    expect(findOne).toHaveBeenCalledWith(
+      { kind: 'delete_asset', targetId: 'as-1', deployment: 'test:tsw_2026_test' },
+      null,
+      { lean: true }
+    );
+  });
+
+  test('enqueueCleanupJob throws when the target is held by another deployment (never adopts it)', async () => {
+    jest
+      .spyOn(VideoCleanupJob, 'findOneAndUpdate')
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(duplicateKeyError());
+    jest.spyOn(VideoCleanupJob, 'findOne').mockResolvedValue(null);
+
+    await expect(videoRepository.enqueueCleanupJob({ ...jobInput, now: NOW })).rejects.toThrow(
+      /another deployment/
+    );
   });
 
   test('enqueueCleanupJob re-checks once when the job failed between the two steps', async () => {
@@ -668,11 +693,37 @@ describe('VideoCleanupJob', () => {
     await expect(videoRepository.countPendingCleanupJobs()).resolves.toBe(3);
     await videoRepository.countPendingCleanupJobs({ gameId: GAME_ID, includeFailed: true });
 
-    expect(countDocuments.mock.calls[0][0]).toEqual({ status: { $in: ['pending', 'leased'] } });
+    expect(countDocuments.mock.calls[0][0]).toEqual({
+      deployment: 'test:tsw_2026_test',
+      status: { $in: ['pending', 'leased'] },
+    });
     expect(countDocuments.mock.calls[1][0]).toEqual({
+      deployment: 'test:tsw_2026_test',
       status: { $in: ['pending', 'leased', 'failed'] },
       gameId: GAME_ID,
     });
+  });
+
+  test('listDueCleanupJobs is a read-only preview of what a claim would lease (dry-run)', async () => {
+    const find = jest.spyOn(VideoCleanupJob, 'find').mockResolvedValue([{ _id: JOB_ID }]);
+    const findOneAndUpdate = jest.spyOn(VideoCleanupJob, 'findOneAndUpdate');
+
+    await expect(videoRepository.listDueCleanupJobs({ now: NOW, limit: 500 })).resolves.toEqual([
+      { _id: JOB_ID },
+    ]);
+
+    expect(find).toHaveBeenCalledWith(
+      {
+        deployment: 'test:tsw_2026_test',
+        $or: [
+          { status: 'pending', nextAttemptAt: { $lte: NOW } },
+          { status: 'leased', leaseExpiresAt: { $lte: NOW } },
+        ],
+      },
+      null,
+      { sort: { nextAttemptAt: 1 }, limit: 50, lean: true }
+    );
+    expect(findOneAndUpdate).not.toHaveBeenCalled();
   });
 });
 
@@ -781,7 +832,14 @@ describe('quota counters (VideoQuotaCounter)', () => {
       resourceType: 'league',
       resourceId: LEAGUE_ID,
       activeUploads: { $lt: 1 },
-      $or: [{ createsDay: { $ne: '2026-10-04' } }, { createsToday: { $lt: 3 } }],
+      // A stored day that is unset or EARLIER than today counts as zero creates;
+      // today or a LATER stored day (another instance's clock already crossed
+      // midnight) must still have room — the day never moves backwards.
+      $or: [
+        { createsDay: null },
+        { createsDay: { $lt: '2026-10-04' } },
+        { createsToday: { $lt: 3 } },
+      ],
       $expr: {
         $lte: [{ $add: ['$storedMinutes', '$reservedMinutes', 180] }, 600],
       },
@@ -793,9 +851,15 @@ describe('quota counters (VideoQuotaCounter)', () => {
           activeUploads: { $add: ['$activeUploads', 1] },
           reservedMinutes: { $add: ['$reservedMinutes', 180] },
           createsToday: {
-            $cond: [{ $eq: ['$createsDay', '2026-10-04'] }, { $add: ['$createsToday', 1] }, 1],
+            $cond: [{ $gte: ['$createsDay', '2026-10-04'] }, { $add: ['$createsToday', 1] }, 1],
           },
-          createsDay: { $literal: '2026-10-04' },
+          createsDay: {
+            $cond: [
+              { $gt: ['$createsDay', '2026-10-04'] },
+              '$createsDay',
+              { $literal: '2026-10-04' },
+            ],
+          },
         },
       },
     ]);
@@ -818,8 +882,8 @@ describe('quota counters (VideoQuotaCounter)', () => {
       now: new Date('2026-10-04T23:59:59.999-01:00'),
     });
     const [filter, pipeline] = findOneAndUpdate.mock.calls[0];
-    expect(filter.$or[0]).toEqual({ createsDay: { $ne: '2026-10-05' } });
-    expect(pipeline[0].$set.createsDay).toEqual({ $literal: '2026-10-05' });
+    expect(filter.$or[1]).toEqual({ createsDay: { $lt: '2026-10-05' } });
+    expect(pipeline[0].$set.createsDay.$cond[2]).toEqual({ $literal: '2026-10-05' });
   });
 
   test.each([
@@ -848,6 +912,18 @@ describe('quota counters (VideoQuotaCounter)', () => {
     ).resolves.toEqual({ activeUploads: 1 });
   });
 
+  test('reserveUploadSlot requires at least one reserved minute (RangeError, no query)', async () => {
+    const { updateOne, findOneAndUpdate } = mockReserve({});
+    await expect(
+      videoRepository.reserveUploadSlot({ resource, limits, reservedMinutes: 0, now: NOW })
+    ).rejects.toThrow(RangeError);
+    await expect(
+      videoRepository.reserveUploadSlot({ resource, limits, reservedMinutes: 0, now: NOW })
+    ).rejects.toThrow(/reservedMinutes/);
+    expect(updateOne).not.toHaveBeenCalled();
+    expect(findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   test('reserveUploadSlot rejects bad input (programmer errors)', async () => {
     await expect(
       videoRepository.reserveUploadSlot({ resource, limits, reservedMinutes: -1, now: NOW })
@@ -870,35 +946,94 @@ describe('quota counters (VideoQuotaCounter)', () => {
     ).rejects.toThrow(/maxStoredMinutes/);
   });
 
-  // Two creates racing for the last slot: the DB applies the conditional filter
-  // atomically per document, so at most one update can match. Model that with a
-  // fake store that evaluates exactly the shape the repository sends.
-  test('two concurrent reservations at the limit leave exactly one winner', async () => {
+  // A fake counter document that evaluates exactly the filter and pipeline
+  // the repository sends (MongoDB semantics for the operators used: query
+  // comparisons only match the same BSON type; aggregation comparisons order
+  // missing < null < numbers < strings; one $set stage reads the input doc).
+  const bsonRank = (value) => {
+    if (value === undefined) return 0;
+    if (value === null) return 1;
+    return typeof value === 'number' ? 2 : 3;
+  };
+  function compareBson(a, b) {
+    const rank = bsonRank(a) - bsonRank(b);
+    if (rank !== 0) return rank;
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
+  }
+  const COMPARISONS = {
+    $eq: (c) => c === 0,
+    $gt: (c) => c > 0,
+    $gte: (c) => c >= 0,
+    $lt: (c) => c < 0,
+    $lte: (c) => c <= 0,
+  };
+  function evalExpr(expr, doc) {
+    if (typeof expr === 'string' && expr.startsWith('$')) return doc[expr.slice(1)];
+    if (expr === null || typeof expr !== 'object') return expr;
+    const [[operator, args]] = Object.entries(expr);
+    if (operator === '$literal') return args;
+    if (operator === '$add') return args.reduce((sum, arg) => sum + evalExpr(arg, doc), 0);
+    if (operator === '$subtract') return evalExpr(args[0], doc) - evalExpr(args[1], doc);
+    if (operator === '$max') return Math.max(...args.map((arg) => evalExpr(arg, doc)));
+    if (operator === '$cond') {
+      return evalExpr(args[0], doc) ? evalExpr(args[1], doc) : evalExpr(args[2], doc);
+    }
+    if (COMPARISONS[operator]) {
+      return COMPARISONS[operator](compareBson(evalExpr(args[0], doc), evalExpr(args[1], doc)));
+    }
+    throw new Error(`evalExpr: unsupported ${operator}`);
+  }
+  function matchesQuery(filter, doc) {
+    return Object.entries(filter).every(([key, condition]) => {
+      if (key === '$or') return condition.some((branch) => matchesQuery(branch, doc));
+      if (key === '$expr') return Boolean(evalExpr(condition, doc));
+      const value = doc[key];
+      if (condition === null) return value === null || value === undefined;
+      if (typeof condition !== 'object') return String(value) === String(condition);
+      return Object.entries(condition).every(([operator, operand]) => {
+        if (operator === '$ne') return compareBson(value, operand) !== 0;
+        if (bsonRank(value) !== bsonRank(operand)) return false; // type bracketing
+        return COMPARISONS[operator](compareBson(value, operand));
+      });
+    });
+  }
+  function applyPipeline(pipeline, doc) {
+    return pipeline.reduce((input, stage) => {
+      const output = { ...input };
+      for (const [field, expr] of Object.entries(stage.$set)) output[field] = evalExpr(expr, input);
+      return output;
+    }, doc);
+  }
+  function mockCounterStore(initial = {}) {
     const store = {
+      resourceType: 'league',
+      resourceId: LEAGUE_ID,
       activeUploads: 0,
       reservedMinutes: 0,
       storedMinutes: 0,
       createsDay: null,
       createsToday: 0,
+      ...initial,
     };
     jest.spyOn(VideoQuotaCounter, 'updateOne').mockResolvedValue({});
     jest
       .spyOn(VideoQuotaCounter, 'findOneAndUpdate')
       .mockImplementation(async (filter, pipeline) => {
         await Promise.resolve();
-        const day = pipeline[0].$set.createsDay.$literal;
-        const fits =
-          store.activeUploads < filter.activeUploads.$lt &&
-          (store.createsDay !== day || store.createsToday < filter.$or[1].createsToday.$lt) &&
-          store.storedMinutes + store.reservedMinutes + filter.$expr.$lte[0].$add[2] <=
-            filter.$expr.$lte[1];
-        if (!fits) return null;
-        store.createsToday = store.createsDay === day ? store.createsToday + 1 : 1;
-        store.createsDay = day;
-        store.activeUploads += 1;
-        store.reservedMinutes += pipeline[0].$set.reservedMinutes.$add[1];
+        if (!matchesQuery(filter, store)) return null;
+        Object.assign(store, applyPipeline(pipeline, store));
         return { ...store };
       });
+    return store;
+  }
+  const reserve = (now = NOW) =>
+    videoRepository.reserveUploadSlot({ resource, limits, reservedMinutes: 10, now });
+
+  // Two creates racing for the last slot: the DB applies the conditional filter
+  // atomically per document, so at most one update can match.
+  test('two concurrent reservations at the limit leave exactly one winner', async () => {
+    const store = mockCounterStore();
 
     const results = await Promise.all([
       videoRepository.reserveUploadSlot({ resource, limits, reservedMinutes: 100, now: NOW }),
@@ -907,6 +1042,37 @@ describe('quota counters (VideoQuotaCounter)', () => {
 
     expect(results.filter(Boolean)).toHaveLength(1);
     expect(store.activeUploads).toBe(1);
+    expect(store.reservedMinutes).toBe(100);
+  });
+
+  test('day rollover: a first create, a new day after a capped day, and the cap itself', async () => {
+    const fresh = mockCounterStore();
+    await expect(reserve()).resolves.toMatchObject({ createsDay: '2026-10-04', createsToday: 1 });
+    expect(fresh.createsToday).toBe(1);
+    jest.restoreAllMocks();
+
+    const yesterdayCapped = mockCounterStore({ createsDay: '2026-10-03', createsToday: 3 });
+    await expect(reserve()).resolves.toMatchObject({ createsDay: '2026-10-04', createsToday: 1 });
+    expect(yesterdayCapped.createsToday).toBe(1);
+    jest.restoreAllMocks();
+
+    const todayCapped = mockCounterStore({ createsDay: '2026-10-04', createsToday: 3 });
+    await expect(reserve()).resolves.toBeNull();
+    expect(todayCapped).toMatchObject({ createsDay: '2026-10-04', createsToday: 3 });
+  });
+
+  test('day rollover never moves backwards across midnight (a lagging clock cannot reset the count)', async () => {
+    // Another instance already counted creates for 2026-10-05; this request's
+    // clock still says 2026-10-04. It counts against the stored day instead of
+    // resetting it to its own older day.
+    const store = mockCounterStore({ createsDay: '2026-10-05', createsToday: 1 });
+    await expect(reserve()).resolves.toMatchObject({ createsDay: '2026-10-05', createsToday: 2 });
+    expect(store).toMatchObject({ createsDay: '2026-10-05', createsToday: 2, activeUploads: 1 });
+    jest.restoreAllMocks();
+
+    const capped = mockCounterStore({ createsDay: '2026-10-05', createsToday: 3 });
+    await expect(reserve()).resolves.toBeNull();
+    expect(capped).toMatchObject({ createsDay: '2026-10-05', createsToday: 3, activeUploads: 0 });
   });
 
   test('releaseUploadSlot frees the slot and its reservation, never below zero', async () => {
@@ -1228,4 +1394,46 @@ test('models are registered once under stable names', () => {
   expect(mongoose.model('VideoCleanupJob')).toBe(VideoCleanupJob);
   expect(mongoose.model('VideoWebhookEvent')).toBe(VideoWebhookEvent);
   expect(mongoose.model('VideoQuotaCounter')).toBe(VideoQuotaCounter);
+});
+
+describe('isGameVideoGenerationReferenced (reconcile reference recheck, R3)', () => {
+  test('is true only while the Game still carries that generation', async () => {
+    const exists = jest
+      .spyOn(Game, 'exists')
+      .mockResolvedValueOnce({ _id: GAME_ID })
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      videoRepository.isGameVideoGenerationReferenced({
+        gameId: GAME_ID,
+        generationId: GENERATION_ID,
+      })
+    ).resolves.toBe(true);
+    // Replaced, detached, or the game is gone.
+    await expect(
+      videoRepository.isGameVideoGenerationReferenced({
+        gameId: GAME_ID,
+        generationId: GENERATION_ID,
+      })
+    ).resolves.toBe(false);
+    expect(exists).toHaveBeenCalledWith({ _id: GAME_ID, 'video.generationId': GENERATION_ID });
+  });
+
+  test('a failed database read propagates — never treated as "not referenced"', async () => {
+    jest.spyOn(Game, 'exists').mockRejectedValue(new Error('connection lost'));
+    await expect(
+      videoRepository.isGameVideoGenerationReferenced({
+        gameId: GAME_ID,
+        generationId: GENERATION_ID,
+      })
+    ).rejects.toThrow('connection lost');
+  });
+
+  test('requires a generation id', async () => {
+    const exists = jest.spyOn(Game, 'exists');
+    await expect(
+      videoRepository.isGameVideoGenerationReferenced({ gameId: GAME_ID, generationId: '' })
+    ).rejects.toThrow(/generationId/);
+    expect(exists).not.toHaveBeenCalled();
+  });
 });

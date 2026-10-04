@@ -375,9 +375,12 @@ async function listStaleUploadAttempts({
 // Cleanup jobs (E4 — the Instagram delivery lease/backoff pattern)
 // ---------------------------------------------------------------------------
 
+// Every cleanup-job lookup and write is scoped to this deployment (E3), like
+// the claims: a restored or copied database never resets, adopts, counts or
+// claims another deployment's jobs.
 function resetFailedCleanupJob({ kind, targetId, now }) {
   return VideoCleanupJob.findOneAndUpdate(
-    { kind, targetId, status: 'failed' },
+    { kind, targetId, status: 'failed', deployment: getVideoDeployment() },
     {
       $set: {
         status: 'pending',
@@ -395,7 +398,8 @@ function resetFailedCleanupJob({ kind, targetId, now }) {
 // leased or done job is left as it is (done = already confirmed by Mux); a
 // failed job is reset to pending with a fresh retry budget. Throws on a
 // database error — R3: if enqueueing fails, the caller must not report
-// deletion success.
+// deletion success. Also throws when the target is held by another
+// deployment's job ({kind, targetId} is globally unique) — never adopted.
 // → job
 async function enqueueCleanupJob({ kind, targetId, attemptId, gameId, reason, now = new Date() }) {
   if (!CLEANUP_JOB_KINDS.includes(kind)) throw new TypeError(`Unknown cleanup job kind ${kind}`);
@@ -405,13 +409,14 @@ async function enqueueCleanupJob({ kind, targetId, attemptId, gameId, reason, no
   // Update validators skip `required` on $setOnInsert paths, so check here.
   assertNonEmptyString(reason, 'reason');
 
+  const deployment = getVideoDeployment();
   const reset = await resetFailedCleanupJob({ kind, targetId, now });
   if (reset) return reset;
 
   let job;
   try {
     job = await VideoCleanupJob.findOneAndUpdate(
-      { kind, targetId },
+      { kind, targetId, deployment },
       {
         $setOnInsert: {
           kind,
@@ -419,7 +424,7 @@ async function enqueueCleanupJob({ kind, targetId, attemptId, gameId, reason, no
           attemptId,
           gameId,
           reason,
-          deployment: getVideoDeployment(),
+          deployment,
           status: 'pending',
           attempts: 0,
           nextAttemptAt: now,
@@ -434,8 +439,13 @@ async function enqueueCleanupJob({ kind, targetId, attemptId, gameId, reason, no
     );
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
-    // A concurrent enqueue inserted it first; theirs is ours.
-    job = await VideoCleanupJob.findOne({ kind, targetId }, null, { lean: true });
+    // A concurrent enqueue inserted it first; theirs is ours — but only if it
+    // is this deployment's (otherwise the unique {kind, targetId} is taken by
+    // another deployment's job and nothing was enqueued here).
+    job = await VideoCleanupJob.findOne({ kind, targetId, deployment }, null, { lean: true });
+    if (!job) {
+      throw new Error(`Cleanup job ${kind} target is held by another deployment`);
+    }
   }
 
   // It failed between our two steps: one bounded re-check.
@@ -443,6 +453,20 @@ async function enqueueCleanupJob({ kind, targetId, attemptId, gameId, reason, no
     return (await resetFailedCleanupJob({ kind, targetId, now })) || job;
   }
   return job;
+}
+
+function dueCleanupJobsFilter(now) {
+  return {
+    deployment: getVideoDeployment(),
+    $or: [
+      { status: 'pending', nextAttemptAt: { $lte: now } },
+      { status: 'leased', leaseExpiresAt: { $lte: now } },
+    ],
+  };
+}
+
+function boundedClaimLimit(limit) {
+  return Math.min(Math.max(1, Math.trunc(limit) || 1), MAX_CLEANUP_CLAIMS_PER_SWEEP);
 }
 
 // Lease up to `limit` due jobs of this deployment, one atomic claim each:
@@ -460,19 +484,13 @@ async function claimDueCleanupJobs({
   if (!Number.isFinite(leaseMs) || leaseMs <= 0) {
     throw new TypeError('leaseMs must be a positive number');
   }
-  const boundedLimit = Math.min(Math.max(1, Math.trunc(limit) || 1), MAX_CLEANUP_CLAIMS_PER_SWEEP);
+  const boundedLimit = boundedClaimLimit(limit);
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
   const claimed = [];
   while (claimed.length < boundedLimit) {
     const job = await VideoCleanupJob.findOneAndUpdate(
-      {
-        deployment: getVideoDeployment(),
-        $or: [
-          { status: 'pending', nextAttemptAt: { $lte: now } },
-          { status: 'leased', leaseExpiresAt: { $lte: now } },
-        ],
-      },
+      dueCleanupJobsFilter(now),
       {
         $set: { status: 'leased', leaseOwner, leaseExpiresAt },
         $inc: { attempts: 1 },
@@ -483,6 +501,17 @@ async function claimDueCleanupJobs({
     claimed.push(job);
   }
   return claimed;
+}
+
+// Read-only preview of what claimDueCleanupJobs would lease (video:reconcile
+// --dry-run). Same filter, order and bound; leases nothing.
+// → job[]
+async function listDueCleanupJobs({ now = new Date(), limit = MAX_CLEANUP_CLAIMS_PER_SWEEP } = {}) {
+  return VideoCleanupJob.find(dueCleanupJobsFilter(now), null, {
+    sort: { nextAttemptAt: 1 },
+    limit: boundedClaimLimit(limit),
+    lean: true,
+  });
 }
 
 const leasedBy = (jobId, leaseOwner) => ({ _id: jobId, status: 'leased', leaseOwner });
@@ -544,11 +573,12 @@ async function failCleanupJobAttempt({ jobId, leaseOwner, retryable, nextAttempt
 }
 
 // Outstanding provider cancellation/deletion (pending + leased; optionally
-// failed too), across the deployment or for one game.
+// failed too) of this deployment, across it or for one game.
 // → number
 async function countPendingCleanupJobs({ gameId, includeFailed = false } = {}) {
   const statuses = includeFailed ? ['pending', 'leased', 'failed'] : ['pending', 'leased'];
   return VideoCleanupJob.countDocuments({
+    deployment: getVideoDeployment(),
     status: { $in: statuses },
     ...(gameId ? { gameId } : {}),
   });
@@ -602,16 +632,24 @@ function utcDay(now) {
 // OPT-027: the upload allowance is reserved by ONE conditional pipeline
 // findOneAndUpdate on the resource's counter. The filter carries every limit
 // (concurrent uploads, stored + in-flight minutes, creates today — where a
-// stored day other than today counts as zero), and the pipeline decides the
+// stored day EARLIER than today counts as zero), and the pipeline decides the
 // day rollover from the same stored value, so the check and the increment
 // are a single atomic document update: two creates racing for the last slot
-// leave exactly one winner. The preceding $setOnInsert upsert only makes the
+// leave exactly one winner. The day never moves backwards: a request whose
+// clock is behind the stored day (another instance already crossed midnight)
+// counts against the stored day instead of resetting it ('YYYY-MM-DD' strings
+// order like dates). The preceding $setOnInsert upsert only makes the
 // counter exist (E11000 from a racing upsert is harmless). Limits come from
 // League.videoHosting and are read by the caller at reservation time.
 // → counter | null (a limit would be exceeded)
 async function reserveUploadSlot({ resource, limits, reservedMinutes, now = new Date() }) {
   const filter = resourceFilter(resource);
   assertNonNegativeInteger(reservedMinutes, 'reservedMinutes');
+  if (reservedMinutes < 1) {
+    // An upload always reserves its upper-bound minutes; 0 would let an
+    // unlimited number of zero-minute reservations past the stored cap.
+    throw new RangeError('reservedMinutes must be at least 1');
+  }
   const { maxConcurrentUploads, maxStoredMinutes, maxCreatesPerDay } = limits || {};
   assertNonNegativeInteger(maxConcurrentUploads, 'maxConcurrentUploads');
   assertNonNegativeInteger(maxStoredMinutes, 'maxStoredMinutes');
@@ -644,7 +682,11 @@ async function reserveUploadSlot({ resource, limits, reservedMinutes, now = new 
     {
       ...filter,
       activeUploads: { $lt: maxConcurrentUploads },
-      $or: [{ createsDay: { $ne: today } }, { createsToday: { $lt: maxCreatesPerDay } }],
+      $or: [
+        { createsDay: null },
+        { createsDay: { $lt: today } },
+        { createsToday: { $lt: maxCreatesPerDay } },
+      ],
       $expr: {
         $lte: [{ $add: ['$storedMinutes', '$reservedMinutes', reservedMinutes] }, maxStoredMinutes],
       },
@@ -654,10 +696,13 @@ async function reserveUploadSlot({ resource, limits, reservedMinutes, now = new 
         $set: {
           activeUploads: { $add: ['$activeUploads', 1] },
           reservedMinutes: { $add: ['$reservedMinutes', reservedMinutes] },
+          // null/missing order before any string, so an unset day resets too.
           createsToday: {
-            $cond: [{ $eq: ['$createsDay', today] }, { $add: ['$createsToday', 1] }, 1],
+            $cond: [{ $gte: ['$createsDay', today] }, { $add: ['$createsToday', 1] }, 1],
           },
-          createsDay: { $literal: today },
+          createsDay: {
+            $cond: [{ $gt: ['$createsDay', today] }, '$createsDay', { $literal: today }],
+          },
         },
       },
     ],
@@ -834,6 +879,16 @@ async function updateGameVideo({
   return Game.findOneAndUpdate(filter, update, GAME_VIDEO_WRITE_OPTIONS);
 }
 
+// Reconciliation reference recheck (R3): does the Game still carry this
+// generation? False when it was replaced, detached or the game is gone. A
+// failed read throws — never read as "not referenced".
+// → boolean
+async function isGameVideoGenerationReferenced({ gameId, generationId }) {
+  assertNonEmptyString(generationId, 'generationId');
+  const found = await Game.exists({ _id: gameId, 'video.generationId': generationId });
+  return Boolean(found);
+}
+
 // Remove the video, but only if it is still that generation. Returns what was
 // removed so the caller can enqueue cleanup for its upload/asset — callers
 // enqueue BEFORE detaching where the ids are already known (R3).
@@ -872,6 +927,7 @@ module.exports = {
   // cleanup jobs
   enqueueCleanupJob,
   claimDueCleanupJobs,
+  listDueCleanupJobs,
   completeCleanupJob,
   failCleanupJobAttempt,
   summarizeCleanupError,
@@ -888,4 +944,5 @@ module.exports = {
   attachGameVideo,
   updateGameVideo,
   detachGameVideo,
+  isGameVideoGenerationReferenced,
 };
