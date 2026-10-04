@@ -8,6 +8,7 @@ jest.mock('../../middleware/rateLimit.middleware', () => {
     authCredentialLimiter: passThrough,
     contactLimiter: passThrough,
     checkoutLimiter: passThrough,
+    videoUploadLimiter: passThrough,
   };
 });
 

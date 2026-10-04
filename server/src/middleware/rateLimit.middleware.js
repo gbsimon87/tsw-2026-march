@@ -64,10 +64,32 @@ const checkoutLimiter = rateLimit({
   },
 });
 
+// Mux game video (E5): creating a direct upload provisions billable provider
+// media, so it gets its own tight budget. Mounted AFTER authMiddleware and
+// keyed by the authenticated user (IP only as a fallback that should never be
+// hit), so a club sharing one Wi-Fi does not share a budget and a user cannot
+// rotate IPs past it. In-memory like the other limiters (single instance);
+// the atomic per-League quota reservation in video.repository is the real
+// guard (reserveUploadSlot).
+const videoUploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => (req.auth?.userId ? `user:${req.auth.userId}` : `ip:${req.ip}`),
+  message: {
+    error: {
+      message: 'Too many video uploads started. Please try again later.',
+      details: { reason: 'rate_limited' },
+    },
+  },
+});
+
 module.exports = {
   apiRateLimiter,
   authRecoveryLimiter,
   authCredentialLimiter,
   contactLimiter,
   checkoutLimiter,
+  videoUploadLimiter,
 };
