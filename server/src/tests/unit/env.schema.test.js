@@ -414,3 +414,89 @@ describe('env schema — Instagram OAuth', () => {
     expect(result.error.issues.map((issue) => issue.message).join(' ')).toContain('must differ');
   });
 });
+
+describe('Mux video config', () => {
+  const crypto = require('node:crypto');
+  // Real key generated at test time. Never commit a PEM literal; the
+  // pre-commit secret scanner rejects one.
+  const validKey = (type = 'pkcs1') =>
+    Buffer.from(
+      crypto
+        .generateKeyPairSync('rsa', { modulusLength: 2048 })
+        .privateKey.export({ type, format: 'pem' })
+    ).toString('base64');
+
+  const FULL_MUX = {
+    MUX_TOKEN_ID: 'token-id',
+    MUX_TOKEN_SECRET: 'token-secret',
+    MUX_WEBHOOK_SECRET: 'webhook-secret',
+    MUX_SIGNING_KEY_ID: 'signing-key-id',
+    MUX_SIGNING_PRIVATE_KEY: validKey(),
+  };
+
+  test('boots with no Mux config (video hosting off)', () => {
+    const result = envSchema.safeParse(baseEnv());
+    expect(result.success).toBe(true);
+    expect(result.data.MUX_MAX_RESOLUTION_TIER).toBe('1080p');
+    expect(result.data.MUX_UPLOADS_ENABLED).toBe(false);
+    expect(result.data.MUX_PUBLIC_CLIPS_ENABLED).toBe(false);
+  });
+
+  test('boots with the full Mux config (pkcs1 and pkcs8 keys)', () => {
+    expect(envSchema.safeParse(baseEnv(FULL_MUX)).success).toBe(true);
+    expect(
+      envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_SIGNING_PRIVATE_KEY: validKey('pkcs8') }))
+        .success
+    ).toBe(true);
+  });
+
+  test('rejects a partial Mux config and names every missing key', () => {
+    const result = envSchema.safeParse(baseEnv({ MUX_TOKEN_ID: 'token-id' }));
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.path[0])).toEqual(
+      expect.arrayContaining([
+        'MUX_TOKEN_SECRET',
+        'MUX_WEBHOOK_SECRET',
+        'MUX_SIGNING_KEY_ID',
+        'MUX_SIGNING_PRIVATE_KEY',
+      ])
+    );
+  });
+
+  test('rejects an unsupported resolution tier', () => {
+    const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_MAX_RESOLUTION_TIER: '2160p' }));
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects a signing key that is not a base64 private key without echoing it', () => {
+    const bad = 'not-a-real-key-SENTINEL-123';
+    const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_SIGNING_PRIVATE_KEY: bad }));
+    expect(result.success).toBe(false);
+    const issues = result.error.issues.filter((i) => i.path[0] === 'MUX_SIGNING_PRIVATE_KEY');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).not.toContain(bad);
+    expect(issues[0].message).not.toContain(Buffer.from(bad).toString('base64'));
+    expect(JSON.stringify(result.error.issues)).not.toContain('SENTINEL');
+  });
+
+  test('rejects a raw (non-base64) PEM signing key', () => {
+    const pem = Buffer.from(FULL_MUX.MUX_SIGNING_PRIVATE_KEY, 'base64').toString('utf8');
+    const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_SIGNING_PRIVATE_KEY: pem }));
+    expect(result.success).toBe(false);
+  });
+
+  test('MUX_UPLOADS_ENABLED and MUX_PUBLIC_CLIPS_ENABLED parse string to bool', () => {
+    const on = envSchema.safeParse(
+      baseEnv({ MUX_UPLOADS_ENABLED: 'true', MUX_PUBLIC_CLIPS_ENABLED: 'true' })
+    );
+    expect(on.success).toBe(true);
+    expect(on.data.MUX_UPLOADS_ENABLED).toBe(true);
+    expect(on.data.MUX_PUBLIC_CLIPS_ENABLED).toBe(true);
+    const off = envSchema.safeParse(baseEnv({ MUX_UPLOADS_ENABLED: 'false' }));
+    expect(off.data.MUX_UPLOADS_ENABLED).toBe(false);
+  });
+
+  test('the flags are not part of the all-or-nothing credential set', () => {
+    expect(envSchema.safeParse(baseEnv({ MUX_UPLOADS_ENABLED: 'true' })).success).toBe(true);
+  });
+});

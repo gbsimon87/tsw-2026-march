@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const { z } = require('zod');
 
@@ -99,6 +100,25 @@ const baseEnvSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
   CLOUDINARY_FOLDER: z.string().default('tsw/feed'),
+  // Mux game video (docs/mux.md). All five credentials or none: hosting is
+  // off when unset, and a partial set fails boot rather than half-working.
+  MUX_TOKEN_ID: z.string().min(1).optional(),
+  MUX_TOKEN_SECRET: z.string().min(1).optional(),
+  MUX_WEBHOOK_SECRET: z.string().min(1).optional(),
+  MUX_SIGNING_KEY_ID: z.string().min(1).optional(),
+  // Base64 PEM, exactly as Mux shows it. Validated in the superRefine below.
+  MUX_SIGNING_PRIVATE_KEY: z.string().min(1).optional(),
+  MUX_MAX_RESOLUTION_TIER: z.enum(['720p', '1080p']).default('1080p'),
+  // Operator kill switch for hosted uploads (not part of the credential set).
+  MUX_UPLOADS_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
+  // Public Mux highlight clips stay dark until explicitly enabled.
+  MUX_PUBLIC_CLIPS_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
   TEAM_LOGO_MAX_BYTES: z.coerce
     .number()
     .int()
@@ -154,6 +174,14 @@ const REQUIRED_STRIPE_CONFIG = [
 ];
 const ALL_STRIPE_CONFIG = ['STRIPE_SECRET_KEY', ...REQUIRED_STRIPE_CONFIG];
 
+const ALL_MUX_CONFIG = [
+  'MUX_TOKEN_ID',
+  'MUX_TOKEN_SECRET',
+  'MUX_WEBHOOK_SECRET',
+  'MUX_SIGNING_KEY_ID',
+  'MUX_SIGNING_PRIVATE_KEY',
+];
+
 const REQUIRED_INSTAGRAM_CONFIG = [
   'INSTAGRAM_GRAPH_API_VERSION',
   'INSTAGRAM_USER_ID',
@@ -207,6 +235,36 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
           message: `${key} is required when any Stripe setting is configured outside local development`,
         });
       }
+    }
+  }
+
+  const configuredMuxKeys = ALL_MUX_CONFIG.filter((key) => Boolean(data[key]));
+  if (configuredMuxKeys.length > 0 && configuredMuxKeys.length < ALL_MUX_CONFIG.length) {
+    for (const key of ALL_MUX_CONFIG) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when any Mux setting is configured`,
+        });
+      }
+    }
+  }
+
+  if (data.MUX_SIGNING_PRIVATE_KEY) {
+    let keyOk = true;
+    try {
+      crypto.createPrivateKey(Buffer.from(data.MUX_SIGNING_PRIVATE_KEY, 'base64').toString('utf8'));
+    } catch {
+      keyOk = false;
+    }
+    if (!keyOk) {
+      // Never include the value (or the underlying error) in the message.
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MUX_SIGNING_PRIVATE_KEY'],
+        message: 'MUX_SIGNING_PRIVATE_KEY must be a base64-encoded PEM private key',
+      });
     }
   }
 

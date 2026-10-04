@@ -103,6 +103,22 @@ services:
         sync: false
       - key: CLOUDINARY_FOLDER
         value: tsw/feed/prod
+      - key: MUX_TOKEN_ID
+        sync: false
+      - key: MUX_TOKEN_SECRET
+        sync: false
+      - key: MUX_WEBHOOK_SECRET
+        sync: false
+      - key: MUX_SIGNING_KEY_ID
+        sync: false
+      - key: MUX_SIGNING_PRIVATE_KEY
+        sync: false
+      - key: MUX_MAX_RESOLUTION_TIER
+        value: 1080p
+      - key: MUX_UPLOADS_ENABLED
+        value: false
+      - key: MUX_PUBLIC_CLIPS_ENABLED
+        value: false
       - key: TEAM_LOGO_MAX_BYTES
         value: 2097152
       - key: FEED_IMAGE_MAX_BYTES
@@ -245,6 +261,22 @@ services:
         sync: false
       - key: CLOUDINARY_FOLDER
         value: tsw/feed/dev
+      - key: MUX_TOKEN_ID
+        sync: false
+      - key: MUX_TOKEN_SECRET
+        sync: false
+      - key: MUX_WEBHOOK_SECRET
+        sync: false
+      - key: MUX_SIGNING_KEY_ID
+        sync: false
+      - key: MUX_SIGNING_PRIVATE_KEY
+        sync: false
+      - key: MUX_MAX_RESOLUTION_TIER
+        value: 1080p
+      - key: MUX_UPLOADS_ENABLED
+        value: false
+      - key: MUX_PUBLIC_CLIPS_ENABLED
+        value: false
       - key: TEAM_LOGO_MAX_BYTES
         value: 2097152
       - key: FEED_IMAGE_MAX_BYTES

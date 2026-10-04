@@ -15,3 +15,18 @@ describe('CORS configuration', () => {
     expect(corsOptions.exposedHeaders).toContain('x-csrf-token');
   });
 });
+
+describe('isAllowedClientOrigin', () => {
+  const { isAllowedClientOrigin } = require('../../config/cors');
+
+  test('allows a configured client origin', () => {
+    expect(isAllowedClientOrigin('http://localhost:5173')).toBe(true);
+  });
+
+  test('rejects missing, wildcard and unknown origins', () => {
+    expect(isAllowedClientOrigin(undefined)).toBe(false);
+    expect(isAllowedClientOrigin('')).toBe(false);
+    expect(isAllowedClientOrigin('*')).toBe(false);
+    expect(isAllowedClientOrigin('https://evil.example')).toBe(false);
+  });
+});
