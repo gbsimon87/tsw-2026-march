@@ -1889,19 +1889,26 @@ function buildSlimGameEventDelta(userId, game, context) {
 // roster queries per poll would buy nothing; the organisation's own record is
 // already loaded either way, so an operator still sees "permission not
 // recorded" before the final whistle.
-async function buildGameMarketing(game, { league, teamDoc, participants }) {
+//
+// `strict` (Mux game video Task 3c): export surfaces tolerate a failed read —
+// the operator sees a degraded block and retries. The video access policy
+// cannot: a swallowed roster read leaves restrictedPlayerIds empty while
+// canFeature stays true, which would publish footage of a minor without
+// guardian consent (R9). With strict: true every read error propagates.
+async function buildGameMarketing(game, { league, teamDoc, participants, strict = false }) {
   const completed = game.status === 'completed';
+  const read = (promise, fallback) => (strict ? promise : promise.catch(() => fallback));
 
   if (game.gameContext === 'league') {
-    const leagueDoc = league || (await findLeagueById(game.leagueId).catch(() => null));
+    const leagueDoc = league || (await read(findLeagueById(game.leagueId), null));
     const leagueTeamIds = [game.homeLeagueTeamId, game.awayLeagueTeamId].filter(Boolean);
     const teams = completed
-      ? (
-          await Promise.all(leagueTeamIds.map((id) => findLeagueTeamById(id).catch(() => null)))
-        ).filter(Boolean)
+      ? (await Promise.all(leagueTeamIds.map((id) => read(findLeagueTeamById(id), null)))).filter(
+          Boolean
+        )
       : [];
     const players = completed
-      ? (await Promise.all(leagueTeamIds.map((id) => listLeaguePlayers(id).catch(() => [])))).flat()
+      ? (await Promise.all(leagueTeamIds.map((id) => read(listLeaguePlayers(id), [])))).flat()
       : [];
 
     return resolveMarketingPermission({
@@ -1919,7 +1926,7 @@ async function buildGameMarketing(game, { league, teamDoc, participants }) {
         await Promise.all(
           [game.homeTeamId, game.awayTeamId]
             .filter(Boolean)
-            .map((id) => findTeamById(id).catch(() => null))
+            .map((id) => read(findTeamById(id), null))
         )
       ).filter(Boolean)
     : [teamDoc].filter(Boolean);

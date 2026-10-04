@@ -306,8 +306,10 @@ async function checkPublicationLocks(game, preloadedLeague) {
   return { reason: null, league };
 }
 
+// strict: a failed LeagueTeam/LeaguePlayer read must throw, never degrade to
+// "no restricted players" while canFeature stays true (R9 fail closed).
 async function checkMarketing(game, league) {
-  const marketing = await gamesService().buildGameMarketing(game, { league });
+  const marketing = await gamesService().buildGameMarketing(game, { league, strict: true });
   if (marketing?.canFeature !== true) {
     return { reason: CLIP_ACCESS_REASONS.MARKETING_NOT_PERMITTED, restrictedPlayerIds: [] };
   }

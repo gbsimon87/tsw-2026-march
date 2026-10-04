@@ -2392,4 +2392,58 @@ describe('buildGameMarketing (consumed by video.policy)', () => {
     expect(result.restrictedPlayerIds.sort()).toEqual(['lp-declined', 'lp-minor']);
     listLeaguePlayers.mockImplementation(() => Promise.resolve([]));
   });
+
+  const completedLeagueGame = {
+    gameContext: 'league',
+    leagueId: 'league-1',
+    status: 'completed',
+    homeLeagueTeamId: 'lt-home',
+    awayLeagueTeamId: 'lt-away',
+  };
+  const grantedLeague = {
+    _id: 'league-1',
+    name: 'L',
+    social: { marketing: { status: 'granted' } },
+  };
+
+  test('default (export) callers keep the lenient behaviour: a failed player read is swallowed', async () => {
+    listLeaguePlayers.mockImplementation(() => Promise.reject(new Error('db down')));
+    const result = await buildGameMarketing(completedLeagueGame, { league: grantedLeague });
+    expect(result.canFeature).toBe(true);
+    expect(result.restrictedPlayerIds).toEqual([]);
+    listLeaguePlayers.mockImplementation(() => Promise.resolve([]));
+  });
+
+  test('strict: a failed player read propagates instead of clearing every restriction', async () => {
+    listLeaguePlayers.mockImplementation(() => Promise.reject(new Error('db down')));
+    await expect(
+      buildGameMarketing(completedLeagueGame, { league: grantedLeague, strict: true })
+    ).rejects.toThrow('db down');
+    listLeaguePlayers.mockImplementation(() => Promise.resolve([]));
+  });
+
+  test('strict: a failed league-team read propagates', async () => {
+    const { findLeagueTeamById } = require('../../modules/leagues/leagues.repository');
+    findLeagueTeamById.mockImplementationOnce(() => Promise.reject(new Error('db down')));
+    await expect(
+      buildGameMarketing(completedLeagueGame, { league: grantedLeague, strict: true })
+    ).rejects.toThrow('db down');
+  });
+
+  test('strict: a failed league read propagates when no League is preloaded', async () => {
+    findLeagueById.mockImplementationOnce(() => Promise.reject(new Error('db down')));
+    await expect(buildGameMarketing(completedLeagueGame, { strict: true })).rejects.toThrow(
+      'db down'
+    );
+  });
+
+  test('strict: a failed standalone team read propagates', async () => {
+    findTeamById.mockImplementationOnce(() => Promise.reject(new Error('db down')));
+    await expect(
+      buildGameMarketing(
+        { gameContext: 'standalone', status: 'completed', homeTeamId: 't1', awayTeamId: 't2' },
+        { participants: {}, strict: true }
+      )
+    ).rejects.toThrow('db down');
+  });
 });

@@ -493,6 +493,22 @@ describe('resolveClipPlaybackAccess (P4)', () => {
     expect(marketingContext.league).toEqual(leagueDoc());
   });
 
+  test('marketing is built in strict mode so roster read failures cannot clear restrictions', async () => {
+    await clip();
+    expect(mockGamesService.buildGameMarketing.mock.calls[0][1]).toMatchObject({ strict: true });
+  });
+
+  test.each([
+    ['signed out', null],
+    ['signed in, unrelated', STRANGER_ID],
+  ])(
+    'player-restriction read fails (%s) → rejects, never a public clip (R9 fail closed)',
+    async (_label, userId) => {
+      mockGamesService.buildGameMarketing.mockRejectedValue(new Error('listLeaguePlayers failed'));
+      await expect(clip({ userId })).rejects.toThrow('listLeaguePlayers failed');
+    }
+  );
+
   test('every lock satisfied → unrelated signed-in viewer gets a public clip', async () => {
     const decision = await clip({ userId: STRANGER_ID });
     expect(decision).toEqual({ allowed: true, status: 200, reason: null, audience: 'public' });
@@ -683,6 +699,18 @@ describe('canPublishMuxClips (P4 gate without the share lookup)', () => {
       restrictedPlayerIds: [ASSISTER_ID],
     });
     expect(mockFeedRepository.findLiveHighlightClipPost).not.toHaveBeenCalled();
+  });
+
+  test('player-restriction read fails → rejects, never allowed with an empty restriction list', async () => {
+    mockGamesService.buildGameMarketing.mockRejectedValue(new Error('listLeaguePlayers failed'));
+    await expect(policy.canPublishMuxClips({ game: leagueGame() })).rejects.toThrow(
+      'listLeaguePlayers failed'
+    );
+  });
+
+  test('marketing is built in strict mode', async () => {
+    await policy.canPublishMuxClips({ game: leagueGame() });
+    expect(mockGamesService.buildGameMarketing.mock.calls[0][1]).toMatchObject({ strict: true });
   });
 
   test('a preloaded league is used instead of a read', async () => {
