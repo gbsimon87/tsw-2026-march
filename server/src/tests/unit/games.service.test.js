@@ -123,11 +123,12 @@ const {
   setGameLineup,
   updateClockForUser,
   computeGameFinalScore,
+  buildGameMarketing,
 } = require('../../modules/games/games.service');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 const { autoPublishForFinalizedGame } = require('../../modules/feed/feed.service');
 const { env } = require('../../config/env');
-const { findLeagueById } = require('../../modules/leagues/leagues.repository');
+const { findLeagueById, listLeaguePlayers } = require('../../modules/leagues/leagues.repository');
 const { captureUserEventDetached } = require('../../modules/analytics/analytics.service');
 
 beforeEach(() => {
@@ -2358,5 +2359,37 @@ describe('games service video timeline stamping (P6)', () => {
       });
       expect(restamped.videoTimelineId).toBe(YOUTUBE_TIMELINE);
     });
+  });
+});
+
+// Mux game video Task 3c: video.policy passes the lean League it already read
+// (findLeagueVideoPolicyById) and relies on canFeature + restrictedPlayerIds.
+describe('buildGameMarketing (consumed by video.policy)', () => {
+  test('uses a preloaded lean League and reports restricted league players', async () => {
+    findLeagueById.mockClear();
+    listLeaguePlayers.mockImplementation(async (leagueTeamId) =>
+      leagueTeamId === 'lt-home'
+        ? [
+            { _id: 'lp-ok', social: { marketing: { status: 'unrecorded' } } },
+            { _id: 'lp-declined', social: { marketing: { status: 'declined' } } },
+          ]
+        : [{ _id: 'lp-minor', social: { ageCategory: 'minor', guardianConsentAt: null } }]
+    );
+
+    const result = await buildGameMarketing(
+      {
+        gameContext: 'league',
+        leagueId: 'league-1',
+        status: 'completed',
+        homeLeagueTeamId: 'lt-home',
+        awayLeagueTeamId: 'lt-away',
+      },
+      { league: { _id: 'league-1', name: 'L', social: { marketing: { status: 'granted' } } } }
+    );
+
+    expect(findLeagueById).not.toHaveBeenCalled();
+    expect(result.canFeature).toBe(true);
+    expect(result.restrictedPlayerIds.sort()).toEqual(['lp-declined', 'lp-minor']);
+    listLeaguePlayers.mockImplementation(() => Promise.resolve([]));
   });
 });

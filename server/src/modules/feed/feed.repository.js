@@ -336,6 +336,27 @@ async function findSharedEventIds(eventIds) {
   return posts.map((p) => p.highlightClip.eventId);
 }
 
+// Mux game video P4 (plan R1/R9): the authorization lookup for a public clip.
+// Unlike findSharedEventIds (an eventId-only dedupe helper) this requires BOTH
+// ids to match, so a share of one game's event never vouches for another game.
+// Posts are hard-deleted (deletePostById / deleteAutoPostsForGameIds) and carry
+// no visibility flag, so "live" means "the document still exists". Served by
+// the unique sparse `highlightClip.eventId` index (equality on eventId picks at
+// most one post; gameId is a residual check), so no new index is needed.
+async function findLiveHighlightClipPost({ gameId, eventId } = {}) {
+  if (!gameId || !eventId || !mongoose.Types.ObjectId.isValid(gameId)) {
+    return null;
+  }
+  return Post.findOne(
+    {
+      type: 'highlight_clip',
+      'highlightClip.gameId': gameId,
+      'highlightClip.eventId': String(eventId),
+    },
+    { _id: 1, creatorUserId: 1, 'highlightClip.gameId': 1, 'highlightClip.eventId': 1 }
+  ).lean();
+}
+
 module.exports = {
   Post,
   createPost,
@@ -349,6 +370,7 @@ module.exports = {
   findAutoGameCardPost,
   findPostByHighlightEventId,
   findSharedEventIds,
+  findLiveHighlightClipPost,
   updatePostCardSnapshot,
   listGameCardPostsByGameId,
   listPlayerGameCardPostsByGameId,

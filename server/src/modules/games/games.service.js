@@ -2728,6 +2728,7 @@ module.exports = {
   canAccessStandaloneDualGame,
   canEditStandaloneDualGame,
   canAccessGame,
+  buildGameMarketing,
   resolveDualGameParticipants,
   resolveRosterTargetForGame,
   addPlayerToGameRoster,

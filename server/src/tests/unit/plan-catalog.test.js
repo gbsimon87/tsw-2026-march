@@ -61,6 +61,19 @@ describe('capacity pricing catalog', () => {
     }
   });
 
+  // Mux game video P1/L6: hosted upload is an operator grant on the League
+  // (League.videoHosting), not a plan feature. The key is reserved so packaging
+  // it later is a one-line catalog change; until then NO plan grants it.
+  it('reserves canHostGameVideo and grants it to no plan', () => {
+    expect(FEATURES.CAN_HOST_GAME_VIDEO).toBe('canHostGameVideo');
+    for (const planId of [...Object.keys(PLANS), 'unknown']) {
+      expect(entitlementsForPlan(planId).canHostGameVideo).toBe(false);
+    }
+    for (const plan of Object.values(PLANS)) {
+      expect(plan.entitlements).not.toContain('canHostGameVideo');
+    }
+  });
+
   it('normalizes legacy team plan names to team_extra', () => {
     for (const legacy of ['pro', 'team', 'team_pro', 'team_extra']) {
       expect(normalizePlanId('team', legacy)).toBe('team_extra');

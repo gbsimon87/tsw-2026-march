@@ -210,6 +210,13 @@ async function findTeamById(teamId) {
   return Team.findById(teamId);
 }
 
+// Mux game video (Task 3c): only the inputs entitlements.resolveForTeam reads,
+// for the per-token replay check — never the roster.
+async function findTeamBillingStateById(teamId) {
+  if (!teamId || !mongoose.Types.ObjectId.isValid(teamId)) return null;
+  return Team.findById(teamId).select('plan subscriptionStatus billingSource').lean();
+}
+
 async function listTeams() {
   return Team.find().sort({ createdAt: -1 });
 }
@@ -291,6 +298,7 @@ module.exports = {
   listTeamsByOwner,
   findTeamByIdAndOwner,
   findTeamById,
+  findTeamBillingStateById,
   listTeams,
   listTeamsByClaimedPlayerUserId,
   saveTeam,

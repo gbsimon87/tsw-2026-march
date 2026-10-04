@@ -435,6 +435,21 @@ function findLeagueById(leagueId) {
   return League.findById(leagueId);
 }
 
+// Mux game video (Task 3c): the narrow League read the video access policy
+// runs per upload/token decision — ownership, visibility, live billing inputs,
+// marketing consent and the video grant only. Lean on purpose: a lean doc has
+// no schema defaults, so a League saved before videoHosting existed reads as
+// `videoHosting: undefined` and the policy treats that as closed. Skips the
+// unbounded processedWebhookEventIds history a full findLeagueById carries.
+async function findLeagueVideoPolicyById(leagueId) {
+  if (!leagueId || !mongoose.Types.ObjectId.isValid(leagueId)) return null;
+  return League.findById(leagueId)
+    .select(
+      'ownerUserId name status isPublic plan subscriptionStatus billingSource social videoHosting'
+    )
+    .lean();
+}
+
 function findLeagueByIdAndOwner(leagueId, ownerUserId) {
   return League.findOne({ _id: leagueId, ownerUserId });
 }
@@ -685,6 +700,7 @@ module.exports = {
   listLeaguesByOwner,
   listPublicLeagues,
   findLeagueById,
+  findLeagueVideoPolicyById,
   findLeagueByIdAndOwner,
   findLeaguesByOwner,
   findLeagueBySlug,

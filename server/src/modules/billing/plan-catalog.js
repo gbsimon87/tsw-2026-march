@@ -25,6 +25,12 @@ const FEATURES = Object.freeze({
   CAN_VIEW_COACH_REPORTS: 'canViewCoachReports', // future
   CAN_MANAGE_LEAGUE: 'canManageLeague',
   CAN_USE_SPONSOR_TOOLS: 'canUseSponsorTools', // future
+  // Reserved, granted by NO plan. Mux hosted game video is allowed by an
+  // operator grant on the League (League.videoHosting, set by
+  // scripts/set-league-video-hosting.js), not by a plan — rulings P1 / L6 in
+  // docs/superpowers/plans/2026-10-04-mux-game-video.md. Packaging it later is
+  // a one-line change here plus checking the key in video.policy.js.
+  CAN_HOST_GAME_VIDEO: 'canHostGameVideo',
 });
 
 const ALL_FEATURE_KEYS = Object.freeze(Object.values(FEATURES));
