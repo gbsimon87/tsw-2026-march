@@ -40,8 +40,7 @@ const { resolveUploadAllowance, resolveVideoManagerAccess } = require('./video.p
 // minutes when the asset is ready (commitStoredMinutes) or releases it.
 const UPLOAD_RESERVATION_MINUTES = 180;
 
-// GC: one video per game; only an unfinished one may be replaced in place.
-const REPLACEABLE_VIDEO_STATUSES = ['uploading', 'errored'];
+// GC/V22: one video per game; cancel or remove it before another upload.
 // Attempt statuses that hold no slot but may hold stored minutes.
 const SETTLED_ATTEMPT_STATUSES = ['ready', 'errored'];
 const TERMINAL_ATTEMPT_STATUSES = ['cancelled', 'superseded', 'rejected'];
@@ -296,11 +295,15 @@ async function createGameVideoUpload({ userId, gameId, origin, sameRecording = f
     throw videoError(403, 'Video upload is not available for this game.', allowance.reason);
   }
 
-  const current = game.video || null;
-  if (current && !REPLACEABLE_VIDEO_STATUSES.includes(current.status)) {
+  // V22: one video at a time. Replacing an unfinished upload needed a second
+  // concurrent slot (a misleading 429 at the default limit of 1) and failures
+  // detach rather than store `errored`, so cancel or remove first.
+  if (game.video) {
     throw videoError(
       409,
-      'This game already has a video. Remove it before uploading another.',
+      game.video.status === 'ready'
+        ? 'This game already has a video. Remove it before uploading another.'
+        : 'This game has an upload in progress. Cancel it before uploading another.',
       R.VIDEO_EXISTS
     );
   }
@@ -309,26 +312,13 @@ async function createGameVideoUpload({ userId, gameId, origin, sameRecording = f
   const upload = await createMuxUpload(attempt, game, origin);
   await recordUploadId(attempt, upload.id);
 
-  // Replacing an unfinished video: persist its cleanup before the attach.
-  let replacedAttempt = null;
-  if (current) {
-    try {
-      replacedAttempt = await repository.findUploadAttemptByGenerationId(current.generationId);
-      if (replacedAttempt) await enqueueAttemptCleanup(replacedAttempt, 'replaced');
-      else warnUnownedGeneration(game._id, current.generationId);
-    } catch (error) {
-      await abandonNewUpload(attempt, upload.id, 'rejected', 'create_failed');
-      throw error;
-    }
-  }
-
   let attached;
   try {
     attached = await repository.attachGameVideo({
       gameId: game._id,
-      expectedGenerationId: current ? current.generationId : null,
-      allowReplaceStatuses: current ? REPLACEABLE_VIDEO_STATUSES : [],
-      previousVersion: current ? current.version : null,
+      expectedGenerationId: null,
+      allowReplaceStatuses: [],
+      previousVersion: null,
       video: {
         status: 'uploading',
         generationId: attempt.generationId,
@@ -356,11 +346,6 @@ async function createGameVideoUpload({ userId, gameId, origin, sameRecording = f
       'Another change to this game’s video happened at the same time. Reload and try again.',
       R.UPLOAD_CONFLICT
     );
-  }
-
-  if (replacedAttempt) {
-    await retireAttempt(replacedAttempt, 'superseded');
-    kickCleanup();
   }
 
   return {

@@ -333,7 +333,10 @@ describe('createGameVideoUpload', () => {
     }
   );
 
-  test.each(['processing', 'ready'])(
+  // V22: replacing an unfinished upload could never reserve a second slot
+  // (maxConcurrentUploads 1 → a misleading 429), and failures detach rather
+  // than store `errored`. Any existing video must be cancelled/removed first.
+  test.each(['uploading', 'processing', 'ready', 'errored'])(
     'existing %s video → 409 video_exists; nothing reserved',
     async (status) => {
       mockGamesService.assertGameAccess.mockResolvedValue(game({ video: oldVideo({ status }) }));
@@ -427,130 +430,6 @@ describe('createGameVideoUpload', () => {
     expect(mockRepository.releaseUploadSlot).toHaveBeenCalledTimes(1);
   });
 
-  describe('replacing an uploading/errored video (GC)', () => {
-    test('uploading: old upload cancel is enqueued BEFORE the attach; old attempt superseded, its slot released once', async () => {
-      mockGamesService.assertGameAccess.mockResolvedValue(game({ video: oldVideo() }));
-      mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
-        attempt({
-          _id: OLD_ATTEMPT_ID,
-          generationId: OLD_GENERATION,
-          status: 'uploading',
-          uploadId: 'up-old',
-        })
-      );
-      mockRepository.transitionUploadAttempt.mockImplementation(async (input) =>
-        input.attemptId === OLD_ATTEMPT_ID ? attempt({ _id: OLD_ATTEMPT_ID }) : null
-      );
-
-      await create();
-
-      expect(mockRepository.findUploadAttemptByGenerationId).toHaveBeenCalledWith(OLD_GENERATION);
-      expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledTimes(1);
-      expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledWith({
-        kind: 'cancel_upload',
-        targetId: 'up-old',
-        attemptId: OLD_ATTEMPT_ID,
-        gameId: GAME_ID,
-        reason: 'replaced',
-      });
-      expect(mockRepository.attachGameVideo).toHaveBeenCalledWith(
-        expect.objectContaining({
-          expectedGenerationId: OLD_GENERATION,
-          allowReplaceStatuses: ['uploading', 'errored'],
-          previousVersion: 3,
-        })
-      );
-      expect(mockRepository.transitionUploadAttempt).toHaveBeenCalledWith({
-        attemptId: OLD_ATTEMPT_ID,
-        fromStatuses: ['reserved', 'uploading', 'processing'],
-        toStatus: 'superseded',
-        set: {},
-      });
-      expect(mockRepository.releaseUploadSlot).toHaveBeenCalledTimes(1);
-      expectAscending(
-        callOrder(
-          mockRepository.enqueueCleanupJob,
-          mockRepository.attachGameVideo,
-          mockRepository.transitionUploadAttempt,
-          mockRepository.releaseUploadSlot,
-          mockCleanup.kickCleanup
-        )
-      );
-    });
-
-    test('errored with an asset: deletes the asset; settled attempt superseded without a slot release', async () => {
-      mockGamesService.assertGameAccess.mockResolvedValue(
-        game({ video: oldVideo({ status: 'errored', assetId: 'as-old' }) })
-      );
-      mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
-        attempt({
-          _id: OLD_ATTEMPT_ID,
-          generationId: OLD_GENERATION,
-          status: 'errored',
-          uploadId: 'up-old',
-          assetId: 'as-old',
-        })
-      );
-      mockRepository.transitionUploadAttempt.mockImplementation(async (input) =>
-        input.fromStatuses.includes('errored') ? attempt({ status: 'superseded' }) : null
-      );
-
-      await create();
-
-      expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledTimes(1);
-      expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'delete_asset', targetId: 'as-old', reason: 'replaced' })
-      );
-      expect(mockRepository.transitionUploadAttempt).toHaveBeenLastCalledWith({
-        attemptId: OLD_ATTEMPT_ID,
-        fromStatuses: ['ready', 'errored'],
-        toStatus: 'superseded',
-        set: {},
-      });
-      expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
-      expect(mockRepository.takeUploadAttemptStoredMinutes).not.toHaveBeenCalled();
-      expect(mockRepository.releaseStoredMinutes).not.toHaveBeenCalled();
-    });
-
-    test('enqueueing the old cleanup fails → no attach; the new upload is abandoned and its slot released', async () => {
-      mockGamesService.assertGameAccess.mockResolvedValue(game({ video: oldVideo() }));
-      mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
-        attempt({ _id: OLD_ATTEMPT_ID, generationId: OLD_GENERATION, uploadId: 'up-old' })
-      );
-      mockRepository.enqueueCleanupJob.mockRejectedValueOnce(new Error('db down'));
-
-      await expect(create()).rejects.toThrow('db down');
-
-      expect(mockRepository.attachGameVideo).not.toHaveBeenCalled();
-      expect(mockRepository.enqueueCleanupJob).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          kind: 'cancel_upload',
-          targetId: 'up-new',
-          attemptId: ATTEMPT_ID,
-        })
-      );
-      expect(mockRepository.transitionUploadAttempt).toHaveBeenCalledTimes(1);
-      expect(mockRepository.transitionUploadAttempt).toHaveBeenCalledWith(
-        expect.objectContaining({ attemptId: ATTEMPT_ID, toStatus: 'rejected' })
-      );
-      expect(mockRepository.releaseUploadSlot).toHaveBeenCalledTimes(1);
-    });
-
-    test('a replaced video without an owning attempt is attached over with a warning (E3: never cleaned)', async () => {
-      mockGamesService.assertGameAccess.mockResolvedValue(game({ video: oldVideo() }));
-      mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(null);
-
-      await create();
-
-      expect(mockRepository.enqueueCleanupJob).not.toHaveBeenCalled();
-      expect(mockRepository.attachGameVideo).toHaveBeenCalled();
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ gameId: GAME_ID, generationId: OLD_GENERATION }),
-        expect.stringContaining('no owning upload attempt')
-      );
-    });
-  });
-
   test('attach THROWS (it may have applied) → best-effort detach of the fresh generation, then abandon', async () => {
     mockRepository.attachGameVideo.mockRejectedValue(new Error('socket hang up'));
 
@@ -598,18 +477,6 @@ describe('createGameVideoUpload', () => {
 
   test('attach returns null (condition did not hold, nothing applied) → no detach', async () => {
     mockRepository.attachGameVideo.mockResolvedValue(null);
-
-    await create().catch(() => {});
-
-    expect(mockRepository.detachGameVideo).not.toHaveBeenCalled();
-  });
-
-  test('old-cleanup enqueue fails before any attach → no detach either', async () => {
-    mockGamesService.assertGameAccess.mockResolvedValue(game({ video: oldVideo() }));
-    mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
-      attempt({ _id: OLD_ATTEMPT_ID, generationId: OLD_GENERATION, uploadId: 'up-old' })
-    );
-    mockRepository.enqueueCleanupJob.mockRejectedValueOnce(new Error('db down'));
 
     await create().catch(() => {});
 
