@@ -187,6 +187,21 @@ describe('AdminLeaguePage', () => {
     delete Element.prototype.scrollIntoView;
   });
 
+  test('a #marketing link scrolls to the marketing permission panel', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({ viewerContext: { viewerRole: 'owner', managedTeamIds: [] } }),
+    });
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+
+    renderPage('/admin/leagues/league-1?tab=settings#marketing');
+
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0].id).toBe('marketing');
+    delete Element.prototype.scrollIntoView;
+  });
+
   test('lets a league owner archive a team from the Teams tab', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
     leaguesApi.getById.mockResolvedValue({

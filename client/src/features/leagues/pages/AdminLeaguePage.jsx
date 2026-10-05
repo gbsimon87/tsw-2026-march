@@ -194,13 +194,14 @@ export function AdminLeaguePage() {
     if (TABS.some((tab) => tab.id === requestedTab)) setActiveTab(requestedTab);
   }, [requestedTab]);
 
-  // "No active season" guidance links to ?tab=settings#season. The router
-  // doesn't scroll to hashes, so bring the Season section into view once the
-  // settings tab has rendered.
+  // Guidance elsewhere links to ?tab=settings#season ("no active season") or
+  // #marketing (a refused Pulse clip). The router doesn't scroll to hashes,
+  // so bring the section into view once the settings tab has rendered.
   const { hash } = useLocation();
   useEffect(() => {
-    if (hash !== '#season' || activeTab !== 'settings' || !league || isLoading) return;
-    document.getElementById('season')?.scrollIntoView?.({ block: 'start' });
+    if (!['#season', '#marketing'].includes(hash)) return;
+    if (activeTab !== 'settings' || !league || isLoading) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, activeTab, league, isLoading]);
 
   function selectTab(tabId) {
@@ -1407,7 +1408,7 @@ export function AdminLeaguePage() {
                 <span className="font-semibold">{league.isPublic ? 'Public' : 'Private'}</span>
               </p>
 
-              <div className="mt-8 border-t border-slate-200 pt-6">
+              <div id="marketing" className="mt-8 scroll-mt-6 border-t border-slate-200 pt-6">
                 <MarketingPermissionPanel
                   social={league.social}
                   scopeLabel="league"

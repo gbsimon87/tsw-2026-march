@@ -96,6 +96,7 @@ export function GameRecapPanel({
   canShareHighlights = false,
   clipShareState = {},
   onShareHighlightClip = null,
+  shareFixHref = null,
   highlightReelOpen = false,
   onOpenHighlightReel = null,
   onCloseHighlightReel = null,
@@ -167,9 +168,14 @@ export function GameRecapPanel({
           </div>
           <HorizontalScrollRow>
             {featuredHighlights.map((h) => {
-              const clipState =
+              const rawState =
                 clipShareState[h.eventId] ||
                 (sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
+              // A refusal with an explanation: the button offers a retry and
+              // the reason shows underneath.
+              const refusal = typeof rawState === 'object' ? rawState : null;
+              const clipState = refusal ? 'idle' : rawState;
+              const fixHref = refusal ? shareFixHref?.(refusal.reason) : null;
               return (
                 <div key={h.eventId} className="flex shrink-0 flex-col">
                   <GameHighlightClip
@@ -205,6 +211,19 @@ export function GameRecapPanel({
                             ? clipState
                             : 'Share to Pulse'}
                     </button>
+                  ) : null}
+                  {refusal ? (
+                    <div role="alert" className="mt-1.5 w-56 text-xs text-slate-600">
+                      <p>{refusal.message}</p>
+                      {fixHref ? (
+                        <Link
+                          to={fixHref}
+                          className="mt-1 inline-block font-semibold text-[#1B4332] underline underline-offset-2"
+                        >
+                          Open League settings
+                        </Link>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               );

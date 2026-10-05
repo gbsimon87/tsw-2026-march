@@ -1355,6 +1355,25 @@ function findSnapshotPlayer(game, playerId) {
   return null;
 }
 
+// Why a hosted clip can't go on the Pulse, in words the sharer can act on.
+// Keyed by the video policy's reason, which also travels in error.details so
+// the game page can link the owner to the right settings.
+const MUX_SHARE_REFUSALS = {
+  marketing_not_permitted:
+    "The league hasn't confirmed it may feature its players. The league owner can confirm marketing permission in League settings.",
+  league_not_public:
+    'This league is private, so its clips can’t go on the public Pulse. The league owner can make it public in League settings.',
+  publication_not_granted:
+    "This league doesn't have permission to publish its game footage yet. Contact TSW support to turn it on.",
+  public_clips_disabled: 'Sharing hosted video clips to the Pulse is switched off right now.',
+  game_not_completed: 'Finish the game before sharing its clips to the Pulse.',
+  player_restricted:
+    'A player in this clip hasn’t agreed to be featured, so it can’t be shared to the Pulse.',
+  player_unknown:
+    'This clip has no player recorded, so it can’t be cleared for sharing to the Pulse.',
+};
+const MUX_SHARE_REFUSAL_FALLBACK = 'This footage cannot be shared to the Pulse.';
+
 async function assertCanShareHighlightClip(userId, game, event) {
   if (await canAccessGame(userId, game)) return;
 
@@ -1404,11 +1423,17 @@ async function createHighlightClipPostForUser(userId, input) {
   if (getGameVideoProvider(game) === 'mux') {
     const { canPublishMuxClips, isEventSubjectRestricted } = require('../video/video.policy');
     const permission = await canPublishMuxClips({ game });
+    let reason = permission.allowed ? null : permission.reason;
     if (
-      !permission.allowed ||
+      !reason &&
       isEventSubjectRestricted({ game, event, restrictedPlayerIds: permission.restrictedPlayerIds })
     ) {
-      throw new ApiError(403, 'This footage cannot be shared to the Pulse');
+      reason = event.playerId ? 'player_restricted' : 'player_unknown';
+    }
+    if (reason) {
+      throw new ApiError(403, MUX_SHARE_REFUSALS[reason] || MUX_SHARE_REFUSAL_FALLBACK, {
+        reason,
+      });
     }
     if (!buildHighlightVideoFields(game, event).videoAvailable)
       throw new ApiError(422, 'Video unavailable');

@@ -21,6 +21,7 @@ const feedApiMocks = vi.hoisted(() => ({
   createGameCardPost: vi.fn(),
   createPlayerCardPost: vi.fn(),
   createTeamCardPost: vi.fn(),
+  createHighlightClipPost: vi.fn(),
 }));
 
 const authMocks = vi.hoisted(() => ({
@@ -1010,6 +1011,73 @@ describe('GameDetailPage', () => {
 
     expect(await screen.findByRole('tab', { name: 'Recap' })).toBeInTheDocument();
     expect(screen.queryByText('Game Summary')).not.toBeInTheDocument();
+  });
+
+  // A refused clip share explains why; a League manager also gets a link to the
+  // settings that fix it.
+  test('a refused clip share explains why and links the manager to League settings', async () => {
+    apiMocks.getById.mockResolvedValue({
+      game: {
+        id: 'game-share',
+        title: 'TSW Team vs Wildcats',
+        opponent: 'Wildcats',
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        status: 'completed',
+        completedAt: '2026-03-12T19:20:00.000Z',
+        events: [],
+      },
+      team: {
+        id: 'team-1',
+        name: 'TSW Team',
+        players: [],
+        entitlements: { canViewReplay: true, canViewShotMaps: true },
+      },
+      teamEntitlements: { canViewReplay: true, canViewShotMaps: true },
+      league: { id: 'league-9', name: 'Demo League', slug: 'demo' },
+      recap: {
+        statusLabel: 'Final',
+        team: { id: 'team-1', name: 'TSW Team', points: 5 },
+        opponent: { name: 'Wildcats' },
+        topPerformers: [],
+        teamStats: {},
+        keyMoments: [],
+      },
+      boxScore: { players: [], teamTotals: { points: 5 }, opponentTotals: { points: 2 } },
+      highlights: [
+        {
+          eventId: 'three',
+          statType: 'FG3_MADE',
+          videoTimestamp: 30,
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          playerName: 'Alex',
+        },
+      ],
+      sharedEventIds: [],
+      canShareHighlights: true,
+      canManageGame: true,
+    });
+    feedApiMocks.createHighlightClipPost.mockRejectedValue(
+      Object.assign(new Error("The league hasn't confirmed it may feature its players."), {
+        status: 403,
+        details: { reason: 'marketing_not_permitted' },
+      })
+    );
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/games/game-share']}>
+        <Routes>
+          <Route path="/games/:gameId" element={<GameDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Share to Pulse' }));
+
+    expect(await screen.findByText(/hasn't confirmed it may feature/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open League settings' })).toHaveAttribute(
+      'href',
+      '/admin/leagues/league-9?tab=settings#marketing'
+    );
   });
 
   test('opens a shared virtual reel link and shares its canonical game URL', async () => {

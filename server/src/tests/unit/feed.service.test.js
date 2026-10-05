@@ -1774,6 +1774,44 @@ describe('Mux highlight sources and footage publication', () => {
     // V15: one full read per distinct Mux game, for the viewer gate.
     expect(findGameById).toHaveBeenCalledTimes(1);
   });
+  // A refused share says why and what to do, with a stable reason the game
+  // page uses to link the owner to the right settings.
+  test.each([
+    ['marketing_not_permitted', /League settings/],
+    ['league_not_public', /private/],
+    ['publication_not_granted', /permission to publish/],
+    ['public_clips_disabled', /switched off/],
+    ['game_not_completed', /Finish the game/],
+  ])('a %s refusal explains itself', async (reason, text) => {
+    const { canAccessGame } = require('../../modules/games/games.service');
+    canAccessGame.mockResolvedValue(true);
+    policy.canPublishMuxClips.mockResolvedValue({
+      allowed: false,
+      reason,
+      restrictedPlayerIds: [],
+    });
+    await expect(
+      service.createHighlightClipPostForUser('user', { gameId, eventId })
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: expect.stringMatching(text),
+      details: { reason },
+    });
+  });
+
+  test('a restricted player refusal says the player has not agreed to be featured', async () => {
+    const { canAccessGame } = require('../../modules/games/games.service');
+    canAccessGame.mockResolvedValue(true);
+    policy.isEventSubjectRestricted.mockReturnValue(true);
+    await expect(
+      service.createHighlightClipPostForUser('user', { gameId, eventId })
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: expect.stringMatching(/agreed to be featured/),
+      details: { reason: 'player_restricted' },
+    });
+  });
+
   test('late-ready Mux clips require current footage permission before auto-publishing', async () => {
     policy.canPublishMuxClips.mockResolvedValue({ allowed: false, restrictedPlayerIds: [] });
     expect(await service.autoCreateHighlightClipPosts('system', current())).toMatchObject({

@@ -811,11 +811,31 @@ export function GameDetailPage() {
         requestId: err.requestId,
         err,
       });
-      const msg = err.message?.toLowerCase().includes('already been shared')
-        ? 'Already shared'
-        : err.message || 'Failed to share';
-      setClipShareState((s) => ({ ...s, [eventId]: msg }));
+      if (err.message?.toLowerCase().includes('already been shared')) {
+        setClipShareState((s) => ({ ...s, [eventId]: 'Already shared' }));
+        return;
+      }
+      // A policy refusal carries a reason: show the server's explanation under
+      // the clip (not squeezed into the button) and, where the League owner
+      // can fix it, a link to the right settings.
+      setClipShareState((s) => ({
+        ...s,
+        [eventId]: {
+          message: err.message || 'Failed to share',
+          reason: err.details?.reason ?? null,
+        },
+      }));
     }
+  }
+
+  // Settings the League owner or a manager can change to unblock a clip share.
+  function shareFixHref(reason) {
+    if (!data.canManageGame || !data.league?.id) return null;
+    if (reason === 'marketing_not_permitted') {
+      return `/admin/leagues/${data.league.id}?tab=settings#marketing`;
+    }
+    if (reason === 'league_not_public') return `/admin/leagues/${data.league.id}?tab=settings`;
+    return null;
   }
 
   function openHighlightReel() {
@@ -1106,6 +1126,7 @@ export function GameDetailPage() {
                   canShareHighlights={canShareHighlights}
                   clipShareState={clipShareState}
                   onShareHighlightClip={shareHighlightClip}
+                  shareFixHref={shareFixHref}
                   highlightReelOpen={isHighlightReelOpen}
                   onOpenHighlightReel={openHighlightReel}
                   onCloseHighlightReel={closeHighlightReel}
