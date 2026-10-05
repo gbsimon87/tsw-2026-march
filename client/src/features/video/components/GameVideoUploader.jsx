@@ -4,6 +4,15 @@ import { videoApi } from '../api/videoApi';
 import { gamesApi } from '../../games/api/gamesApi';
 export const MAX_VIDEO_UPLOAD_BYTES = 20 * 1024 ** 3;
 const POLL_INTERVAL_MS = 3000;
+// Why uploads are unavailable, keyed by the server's allowance reason.
+const DENIAL_MESSAGES = {
+  game_scheduled:
+    'Start the game to upload its video: set the starting lineups and begin tracking, then come back here.',
+  not_league_manager: 'Only the league owner or a league manager can upload game video.',
+  league_not_granted: "Hosted video isn't enabled for this league yet.",
+  not_league_game: 'Hosted video is available only for league games.',
+  hosting_disabled: 'Hosted video uploads are switched off right now.',
+};
 const MAX_POLL_MS = 10 * 60 * 1000;
 function storedAttempt(key) {
   try {
@@ -347,7 +356,8 @@ export function GameVideoUploader({ gameId, video, videoUrl = null, allowance, o
       ) : null}
       {allowance?.allowed === false && !video ? (
         <p className="text-xs text-slate-500">
-          Hosted uploads are not enabled for this game. You can still link a YouTube video.
+          {DENIAL_MESSAGES[allowance.reason] || 'Hosted uploads are not enabled for this game.'} You
+          can still link a YouTube video.
         </p>
       ) : null}
     </section>

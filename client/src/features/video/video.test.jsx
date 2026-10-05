@@ -467,6 +467,18 @@ describe('uploads', () => {
     expect(mocks.createUpload.mock.calls[0][1].sameRecording).toBe(true);
     await act(async () => resolve({ attemptId: 'attempt', uploadUrl: 'bearer', video: pending }));
   });
+  // The allowance reason decides the guidance; "not enabled for this game"
+  // misled a League owner whose game was simply not started yet.
+  test.each([
+    ['game_scheduled', /Start the game/],
+    ['not_league_manager', /Only the league owner or a league manager/],
+    ['league_not_granted', /isn't enabled for this league/],
+    ['not_league_game', /only for league games/],
+    ['hosting_disabled', /switched off/],
+  ])('a %s denial explains what to do', (reason, text) => {
+    render(<GameVideoUploader gameId="game" allowance={{ allowed: false, reason }} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
   test('rejects oversized files before requesting a billable upload', () => {
     render(<GameVideoUploader gameId="game" allowance={{ allowed: true }} />);
     chooseFile(MAX_VIDEO_UPLOAD_BYTES + 1);
