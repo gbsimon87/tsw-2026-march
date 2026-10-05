@@ -2184,6 +2184,13 @@ async function getPublicGame(gameId, viewerUserId = null) {
   if (viewerUserId) {
     if (rawGame) {
       result.canManageGame = await canAccessGame(viewerUserId, rawGame);
+      // V16 regression: managers (the tracker's uploader polls this route)
+      // see the full video status, not the anonymous ready-only view.
+      if (result.canManageGame && rawGame.video) {
+        result.game.video = sanitizeGameVideo(rawGame.video, {
+          includePremiumMedia: Boolean(result.team?.entitlements?.canViewReplay),
+        });
+      }
       result.canShareHighlights =
         result.canManageGame || isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
       result.videoUpload = await resolveVideoUploadFlag(viewerUserId, rawGame, {

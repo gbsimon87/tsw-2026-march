@@ -1357,6 +1357,21 @@ describe('games service frozen box score (OPT-012)', () => {
     expect(JSON.stringify(result)).not.toContain('duration_limit');
   });
 
+  // V16 regression: the tracker's uploader polls this same public route, so a
+  // signed-in manager must still see an in-progress upload's status.
+  test('getPublicGame shows a manager the in-progress Mux video', async () => {
+    findGameById.mockResolvedValue(
+      buildDualLeagueGame({
+        status: 'completed',
+        videoUrl: null,
+        video: { provider: 'mux', status: 'uploading', generationId: 'gen', version: 4 },
+      })
+    );
+    const result = await getPublicGame('game-1', 'user-1');
+    expect(result.canManageGame).toBe(true);
+    expect(result.game.video).toMatchObject({ provider: 'mux', status: 'uploading', version: 4 });
+  });
+
   // V15: the public recap only offers Mux clips this viewer can get a token for.
   test('public recap marks Mux highlights the viewer cannot play as unavailable', async () => {
     const { resolveMuxHighlightViewerGate } = require('../../modules/video/video.policy');
