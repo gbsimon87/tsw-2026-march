@@ -245,6 +245,42 @@ describe('signed playback', () => {
   });
 });
 
+// V21: client edge cases from the Mux review.
+describe('playback edge cases (V21)', () => {
+  test('a device clock ahead of the server still plays and does not refetch every second', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Server says one hour; the device clock is two hours ahead of it.
+    mocks.getPlayback.mockImplementation(() =>
+      Promise.resolve({
+        ...grant(),
+        expiresAt: new Date(Date.now() - 3600000).toISOString(),
+        expiresInSeconds: 3600,
+      })
+    );
+    renderVideo(<MuxVideo gameId="game" autoPlay />);
+    await screen.findByTestId('mux-player');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(mocks.getPlayback).toHaveBeenCalledTimes(1);
+  });
+  test('a recovered media error can refresh credentials again later', async () => {
+    renderVideo(<MuxVideo gameId="game" autoPlay />);
+    const media = await screen.findByTestId('mux-player');
+    fireEvent.error(media);
+    await waitFor(() => expect(mocks.getPlayback).toHaveBeenCalledTimes(2));
+    fireEvent.canPlay(media);
+    fireEvent.error(media);
+    await waitFor(() => expect(mocks.getPlayback).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText('Video unavailable')).not.toBeInTheDocument();
+  });
+  test('an offscreen feed card shows no dead Play button', () => {
+    renderVideo(<MuxHighlightFeed highlight={highlight} />);
+    expect(screen.queryByRole('button', { name: /^Play/ })).not.toBeInTheDocument();
+    expect(mocks.getPlayback).not.toHaveBeenCalled();
+  });
+});
+
 describe('uploads', () => {
   test('transfers in chunks, displays progress, polls media fields, and stores only an attempt id', async () => {
     const change = vi.fn();
@@ -312,6 +348,40 @@ describe('uploads', () => {
     expect(sessionStorage.getItem('gameVideoAttempt:game')).toBe('attempt');
     fireEvent.click(screen.getByText('Cancel upload'));
     await waitFor(() => expect(sessionStorage.length).toBe(0));
+  });
+  // V21: losing replay entitlement hides `video` in the poll; that is not the
+  // server discarding the upload, so the live transfer continues.
+  test('a poll without video does not abort a live transfer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const change = vi.fn();
+    render(
+      <GameVideoUploader gameId="game" allowance={{ allowed: true }} onMediaChange={change} />
+    );
+    chooseFile();
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalled());
+    mocks.getById.mockResolvedValue({ game: { video: null }, videoUpload: { allowed: false } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+    expect(mocks.getById).toHaveBeenCalled();
+    expect(upload.abort).not.toHaveBeenCalled();
+    expect(change).not.toHaveBeenCalledWith(expect.objectContaining({ video: null }));
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+  });
+  test('cancelling while the create request fails still offers Cancel', async () => {
+    let reject;
+    mocks.createUpload.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r;
+      })
+    );
+    render(<GameVideoUploader gameId="game" allowance={{ allowed: true }} />);
+    chooseFile();
+    fireEvent.click(screen.getByText('Cancel upload'));
+    await act(async () => reject(new Error('network')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Try cancelling again');
+    fireEvent.click(screen.getByText('Cancel upload'));
+    await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith('game'));
   });
   test('a stale poll cannot resurrect a removed video', async () => {
     let resolve;

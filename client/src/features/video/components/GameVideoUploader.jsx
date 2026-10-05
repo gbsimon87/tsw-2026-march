@@ -70,6 +70,10 @@ export function GameVideoUploader({ gameId, video, videoUrl = null, allowance, o
     const generation = revision.current;
     const result = await gamesApi.getById(gameId);
     if (!mounted.current || generation !== revision.current) return;
+    // V21: a missing `video` mid-transfer is not a server discard (losing
+    // replay entitlement hides it too). Keep the transfer; its own success or
+    // error, and the next poll after it ends, decide.
+    if (!result.game.video && operation.current.transferring) return;
     notify.current?.({
       video: result.game.video ?? null,
       videoProvider: result.game.videoProvider,
@@ -283,7 +287,12 @@ export function GameVideoUploader({ gameId, video, videoUrl = null, allowance, o
           Refresh video status
         </button>
       ) : null}
-      {(pending || operation.current.attemptId || phase === 'creating' || phase === 'cancelling') &&
+      {(pending ||
+        operation.current.attemptId ||
+        phase === 'creating' ||
+        phase === 'cancelling' ||
+        // V21: an unconfirmed cancellation must stay retryable.
+        (phase === 'failed' && operation.current.cancelled)) &&
       video?.status !== 'ready' ? (
         <button
           type="button"

@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import MuxPlayer from '@mux/mux-player-react/lazy';
-import { useVideoPlayback } from '../hooks/useVideoPlayback';
+import { playbackExpiresAt, useVideoPlayback } from '../hooks/useVideoPlayback';
 import { activatePlayback, releasePlayback } from '../playbackCoordinator';
 
 const MuxVideoSession = forwardRef(function MuxVideoSession(
@@ -102,6 +102,18 @@ const MuxVideoSession = forwardRef(function MuxVideoSession(
         Video unavailable
       </div>
     );
+  // V21: a visibility-controlled card (`active` set) starts on its own when
+  // in view; a Play button there could never do anything.
+  if (!enabled && !playback.data && active !== undefined)
+    return (
+      <div
+        className={`flex aspect-video w-full items-center justify-center bg-slate-950 text-sm text-slate-400 ${className}`}
+        aria-label={title}
+        role="img"
+      >
+        ▶
+      </div>
+    );
   if (!enabled && !playback.data)
     return (
       <button
@@ -113,7 +125,7 @@ const MuxVideoSession = forwardRef(function MuxVideoSession(
         ▶ Play video
       </button>
     );
-  if (!playback.data || Date.parse(playback.data.expiresAt) <= Date.now())
+  if (!playback.data || playbackExpiresAt(playback.data) <= Date.now())
     return (
       <div
         className={`flex aspect-video items-center justify-center bg-slate-950 text-sm text-slate-400 ${className}`}
@@ -150,7 +162,12 @@ const MuxVideoSession = forwardRef(function MuxVideoSession(
         aspectRatio: fill ? undefined : '16 / 9',
       }}
       onLoadedMetadata={restore}
-      onCanPlay={restore}
+      onCanPlay={() => {
+        // V21: the refreshed source is playable again, so a later error gets
+        // its own one retry (metadata alone is not enough proof).
+        retried.current = false;
+        restore();
+      }}
       onPlay={(e) => {
         setPlaying(true);
         activatePlayback(player.current, () => player.current?.pause());

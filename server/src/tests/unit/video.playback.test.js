@@ -45,6 +45,8 @@ test('full-game playback gets distinct audiences and a 12-hour expiry', async ()
     playbackId: 'playback',
     clip: null,
     expiresAt: '2026-10-06T00:00:00.000Z',
+    // V21: clients time renewal from receipt, not their own (possibly skewed) clock.
+    expiresInSeconds: 43200,
     tokens: { playback: 'token-v', thumbnail: 'token-t', storyboard: 'token-s' },
   });
   expect(signPlaybackToken).toHaveBeenCalledWith(
@@ -56,6 +58,7 @@ test('clip signing bounds the HLS window, fixes the thumbnail frame and omits fu
   expect(result).toMatchObject({
     clip: { startSeconds: 95, endSeconds: 105 },
     expiresAt: '2026-10-05T13:00:00.000Z',
+    expiresInSeconds: 3600,
     tokens: { storyboard: null },
   });
   expect(signPlaybackToken).toHaveBeenCalledWith(

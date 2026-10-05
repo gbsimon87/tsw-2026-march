@@ -2,6 +2,13 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { videoApi } from '../api/videoApi';
 export const REFRESH_MARGIN_MS = 5 * 60 * 1000;
+// V21: token expiry on this device's clock — receipt time plus the server's
+// lifetime — so a skewed device clock neither loops refetches nor hides a
+// valid token. Falls back to the absolute expiresAt.
+export function playbackExpiresAt(data) {
+  if (Number.isFinite(data?.localExpiresAt)) return data.localExpiresAt;
+  return Date.parse(data?.expiresAt ?? '');
+}
 export function useVideoPlayback({
   gameId,
   eventId = null,
@@ -21,9 +28,12 @@ export function useVideoPlayback({
   callback.current = beforeRefresh;
   const query = useQuery({
     queryKey: ['videoPlayback', viewer, gameId, eventId ?? 'full', version],
-    queryFn: () => {
+    queryFn: async () => {
       callback.current?.();
-      return videoApi.getPlayback(gameId, eventId);
+      const data = await videoApi.getPlayback(gameId, eventId);
+      return Number.isFinite(data?.expiresInSeconds)
+        ? { ...data, localExpiresAt: Date.now() + data.expiresInSeconds * 1000 }
+        : data;
     },
     enabled: Boolean(gameId) && enabled,
     retry: (count, error) => count < 2 && ![401, 403, 404, 422].includes(error.status),
@@ -38,7 +48,7 @@ export function useVideoPlayback({
     refetchIntervalInBackground: false,
     refetchInterval: (q) => {
       if (!enabled || q.state.status === 'error') return false;
-      const expires = Date.parse(q.state.data?.expiresAt ?? '');
+      const expires = playbackExpiresAt(q.state.data);
       return Number.isFinite(expires)
         ? Math.max(1000, expires - Date.now() - REFRESH_MARGIN_MS)
         : false;
@@ -48,9 +58,8 @@ export function useVideoPlayback({
   useEffect(() => {
     if (!enabled) return undefined;
     const wake = () => {
-      const expires = Date.parse(
+      const expires = playbackExpiresAt(
         client.getQueryData(['videoPlayback', viewer, gameId, eventId ?? 'full', version])
-          ?.expiresAt ?? ''
       );
       if (
         document.visibilityState === 'visible' &&

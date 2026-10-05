@@ -42,6 +42,8 @@ async function getGameVideoPlayback({ userId = null, gameId, eventId = null, now
     playbackId,
     clip,
     expiresAt: new Date((Math.floor(now / 1000) + ttlSeconds) * 1000).toISOString(),
+    // V21: lets clients time renewal from receipt, immune to device clock skew.
+    expiresInSeconds: ttlSeconds,
     tokens: {
       playback: sign(
         MUX_AUDIENCE.video,
