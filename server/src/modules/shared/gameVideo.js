@@ -58,14 +58,17 @@ function hasGameVideo(game) {
 // Client-safe projection. Status plus the non-secret version only — Mux
 // upload/asset/playback ids and the generation id never leave the server;
 // clients get playback through the token endpoint.
+// V16: `publicView` (anonymous/public payloads) exposes ready media only and
+// never the internal errorMessage codes.
 // → { provider, status, durationSeconds, errorMessage, version } | null
-function sanitizeGameVideo(video, { includePremiumMedia = true } = {}) {
+function sanitizeGameVideo(video, { includePremiumMedia = true, publicView = false } = {}) {
   if (!video || !includePremiumMedia) return null;
+  if (publicView && video.status !== 'ready') return null;
   return {
     provider: video.provider,
     status: video.status,
     durationSeconds: video.durationSeconds ?? null,
-    errorMessage: video.errorMessage ?? null,
+    errorMessage: publicView ? null : (video.errorMessage ?? null),
     version: video.version ?? null,
   };
 }

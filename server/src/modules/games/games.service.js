@@ -451,7 +451,10 @@ function sanitizeGame(game, options = {}) {
     title: game.title,
     opponent: game.opponent ?? null,
     videoUrl: includePremiumMedia ? (game.videoUrl ?? null) : null,
-    video: sanitizeGameVideo(game.video, { includePremiumMedia }),
+    video: sanitizeGameVideo(game.video, {
+      includePremiumMedia,
+      publicView: options.publicView === true,
+    }),
     videoProvider: includePremiumMedia ? getGameVideoProvider(game) : null,
     status: game.status,
     startingLineupPlayerIds: Array.isArray(game.startingLineupPlayerIds)
@@ -1932,6 +1935,7 @@ function buildSlimGameEventDelta(userId, game, context) {
     game: sanitizeGame(game, {
       includeOwnerUserId: Boolean(userId),
       includePremiumMedia: Boolean(context.team?.entitlements?.canViewReplay),
+      publicView: !userId,
     }),
     lineups:
       game.trackingMode === 'dual_team'
@@ -2095,6 +2099,7 @@ async function getGameForUser(userId, gameId, { includeVideoUpload = true } = {}
     game: sanitizeGame(game, {
       includeOwnerUserId: Boolean(userId),
       includePremiumMedia: Boolean(viewEntitlements.canViewReplay),
+      publicView: !userId,
     }),
     team,
     opponentTeam,

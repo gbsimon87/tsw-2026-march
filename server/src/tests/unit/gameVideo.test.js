@@ -102,6 +102,22 @@ describe('getGameVideoProvider', () => {
 });
 
 describe('sanitizeGameVideo', () => {
+  // V16: anonymous/public payloads see ready media only, never internal codes.
+  test('public view hides unfinished media and internal error codes', () => {
+    expect(
+      sanitizeGameVideo(
+        { provider: 'mux', status: 'errored', errorMessage: 'provider_create_failed', version: 2 },
+        { publicView: true }
+      )
+    ).toBeNull();
+    expect(
+      sanitizeGameVideo({ ...readyMux, status: 'processing' }, { publicView: true })
+    ).toBeNull();
+    expect(
+      sanitizeGameVideo({ ...readyMux, errorMessage: 'stale' }, { publicView: true })
+    ).toMatchObject({ status: 'ready', errorMessage: null });
+  });
+
   test('exposes status and the non-secret version, never Mux ids', () => {
     expect(
       sanitizeGameVideo({

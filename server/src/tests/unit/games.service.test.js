@@ -1343,6 +1343,20 @@ describe('games service frozen box score (OPT-012)', () => {
     }
   });
 
+  // V16: the anonymous payload carries no in-progress status or error code.
+  test('getPublicGame omits an errored Mux video and its error code', async () => {
+    findGameById.mockResolvedValue(
+      buildDualLeagueGame({
+        status: 'completed',
+        videoUrl: null,
+        video: { provider: 'mux', status: 'errored', errorMessage: 'duration_limit', version: 3 },
+      })
+    );
+    const result = await getPublicGame('game-1', null);
+    expect(result.game.video).toBeNull();
+    expect(JSON.stringify(result)).not.toContain('duration_limit');
+  });
+
   // V15: the public recap only offers Mux clips this viewer can get a token for.
   test('public recap marks Mux highlights the viewer cannot play as unavailable', async () => {
     const { resolveMuxHighlightViewerGate } = require('../../modules/video/video.policy');
