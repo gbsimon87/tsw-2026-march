@@ -119,23 +119,15 @@ async function retireAttempt(attempt, toStatus, set = {}) {
       return fromInFlight;
     }
 
+    // V14: settled media keeps its stored minutes counted here. Every caller
+    // queues the asset's delete_asset job first, and that job hands the
+    // minutes back once Mux confirms deletion.
     const fromSettled = await repository.transitionUploadAttempt({
       attemptId: attempt._id,
       fromStatuses: SETTLED_ATTEMPT_STATUSES,
       toStatus,
       set,
     });
-    if (fromSettled) {
-      await releaseQuota(
-        async () => {
-          const minutes = await repository.takeUploadAttemptStoredMinutes(attempt._id);
-          if (minutes > 0) {
-            await repository.releaseStoredMinutes({ resource: attempt.billingResource, minutes });
-          }
-        },
-        { ...attemptLogFields(attempt), toStatus }
-      );
-    }
     return fromSettled;
   } catch (error) {
     logger.error(

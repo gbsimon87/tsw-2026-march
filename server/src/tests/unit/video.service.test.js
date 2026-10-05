@@ -508,7 +508,7 @@ describe('createGameVideoUpload', () => {
         set: {},
       });
       expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
-      expect(mockRepository.takeUploadAttemptStoredMinutes).toHaveBeenCalledWith(OLD_ATTEMPT_ID);
+      expect(mockRepository.takeUploadAttemptStoredMinutes).not.toHaveBeenCalled();
       expect(mockRepository.releaseStoredMinutes).not.toHaveBeenCalled();
     });
 
@@ -846,7 +846,7 @@ describe('cancelGameVideoUpload', () => {
       expect(mockRepository.takeUploadAttemptStoredMinutes).not.toHaveBeenCalled();
     } else {
       expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
-      expect(mockRepository.takeUploadAttemptStoredMinutes).toHaveBeenCalledWith(ATTEMPT_ID);
+      expect(mockRepository.takeUploadAttemptStoredMinutes).not.toHaveBeenCalled();
     }
     const order = callOrder(
       mockRepository.detachGameVideo,
@@ -959,7 +959,10 @@ describe('removeGameVideo', () => {
     }
   );
 
-  test('ready media releases its stored minutes exactly once (takeUploadAttemptStoredMinutes)', async () => {
+  // V14: stored minutes stay counted until Mux confirms deletion — the
+  // delete_asset job hands them back, so a permanent cleanup failure cannot
+  // let a League exceed maxStoredMinutes.
+  test('ready media keeps its stored minutes until the delete job confirms deletion', async () => {
     withVideo({ status: 'ready', assetId: 'as-old' });
     mockRepository.findUploadAttemptByGenerationId.mockResolvedValue(
       attempt({
@@ -978,12 +981,11 @@ describe('removeGameVideo', () => {
     await remove();
 
     expect(mockRepository.transitionUploadAttempt).toHaveBeenCalledTimes(2);
-    expect(mockRepository.takeUploadAttemptStoredMinutes).toHaveBeenCalledWith(OLD_ATTEMPT_ID);
-    expect(mockRepository.releaseStoredMinutes).toHaveBeenCalledTimes(1);
-    expect(mockRepository.releaseStoredMinutes).toHaveBeenCalledWith({
-      resource: RESOURCE,
-      minutes: 42,
-    });
+    expect(mockRepository.enqueueCleanupJob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'delete_asset', targetId: 'as-old' })
+    );
+    expect(mockRepository.takeUploadAttemptStoredMinutes).not.toHaveBeenCalled();
+    expect(mockRepository.releaseStoredMinutes).not.toHaveBeenCalled();
     expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
   });
 
