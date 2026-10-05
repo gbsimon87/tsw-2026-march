@@ -70,10 +70,13 @@ const checkoutLimiter = rateLimit({
 // hit), so a club sharing one Wi-Fi does not share a budget and a user cannot
 // rotate IPs past it. In-memory like the other limiters (single instance);
 // the atomic per-League quota reservation in video.repository is the real
-// guard (reserveUploadSlot).
+// guard (reserveUploadSlot). V17: only successful creates count — rejected
+// requests (quota, policy, a Mux outage's 502) provision nothing, and counting
+// them would lock a retrying manager out for the hour.
 const videoUploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
+  skipFailedRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => (req.auth?.userId ? `user:${req.auth.userId}` : `ip:${req.ip}`),

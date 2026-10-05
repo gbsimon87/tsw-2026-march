@@ -101,6 +101,10 @@ describe('videoUploadLimiter (E5)', () => {
         getHeader(name) {
           return this.headers[name];
         },
+        // skipFailedRequests (V17) listens for finish/close; never fired here.
+        on() {
+          return this;
+        },
         json(payload) {
           this.body = payload;
           resolve({ res: this, passed: false });
@@ -153,5 +157,44 @@ describe('videoUploadLimiter (E5)', () => {
       auth: { userId: 'user-d' },
     });
     expect(passed).toBe(false);
+  });
+});
+
+// V17: rejected creates (quota 409/429, policy 403, Mux 502) provision nothing,
+// so they must not burn the hourly budget during an outage.
+describe('videoUploadLimiter counts successful creates only (V17)', () => {
+  const express = require('express');
+  const request = require('supertest');
+
+  function appWithStatus(getStatus) {
+    let limiter;
+    jest.isolateModules(() => {
+      ({ videoUploadLimiter: limiter } = require('../../middleware/rateLimit.middleware'));
+    });
+    const app = express();
+    app.use((req, _res, next) => {
+      req.auth = { userId: 'user-v17' };
+      next();
+    });
+    app.post('/upload', limiter, (_req, res) => res.status(getStatus()).json({}));
+    return app;
+  }
+
+  test('failed attempts do not count toward the limit', async () => {
+    let status = 502;
+    const app = appWithStatus(() => status);
+    for (let i = 0; i < 8; i += 1) {
+      expect((await request(app).post('/upload')).status).toBe(502);
+    }
+    status = 201;
+    expect((await request(app).post('/upload')).status).toBe(201);
+  });
+
+  test('successful creates still stop at 5 per hour', async () => {
+    const app = appWithStatus(() => 201);
+    for (let i = 0; i < 5; i += 1) {
+      expect((await request(app).post('/upload')).status).toBe(201);
+    }
+    expect((await request(app).post('/upload')).status).toBe(429);
   });
 });
