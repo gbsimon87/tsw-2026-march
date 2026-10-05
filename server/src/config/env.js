@@ -5,6 +5,9 @@ const { z } = require('zod');
 
 dotenv.config({ path: process.env.ENV_FILE || path.resolve(process.cwd(), '.env') });
 
+// V18: an empty `KEY=` line (a template leftover) means unset, not invalid.
+const blankAsUnset = (schema) => z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   // Deployment identity is separate from NODE_ENV: both Render services run
@@ -102,15 +105,15 @@ const baseEnvSchema = z.object({
   CLOUDINARY_FOLDER: z.string().default('tsw/feed'),
   // Mux game video (docs/mux.md). All five credentials or none: hosting is
   // off when unset, and a partial set fails boot rather than half-working.
-  MUX_TOKEN_ID: z.string().min(1).optional(),
-  MUX_TOKEN_SECRET: z.string().min(1).optional(),
-  MUX_WEBHOOK_SECRET: z.string().min(1).optional(),
-  MUX_SIGNING_KEY_ID: z.string().min(1).optional(),
+  MUX_TOKEN_ID: blankAsUnset(z.string().min(1).optional()),
+  MUX_TOKEN_SECRET: blankAsUnset(z.string().min(1).optional()),
+  MUX_WEBHOOK_SECRET: blankAsUnset(z.string().min(1).optional()),
+  MUX_SIGNING_KEY_ID: blankAsUnset(z.string().min(1).optional()),
   // Base64 PEM, exactly as Mux shows it. Validated in the superRefine below.
-  MUX_SIGNING_PRIVATE_KEY: z.string().min(1).optional(),
+  MUX_SIGNING_PRIVATE_KEY: blankAsUnset(z.string().min(1).optional()),
   // Mux's ingest cap accepts only 1080p/1440p/2160p (V5: 720p made every
   // upload create fail). Higher tiers are not offered on cost grounds.
-  MUX_MAX_RESOLUTION_TIER: z.enum(['1080p']).default('1080p'),
+  MUX_MAX_RESOLUTION_TIER: blankAsUnset(z.enum(['1080p']).default('1080p')),
   // Operator kill switch for hosted uploads (not part of the credential set).
   MUX_UPLOADS_ENABLED: z
     .string()
@@ -267,7 +270,11 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
   if (data.MUX_SIGNING_PRIVATE_KEY) {
     let keyOk = true;
     try {
-      crypto.createPrivateKey(Buffer.from(data.MUX_SIGNING_PRIVATE_KEY, 'base64').toString('utf8'));
+      const key = crypto.createPrivateKey(
+        Buffer.from(data.MUX_SIGNING_PRIVATE_KEY, 'base64').toString('utf8')
+      );
+      // V18: Mux tokens are RS256; any other key type fails only at signing.
+      keyOk = key.asymmetricKeyType === 'rsa';
     } catch {
       keyOk = false;
     }
@@ -276,7 +283,7 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['MUX_SIGNING_PRIVATE_KEY'],
-        message: 'MUX_SIGNING_PRIVATE_KEY must be a base64-encoded PEM private key',
+        message: 'MUX_SIGNING_PRIVATE_KEY must be a base64-encoded PEM RSA private key',
       });
     }
   }

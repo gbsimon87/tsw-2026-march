@@ -487,6 +487,27 @@ describe('Mux video config', () => {
     ).toBe(true);
   });
 
+  // V18: an empty `MUX_*=` line (a common template leftover) means "off".
+  test('treats blank Mux values as unset', () => {
+    const blank = Object.fromEntries(Object.keys(FULL_MUX).map((key) => [key, '']));
+    const result = envSchema.safeParse(baseEnv({ ...blank, MUX_MAX_RESOLUTION_TIER: '' }));
+    expect(result.success).toBe(true);
+    expect(result.data.MUX_TOKEN_ID).toBeUndefined();
+    expect(result.data.MUX_MAX_RESOLUTION_TIER).toBe('1080p');
+  });
+
+  // V18: Mux signs RS256 tokens, so a valid non-RSA key fails at signing.
+  test('rejects a non-RSA signing key', () => {
+    const ec = Buffer.from(
+      crypto
+        .generateKeyPairSync('ec', { namedCurve: 'P-256' })
+        .privateKey.export({ type: 'pkcs8', format: 'pem' })
+    ).toString('base64');
+    const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_SIGNING_PRIVATE_KEY: ec }));
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.path[0])).toContain('MUX_SIGNING_PRIVATE_KEY');
+  });
+
   test('rejects a signing key that is not a base64 private key without echoing it', () => {
     const bad = 'not-a-real-key-SENTINEL-123';
     const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_SIGNING_PRIVATE_KEY: bad }));
