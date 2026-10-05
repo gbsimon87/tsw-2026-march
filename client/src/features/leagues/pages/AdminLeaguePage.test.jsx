@@ -169,6 +169,24 @@ describe('AdminLeaguePage', () => {
     );
   });
 
+  // The "no active season" guidance links here; land on the Season section
+  // itself, not the top of a long settings tab.
+  test('a #season link scrolls to the Season section', async () => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: buildLeague({ viewerContext: { viewerRole: 'owner', managedTeamIds: [] } }),
+    });
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+
+    renderPage('/admin/leagues/league-1?tab=settings#season');
+
+    const heading = await screen.findByRole('heading', { name: 'Season' });
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0]).toBe(heading.closest('#season'));
+    delete Element.prototype.scrollIntoView;
+  });
+
   test('lets a league owner archive a team from the Teams tab', async () => {
     authMocks.useAuth.mockReturnValue({ user: { id: 'owner-1' } });
     leaguesApi.getById.mockResolvedValue({

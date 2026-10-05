@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { leaguesApi } from '../api/leaguesApi';
 import { LeagueStandingsTable } from '../components/LeagueStandingsTable';
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel';
@@ -193,6 +193,15 @@ export function AdminLeaguePage() {
   useEffect(() => {
     if (TABS.some((tab) => tab.id === requestedTab)) setActiveTab(requestedTab);
   }, [requestedTab]);
+
+  // "No active season" guidance links to ?tab=settings#season. The router
+  // doesn't scroll to hashes, so bring the Season section into view once the
+  // settings tab has rendered.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash !== '#season' || activeTab !== 'settings' || !league || isLoading) return;
+    document.getElementById('season')?.scrollIntoView?.({ block: 'start' });
+  }, [hash, activeTab, league, isLoading]);
 
   function selectTab(tabId) {
     setActiveTab(tabId);
@@ -1409,7 +1418,7 @@ export function AdminLeaguePage() {
                 />
               </div>
 
-              <div id="season" className="mt-8 scroll-mt-6 border-t border-slate-200 pt-6">
+              <div className="mt-8 border-t border-slate-200 pt-6">
                 <GameFormatFields
                   value={defaultGameFormatDraft}
                   onChange={setDefaultGameFormatDraft}
@@ -1435,7 +1444,7 @@ export function AdminLeaguePage() {
                 )}
               </div>
 
-              <div className="mt-8 border-t border-slate-200 pt-6">
+              <div id="season" className="mt-8 scroll-mt-6 border-t border-slate-200 pt-6">
                 <h2
                   className="text-lg text-slate-900"
                   style={{ fontFamily: "'Archivo Black', sans-serif" }}

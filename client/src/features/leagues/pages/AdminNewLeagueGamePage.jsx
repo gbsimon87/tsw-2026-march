@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { gamesApi } from '../../games/api/gamesApi';
 import { TEAM_SIDES } from '../../games/constants';
 import { leaguesApi } from '../api/leaguesApi';
@@ -303,6 +303,7 @@ export function AdminNewLeagueGamePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [seasonRejected, setSeasonRejected] = useState(false);
   const [gameFormat, setGameFormat] = useState({ ...DEFAULT_GAME_FORMAT });
   const [inlineTeamNames, setInlineTeamNames] = useState({ home: '', away: '' });
   const [creatingTeamSide, setCreatingTeamSide] = useState(null);
@@ -379,6 +380,10 @@ export function AdminNewLeagueGamePage() {
       });
       navigate(`/games/${response.game.id}/track`);
     } catch (submitError) {
+      if (submitError.details?.reason === 'no_active_season') {
+        setSeasonRejected(true);
+        return;
+      }
       setError(submitError.message || 'Failed to create league game');
     } finally {
       setIsSubmitting(false);
@@ -428,6 +433,41 @@ export function AdminNewLeagueGamePage() {
     setAwayLeagueTeamId(homeLeagueTeamId);
     setInitialActiveSide((currentSide) =>
       currentSide === TEAM_SIDES.HOME ? TEAM_SIDES.AWAY : TEAM_SIDES.HOME
+    );
+  }
+
+  // New games need an active season (server: no_active_season). Send the user
+  // to League settings → Season rather than letting them fill in a dead form.
+  const hasActiveSeason = league?.currentSeason?.status === 'active' && !seasonRejected;
+  const breadcrumbs = (
+    <Breadcrumbs
+      crumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: league?.name || 'League', href: `/admin/leagues/${leagueId}` },
+        { label: 'Schedule Game' },
+      ]}
+    />
+  );
+
+  if (league && !hasActiveSeason) {
+    return (
+      <main className="mx-auto max-w-2xl space-y-6 px-4 pb-10">
+        {breadcrumbs}
+        <PageHeader title="Schedule Game" description="Games belong to a league season." />
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+          <p className="font-semibold">This league has no active season.</p>
+          <p className="mt-1">
+            Start a season in League settings → Season, then come back to schedule this game. Only
+            the league owner can start a season.
+          </p>
+          <Link
+            to={`/admin/leagues/${leagueId}?tab=settings#season`}
+            className="mt-3 inline-flex rounded-lg bg-amber-900 px-4 py-2 font-semibold text-white transition hover:bg-amber-800"
+          >
+            Go to season settings
+          </Link>
+        </div>
+      </main>
     );
   }
 

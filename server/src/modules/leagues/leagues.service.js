@@ -442,6 +442,20 @@ function ensureSeasonEditable(season) {
   }
 }
 
+// New games need an active season. A missing or completed season gives one
+// stable reason, so the game forms can send the owner to League settings →
+// Season instead of a dead end.
+const NO_ACTIVE_SEASON_MESSAGE =
+  'This league has no active season. The league owner can start one in League settings → Season.';
+
+async function assertSeasonAcceptsNewGames(league) {
+  const season = league.currentSeasonId ? await findSeasonById(league.currentSeasonId) : null;
+  if (!season || season.status === 'completed') {
+    throw new ApiError(400, NO_ACTIVE_SEASON_MESSAGE, { reason: 'no_active_season' });
+  }
+  return season;
+}
+
 async function isTeamManager(userId, leagueTeamId) {
   const member = await findActiveLeagueTeamMember(leagueTeamId, userId);
   return Boolean(member && member.role === 'manager');
@@ -2622,11 +2636,7 @@ async function bulkCreateLeagueGamesForUser(userId, leagueId, payload) {
   const { league } = await assertLeagueManagerOrOwner(userId, leagueId);
   ensureLeagueEditable(league);
 
-  if (!league.currentSeasonId) {
-    throw new ApiError(400, 'League has no active season');
-  }
-  const season = await findSeasonById(league.currentSeasonId);
-  ensureSeasonEditable(season);
+  await assertSeasonAcceptsNewGames(league);
 
   // Resolve every referenced team once, then validate all rows up front.
   const teams = await listLeagueTeams(leagueId);
@@ -2726,11 +2736,7 @@ async function getLeagueContextForGame(userId, payload, options = {}) {
     throw new ApiError(403, 'Forbidden');
   }
 
-  if (!league.currentSeasonId) {
-    throw new ApiError(400, 'League has no active season');
-  }
-  const season = await findSeasonById(league.currentSeasonId);
-  ensureSeasonEditable(season);
+  await assertSeasonAcceptsNewGames(league);
 
   const [homeTeam, awayTeam, trackedTeam, trackedPlayers] = await Promise.all([
     assertLeagueTeamExists(payload.leagueId, payload.homeLeagueTeamId),
@@ -3025,6 +3031,7 @@ async function getPublicLeagueLeaders(
 }
 
 module.exports = {
+  assertSeasonAcceptsNewGames,
   createLeagueForUser,
   listLeaguesForUser,
   listPublicLeagues,

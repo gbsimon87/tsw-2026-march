@@ -1337,3 +1337,30 @@ describe('auto feed reversal on league going private (B2)', () => {
     await Promise.resolve();
   });
 });
+
+// New games need an active season. The error carries a stable reason so the
+// game forms can send the owner straight to League settings → Season.
+describe('assertSeasonAcceptsNewGames', () => {
+  const { assertSeasonAcceptsNewGames } = require('../../modules/leagues/leagues.service');
+  const { findSeasonById } = require('../../modules/leagues/seasons.repository');
+
+  test.each([
+    ['no season at all', { currentSeasonId: null }, null],
+    ['a completed current season', { currentSeasonId: 'season-1' }, { status: 'completed' }],
+  ])('%s → 400 no_active_season pointing at season settings', async (_label, league, season) => {
+    findSeasonById.mockResolvedValue(season);
+    await expect(assertSeasonAcceptsNewGames(league)).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining('League settings'),
+      details: { reason: 'no_active_season' },
+    });
+  });
+
+  test('an active season is returned', async () => {
+    findSeasonById.mockResolvedValue({ _id: 'season-1', status: 'active' });
+    await expect(assertSeasonAcceptsNewGames({ currentSeasonId: 'season-1' })).resolves.toEqual({
+      _id: 'season-1',
+      status: 'active',
+    });
+  });
+});

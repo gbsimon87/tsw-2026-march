@@ -6,6 +6,7 @@ import { AdminNewLeagueGamePage } from './AdminNewLeagueGamePage';
 import { leaguesApi } from '../api/leaguesApi';
 
 const mockNavigate = vi.fn();
+const ACTIVE_SEASON = { id: 'season-1', label: '2026', status: 'active' };
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -51,7 +52,9 @@ describe('AdminNewLeagueGamePage', () => {
   });
 
   test('warns about short rosters while allowing a valid matchup to be created', async () => {
-    leaguesApi.getById.mockResolvedValue({ league: { id: 'league-1', name: 'City League' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: { id: 'league-1', name: 'City League', currentSeason: ACTIVE_SEASON },
+    });
     leaguesApi.listTeams.mockResolvedValue({
       teams: [
         { id: 'home-team', name: 'Home Squad', activeRosterCount: 4 },
@@ -92,7 +95,9 @@ describe('AdminNewLeagueGamePage', () => {
   });
 
   test('swaps home and away when the league has exactly two teams', async () => {
-    leaguesApi.getById.mockResolvedValue({ league: { id: 'league-1', name: 'City League' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: { id: 'league-1', name: 'City League', currentSeason: ACTIVE_SEASON },
+    });
     leaguesApi.listTeams.mockResolvedValue({
       teams: [
         { id: 'team-1', name: 'Falcons', activeRosterCount: 5 },
@@ -124,7 +129,9 @@ describe('AdminNewLeagueGamePage', () => {
   });
 
   test('creates and selects both teams inline when a new league has no teams', async () => {
-    leaguesApi.getById.mockResolvedValue({ league: { id: 'league-1', name: 'New League' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: { id: 'league-1', name: 'New League', currentSeason: ACTIVE_SEASON },
+    });
     leaguesApi.listTeams.mockResolvedValue({ teams: [] });
     leaguesApi.createTeam
       .mockResolvedValueOnce({ team: { id: 'home-team', name: 'Falcons' } })
@@ -163,7 +170,9 @@ describe('AdminNewLeagueGamePage', () => {
   });
 
   test('reuses a previous addressed venue in the new game payload', async () => {
-    leaguesApi.getById.mockResolvedValue({ league: { id: 'league-1', name: 'City League' } });
+    leaguesApi.getById.mockResolvedValue({
+      league: { id: 'league-1', name: 'City League', currentSeason: ACTIVE_SEASON },
+    });
     leaguesApi.listTeams.mockResolvedValue({
       teams: [
         { id: 'home-team', name: 'Falcons', activeRosterCount: 5 },
@@ -201,5 +210,46 @@ describe('AdminNewLeagueGamePage', () => {
         })
       );
     });
+  });
+
+  // A league with no active season can't take new games. Say so before the
+  // form, and point the owner at League settings → Season.
+  test.each([
+    ['no season', undefined],
+    ['a completed season', { id: 'season-1', label: '2025', status: 'completed' }],
+  ])('a league with %s shows how to start a season instead of the form', async (_label, season) => {
+    leaguesApi.getById.mockResolvedValue({
+      league: { id: 'league-1', name: 'City League', currentSeason: season },
+    });
+    leaguesApi.listTeams.mockResolvedValue({ teams: [] });
+    renderPage();
+
+    const link = await screen.findByRole('link', { name: 'Go to season settings' });
+    expect(link).toHaveAttribute('href', '/admin/leagues/league-1?tab=settings#season');
+    expect(screen.getByText(/no active season/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create|schedule/i })).not.toBeInTheDocument();
+  });
+
+  test('a no_active_season error on submit shows the same guidance', async () => {
+    leaguesApi.getById.mockResolvedValue({
+      league: { id: 'league-1', name: 'City League', currentSeason: ACTIVE_SEASON },
+    });
+    leaguesApi.listTeams.mockResolvedValue({
+      teams: [
+        { id: 'home-team', name: 'Home Squad', activeRosterCount: 5 },
+        { id: 'away-team', name: 'Away Squad', activeRosterCount: 5 },
+      ],
+    });
+    gamesApi.create.mockRejectedValue(
+      Object.assign(new Error('This league has no active season.'), {
+        status: 400,
+        details: { reason: 'no_active_season' },
+      })
+    );
+    renderPage();
+    await screen.findAllByText('Home Squad');
+    fireEvent.submit(document.querySelector('form'));
+
+    expect(await screen.findByRole('link', { name: 'Go to season settings' })).toBeInTheDocument();
   });
 });
