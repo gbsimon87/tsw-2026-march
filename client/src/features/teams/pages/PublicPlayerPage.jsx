@@ -8,7 +8,7 @@ import { teamsApi } from '../api/teamsApi';
 import { StatsTable } from '../components/StatsTable';
 import { PlayerCardPost } from '../../feed/components/posts/PlayerCardPost';
 import { ShareImageButton } from '../../feed/components/ShareImageButton';
-import { extractYouTubeVideoId } from '../../games/youtube';
+import { HighlightPlayer } from '../../video/components/HighlightPlayer';
 import { PlayerStatsFilters } from '../../players/components/PlayerStatsFilters';
 import {
   buildPlayerSeasonOptions,
@@ -61,7 +61,6 @@ const HIGHLIGHT_LABELS = {
   BLK: 'Block',
 };
 
-const CLIP_BUFFER = 5;
 const HIGHLIGHT_PRIORITY = { FG3_MADE: 0, FG2_MADE: 1 };
 const MAX_HIGHLIGHTS = 5;
 
@@ -75,24 +74,14 @@ function selectHighlights(highlights) {
     .slice(0, MAX_HIGHLIGHTS);
 }
 
-function HighlightClip({ videoUrl, timestamp, statType, gameTitle }) {
-  const videoId = extractYouTubeVideoId(videoUrl);
-  if (!videoId) return null;
-
-  const start = Math.max(0, timestamp - CLIP_BUFFER);
-  const end = timestamp + CLIP_BUFFER;
-  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
-
+function HighlightClip({ highlight, statType, gameTitle }) {
   return (
     <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="aspect-video w-full bg-slate-950">
-        <iframe
-          className="h-full w-full"
-          src={src}
+        <HighlightPlayer
+          highlight={highlight}
           title={`${HIGHLIGHT_LABELS[statType] || statType} — ${gameTitle || 'Game'}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
+          className="h-full w-full"
         />
       </div>
       <div className="px-3 py-2">
@@ -481,8 +470,7 @@ export function PublicPlayerPage() {
             {selectHighlights(data.highlights).map((h) => (
               <HighlightClip
                 key={h.eventId}
-                videoUrl={h.videoUrl}
-                timestamp={h.videoTimestamp}
+                highlight={h}
                 statType={h.statType}
                 gameTitle={h.gameTitle}
               />

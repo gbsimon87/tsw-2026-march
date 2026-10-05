@@ -1,3 +1,7 @@
+jest.mock('../../modules/video/video.policy', () => ({
+  canPublishMuxClips: jest.fn(),
+  isEventSubjectRestricted: jest.fn(() => false),
+}));
 jest.mock('../../modules/feed/feed.repository', () => ({
   createPost: jest.fn(),
   listPosts: jest.fn(),
@@ -31,6 +35,8 @@ jest.mock('../../modules/auth/auth.service', () => ({
 
 jest.mock('../../modules/games/games.repository', () => ({
   findGameById: jest.fn(),
+  markAutoHighlightsPublished: jest.fn(() => Promise.resolve(true)),
+  findGameVideoSourcesByIds: jest.fn(() => Promise.resolve([])),
   listCompletedGames: jest.fn(),
   listLeagueGamesByLeagueId: jest.fn(() => Promise.resolve([])),
   listLeagueGameIdsByLeagueId: jest.fn(() => Promise.resolve([])),
@@ -1090,7 +1096,7 @@ describe('feed service', () => {
     test('creates a highlight_clip for each eligible, unshared event', async () => {
       const game = {
         _id: 'game-1',
-        videoUrl: 'https://youtube.com/watch?v=abc123',
+        videoUrl: 'https://youtube.com/watch?v=abcdefghijk',
         title: 'Big Game',
         events: [
           makeEvent({ _id: 'e1', statType: 'FG3_MADE', videoTimestamp: 10 }),
@@ -1120,7 +1126,7 @@ describe('feed service', () => {
     test('skips events already shared (manually or by a prior auto run)', async () => {
       const game = {
         _id: 'game-1',
-        videoUrl: 'https://youtube.com/watch?v=abc123',
+        videoUrl: 'https://youtube.com/watch?v=abcdefghijk',
         events: [
           makeEvent({ _id: 'e1', statType: 'FG3_MADE', videoTimestamp: 10 }),
           makeEvent({ _id: 'e2', statType: 'AST', videoTimestamp: 20 }),
@@ -1144,7 +1150,7 @@ describe('feed service', () => {
       const events = Array.from({ length: 8 }, (_, i) =>
         makeEvent({ _id: `e${i}`, statType: 'FG3_MADE', videoTimestamp: i })
       );
-      const game = { _id: 'game-1', videoUrl: 'https://youtube.com/watch?v=abc123', events };
+      const game = { _id: 'game-1', videoUrl: 'https://youtube.com/watch?v=abcdefghijk', events };
       findSharedEventIds.mockResolvedValue([]);
       createPost.mockResolvedValue({ _id: 'clip-post' });
 
@@ -1158,7 +1164,7 @@ describe('feed service', () => {
     test('treats a concurrent duplicate-key error per event as a skip, not a failure', async () => {
       const game = {
         _id: 'game-1',
-        videoUrl: 'https://youtube.com/watch?v=abc123',
+        videoUrl: 'https://youtube.com/watch?v=abcdefghijk',
         events: [
           makeEvent({ _id: 'e1', statType: 'FG3_MADE', videoTimestamp: 10 }),
           makeEvent({ _id: 'e2', statType: 'AST', videoTimestamp: 20 }),
@@ -1172,6 +1178,65 @@ describe('feed service', () => {
 
       expect(result.created).toBe(1);
       expect(result.skipped).toBe(1);
+    });
+  });
+
+  // V1: a ready upload reruns auto-publication. The cap is per game, and a
+  // game is published at most once, so deleted (taken-down) clips stay gone.
+  describe('autoCreateHighlightClipPosts (once per game, V1)', () => {
+    const { markAutoHighlightsPublished } = require('../../modules/games/games.repository');
+    const youtubeGame = (overrides = {}) => ({
+      _id: 'game-1',
+      videoUrl: 'https://youtube.com/watch?v=abcdefghijk',
+      events: Array.from({ length: 8 }, (_, i) => ({
+        _id: `e${i}`,
+        statType: 'FG3_MADE',
+        videoTimestamp: i,
+        playerId: null,
+      })),
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      createPost.mockReset();
+      createPost.mockResolvedValue({ _id: 'clip-post' });
+      findSharedEventIds.mockReset();
+      findSharedEventIds.mockResolvedValue([]);
+      markAutoHighlightsPublished.mockClear();
+    });
+
+    test('a game already published creates nothing, even after its clips were deleted', async () => {
+      const game = youtubeGame({ autoHighlightsPublishedAt: new Date('2026-10-01') });
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', game);
+
+      expect(result).toMatchObject({ created: 0 });
+      expect(createPost).not.toHaveBeenCalled();
+      expect(markAutoHighlightsPublished).not.toHaveBeenCalled();
+    });
+
+    test('marks the game published after a run that reached eligible events', async () => {
+      await service.autoCreateHighlightClipPosts('system-user-1', youtubeGame());
+
+      expect(markAutoHighlightsPublished).toHaveBeenCalledWith('game-1');
+      expect(markAutoHighlightsPublished.mock.invocationCallOrder[0]).toBeGreaterThan(
+        createPost.mock.invocationCallOrder[createPost.mock.invocationCallOrder.length - 1]
+      );
+    });
+
+    test('does not mark a game with no eligible events (a later ready upload may still publish)', async () => {
+      await service.autoCreateHighlightClipPosts('system-user-1', youtubeGame({ events: [] }));
+
+      expect(markAutoHighlightsPublished).not.toHaveBeenCalled();
+    });
+
+    test('the cap counts events already shared for the game', async () => {
+      findSharedEventIds.mockResolvedValue(['e0', 'e1', 'e2']);
+
+      const result = await service.autoCreateHighlightClipPosts('system-user-1', youtubeGame());
+
+      expect(result).toMatchObject({ created: 2, capped: true });
+      expect(createPost).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -1574,5 +1639,127 @@ describe('player_game_card', () => {
       'playerGameCard',
       expect.objectContaining({ stats: expect.objectContaining({ points: 28 }) })
     );
+  });
+});
+
+describe('Mux highlight sources and footage publication', () => {
+  const policy = require('../../modules/video/video.policy');
+  const { findGameVideoSourcesByIds } = require('../../modules/games/games.repository');
+  const gameId = '64b7f0c2a1b2c3d4e5f60718';
+  const eventId = '64b7f0c2a1b2c3d4e5f60719';
+  const current = () => ({
+    _id: gameId,
+    videoUrl: 'https://youtu.be/abcdefghijk',
+    video: {
+      provider: 'mux',
+      status: 'ready',
+      generationId: 'new',
+      playbackId: 'server-only',
+      durationSeconds: 500,
+      version: 42,
+      equivalentTimelines: ['youtube:abcdefghijk'],
+    },
+    events: [
+      {
+        _id: eventId,
+        statType: 'FG3_MADE',
+        playerId: 'player',
+        videoTimestamp: 120,
+        videoTimelineId: 'youtube:abcdefghijk',
+      },
+    ],
+  });
+  const legacy = () => ({
+    _id: 'post',
+    creatorUserId: 'user',
+    type: 'highlight_clip',
+    highlightClip: {
+      gameId,
+      eventId,
+      videoUrl: 'https://youtu.be/oldvideo123',
+      videoTimestamp: 30,
+    },
+  });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    createPost.mockReset();
+    findUserById.mockResolvedValue({ _id: 'user', name: 'Simon' });
+    policy.canPublishMuxClips.mockResolvedValue({ allowed: true, restrictedPlayerIds: [] });
+    policy.isEventSubjectRestricted.mockReturnValue(false);
+    findGameById.mockResolvedValue(current());
+  });
+  test('legacy posts resolve the current Mux provider and corrected event timestamp without secrets', async () => {
+    const post = await service.sanitizePost(legacy());
+    expect(post.highlightClip).toMatchObject({
+      videoProvider: 'mux',
+      videoAvailable: true,
+      videoTimestamp: 120,
+      videoUrl: null,
+      videoVersion: 42,
+    });
+    expect(JSON.stringify(post)).not.toContain('server-only');
+  });
+  test.each(['deleted-event', 'different-recording', 'deleted-game'])(
+    '%s makes legacy media unavailable',
+    async (scenario) => {
+      const game = current();
+      if (scenario === 'deleted-event') game.events = [];
+      if (scenario === 'different-recording') game.video.equivalentTimelines = [];
+      findGameById.mockResolvedValue(scenario === 'deleted-game' ? null : game);
+      expect((await service.sanitizePost(legacy())).highlightClip).toMatchObject({
+        videoAvailable: false,
+        videoUrl: null,
+      });
+    }
+  );
+  test('removing an equivalent Mux recording falls back only to an event on the current YouTube timeline', async () => {
+    const game = current();
+    game.video = null;
+    findGameById.mockResolvedValue(game);
+    expect((await service.sanitizePost(legacy())).highlightClip).toMatchObject({
+      videoProvider: 'youtube',
+      videoUrl: game.videoUrl,
+      videoTimestamp: 120,
+    });
+    game.events[0].videoTimelineId = 'mux:removed';
+    expect((await service.sanitizePost(legacy())).highlightClip.videoAvailable).toBe(false);
+  });
+  test('feed pages batch all media references instead of loading each game', async () => {
+    listPosts.mockResolvedValue([legacy(), { ...legacy(), _id: 'post2' }]);
+    findUsersByIds.mockResolvedValue([{ _id: 'user', name: 'Simon' }]);
+    findGameVideoSourcesByIds.mockResolvedValue([current()]);
+    expect((await service.listFeedPosts(null)).posts).toHaveLength(2);
+    expect(findGameVideoSourcesByIds).toHaveBeenCalledTimes(1);
+    expect(findGameById).not.toHaveBeenCalled();
+  });
+  test('late-ready Mux clips require current footage permission before auto-publishing', async () => {
+    policy.canPublishMuxClips.mockResolvedValue({ allowed: false, restrictedPlayerIds: [] });
+    expect(await service.autoCreateHighlightClipPosts('system', current())).toMatchObject({
+      created: 0,
+    });
+    expect(createPost).not.toHaveBeenCalled();
+  });
+  test('restricted players and incompatible timelines are excluded from auto-publishing', async () => {
+    policy.isEventSubjectRestricted.mockReturnValue(true);
+    expect(await service.autoCreateHighlightClipPosts('system', current())).toMatchObject({
+      created: 0,
+    });
+    expect(createPost).not.toHaveBeenCalled();
+  });
+  test('permitted Mux events create reference-based posts and repeated runs skip shared events', async () => {
+    findSharedEventIds.mockResolvedValueOnce([]).mockResolvedValueOnce([eventId]);
+    createPost.mockResolvedValue({});
+    expect(await service.autoCreateHighlightClipPosts('system', current())).toMatchObject({
+      created: 1,
+    });
+    expect(createPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        highlightClip: expect.objectContaining({ gameId, eventId, videoUrl: null }),
+      })
+    );
+    expect(await service.autoCreateHighlightClipPosts('system', current())).toMatchObject({
+      created: 0,
+    });
+    expect(createPost).toHaveBeenCalledTimes(1);
   });
 });

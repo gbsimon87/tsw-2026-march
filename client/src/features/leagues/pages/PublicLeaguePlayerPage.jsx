@@ -8,7 +8,7 @@ import { getLeagueHeaderImage } from '../../feed/cardImage';
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { StatsTable } from '../../teams/components/StatsTable';
-import { extractYouTubeVideoId } from '../../games/youtube';
+import { HighlightPlayer } from '../../video/components/HighlightPlayer';
 import { feedApi } from '../../feed/api/feedApi';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { FollowButton } from '../../follows/components/FollowButton';
@@ -46,22 +46,14 @@ function selectHighlights(highlights) {
     .slice(0, MAX_HIGHLIGHTS);
 }
 
-function HighlightClip({ videoUrl, timestamp, statType, gameTitle }) {
-  const videoId = extractYouTubeVideoId(videoUrl);
-  if (!videoId) return null;
-  const start = Math.max(0, timestamp - 5);
-  const end = timestamp + 5;
-  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
+function HighlightClip({ highlight, statType, gameTitle }) {
   return (
     <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="aspect-video w-full bg-slate-950">
-        <iframe
-          className="h-full w-full"
-          src={src}
+        <HighlightPlayer
+          highlight={highlight}
           title={`${HIGHLIGHT_LABELS[statType] || statType} — ${gameTitle || 'Game'}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
+          className="h-full w-full"
         />
       </div>
       <div className="px-3 py-2">
@@ -531,12 +523,7 @@ export function PublicLeaguePlayerPage() {
                 (data.sharedEventIds?.includes(h.eventId) ? 'shared' : 'idle');
               return (
                 <div key={h.eventId} className="flex shrink-0 flex-col">
-                  <HighlightClip
-                    videoUrl={h.videoUrl}
-                    timestamp={h.videoTimestamp}
-                    statType={h.statType}
-                    gameTitle={h.gameTitle}
-                  />
+                  <HighlightClip highlight={h} statType={h.statType} gameTitle={h.gameTitle} />
                   {canShareOwnHighlights ? (
                     <button
                       type="button"

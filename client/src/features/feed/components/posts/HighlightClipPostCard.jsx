@@ -1,11 +1,13 @@
+import { isMuxHighlight } from '../../../video/videoSource';
+import { MuxHighlightFeed } from '../../../video/components/MuxHighlightFeed';
 import { extractYouTubeVideoId } from '../../../games/youtube';
 import { STAT_LABELS } from '../../../games/constants';
 import { useYouTubeAutoplay } from '../../hooks/useYouTubeAutoplay';
 import CloudinaryImage from '../../../media/CloudinaryImage';
 
-export function HighlightClipPostCard({ highlightClip, caption }) {
+function YouTubeHighlightClipPostCard({ highlightClip, caption }) {
   const { videoUrl, videoTimestamp, statType, playerName, gameTitle } = highlightClip;
-  const videoId = extractYouTubeVideoId(videoUrl);
+  const videoId = highlightClip.videoAvailable === false ? null : extractYouTubeVideoId(videoUrl);
 
   const label = STAT_LABELS[statType] || statType;
   const safeTimestamp = Number.isFinite(videoTimestamp) ? videoTimestamp : null;
@@ -56,4 +58,10 @@ export function HighlightClipPostCard({ highlightClip, caption }) {
       </div>
     </article>
   );
+}
+
+export function HighlightClipPostCard({ highlightClip, caption }) {
+  if (isMuxHighlight(highlightClip))
+    return <MuxHighlightFeed highlight={highlightClip} caption={caption} />;
+  return <YouTubeHighlightClipPostCard highlightClip={highlightClip} caption={caption} />;
 }

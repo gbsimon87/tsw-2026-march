@@ -775,6 +775,63 @@ describe('VideoCleanupJob', () => {
     });
   });
 
+  // V4: failed jobs are otherwise only reset by a re-enqueue of the same
+  // target, which a removal or replacement never repeats.
+  test("requeueFailedCleanupJobs resets this deployment's failed jobs with a fresh budget", async () => {
+    const updateMany = jest
+      .spyOn(VideoCleanupJob, 'updateMany')
+      .mockResolvedValue({ modifiedCount: 2 });
+
+    await expect(videoRepository.requeueFailedCleanupJobs({ now: NOW })).resolves.toBe(2);
+
+    expect(updateMany).toHaveBeenCalledWith(
+      { status: 'failed', deployment: 'test:tsw_2026_test' },
+      {
+        $set: {
+          status: 'pending',
+          attempts: 0,
+          deferrals: 0,
+          firstDeferredAt: null,
+          nextAttemptAt: NOW,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+      },
+      { runValidators: true }
+    );
+  });
+
+  test("listProviderAnchorAttempts reads this deployment's newest live assets (V6)", async () => {
+    const find = jest.spyOn(VideoUploadAttempt, 'find').mockResolvedValue([{ assetId: 'as-1' }]);
+
+    await expect(videoRepository.listProviderAnchorAttempts({ limit: 3 })).resolves.toEqual([
+      { assetId: 'as-1' },
+    ]);
+    expect(find).toHaveBeenCalledWith(
+      { deployment: 'test:tsw_2026_test', status: 'ready', assetId: { $ne: null } },
+      { assetId: 1 },
+      { sort: { updatedAt: -1 }, limit: 3, lean: true }
+    );
+  });
+
+  test('countForeignVideoWork counts open work held under any other deployment label (V6)', async () => {
+    jest.spyOn(VideoUploadAttempt, 'countDocuments').mockResolvedValue(2);
+    jest.spyOn(VideoCleanupJob, 'countDocuments').mockResolvedValue(1);
+
+    await expect(videoRepository.countForeignVideoWork()).resolves.toEqual({
+      attempts: 2,
+      jobs: 1,
+    });
+    expect(VideoUploadAttempt.countDocuments).toHaveBeenCalledWith({
+      deployment: { $ne: 'test:tsw_2026_test' },
+      status: { $in: UPLOAD_ATTEMPT_IN_FLIGHT_STATUSES },
+    });
+    expect(VideoCleanupJob.countDocuments).toHaveBeenCalledWith({
+      deployment: { $ne: 'test:tsw_2026_test' },
+      status: { $in: ['pending', 'leased', 'failed'] },
+    });
+  });
+
   test('listDueCleanupJobs is a read-only preview of what a claim would lease (dry-run)', async () => {
     const find = jest.spyOn(VideoCleanupJob, 'find').mockResolvedValue([{ _id: JOB_ID }]);
     const findOneAndUpdate = jest.spyOn(VideoCleanupJob, 'findOneAndUpdate');

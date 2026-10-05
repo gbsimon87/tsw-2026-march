@@ -1,12 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-// Module-level singleton — only one YouTube iframe plays at a time across all instances.
-// WeakRef prevents stale detached DOM nodes from blocking GC.
-let activeIframeRef = null;
-
-function getActiveIframe() {
-  return activeIframeRef?.deref() ?? null;
-}
+import { activatePlayback, releasePlayback } from '../../video/playbackCoordinator';
 
 function sendCommand(iframe, func) {
   if (!iframe?.contentWindow || !iframe.isConnected) return;
@@ -17,16 +11,12 @@ function sendCommand(iframe, func) {
 }
 
 function activateIframe(iframe) {
-  const current = getActiveIframe();
-  if (current && current !== iframe) {
-    sendCommand(current, 'pauseVideo');
-  }
-  activeIframeRef = new WeakRef(iframe);
+  if (!iframe) return;
+  activatePlayback(iframe, () => sendCommand(iframe, 'pauseVideo'));
   sendCommand(iframe, 'playVideo');
 }
-
 function clearActiveIframe(iframe) {
-  if (getActiveIframe() === iframe) activeIframeRef = null;
+  releasePlayback(iframe);
 }
 
 export function useYouTubeAutoplay({ src, threshold = 0.5 } = {}) {
@@ -35,8 +25,8 @@ export function useYouTubeAutoplay({ src, threshold = 0.5 } = {}) {
   const pendingPlay = useRef(false);
   const isLoaded = useRef(false);
   const srcLoaded = useRef(false);
-  const thresholdRef = useRef(threshold);
   const srcRef = useRef(src);
+  srcRef.current = src;
 
   // Listen for iframe load — fires after src is set lazily.
   useEffect(() => {
@@ -53,7 +43,7 @@ export function useYouTubeAutoplay({ src, threshold = 0.5 } = {}) {
       iframe.removeEventListener('load', onLoad);
       isLoaded.current = false;
     };
-  }, []);
+  }, [src]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -63,34 +53,39 @@ export function useYouTubeAutoplay({ src, threshold = 0.5 } = {}) {
     // Reset lazy-load flag so Strict Mode double-invoke re-sets the src correctly.
     srcLoaded.current = false;
 
+    let intersecting = false;
+    const update = () => {
+      if (intersecting && document.visibilityState !== 'hidden') {
+        pendingPlay.current = true;
+        if (!srcLoaded.current && iframe && srcRef.current) {
+          srcLoaded.current = true;
+          iframe.src = srcRef.current;
+        } else if (isLoaded.current) activateIframe(iframe);
+      } else {
+        pendingPlay.current = false;
+        clearActiveIframe(iframe);
+        sendCommand(iframe, 'pauseVideo');
+      }
+    };
+    document.addEventListener('visibilitychange', update);
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          pendingPlay.current = true;
-          if (!srcLoaded.current && iframe && srcRef.current) {
-            srcLoaded.current = true;
-            iframe.src = srcRef.current;
-            // onLoad fires after src resolves; it calls activateIframe.
-          } else if (isLoaded.current) {
-            activateIframe(iframe);
-          }
-        } else {
-          pendingPlay.current = false;
-          clearActiveIframe(iframe);
-          sendCommand(iframe, 'pauseVideo');
-        }
+        intersecting = entry.isIntersecting && entry.intersectionRatio >= threshold;
+        update();
       },
-      { threshold: thresholdRef.current }
+      { threshold }
     );
 
     observer.observe(el);
 
     return () => {
+      document.removeEventListener('visibilitychange', update);
       observer.disconnect();
       clearActiveIframe(iframe);
+      sendCommand(iframe, 'pauseVideo');
       srcLoaded.current = false;
     };
-  }, []);
+  }, [src, threshold]);
 
   return { containerRef, iframeRef };
 }

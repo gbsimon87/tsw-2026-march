@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const {
   insertManyGames,
   deleteReplaceableLeagueGames,
+  deleteGameIfVideoUnchanged,
+  markAutoHighlightsPublished,
 } = require('../../modules/games/games.repository');
 const { CURRENT_COURT_LAYOUT_ID } = require('../../modules/shared/courtLayouts');
 
@@ -97,5 +99,50 @@ describe('deleteReplaceableLeagueGames', () => {
     jest.spyOn(Game, 'deleteMany').mockResolvedValue({});
 
     await expect(deleteReplaceableLeagueGames(leagueId, seasonId)).resolves.toBe(0);
+  });
+});
+
+// Mux game video V7: a single-game delete is conditional on the hosted video
+// it read, so an upload attached concurrently is never deleted with the row
+// (its upload URL already issued, its cleanup never queued).
+describe('deleteGameIfVideoUnchanged', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('deletes only while the game still carries the generation that was read', async () => {
+    const deleteOne = jest.spyOn(Game, 'deleteOne').mockResolvedValue({ deletedCount: 1 });
+
+    await expect(deleteGameIfVideoUnchanged('game-1', 'gen-1')).resolves.toBe(true);
+    expect(deleteOne).toHaveBeenCalledWith({ _id: 'game-1', 'video.generationId': 'gen-1' });
+  });
+
+  it('deletes a video-less game only while it is still video-less', async () => {
+    const deleteOne = jest.spyOn(Game, 'deleteOne').mockResolvedValue({ deletedCount: 0 });
+
+    await expect(deleteGameIfVideoUnchanged('game-1', null)).resolves.toBe(false);
+    expect(deleteOne).toHaveBeenCalledWith({ _id: 'game-1', video: null });
+  });
+});
+
+// Mux game video V1: auto highlights publish at most once per game.
+describe('markAutoHighlightsPublished', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('stamps the game once, without touching an existing stamp', async () => {
+    const updateOne = jest.spyOn(Game, 'updateOne').mockResolvedValue({ modifiedCount: 1 });
+    const now = new Date('2026-10-05T12:00:00.000Z');
+
+    await expect(markAutoHighlightsPublished('game-1', now)).resolves.toBe(true);
+    expect(updateOne).toHaveBeenCalledWith(
+      { _id: 'game-1', autoHighlightsPublishedAt: null },
+      { $set: { autoHighlightsPublishedAt: now } }
+    );
+  });
+
+  it('is part of the Game schema and defaults to null', () => {
+    expect(new Game({}).autoHighlightsPublishedAt).toBeNull();
   });
 });

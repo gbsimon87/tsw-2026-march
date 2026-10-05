@@ -8,6 +8,7 @@ const { logger } = require('./config/logger');
 const { corsOptions } = require('./config/cors');
 const { configureGoogleOAuth } = require('./modules/auth/oauth.google');
 const { apiRouter } = require('./routes');
+const { videoWebhookRouter } = require('./modules/video/video.routes');
 const { billingWebhookRouter } = require('./modules/billing/billing.routes');
 const { attachCsrfToken, csrfProtection } = require('./middleware/csrf.middleware');
 const { requestIdMiddleware } = require('./middleware/requestId.middleware');
@@ -35,6 +36,11 @@ function createApp() {
     '/api/v1/billing/webhooks',
     express.raw({ type: 'application/json' }),
     billingWebhookRouter
+  );
+  app.use(
+    '/api/v1/videos/webhooks',
+    express.raw({ type: 'application/json', limit: '1mb' }),
+    videoWebhookRouter
   );
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());

@@ -310,6 +310,46 @@ const SUMMARY_KEYS = {
  * `now` fixes the clock (tests); omitted, each claim uses the current time so
  * a follow-up delete_asset queued during the batch is picked up in it.
  */
+const PROVIDER_ANCHOR_LIMIT = 3;
+
+/**
+ * V6: a 404 is read as "gone" by cleanup and recovery, but credentials for a
+ * different Mux environment also 404 on everything. Before acting, prove the
+ * configured credentials can see at least one of this deployment's live
+ * (ready) assets. With no live media there is nothing to compare against.
+ * A transient provider failure throws (the caller skips this run).
+ * @returns {Promise<{verified: boolean, anchors: number}>}
+ */
+async function verifyMuxEnvironment() {
+  const anchors = await repository.listProviderAnchorAttempts({ limit: PROVIDER_ANCHOR_LIMIT });
+  if (anchors.length === 0) return { verified: true, anchors: 0 };
+  for (const anchor of anchors) {
+    try {
+      const asset = await muxClient.getAsset(anchor.assetId);
+      if (asset?.id === anchor.assetId) return { verified: true, anchors: anchors.length };
+    } catch (error) {
+      if (error?.status !== 404) throw error;
+    }
+  }
+  logger.error(
+    { deployment: repository.getVideoDeployment(), anchors: anchors.length },
+    "Mux credentials cannot see this deployment's live video; provider cleanup and recovery are paused"
+  );
+  return { verified: false, anchors: anchors.length };
+}
+
+/** V6: warn about open work held under another deployment label. Never throws on zero. */
+async function warnForeignVideoWork() {
+  const foreign = await repository.countForeignVideoWork();
+  if (foreign.attempts > 0 || foreign.jobs > 0) {
+    logger.warn(
+      { deployment: repository.getVideoDeployment(), ...foreign },
+      'Video work exists under another deployment label and will not be processed here; audit it'
+    );
+  }
+  return foreign;
+}
+
 async function runCleanupBatch({
   now,
   limit = CLEANUP_BATCH_LIMIT,
@@ -327,6 +367,9 @@ async function runCleanupBatch({
     error: 0,
   };
   if (!muxClient.isMuxConfigured()) return { ...summary, skipped: 'mux_not_configured' };
+  if (!(await verifyMuxEnvironment()).verified) {
+    return { ...summary, skipped: 'mux_environment_unverified' };
+  }
 
   const boundedLimit = Math.min(Math.max(1, Math.trunc(limit) || 1), CLEANUP_MAX_BATCH_LIMIT);
   while (summary.claimed < boundedLimit && !shouldStop()) {
@@ -531,9 +574,12 @@ function runSweepTick() {
     try {
       const cleanup = await runCleanupBatch({ shouldStop });
       if (shouldStop()) return;
+      const lifecycle = await require('./video.lifecycle').reconcileVideoLifecycle();
+      if (shouldStop()) return;
       const reconcile = await reconcileStaleAttempts();
+      await warnForeignVideoWork();
       if (cleanup.claimed > 0 || reconcile.reconciled > 0 || reconcile.errors > 0) {
-        logger.info({ cleanup, reconcile }, 'Video cleanup sweep ran');
+        logger.info({ cleanup, lifecycle, reconcile }, 'Video cleanup sweep ran');
       }
     } catch (error) {
       logger.error({ err: error }, 'Video cleanup sweep failed');
@@ -590,6 +636,8 @@ module.exports = {
   runCleanupBatch,
   previewCleanupBatch,
   reconcileStaleAttempts,
+  verifyMuxEnvironment,
+  warnForeignVideoWork,
   kickCleanup,
   startVideoCleanupSweep,
   stopVideoCleanupSweep,

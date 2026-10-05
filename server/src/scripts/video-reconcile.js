@@ -11,10 +11,13 @@
 // Idempotent: attempts are claimed by a conditional transition and jobs by a
 // lease, so re-running (or running beside the API) never repeats work.
 // --dry-run lists what would be reconciled and processed; no Mux calls, no writes.
+// --retry-failed first requeues every permanently failed cleanup job with a
+// fresh retry budget (after fixing credentials or a Mux outage, V4).
 //
 // Usage:
 //   pnpm --filter server video:reconcile
 //   pnpm --filter server video:reconcile --dry-run   (a `--` before it is fine)
+//   pnpm --filter server video:reconcile --retry-failed
 
 const mongoose = require('mongoose');
 
@@ -23,21 +26,24 @@ const CLEANUP_SCRIPT_LIMIT = 50;
 
 function parseVideoReconcileArgs(argv) {
   let dryRun = false;
+  let retryFailed = false;
   for (const argument of argv) {
     // pnpm 10 forwards the separator in `pnpm <script> -- --dry-run` verbatim.
     if (argument === '--') continue;
     if (argument === '--dry-run') dryRun = true;
+    else if (argument === '--retry-failed') retryFailed = true;
     else throw new Error(`Unknown argument ${argument}`);
   }
-  return { dryRun };
+  return { dryRun, retryFailed };
 }
 
-async function runVideoReconcile({ dryRun, now = new Date() }) {
+async function runVideoReconcile({ dryRun, retryFailed = false, now = new Date() }) {
   // Required lazily so the argument parser loads without env/DB config.
   const { isMuxConfigured } = require('../modules/video/mux.client');
   const cleanup = require('../modules/video/video.cleanup');
   const {
     countPendingCleanupJobs,
+    requeueFailedCleanupJobs,
     getVideoDeployment,
   } = require('../modules/video/video.repository');
 
@@ -47,11 +53,24 @@ async function runVideoReconcile({ dryRun, now = new Date() }) {
     );
   }
 
+  const lifecycle = await require('../modules/video/video.lifecycle').reconcileVideoLifecycle({
+    now,
+    limit: RECONCILE_SCRIPT_LIMIT,
+    dryRun,
+  });
   const reconcile = await cleanup.reconcileStaleAttempts({
     now,
     limit: RECONCILE_SCRIPT_LIMIT,
     dryRun,
   });
+  let requeuedFailed;
+  if (retryFailed && dryRun) {
+    const failed =
+      (await countPendingCleanupJobs({ includeFailed: true })) - (await countPendingCleanupJobs());
+    requeuedFailed = { dryRun: true, wouldRequeue: failed };
+  } else if (retryFailed) {
+    requeuedFailed = await requeueFailedCleanupJobs({ now });
+  }
   const cleanupResult = dryRun
     ? {
         dryRun: true,
@@ -62,21 +81,26 @@ async function runVideoReconcile({ dryRun, now = new Date() }) {
   const pending = await countPendingCleanupJobs();
   const pendingOrFailed = await countPendingCleanupJobs({ includeFailed: true });
 
+  const foreignDeployments = await cleanup.warnForeignVideoWork();
+
   return {
     deployment: getVideoDeployment(),
     dryRun,
     reconcile,
+    lifecycle,
+    ...(requeuedFailed === undefined ? {} : { requeuedFailed }),
     cleanup: cleanupResult,
     outstanding: { pending, failed: pendingOrFailed - pending },
+    foreignDeployments,
   };
 }
 
 async function main() {
-  const { dryRun } = parseVideoReconcileArgs(process.argv.slice(2));
+  const { dryRun, retryFailed } = parseVideoReconcileArgs(process.argv.slice(2));
   const { connectDb } = require('../config/db');
 
   await connectDb();
-  const summary = await runVideoReconcile({ dryRun });
+  const summary = await runVideoReconcile({ dryRun, retryFailed });
   console.log(JSON.stringify(summary, null, 2));
   await mongoose.disconnect();
 }

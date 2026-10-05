@@ -479,6 +479,9 @@ async function finishGameVideoCleanupAfterDeletion(attempt) {
 module.exports = {
   UPLOAD_RESERVATION_MINUTES,
   VIDEO_ERROR_REASONS,
+  handleMuxWebhook: (input) => require('./video.lifecycle').handleMuxWebhook(input),
+  handleMuxWebhookEvent: (input) => require('./video.lifecycle').handleMuxWebhookEvent(input),
+  getGameVideoPlayback: (input) => require('./video.playback').getGameVideoPlayback(input),
   createGameVideoUpload,
   cancelGameVideoUpload,
   removeGameVideo,

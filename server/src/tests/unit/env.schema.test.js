@@ -468,6 +468,25 @@ describe('Mux video config', () => {
     expect(result.success).toBe(false);
   });
 
+  // V5: Mux's max_resolution_tier accepts only 1080p/1440p/2160p, so a 720p
+  // setting would make every direct-upload create fail with a 400.
+  test('rejects 720p, which Mux does not accept as an ingest cap', () => {
+    const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_MAX_RESOLUTION_TIER: '720p' }));
+    expect(result.success).toBe(false);
+  });
+
+  // V6: the video deployment label (APP_ENV, else NODE_ENV, plus DB name)
+  // scopes cleanup ownership; production must not fall back to NODE_ENV.
+  test('requires APP_ENV in production when Mux is configured', () => {
+    const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, NODE_ENV: 'production' }));
+    expect(result.success).toBe(false);
+    expect(result.error.issues.map((issue) => issue.path[0])).toContain('APP_ENV');
+    expect(
+      envSchema.safeParse(baseEnv({ ...FULL_MUX, NODE_ENV: 'production', APP_ENV: 'production' }))
+        .success
+    ).toBe(true);
+  });
+
   test('rejects a signing key that is not a base64 private key without echoing it', () => {
     const bad = 'not-a-real-key-SENTINEL-123';
     const result = envSchema.safeParse(baseEnv({ ...FULL_MUX, MUX_SIGNING_PRIVATE_KEY: bad }));

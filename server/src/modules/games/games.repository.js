@@ -306,6 +306,10 @@ const gameSchema = new mongoose.Schema(
     opponent: { type: String, trim: true, default: null },
     videoUrl: { type: String, trim: true, default: null },
     video: { type: gameVideoSchema, default: null },
+    // Mux game video V1: set once automatic highlight clips were published for
+    // this game. A later ready upload never republishes, so the per-game cap
+    // holds and clips an admin deleted are not recreated.
+    autoHighlightsPublishedAt: { type: Date, default: null },
     status: {
       type: String,
       // Schedule Builder: 'scheduled' is a future fixture — created by the bulk
@@ -419,6 +423,14 @@ async function listGamesByOwner(ownerUserId, filter = {}) {
 
 async function findGameByIdAndOwner(gameId, ownerUserId) {
   return Game.findOne({ _id: gameId, ownerUserId });
+}
+
+// One lean media projection for all highlight references on a feed page.
+async function findGameVideoSourcesByIds(gameIds) {
+  if (!gameIds.length) return [];
+  return Game.find({ _id: { $in: [...new Set(gameIds.map(String))] } })
+    .select('_id videoUrl video events._id events.videoTimestamp events.videoTimelineId')
+    .lean();
 }
 
 async function findGameById(gameId) {
@@ -603,6 +615,28 @@ async function insertManyGames(docs) {
   );
 }
 
+// Mux game video V1: stamp the game's automatic highlight publication once.
+// → boolean (false when it was already stamped)
+async function markAutoHighlightsPublished(gameId, now = new Date()) {
+  const result = await Game.updateOne(
+    { _id: gameId, autoHighlightsPublishedAt: null },
+    { $set: { autoHighlightsPublishedAt: now } }
+  );
+  return (result?.modifiedCount ?? 0) > 0;
+}
+
+// Mux game video V7: delete one game only while it still carries the hosted
+// video the caller read (its generation, or none). A document deleteOne()
+// matches _id alone, so an upload attached in between — upload URL already
+// issued, no cleanup queued — would be deleted with the row. → boolean
+async function deleteGameIfVideoUnchanged(gameId, generationId) {
+  const filter = generationId
+    ? { _id: gameId, 'video.generationId': generationId }
+    : { _id: gameId, video: null };
+  const result = await Game.deleteOne(filter);
+  return (result?.deletedCount ?? 0) > 0;
+}
+
 // Schedule Builder: only a future fixture that nobody has started is safe to
 // replace. A game carrying any recorded event, or one already in progress or
 // completed, is real history and is never deleted by a schedule rebuild.
@@ -622,6 +656,8 @@ async function deleteReplaceableLeagueGames(leagueId, seasonId) {
 }
 
 module.exports = {
+  deleteGameIfVideoUnchanged,
+  markAutoHighlightsPublished,
   // Exported for modules/video/video.repository.js, the only writer of
   // `video` (OPT-026). Other modules go through the functions below.
   Game,
@@ -631,6 +667,7 @@ module.exports = {
   listGamesByOwner,
   findGameByIdAndOwner,
   findGameById,
+  findGameVideoSourcesByIds,
   listGamesByTeamId,
   listGamesByStandaloneParticipantTeamId,
   listGamesByLeagueParticipantTeamId,

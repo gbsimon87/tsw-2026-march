@@ -115,7 +115,7 @@ const highlightClipSchema = new mongoose.Schema(
   {
     gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true },
     eventId: { type: String, required: true },
-    videoUrl: { type: String, required: true },
+    videoUrl: { type: String, default: null },
     videoTimestamp: { type: Number, required: true },
     statType: { type: String, required: true },
     playerId: { type: String, default: null },

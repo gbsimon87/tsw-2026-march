@@ -105,7 +105,7 @@ describe('YouTubeHighlightReel', () => {
     expect(player.requestFullscreen).toHaveBeenCalledTimes(1);
   });
 
-  test('shows an empty state when no playable YouTube moments exist', () => {
+  test('shows an empty state when no playable moments exist', () => {
     render(
       <YouTubeHighlightReel
         highlights={[
@@ -119,7 +119,7 @@ describe('YouTubeHighlightReel', () => {
       />
     );
 
-    expect(screen.getByText(/No playable YouTube highlights/i)).toBeInTheDocument();
+    expect(screen.getByText(/No playable highlights/i)).toBeInTheDocument();
     expect(screen.queryByTitle(/highlight 1/i)).not.toBeInTheDocument();
   });
 });

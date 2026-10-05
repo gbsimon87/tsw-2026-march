@@ -1,11 +1,13 @@
+import { isMuxHighlight } from '../../../video/videoSource';
+import { MuxHighlightFeed } from '../../../video/components/MuxHighlightFeed';
 import { extractYouTubeVideoId } from '../../../games/youtube';
 import { STAT_LABELS } from '../../../games/constants';
 import { useYouTubeAutoplay } from '../../hooks/useYouTubeAutoplay';
 import CloudinaryImage from '../../../media/CloudinaryImage';
 
-export function FullScreenHighlightClipPost({ highlightClip }) {
+function YouTubeFullScreenHighlightClipPost({ highlightClip }) {
   const { videoUrl, videoTimestamp, statType, playerName } = highlightClip;
-  const videoId = extractYouTubeVideoId(videoUrl);
+  const videoId = highlightClip.videoAvailable === false ? null : extractYouTubeVideoId(videoUrl);
 
   const label = STAT_LABELS[statType] || statType;
   const safeTimestamp = Number.isFinite(videoTimestamp) ? videoTimestamp : null;
@@ -66,4 +68,10 @@ export function FullScreenHighlightClipPost({ highlightClip }) {
       </div>
     </div>
   );
+}
+
+export function FullScreenHighlightClipPost({ highlightClip }) {
+  if (isMuxHighlight(highlightClip))
+    return <MuxHighlightFeed highlight={highlightClip} fullscreen />;
+  return <YouTubeFullScreenHighlightClipPost highlightClip={highlightClip} />;
 }

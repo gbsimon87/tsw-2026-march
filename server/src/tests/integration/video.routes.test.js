@@ -20,6 +20,7 @@ jest.mock('../../modules/video/video.service', () => ({
   createGameVideoUpload: jest.fn(),
   cancelGameVideoUpload: jest.fn(),
   removeGameVideo: jest.fn(),
+  getGameVideoPlayback: jest.fn(),
 }));
 
 const { videoUploadLimiter } = require('../../middleware/rateLimit.middleware');
@@ -239,4 +240,47 @@ describe('DELETE /api/v1/games/:gameId/video', () => {
     expect(res.statusCode).toBe(401);
     expect(videoService.removeGameVideo).not.toHaveBeenCalled();
   });
+});
+
+describe('GET /api/v1/games/:gameId/video/playback', () => {
+  const path = `/api/v1/games/${GAME_ID}/video/playback`;
+  test('anonymous clip passes optional auth and event id through without caching', async () => {
+    videoService.getGameVideoPlayback.mockResolvedValue({
+      provider: 'mux',
+      tokens: { playback: 'signed' },
+    });
+    const res = await request(createApp()).get(`${path}?eventId=${ATTEMPT_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe(NO_STORE);
+    expect(videoService.getGameVideoPlayback).toHaveBeenCalledWith({
+      userId: null,
+      gameId: GAME_ID,
+      eventId: ATTEMPT_ID,
+    });
+  });
+  test('full-game signed-out policy denial is no-store', async () => {
+    videoService.getGameVideoPlayback.mockRejectedValue(new ApiError(401, 'Unauthorized'));
+    const res = await request(createApp()).get(path);
+    expect(res.status).toBe(401);
+    expect(res.headers['cache-control']).toBe(NO_STORE);
+  });
+  test('authenticated full-game request passes viewer identity', async () => {
+    videoService.getGameVideoPlayback.mockResolvedValue({ provider: 'mux' });
+    const res = await authed('get', path);
+    expect(res.status).toBe(200);
+    expect(videoService.getGameVideoPlayback).toHaveBeenCalledWith({
+      userId: USER_ID,
+      gameId: GAME_ID,
+      eventId: null,
+    });
+  });
+  test.each(['invalid', `${ATTEMPT_ID}&eventId=${ATTEMPT_ID}`])(
+    'malformed or repeated event id is 400 and no-store: %s',
+    async (eventId) => {
+      const res = await request(createApp()).get(`${path}?eventId=${eventId}`);
+      expect(res.status).toBe(400);
+      expect(res.headers['cache-control']).toBe(NO_STORE);
+      expect(videoService.getGameVideoPlayback).not.toHaveBeenCalled();
+    }
+  );
 });

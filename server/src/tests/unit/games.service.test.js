@@ -11,6 +11,7 @@ jest.mock('../../modules/games/games.repository', () => ({
   createGame: jest.fn(),
   findGameById: jest.fn(),
   findGameByIdAndOwner: jest.fn(),
+  deleteGameIfVideoUnchanged: jest.fn(async () => true),
   saveGame: jest.fn(),
   claimGameSummaryGeneration: jest.fn(),
   releaseGameSummaryLock: jest.fn(),
@@ -1288,6 +1289,51 @@ describe('games service frozen box score (OPT-012)', () => {
     const result = await getGameForUser('user-1', 'game-1');
     expect(result.highlights).toHaveLength(1);
     expect(result.recap.shotSnapshot).not.toBeNull();
+  });
+
+  test('ready Mux games expose provider-aware highlights and only safe video metadata', async () => {
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      videoUrl: null,
+      video: {
+        provider: 'mux',
+        status: 'ready',
+        generationId: 'private-generation',
+        assetId: 'private-asset',
+        uploadId: 'private-upload',
+        playbackId: 'private-playback',
+        durationSeconds: 500,
+        version: 42,
+      },
+      events: [{ ...HIGHLIGHT_EVENT, videoTimelineId: 'mux:private-generation' }],
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+    findGameById.mockResolvedValue(game);
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.game.video).toEqual({
+      provider: 'mux',
+      status: 'ready',
+      durationSeconds: 500,
+      errorMessage: null,
+      version: 42,
+    });
+    expect(result.game.videoProvider).toBe('mux');
+    expect(result.highlights[0]).toMatchObject({
+      gameId: String(game._id),
+      videoProvider: 'mux',
+      videoAvailable: true,
+      videoUrl: null,
+      videoVersion: 42,
+    });
+    for (const secret of [
+      'private-generation',
+      'private-asset',
+      'private-upload',
+      'private-playback',
+    ]) {
+      expect(JSON.stringify(result)).not.toContain(secret);
+    }
   });
 
   test('T-14: includes replay highlights and shot snapshot when entitled', async () => {
@@ -2618,13 +2664,18 @@ describe('games service hosted video (Mux Task 4)', () => {
   });
 
   describe('deleteGameForUser (R3: cleanup persisted before the delete)', () => {
+    const { deleteGameIfVideoUnchanged } = require('../../modules/games/games.repository');
+
     function deletableGame(overrides = {}) {
-      const game = leagueGame(overrides);
-      game.deleteOne = jest.fn(async () => undefined);
-      return game;
+      return leagueGame(overrides);
     }
 
-    test('a game with hosted video: enqueue → deleteOne → retire + kick', async () => {
+    beforeEach(() => {
+      deleteGameIfVideoUnchanged.mockReset();
+      deleteGameIfVideoUnchanged.mockResolvedValue(true);
+    });
+
+    test('a game with hosted video: enqueue → conditional delete → retire + kick', async () => {
       const game = deletableGame({
         video: { provider: 'mux', status: 'ready', generationId: GENERATION_ID, version: 2 },
       });
@@ -2635,10 +2686,11 @@ describe('games service hosted video (Mux Task 4)', () => {
       await deleteGameForUser(USER_ID, GAME_ID);
 
       expect(videoService.queueGameVideoCleanupForDeletion).toHaveBeenCalledWith(game);
+      expect(deleteGameIfVideoUnchanged).toHaveBeenCalledWith(game._id, GENERATION_ID);
       expect(videoService.finishGameVideoCleanupAfterDeletion).toHaveBeenCalledWith(owner);
       const order = [
         videoService.queueGameVideoCleanupForDeletion.mock.invocationCallOrder[0],
-        game.deleteOne.mock.invocationCallOrder[0],
+        deleteGameIfVideoUnchanged.mock.invocationCallOrder[0],
         videoService.finishGameVideoCleanupAfterDeletion.mock.invocationCallOrder[0],
       ];
       expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -2652,18 +2704,29 @@ describe('games service hosted video (Mux Task 4)', () => {
       videoService.queueGameVideoCleanupForDeletion.mockRejectedValue(new Error('db down'));
 
       await expect(deleteGameForUser(USER_ID, GAME_ID)).rejects.toThrow('db down');
-      expect(game.deleteOne).not.toHaveBeenCalled();
+      expect(deleteGameIfVideoUnchanged).not.toHaveBeenCalled();
       expect(videoService.finishGameVideoCleanupAfterDeletion).not.toHaveBeenCalled();
     });
 
-    test('a game without hosted video skips the video module entirely', async () => {
+    test('a game without hosted video skips the video module and deletes only while still video-less', async () => {
       const game = deletableGame();
       findGameById.mockResolvedValue(game);
 
       await deleteGameForUser(USER_ID, GAME_ID);
 
-      expect(game.deleteOne).toHaveBeenCalled();
+      expect(deleteGameIfVideoUnchanged).toHaveBeenCalledWith(game._id, null);
       expect(videoService.queueGameVideoCleanupForDeletion).not.toHaveBeenCalled();
+      expect(videoService.finishGameVideoCleanupAfterDeletion).not.toHaveBeenCalled();
+    });
+
+    // V7: an upload attached between the read and the delete must not be
+    // deleted with the row — its upload URL is live and no cleanup is queued.
+    test('a video attached concurrently aborts the delete with 409 and retires nothing', async () => {
+      const game = deletableGame();
+      findGameById.mockResolvedValue(game);
+      deleteGameIfVideoUnchanged.mockResolvedValue(false);
+
+      await expect(deleteGameForUser(USER_ID, GAME_ID)).rejects.toMatchObject({ statusCode: 409 });
       expect(videoService.finishGameVideoCleanupAfterDeletion).not.toHaveBeenCalled();
     });
   });

@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mux/mux-player-react": "^3.13.4",
+    "@mux/upchunk": "^3.5.0",
     "@tanstack/react-query": "^5.101.2",
     "html2canvas": "^1.4.1",
     "posthog-js": "^1.418.13",

@@ -9,7 +9,7 @@ const DIRECT_UPLOAD_TIMEOUT_SECONDS = 6 * 60 * 60;
  * Thrown for every non-2xx Mux response the caller is not expected to handle
  * as a normal outcome (404 on cancel/delete), and for network/timeout errors.
  *   status    HTTP status, or null for network errors / timeouts
- *   retryable true for 408, 429, 5xx and network errors
+ *   retryable true for 401, 403, 408, 429, 5xx and network errors
  * The message never contains credentials, tokens or upload URLs.
  */
 class MuxApiError extends Error {
@@ -21,8 +21,11 @@ class MuxApiError extends Error {
   }
 }
 
+// V4: 401/403 are credential or permission faults (token rotation, a
+// read-only token) that an operator fixes; they never prove the target is
+// gone, so cleanup keeps retrying instead of failing permanently.
 function isRetryableStatus(status) {
-  return status === 408 || status === 429 || status >= 500;
+  return status === 401 || status === 403 || status === 408 || status === 429 || status >= 500;
 }
 
 function isMuxConfigured() {

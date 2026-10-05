@@ -1,3 +1,7 @@
+jest.mock('../../modules/feed/feed.repository', () => ({
+  ...jest.requireActual('../../modules/feed/feed.repository'),
+  findSharedEventIds: jest.fn(() => Promise.resolve([])),
+}));
 jest.mock('../../modules/leagues/leagues.repository', () => ({
   createLeague: jest.fn(),
   listLeaguesByOwner: jest.fn(),
@@ -1106,6 +1110,78 @@ describe('TSW-005 — league feed-sharing support', () => {
 
     const result = await getPublicLeaguePlayerById('lp1');
 
+    expect(result.player.displayName).toBe('Alex');
+    expect(result.team.name).toBe('Alpha');
+    expect(result.summary.gamesCount).toBe(1);
+    expect(result.summary.pointsPerGame).toBe(3);
+    expect(result.milestones).toEqual({ recent: [], total: 0 });
+  });
+
+  test('league player Mux highlights resolve their current recording without exposing provider ids', async () => {
+    findLeaguePlayerById.mockResolvedValue({
+      _id: 'lp1',
+      leagueTeamId: 'team-a',
+      displayName: 'Alex',
+      jerseyNumber: 7,
+      position: 'PG',
+      isActive: true,
+      claimedByUserId: null,
+    });
+    findLeagueTeamById.mockResolvedValue(buildLeagueTeam('team-a', 'Alpha'));
+    listLeagueTeams.mockResolvedValue([buildLeagueTeam('team-a', 'Alpha')]);
+    listLeagueGamesByLeagueId.mockResolvedValue([
+      {
+        _id: 'g1',
+        status: 'completed',
+        video: {
+          provider: 'mux',
+          status: 'ready',
+          playbackId: 'private-playback',
+          generationId: 'generation',
+          durationSeconds: 500,
+          version: 42,
+        },
+        trackingMode: 'dual_team',
+        homeLeagueTeamId: 'team-a',
+        awayLeagueTeamId: 'team-b',
+        homeRosterSnapshot: [{ _id: 'p1', leaguePlayerId: 'lp1', displayName: 'Alex' }],
+        awayRosterSnapshot: [],
+        events: [
+          {
+            _id: 'e1',
+            teamSide: TEAM_SIDES.HOME,
+            playerId: 'p1',
+            statType: STAT_TYPES.FG3_MADE,
+            videoTimestamp: 42,
+            videoTimelineId: 'mux:generation',
+          },
+        ],
+      },
+    ]);
+
+    findLeagueBySlug.mockResolvedValue({
+      _id: 'league-1',
+      ownerUserId: 'owner-1',
+      isPublic: true,
+      status: 'active',
+    });
+    findLeagueTeamByLeagueAndSlug.mockResolvedValue(buildLeagueTeam('team-a', 'Alpha'));
+    findLeaguePlayerByIdAndTeam.mockResolvedValue({
+      _id: 'lp1',
+      displayName: 'Alex',
+      isActive: true,
+    });
+    const result = await getPublicLeaguePlayerBySlug('league', 'alpha', 'lp1');
+
+    expect(result.highlights[0]).toMatchObject({
+      gameId: 'g1',
+      eventId: 'e1',
+      videoProvider: 'mux',
+      videoAvailable: true,
+      videoVersion: 42,
+      videoUrl: null,
+    });
+    expect(JSON.stringify(result)).not.toContain('private-playback');
     expect(result.player.displayName).toBe('Alex');
     expect(result.team.name).toBe('Alpha');
     expect(result.summary.gamesCount).toBe(1);

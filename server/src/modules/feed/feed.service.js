@@ -1,3 +1,8 @@
+const {
+  hasGameVideo,
+  getGameVideoProvider,
+  buildHighlightVideoFields,
+} = require('../shared/gameVideo');
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const {
@@ -35,9 +40,11 @@ const { findUserById, findUsersByIds } = require('../auth/auth.repository');
 const { getSystemUserId } = require('../auth/auth.service');
 const {
   findGameById,
+  findGameVideoSourcesByIds,
   listCompletedGames,
   listLeagueGamesByLeagueId,
   listLeagueGameIdsByLeagueId,
+  markAutoHighlightsPublished,
 } = require('../games/games.repository');
 const { getPublicGame, canAccessGame, HIGHLIGHT_STAT_TYPES } = require('../games/games.service');
 const {
@@ -504,8 +511,16 @@ function isSafeYouTubeUrl(url) {
   }
 }
 
-function resolveHighlightClipPayload(post) {
+async function resolveHighlightClipPayload(post, gamesById) {
   const clip = post.highlightClip;
+  const game = gamesById ? gamesById.get(String(clip.gameId)) : await findGameById(clip.gameId);
+  const event = game?.events?.find((ev) => String(ev._id) === String(clip.eventId));
+  const fields = buildHighlightVideoFields(game, event);
+  if (fields.videoUrl && !isSafeYouTubeUrl(fields.videoUrl)) {
+    fields.videoUrl = null;
+    fields.videoAvailable = false;
+    fields.videoProvider = null;
+  }
   return {
     image: null,
     video: null,
@@ -515,8 +530,9 @@ function resolveHighlightClipPayload(post) {
     highlightClip: {
       gameId: String(clip.gameId),
       eventId: clip.eventId,
-      videoUrl: isSafeYouTubeUrl(clip.videoUrl) ? clip.videoUrl : null,
-      videoTimestamp: clip.videoTimestamp,
+      ...fields,
+      videoVersion: game?.video?.version ?? null,
+      videoTimestamp: event?.videoTimestamp ?? null,
       statType: clip.statType,
       playerId: clip.playerId ?? null,
       playerName: clip.playerName ?? null,
@@ -553,7 +569,7 @@ function resolvePlayerGameCardPayload(post) {
   };
 }
 
-async function resolvePostPayload(post) {
+async function resolvePostPayload(post, gamesById) {
   if (post.type === 'image') {
     return resolveImagePayload(post);
   }
@@ -579,7 +595,7 @@ async function resolvePostPayload(post) {
   }
 
   if (post.type === 'highlight_clip') {
-    return resolveHighlightClipPayload(post);
+    return resolveHighlightClipPayload(post, gamesById);
   }
 
   if (post.type === 'milestone') {
@@ -593,14 +609,18 @@ async function resolvePostPayload(post) {
 // (listFeedPosts) can resolve every post's creator with one `$in` query
 // instead of one `findUserById` per post. Single-post call sites (create,
 // delete) omit it and get the original one-query-per-call behaviour.
-async function sanitizePost(post, viewerUserId = null, { creator: prefetchedCreator } = {}) {
+async function sanitizePost(
+  post,
+  viewerUserId = null,
+  { creator: prefetchedCreator, gamesById } = {}
+) {
   const creator = prefetchedCreator ?? (await findUserById(post.creatorUserId));
   if (!creator) {
     return null;
   }
 
   try {
-    const payload = await resolvePostPayload(post);
+    const payload = await resolvePostPayload(post, gamesById);
     return {
       id: String(post._id),
       type: post.type,
@@ -682,6 +702,16 @@ async function listFeedPosts(viewerUserId, options = {}) {
     ])
   );
 
+  const gamesById = new Map(
+    (
+      await findGameVideoSourcesByIds(
+        rawPosts
+          .filter((post) => post.type === 'highlight_clip')
+          .map((post) => post.highlightClip.gameId)
+      )
+    ).map((game) => [String(game._id), game])
+  );
+
   // PERF-003 (historical performance investigation): sanitize posts concurrently
   // instead of one-at-a-time — a page of snapshot-miss cards used to stack
   // its 3-6 fallback queries per card sequentially. Concurrency is bounded
@@ -697,8 +727,8 @@ async function listFeedPosts(viewerUserId, options = {}) {
         const post = rawPosts[index];
         const creator = creatorsById.get(String(post.creatorUserId));
         sanitizedByIndex[index] = creator
-          ? await sanitizePost(post, viewerUserId, { creator })
-          : await sanitizePost(post, viewerUserId);
+          ? await sanitizePost(post, viewerUserId, { creator, gamesById })
+          : await sanitizePost(post, viewerUserId, { gamesById });
       }
     })
   );
@@ -1321,7 +1351,7 @@ async function createHighlightClipPostForUser(userId, input) {
 
   const game = await findGameById(payload.gameId);
   if (!game) throw new ApiError(404, 'Game not found');
-  if (!game.videoUrl) throw new ApiError(400, 'This game has no video linked');
+  if (!hasGameVideo(game)) throw new ApiError(400, 'This game has no video linked');
 
   const event = (game.events || []).find((ev) => String(ev._id) === payload.eventId);
   if (!event) throw new ApiError(404, 'Event not found');
@@ -1333,6 +1363,18 @@ async function createHighlightClipPostForUser(userId, input) {
   }
 
   await assertCanShareHighlightClip(userId, game, event);
+  if (getGameVideoProvider(game) === 'mux') {
+    const { canPublishMuxClips, isEventSubjectRestricted } = require('../video/video.policy');
+    const permission = await canPublishMuxClips({ game });
+    if (
+      !permission.allowed ||
+      isEventSubjectRestricted({ game, event, restrictedPlayerIds: permission.restrictedPlayerIds })
+    ) {
+      throw new ApiError(403, 'This footage cannot be shared to the Pulse');
+    }
+    if (!buildHighlightVideoFields(game, event).videoAvailable)
+      throw new ApiError(422, 'Video unavailable');
+  }
 
   const existing = await findPostByHighlightEventId(payload.eventId);
   if (existing) throw new ApiError(409, 'This clip has already been shared to the Pulse');
@@ -1346,7 +1388,7 @@ async function createHighlightClipPostForUser(userId, input) {
     highlightClip: {
       gameId: payload.gameId,
       eventId: payload.eventId,
-      videoUrl: game.videoUrl,
+      videoUrl: getGameVideoProvider(game) === 'youtube' ? game.videoUrl : null,
       videoTimestamp: event.videoTimestamp,
       statType: event.statType,
       playerId: event.playerId ? String(event.playerId) : null,
@@ -1425,11 +1467,32 @@ function rankAutoHighlightEvents(events) {
 // numeric videoTimestamp) and the existing findSharedEventIds dedup so events
 // already shared manually are never duplicated. Caps per game and logs when
 // capped rather than silently truncating.
+//
+// V1: a ready Mux upload reruns this. A game publishes automatic highlights at
+// most once (autoHighlightsPublishedAt), so a rerun never adds clips past the
+// cap or recreates clips an admin deleted; and the cap counts events already
+// shared for the game (covers games published before the stamp existed).
 async function autoCreateHighlightClipPosts(systemUserId, game) {
-  if (!game.videoUrl) return { created: 0, skipped: 0, capped: false };
+  if (!hasGameVideo(game) || game.autoHighlightsPublishedAt) {
+    return { created: 0, skipped: 0, capped: false };
+  }
+  let permission = null;
+  if (getGameVideoProvider(game) === 'mux') {
+    permission = await require('../video/video.policy').canPublishMuxClips({ game });
+    if (!permission.allowed) return { created: 0, skipped: 0, capped: false };
+  }
 
   const eligibleEvents = (game.events || []).filter(
-    (ev) => HIGHLIGHT_STAT_TYPES.has(ev.statType) && typeof ev.videoTimestamp === 'number'
+    (ev) =>
+      HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
+      typeof ev.videoTimestamp === 'number' &&
+      buildHighlightVideoFields(game, ev).videoAvailable &&
+      (!permission ||
+        !require('../video/video.policy').isEventSubjectRestricted({
+          game,
+          event: ev,
+          restrictedPlayerIds: permission.restrictedPlayerIds,
+        }))
   );
   if (eligibleEvents.length === 0) return { created: 0, skipped: 0, capped: false };
 
@@ -1438,8 +1501,9 @@ async function autoCreateHighlightClipPosts(systemUserId, game) {
   const unsharedEvents = eligibleEvents.filter((ev) => !alreadySharedIds.has(String(ev._id)));
 
   const ranked = rankAutoHighlightEvents(unsharedEvents);
-  const capped = ranked.length > AUTO_HIGHLIGHT_CAP;
-  const toCreate = ranked.slice(0, AUTO_HIGHLIGHT_CAP);
+  const remaining = Math.max(0, AUTO_HIGHLIGHT_CAP - alreadySharedIds.size);
+  const capped = ranked.length > remaining;
+  const toCreate = ranked.slice(0, remaining);
 
   if (capped) {
     logger.info(
@@ -1461,7 +1525,7 @@ async function autoCreateHighlightClipPosts(systemUserId, game) {
         highlightClip: {
           gameId: game._id,
           eventId: String(event._id),
-          videoUrl: game.videoUrl,
+          videoUrl: getGameVideoProvider(game) === 'youtube' ? game.videoUrl : null,
           videoTimestamp: event.videoTimestamp,
           statType: event.statType,
           playerId: event.playerId ? String(event.playerId) : null,
@@ -1481,6 +1545,7 @@ async function autoCreateHighlightClipPosts(systemUserId, game) {
     }
   }
 
+  await markAutoHighlightsPublished(game._id);
   return { created, skipped, capped };
 }
 

@@ -343,6 +343,130 @@ async function transitionUploadAttempt({
   );
 }
 
+// Ready publication and quota conversion must commit together. A removal that
+// races this transaction either sees ready minutes, or prevents publication.
+// Requires a replica set (Atlas and the documented local development setup).
+async function settleReadyGameVideo({ attempt, asset, equivalentTimelines = [] }) {
+  const minutes = Math.ceil(asset.duration / 60);
+  assertNonNegativeInteger(minutes, 'minutes');
+  if (minutes > attempt.reservedMinutes) throw new RangeError('Asset exceeds reservation');
+  const session = await mongoose.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const game = await Game.findOneAndUpdate(
+        {
+          _id: attempt.gameId,
+          'video.generationId': attempt.generationId,
+          'video.uploadId': attempt.uploadId,
+          'video.assetId': { $in: [null, asset.id] },
+          'video.status': { $in: ['uploading', 'processing'] },
+        },
+        {
+          $set: {
+            'video.status': 'ready',
+            'video.assetId': asset.id,
+            'video.playbackId': asset.playback_ids.find((id) => id.policy === 'signed').id,
+            'video.durationSeconds': asset.duration,
+            'video.readyAt': new Date(),
+            'video.errorMessage': null,
+            'video.equivalentTimelines': normalizeTimelines(equivalentTimelines),
+          },
+          $inc: { 'video.version': 1 },
+        },
+        { ...GAME_VIDEO_WRITE_OPTIONS, session }
+      );
+      if (!game) return null;
+      const settled = await VideoUploadAttempt.findOneAndUpdate(
+        {
+          _id: attempt._id,
+          deployment: getVideoDeployment(),
+          uploadId: attempt.uploadId,
+          assetId: asset.id,
+          status: { $in: ['uploading', 'processing'] },
+        },
+        { $set: { status: 'ready', storedMinutes: minutes, errorMessage: null } },
+        { ...WRITE_OPTIONS, session }
+      );
+      if (!settled) throw new Error('Video attempt changed during ready publication');
+      const counter = await VideoQuotaCounter.findOneAndUpdate(
+        resourceFilter(attempt.billingResource),
+        [
+          {
+            $set: {
+              activeUploads: decrementFloor('activeUploads', 1),
+              reservedMinutes: decrementFloor('reservedMinutes', attempt.reservedMinutes),
+              storedMinutes: { $add: ['$storedMinutes', minutes] },
+            },
+          },
+        ],
+        { new: true, lean: true, session }
+      );
+      if (!counter) throw new Error('Video quota counter missing during ready publication');
+      return game;
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
+// Failed ingest must not detach a video that became ready after the handler
+// read it. Retire the attempt, detach its generation and refund quota in one
+// transaction, with ready excluded unless the asset is proven deleted/orphaned.
+async function settleFailedGameVideo({ attempt, status, reason, allowReady = false }) {
+  const session = await mongoose.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const before = await VideoUploadAttempt.findOneAndUpdate(
+        {
+          _id: attempt._id,
+          deployment: getVideoDeployment(),
+          uploadId: attempt.uploadId,
+          assetId: attempt.assetId ?? null,
+          status: {
+            $in: [
+              ...UPLOAD_ATTEMPT_IN_FLIGHT_STATUSES,
+              ...(allowReady ? ['ready', 'errored'] : []),
+            ],
+          },
+        },
+        { $set: { status, errorMessage: reason, storedMinutes: 0 } },
+        { new: false, lean: true, session, runValidators: true }
+      );
+      if (!before) return null;
+      await Game.findOneAndUpdate(
+        { _id: attempt.gameId, 'video.generationId': attempt.generationId },
+        { $set: { video: null } },
+        { ...GAME_VIDEO_WRITE_OPTIONS, session }
+      );
+      const inFlight = UPLOAD_ATTEMPT_IN_FLIGHT_STATUSES.includes(before.status);
+      const counter = await VideoQuotaCounter.findOneAndUpdate(
+        resourceFilter(attempt.billingResource),
+        [
+          {
+            $set: inFlight
+              ? {
+                  activeUploads: decrementFloor('activeUploads', 1),
+                  reservedMinutes: decrementFloor('reservedMinutes', attempt.reservedMinutes),
+                }
+              : { storedMinutes: decrementFloor('storedMinutes', before.storedMinutes || 0) },
+          },
+        ],
+        { new: true, lean: true, session }
+      );
+      if (!counter) throw new Error('Video quota counter missing during failure settlement');
+      return before;
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
+// Read-only deduplication before handling; the completion marker is inserted
+// AFTER durable effects, so a crash cannot acknowledge unprocessed work.
+async function hasProcessedWebhookEvent(eventId) {
+  return Boolean(await VideoWebhookEvent.exists({ eventId }));
+}
+
 // Exactly-once hand-back of the minutes this attempt committed to its billing
 // resource (for releaseStoredMinutes after the asset is deleted).
 // → number of minutes to release (0 when none or already taken)
@@ -383,22 +507,39 @@ async function listStaleUploadAttempts({
 // Every cleanup-job lookup and write is scoped to this deployment (E3), like
 // the claims: a restored or copied database never resets, adopts, counts or
 // claims another deployment's jobs.
+function freshCleanupBudget(now) {
+  return {
+    $set: {
+      status: 'pending',
+      attempts: 0,
+      deferrals: 0,
+      firstDeferredAt: null,
+      nextAttemptAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  };
+}
+
 function resetFailedCleanupJob({ kind, targetId, now }) {
   return VideoCleanupJob.findOneAndUpdate(
     { kind, targetId, status: 'failed', deployment: getVideoDeployment() },
-    {
-      $set: {
-        status: 'pending',
-        attempts: 0,
-        deferrals: 0,
-        firstDeferredAt: null,
-        nextAttemptAt: now,
-        leaseOwner: null,
-        leaseExpiresAt: null,
-      },
-    },
+    freshCleanupBudget(now),
     WRITE_OPTIONS
   );
+}
+
+// V4 operator re-drive (video:reconcile --retry-failed): every failed job of
+// this deployment back to pending with a fresh budget. A removal/replacement
+// never re-enqueues its target, so without this a failed job stays failed.
+// → number of jobs requeued
+async function requeueFailedCleanupJobs({ now = new Date() } = {}) {
+  const result = await VideoCleanupJob.updateMany(
+    { status: 'failed', deployment: getVideoDeployment() },
+    freshCleanupBudget(now),
+    { runValidators: true }
+  );
+  return result?.modifiedCount ?? 0;
 }
 
 // Idempotent on {kind, targetId}: a new job is inserted pending; a pending,
@@ -619,6 +760,35 @@ async function countPendingCleanupJobs({ gameId, includeFailed = false } = {}) {
     status: { $in: statuses },
     ...(gameId ? { gameId } : {}),
   });
+}
+
+// V6: this deployment's newest live assets — what verifyMuxEnvironment proves
+// the configured Mux credentials can see before any 404 is read as "gone".
+function listProviderAnchorAttempts({ limit = 3 } = {}) {
+  return VideoUploadAttempt.find(
+    { deployment: getVideoDeployment(), status: 'ready', assetId: { $ne: null } },
+    { assetId: 1 },
+    { sort: { updatedAt: -1 }, limit, lean: true }
+  );
+}
+
+// V6: open work stored under any other deployment label. Nothing here claims
+// or touches it; a non-zero count means the label changed (APP_ENV, database
+// name) or a database was restored, and an operator must audit it.
+// → { attempts, jobs }
+async function countForeignVideoWork() {
+  const deployment = { $ne: getVideoDeployment() };
+  const [attempts, jobs] = await Promise.all([
+    VideoUploadAttempt.countDocuments({
+      deployment,
+      status: { $in: UPLOAD_ATTEMPT_IN_FLIGHT_STATUSES },
+    }),
+    VideoCleanupJob.countDocuments({
+      deployment,
+      status: { $in: ['pending', 'leased', 'failed'] },
+    }),
+  ]);
+  return { attempts, jobs };
 }
 
 // ---------------------------------------------------------------------------
@@ -967,9 +1137,14 @@ module.exports = {
   findUploadAttemptByGenerationId,
   transitionUploadAttempt,
   takeUploadAttemptStoredMinutes,
+  settleReadyGameVideo,
+  settleFailedGameVideo,
   listStaleUploadAttempts,
   // cleanup jobs
   enqueueCleanupJob,
+  requeueFailedCleanupJobs,
+  listProviderAnchorAttempts,
+  countForeignVideoWork,
   claimDueCleanupJobs,
   listDueCleanupJobs,
   completeCleanupJob,
@@ -979,6 +1154,7 @@ module.exports = {
   countPendingCleanupJobs,
   // webhook idempotency
   recordWebhookEventOnce,
+  hasProcessedWebhookEvent,
   releaseWebhookEvent,
   // quota
   reserveUploadSlot,

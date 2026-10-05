@@ -1097,6 +1097,8 @@ export function GameDetailPage() {
                   isDualTeam={isDualTeam}
                   recap={recap}
                   aiSummary={aiSummary}
+                  gameId={game.id}
+                  video={game.video}
                   videoUrl={game.videoUrl}
                   videoTitle={game.title}
                   highlights={data.highlights}

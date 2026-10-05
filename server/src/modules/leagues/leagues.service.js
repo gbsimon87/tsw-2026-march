@@ -1,3 +1,4 @@
+const { hasGameVideo, buildHighlightVideoFields } = require('../shared/gameVideo');
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const { buildCursorPage } = require('../../utils/pagination');
@@ -1128,7 +1129,7 @@ const HIGHLIGHT_STAT_TYPES = new Set([
 function buildLeaguePlayerHighlights(games, leagueTeamId, leaguePlayerId) {
   const highlights = [];
   for (const game of games) {
-    if (!game.videoUrl) continue;
+    if (!hasGameVideo(game)) continue;
     const { rosterSnapshot, eventFilter } = getLeagueGameSnapshotForTeam(game, leagueTeamId);
     const snapshotPlayer = rosterSnapshot.find(
       (p) => String(p.leaguePlayerId || p._id) === String(leaguePlayerId)
@@ -1148,7 +1149,8 @@ function buildLeaguePlayerHighlights(games, leagueTeamId, leaguePlayerId) {
           gameId: String(game._id),
           statType: ev.statType,
           videoTimestamp: ev.videoTimestamp,
-          videoUrl: game.videoUrl,
+          ...buildHighlightVideoFields(game, ev),
+          videoVersion: game.video?.version ?? null,
           gameTitle: game.title || null,
         });
       }

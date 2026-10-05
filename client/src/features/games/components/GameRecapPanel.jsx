@@ -4,7 +4,8 @@ import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.
 import { HorizontalScroller } from '../../../components/ui/HorizontalScroller';
 import { Modal } from '../../../components/ui/Modal';
 import { buildHighlightReelSegments, selectFeaturedHighlights } from '../highlightReel';
-import { extractYouTubeVideoId } from '../youtube.js';
+import { HighlightPlayer } from '../../video/components/HighlightPlayer';
+import { MuxVideo } from '../../video/components/MuxVideo';
 import { GameVideoEmbed } from './GameVideoEmbed';
 import { GameStatsCharts } from './GameStatsCharts';
 import { YouTubeHighlightReel } from './YouTubeHighlightReel';
@@ -38,32 +39,16 @@ function HorizontalScrollRow({ children, className = '' }) {
   );
 }
 
-function GameHighlightClip({
-  videoUrl,
-  timestamp,
-  statType,
-  playerName,
-  teamSide,
-  participantName,
-}) {
-  const videoId = extractYouTubeVideoId(videoUrl);
-  if (!videoId) return null;
-  const safeTimestamp = Number.isFinite(timestamp) ? timestamp : 0;
-  const start = Math.max(0, safeTimestamp - 5);
-  const end = safeTimestamp + 5;
-  const src = `https://www.youtube.com/embed/${videoId}?start=${start}&end=${end}&autoplay=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
+function GameHighlightClip({ highlight, statType, playerName, teamSide, participantName }) {
   const label = HIGHLIGHT_LABELS[statType] || statType;
   const sideLabel = participantName || teamSide || null;
   return (
     <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="aspect-video w-full bg-slate-950">
-        <iframe
-          className="h-full w-full"
-          src={src}
+        <HighlightPlayer
+          highlight={highlight}
           title={`${playerName ? `${playerName} — ` : ''}${label}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
+          className="h-full w-full"
         />
       </div>
       <div className="px-3 py-2">
@@ -102,6 +87,8 @@ export function GameRecapPanel({
   isDualTeam = false,
   recap,
   aiSummary = null,
+  gameId = null,
+  video = null,
   videoUrl = null,
   videoTitle = null,
   highlights = [],
@@ -130,16 +117,18 @@ export function GameRecapPanel({
         </section>
       ) : null}
 
-      {videoUrl ? <GameVideoEmbed videoUrl={videoUrl} title={videoTitle} /> : null}
+      {video?.provider === 'mux' && video.status === 'ready' ? (
+        <MuxVideo gameId={gameId} version={video.version} title={videoTitle || 'Game video'} />
+      ) : videoUrl ? (
+        <GameVideoEmbed videoUrl={videoUrl} title={videoTitle} />
+      ) : null}
 
       {featuredHighlights.length > 0 ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-xl font-semibold text-slate-900">Highlights</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Watch the best moments back-to-back from YouTube.
-              </p>
+              <p className="mt-1 text-sm text-slate-500">Watch the best moments back-to-back.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {onOpenHighlightReceipt ? (
@@ -184,8 +173,7 @@ export function GameRecapPanel({
               return (
                 <div key={h.eventId} className="flex shrink-0 flex-col">
                   <GameHighlightClip
-                    videoUrl={h.videoUrl}
-                    timestamp={h.videoTimestamp}
+                    highlight={h}
                     statType={h.statType}
                     playerName={h.playerName}
                     teamSide={h.teamSide}

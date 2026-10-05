@@ -12,6 +12,7 @@ const {
   createGame,
   listGamesByOwner,
   findGameById,
+  deleteGameIfVideoUnchanged,
   saveGame,
   claimGameSummaryGeneration,
   releaseGameSummaryLock,
@@ -26,7 +27,13 @@ const {
 } = require('../shared/statSummary');
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { LEGACY_COURT_LAYOUT_ID, resolveCourtLayoutId } = require('../shared/courtLayouts');
-const { getCurrentVideoTimelineId } = require('../shared/gameVideo');
+const {
+  getCurrentVideoTimelineId,
+  getGameVideoProvider,
+  hasGameVideo,
+  sanitizeGameVideo,
+  buildHighlightVideoFields,
+} = require('../shared/gameVideo');
 const {
   getBillingSummary,
   getLeagueBillingSummary,
@@ -114,7 +121,7 @@ function buildPlayersByIdMap(game, participants, teamDoc) {
 }
 
 function buildGameHighlights(game, playersById) {
-  if (!game.videoUrl) return [];
+  if (!hasGameVideo(game)) return [];
 
   return (game.events || [])
     .filter(
@@ -133,7 +140,9 @@ function buildGameHighlights(game, playersById) {
         teamSide: ev.teamSide || null,
         statType: ev.statType,
         videoTimestamp: ev.videoTimestamp,
-        videoUrl: game.videoUrl,
+        gameId: String(game._id),
+        ...buildHighlightVideoFields(game, ev),
+        videoVersion: game.video?.version ?? null,
         gameTitle: game.title || null,
       };
     });
@@ -440,6 +449,8 @@ function sanitizeGame(game, options = {}) {
     title: game.title,
     opponent: game.opponent ?? null,
     videoUrl: includePremiumMedia ? (game.videoUrl ?? null) : null,
+    video: sanitizeGameVideo(game.video, { includePremiumMedia }),
+    videoProvider: includePremiumMedia ? getGameVideoProvider(game) : null,
     status: game.status,
     startingLineupPlayerIds: Array.isArray(game.startingLineupPlayerIds)
       ? game.startingLineupPlayerIds.map(String)
@@ -2703,7 +2714,12 @@ async function deleteGameForUser(userId, gameId) {
     ? await videoService().queueGameVideoCleanupForDeletion(game)
     : null;
 
-  await game.deleteOne();
+  // V7: conditional on the video read above — a concurrent upload attach
+  // aborts the delete instead of being stranded on a deleted game.
+  const deleted = await deleteGameIfVideoUnchanged(game._id, game.video?.generationId ?? null);
+  if (!deleted) {
+    throw new ApiError(409, 'This game changed while it was being deleted. Reload and try again.');
+  }
 
   if (videoCleanup) await videoService().finishGameVideoCleanupAfterDeletion(videoCleanup);
 

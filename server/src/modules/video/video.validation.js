@@ -28,7 +28,10 @@ const createVideoUploadSchema = z.object({
   sameRecording: z.boolean().optional().default(false),
 });
 
+const videoPlaybackQuerySchema = z.object({ eventId: objectIdSchema.optional() });
+
 module.exports = {
+  videoPlaybackQuerySchema,
   MAX_VIDEO_UPLOAD_BYTES,
   gameVideoParamsSchema,
   videoUploadAttemptParamsSchema,

@@ -54,6 +54,12 @@ importers:
 
   client:
     dependencies:
+      '@mux/mux-player-react':
+        specifier: ^3.13.4
+        version: 3.13.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mux/upchunk':
+        specifier: ^3.5.0
+        version: 3.5.0
       '@tanstack/react-query':
         specifier: ^5.101.2
         version: 5.101.2(react@18.3.1)
@@ -1120,6 +1126,52 @@ packages:
         integrity: sha512-y+x3H1xBZd38n10NZF/rEBlvDOOMQ6LKUTHqr8R9VkJ+mmQOYtJFxIlkkK8fZrtOiL6VixbOBWMbZGBdal3Z1g==,
       }
 
+  '@mux/mux-data-google-ima@0.3.17':
+    resolution:
+      {
+        integrity: sha512-4wpH6dYybyZhqLn9qGn/+67Z8MZnQRAdqTFEEZw2bx61M9q01uPYYHxd8qwOnYtUGEeafsdTwVHVxKHGD3oc1A==,
+      }
+
+  '@mux/mux-player-react@3.13.4':
+    resolution:
+      {
+        integrity: sha512-0xifio9IwZkkzsZr96DiihMwLw3r/XRbDiwF+bKXLhMpvR/Hw4HeDTDCodo212ETE8i/VdPdrF2aBYbHV660qg==,
+      }
+    peerDependencies:
+      '@types/react': ^17.0.0 || ^17.0.0-0 || ^18 || ^18.0.0-0 || ^19 || ^19.0.0-0
+      '@types/react-dom': '*'
+      react: ^17.0.2 || ^17.0.0-0 || ^18 || ^18.0.0-0 || ^19 || ^19.0.0-0
+      react-dom: ^17.0.2 || ^17.0.2-0 || ^18 || ^18.0.0-0 || ^19 || ^19.0.0-0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+
+  '@mux/mux-player@3.13.4':
+    resolution:
+      {
+        integrity: sha512-q1N5S4TsMZ57Zzf3REuHaJ+VC9nxzrsnUSKxjSd8ok5EmAA5kWlosBf1Koted9kjD2fwyFxliQL5UpczwHorBg==,
+      }
+
+  '@mux/mux-video@0.31.4':
+    resolution:
+      {
+        integrity: sha512-ncmoyiF9yRNKUqzl/hvl7sRNDNVcpTEaUPuwgJ1jpUKYtlJYT04ek6WmqE64tjNnuJKNM49NfQExEwslnIl+2A==,
+      }
+
+  '@mux/playback-core@0.35.4':
+    resolution:
+      {
+        integrity: sha512-MxetTf+BpobrSWFUdnQSodKdClPbsOcacEug8EqPefv76rxyTQF64l7RTTF1bUdVlvy6ooqsyEKdR2jK+VS5UQ==,
+      }
+
+  '@mux/upchunk@3.5.0':
+    resolution:
+      {
+        integrity: sha512-D+TtvlujlZQjh5I+vFzJ31h5E1uVpEaLdR8M3BNaCFbVLnFMZs8J/L/fYSUyVGnyHT/yDtPHn/IHKdo3G6oSjA==,
+      }
+
   '@noble/hashes@1.8.0':
     resolution:
       {
@@ -1583,6 +1635,12 @@ packages:
     resolution:
       {
         integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==,
+      }
+
+  '@types/google_interactive_media_ads_types@3.697.1':
+    resolution:
+      {
+        integrity: sha512-gRjJoPKQRjjTuySHqZe8Pnu6a5B0bKbTUD2ioDLPSWlEuBaAc2p1mzUzy42SCeWkyYffo2Mnv+blUGuvVvx3dQ==,
       }
 
   '@types/graceful-fs@4.1.9':
@@ -2225,6 +2283,20 @@ packages:
         integrity: sha512-tmN+fJxroPndC74efCdp12j+0rk0RHwV5Jwa1zWaFVyw2ZxAuPeG8ZgWC3Wz7uSjT3qMRQ5XHZ4COgQmsCMJAQ==,
       }
 
+  castable-video@1.1.16:
+    resolution:
+      {
+        integrity: sha512-wBhe2dZu2afhewL3EaGgVYTyDsa9HvNhY98clMZkNzDrLelOValSrTaoMos9YX7PPBCrgpd1j6YmNyyI2Vbq3w==,
+      }
+
+  ce-la-react@0.3.2:
+    resolution:
+      {
+        integrity: sha512-QJ6k4lOD/btI08xG8jBPxRCGXvCnusGGkTsiXk0u3NqUu/W+BXRnFD4PYjwtqh8AWmGa5LDbGk0fLQsqr0nSMA==,
+      }
+    peerDependencies:
+      react: '>=17.0.0'
+
   chai@5.3.3:
     resolution:
       {
@@ -2572,6 +2644,12 @@ packages:
       }
     engines: { node: '>=18' }
 
+  custom-media-element@1.4.6:
+    resolution:
+      {
+        integrity: sha512-/HRYqJOa1ob5ik4q7FIJVYxTJCFs/FL3+cQPAJjUf2uiqrDEzbTgB315gQ2rG8oK3w094W9m5tcB8S5Qah+caA==,
+      }
+
   d3-array@3.2.4:
     resolution:
       {
@@ -2849,6 +2927,12 @@ packages:
         integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==,
       }
 
+  dom-walk@0.1.2:
+    resolution:
+      {
+        integrity: sha512-6QvTW9mrGeIegrFXdtQi9pk7O/nSK6lSdXW2eqUspN5LWD7UTji2Fqw5V2YLjBpHEoU9Xl/eUWNpDeZvoyOv2w==,
+      }
+
   dompurify@3.4.14:
     resolution:
       {
@@ -3119,6 +3203,7 @@ packages:
         integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==,
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -3181,6 +3266,13 @@ packages:
         integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==,
       }
     engines: { node: '>= 0.6' }
+
+  event-target-shim@6.0.2:
+    resolution:
+      {
+        integrity: sha512-8q3LsZjRezbFZ2PN+uP+Q7pnHUMmAOziU2vA2OwoFaKIXxlxl38IylhSSgUorWu/rf4er67w0ikBqjBFk/pomA==,
+      }
+    engines: { node: '>=10.13.0' }
 
   eventemitter3@5.0.4:
     resolution:
@@ -3548,6 +3640,12 @@ packages:
       }
     engines: { node: '>=18' }
 
+  global@4.4.0:
+    resolution:
+      {
+        integrity: sha512-wv/LAoHdRE3BeTGz53FAamhGlPLhlssK45usmGFThIi4XqnBmjKQ16u+RNbP7WvigRZDxUsM0J3gcQ5yicaL0w==,
+      }
+
   globals@14.0.0:
     resolution:
       {
@@ -3643,6 +3741,12 @@ packages:
         integrity: sha512-jOiHyAZsmnr8LqoPGmCjYAaiuWwjAPLgY8ZX2XrmHawt99/u1y6RgrZMTeoPfpUbV96HOalYgz1qzkRbw54Pmg==,
       }
     engines: { node: '>=18.0.0' }
+
+  hls.js@1.7.3:
+    resolution:
+      {
+        integrity: sha512-MsPlx6yVW4Qv4C7mEVou4/gk/5cN2dVxOTnrNjPSmyH2f0Ln+/UkG10Ax1PE6OvrmTVPKgQYozTtBaPOuCzq7A==,
+      }
 
   html-encoding-sniffer@4.0.0:
     resolution:
@@ -3919,6 +4023,12 @@ packages:
         integrity: sha512-5XHYaSyiqADb4RnZ1Bdad6cPp8Toise4TzEjcOYDHZkTCbKgiUl7WTUCpNWHuxmDt91wnsZBc9xinNzopv3JMQ==,
       }
     engines: { node: '>=18' }
+
+  is-function@1.0.2:
+    resolution:
+      {
+        integrity: sha512-lw7DUp0aWXYg+CBCN+JKkcE0Q2RayZnSvnZBlwgxHBQhqt5pZNVy4Ri7H9GmmXkdu7LUthszM+Tor1u/2iBcpQ==,
+      }
 
   is-generator-fn@2.1.0:
     resolution:
@@ -4722,6 +4832,18 @@ packages:
       }
     engines: { node: '>= 0.4' }
 
+  media-chrome@4.19.3:
+    resolution:
+      {
+        integrity: sha512-B5cPfn5FUTm3ki58QlEk2CB3xFo1i5jM1JavVN3bV81o09cokQC+qWVGVWZWY9Yoo6si9WeaQZUNn472WzbNVQ==,
+      }
+
+  media-tracks@0.3.5:
+    resolution:
+      {
+        integrity: sha512-l54rkKXlLBt3ob3zOLWHcnjvwUmX5bNEZ70igyapOZZC9imzqBmq1oz8p2roiV04KhjblFIi2hetLPF1oYVLRA==,
+      }
+
   media-typer@0.3.0:
     resolution:
       {
@@ -4825,6 +4947,12 @@ packages:
         integrity: sha512-VP79XUPxV2CigYP3jWwAUFSku2aKqBH7uTAapFWCBqutsbmDo96KY5o8uh6U+/YSIn5OxJnXp73beVkpqMIGhA==,
       }
     engines: { node: '>=18' }
+
+  min-document@2.19.2:
+    resolution:
+      {
+        integrity: sha512-8S5I8db/uZN8r9HSLFVWPdJCvYOejMcEC82VIzNUc6Zkklf/d1gg2psfE79/vyhWOj4+J8MtwmoOz3TmvaGu5A==,
+      }
 
   min-indent@1.0.1:
     resolution:
@@ -4935,6 +5063,12 @@ packages:
       }
     engines: { node: '>= 6.0.0' }
     deprecated: Multer 1.x is impacted by a number of vulnerabilities, which have been patched in 2.x. You should upgrade to the latest 2.x version.
+
+  mux-embed@5.18.1:
+    resolution:
+      {
+        integrity: sha512-ePsHjiEKY+FgrSBiMmaF+LOtTQSSBWv/1zqpREQFN96JE93xlsArT/MEi30yKOE06MgjOlL70YI750molu3y7g==,
+      }
 
   mz@2.7.0:
     resolution:
@@ -5190,6 +5324,12 @@ packages:
       }
     engines: { node: '>=6' }
 
+  parse-headers@2.0.6:
+    resolution:
+      {
+        integrity: sha512-Tz11t3uKztEW5FEVZnj1ox8GKblWn+PvHY9TmJV5Mll2uHEwRdR/5Li1OlXoECjLYkApdhWy44ocONwXLiKO5A==,
+      }
+
   parse-json@5.2.0:
     resolution:
       {
@@ -5378,6 +5518,12 @@ packages:
       }
     engines: { node: '>=8' }
 
+  player.style@0.3.4:
+    resolution:
+      {
+        integrity: sha512-5O9bkbq0APQIkhptyZwp0gUgheCeImGPFo4hvPF2M5xBmgsUYzsUPHCfMye2xyeRE1zvQBKtziaC3jPgnHE1tw==,
+      }
+
   possible-typed-array-names@1.1.0:
     resolution:
       {
@@ -5528,6 +5674,13 @@ packages:
       {
         integrity: sha512-a39t9ApHNx2L4+HBnQKqxxHNs1r7KF+Intd8Q/g1bUh6q0WIp9voPXJ/x0j+ZL45KF1pJd9+q2jLIRMfvEshkA==,
       }
+
+  process@0.11.10:
+    resolution:
+      {
+        integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==,
+      }
+    engines: { node: '>= 0.6.0' }
 
   prompts@2.4.2:
     resolution:
@@ -6986,6 +7139,12 @@ packages:
       utf-8-validate:
         optional: true
 
+  xhr@2.6.0:
+    resolution:
+      {
+        integrity: sha512-/eCGLb5rxjx5e3mF1A7s+pLlR6CGyqWN91fv1JgER5mVWg1MZmlhBvy9kjcsOdRk8RrIujotWyJamfyrp+WIcA==,
+      }
+
   xml-name-validator@5.0.0:
     resolution:
       {
@@ -7726,6 +7885,46 @@ snapshots:
     dependencies:
       sparse-bitfield: 3.0.3
 
+  '@mux/mux-data-google-ima@0.3.17':
+    dependencies:
+      mux-embed: 5.18.1
+
+  '@mux/mux-player-react@3.13.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@mux/mux-player': 3.13.4(react@18.3.1)
+      '@mux/playback-core': 0.35.4
+      prop-types: 15.8.1
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+
+  '@mux/mux-player@3.13.4(react@18.3.1)':
+    dependencies:
+      '@mux/mux-video': 0.31.4
+      '@mux/playback-core': 0.35.4
+      media-chrome: 4.19.3(react@18.3.1)
+      player.style: 0.3.4(react@18.3.1)
+    transitivePeerDependencies:
+      - react
+
+  '@mux/mux-video@0.31.4':
+    dependencies:
+      '@mux/mux-data-google-ima': 0.3.17
+      '@mux/playback-core': 0.35.4
+      '@types/google_interactive_media_ads_types': 3.697.1
+      castable-video: 1.1.16
+      custom-media-element: 1.4.6
+      media-tracks: 0.3.5
+
+  '@mux/playback-core@0.35.4':
+    dependencies:
+      hls.js: 1.7.3
+      mux-embed: 5.18.1
+
+  '@mux/upchunk@3.5.0':
+    dependencies:
+      event-target-shim: 6.0.2
+      xhr: 2.6.0
+
   '@noble/hashes@1.8.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
@@ -7952,6 +8151,8 @@ snapshots:
   '@types/d3-timer@3.0.2': {}
 
   '@types/estree@1.0.8': {}
+
+  '@types/google_interactive_media_ads_types@3.697.1': {}
 
   '@types/graceful-fs@4.1.9':
     dependencies:
@@ -8361,6 +8562,14 @@ snapshots:
 
   caniuse-lite@1.0.30001777: {}
 
+  castable-video@1.1.16:
+    dependencies:
+      custom-media-element: 1.4.6
+
+  ce-la-react@0.3.2(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
   chai@5.3.3:
     dependencies:
       assertion-error: 2.0.1
@@ -8558,6 +8767,8 @@ snapshots:
       '@asamuzakjp/css-color': 3.2.0
       rrweb-cssom: 0.8.0
 
+  custom-media-element@1.4.6: {}
+
   d3-array@3.2.4:
     dependencies:
       internmap: 2.0.3
@@ -8685,6 +8896,8 @@ snapshots:
   dom-accessibility-api@0.5.16: {}
 
   dom-accessibility-api@0.6.3: {}
+
+  dom-walk@0.1.2: {}
 
   dompurify@3.4.14:
     optionalDependencies:
@@ -8995,6 +9208,8 @@ snapshots:
 
   etag@1.8.1: {}
 
+  event-target-shim@6.0.2: {}
+
   eventemitter3@5.0.4: {}
 
   execa@5.1.1:
@@ -9257,6 +9472,11 @@ snapshots:
     dependencies:
       ini: 4.1.1
 
+  global@4.4.0:
+    dependencies:
+      min-document: 2.19.2
+      process: 0.11.10
+
   globals@14.0.0: {}
 
   globals@15.15.0: {}
@@ -9295,6 +9515,8 @@ snapshots:
       function-bind: 1.1.2
 
   helmet@8.1.0: {}
+
+  hls.js@1.7.3: {}
 
   html-encoding-sniffer@4.0.0:
     dependencies:
@@ -9443,6 +9665,8 @@ snapshots:
   is-fullwidth-code-point@5.1.0:
     dependencies:
       get-east-asian-width: 1.5.0
+
+  is-function@1.0.2: {}
 
   is-generator-fn@2.1.0: {}
 
@@ -10103,6 +10327,14 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
+  media-chrome@4.19.3(react@18.3.1):
+    dependencies:
+      ce-la-react: 0.3.2(react@18.3.1)
+    transitivePeerDependencies:
+      - react
+
+  media-tracks@0.3.5: {}
+
   media-typer@0.3.0: {}
 
   memory-pager@1.5.0: {}
@@ -10137,6 +10369,10 @@ snapshots:
   mimic-fn@4.0.0: {}
 
   mimic-function@5.0.1: {}
+
+  min-document@2.19.2:
+    dependencies:
+      dom-walk: 0.1.2
 
   min-indent@1.0.1: {}
 
@@ -10205,6 +10441,8 @@ snapshots:
       object-assign: 4.1.1
       type-is: 1.6.18
       xtend: 4.0.2
+
+  mux-embed@5.18.1: {}
 
   mz@2.7.0:
     dependencies:
@@ -10361,6 +10599,8 @@ snapshots:
     dependencies:
       callsites: 3.1.0
 
+  parse-headers@2.0.6: {}
+
   parse-json@5.2.0:
     dependencies:
       '@babel/code-frame': 7.29.0
@@ -10457,6 +10697,12 @@ snapshots:
     dependencies:
       find-up: 4.1.0
 
+  player.style@0.3.4(react@18.3.1):
+    dependencies:
+      media-chrome: 4.19.3(react@18.3.1)
+    transitivePeerDependencies:
+      - react
+
   possible-typed-array-names@1.1.0: {}
 
   postal-mime@2.7.4: {}
@@ -10539,6 +10785,8 @@ snapshots:
   process-nextick-args@2.0.1: {}
 
   process-warning@5.0.0: {}
+
+  process@0.11.10: {}
 
   prompts@2.4.2:
     dependencies:
@@ -11517,6 +11765,13 @@ snapshots:
       signal-exit: 3.0.7
 
   ws@8.19.0: {}
+
+  xhr@2.6.0:
+    dependencies:
+      global: 4.4.0
+      is-function: 1.0.2
+      parse-headers: 2.0.6
+      xtend: 4.0.2
 
   xml-name-validator@5.0.0: {}
 

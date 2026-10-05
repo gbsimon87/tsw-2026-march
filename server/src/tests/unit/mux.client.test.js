@@ -136,7 +136,7 @@ describe('mux.client', () => {
       fetch.mockResolvedValueOnce(res(401, {}));
       await expect(mux.cancelDirectUpload('up1')).rejects.toMatchObject({
         status: 401,
-        retryable: false,
+        retryable: true,
       });
       fetch.mockResolvedValueOnce(res(429, {}));
       await expect(mux.cancelDirectUpload('up1')).rejects.toMatchObject({
@@ -175,6 +175,14 @@ describe('mux.client', () => {
       await expect(mux.deleteAsset('a1')).rejects.toMatchObject({ status: 400, retryable: false });
       fetch.mockResolvedValueOnce(res(500, {}));
       await expect(mux.deleteAsset('a1')).rejects.toMatchObject({ status: 500, retryable: true });
+    });
+    // V4: a credential/permission failure (token rotation, read-only token)
+    // is operator-fixable, never proof the asset is gone — keep retrying.
+    test('401 and 403 are retryable', async () => {
+      fetch.mockResolvedValueOnce(res(401, {}));
+      await expect(mux.deleteAsset('a1')).rejects.toMatchObject({ status: 401, retryable: true });
+      fetch.mockResolvedValueOnce(res(403, {}));
+      await expect(mux.deleteAsset('a1')).rejects.toMatchObject({ status: 403, retryable: true });
     });
     test('429 is retryable; network error is retryable with null status', async () => {
       fetch.mockResolvedValueOnce(res(429, {}));

@@ -5,6 +5,9 @@ import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
+import { MuxVideo } from '../../video/components/MuxVideo';
+import { GameVideoUploader } from '../../video/components/GameVideoUploader';
+import { hasPlayableVideo, gameVideoSourceKey } from '../../video/videoSource';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
 import { AddRosterPlayerDialog } from '../components/AddRosterPlayerDialog';
@@ -252,14 +255,22 @@ function LineupPicker({
   );
 }
 
-function GameVideoPanel({ videoUrl, title, videoIframeRef }) {
-  if (!videoUrl) {
-    return null;
+function GameVideoPanel({ game, title, videoIframeRef, muxRef, onMuxPlay, onMuxPause }) {
+  if (game.video?.provider === 'mux' && game.video.status === 'ready') {
+    return (
+      <MuxVideo
+        ref={muxRef}
+        gameId={game.id}
+        version={game.video.version}
+        title={title}
+        fill
+        onPlay={onMuxPlay}
+        onPause={onMuxPause}
+        onEnded={onMuxPause}
+      />
+    );
   }
-
-  // Always fills its container edge-to-edge (no card chrome / border radius) — both the
-  // desktop left column and the mobile video-first view want the video as large as possible.
-  return <GameVideoEmbed ref={videoIframeRef} videoUrl={videoUrl} title={title} fill />;
+  return <GameVideoEmbed ref={videoIframeRef} videoUrl={game.videoUrl} title={title} fill />;
 }
 
 // Voice grammar differs only by tracking mode: a dual-team command must name a side, a one-team
@@ -570,6 +581,30 @@ export function GameTrackPage() {
   const eventPickerRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
   const videoIframeRef = useRef(null);
+  const muxRef = useRef(null);
+  const onMuxPlay = useCallback(() => {
+    videoPlaybackStateRef.current = 'playing';
+    setVideoPlaybackState('playing');
+  }, []);
+  const onMuxPause = useCallback(() => {
+    videoPlaybackStateRef.current = 'paused';
+    setVideoPlaybackState('paused');
+  }, []);
+  const onMediaChange = useCallback((media) => {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            ...(media.videoUpload ? { videoUpload: media.videoUpload } : {}),
+            game: {
+              ...current.game,
+              video: media.video,
+              ...(media.videoProvider ? { videoProvider: media.videoProvider } : {}),
+            },
+          }
+        : current
+    );
+  }, []);
   const videoCurrentTimeRef = useRef(null);
   const entryClockSnapshotRef = useRef(null);
   const entryClockWasRunningRef = useRef(false);
@@ -632,6 +667,7 @@ export function GameTrackPage() {
     return () => mq.removeEventListener('change', update);
   }, []);
 
+  const videoSourceKey = gameVideoSourceKey(data?.game);
   useEffect(() => {
     // The video remounts in a new location when the layout mode flips (see GameVideoPanel
     // usages below), so any previously-captured playback position is stale until the new
@@ -640,10 +676,13 @@ export function GameTrackPage() {
     // reason: the new iframe is unstarted, and a leftover "playing" would let stat entry claim a
     // video it never paused and then "resume" it into playing from the start.
     videoCurrentTimeRef.current = null;
+    setCurrentVideoTimestamp(null);
+    entryVideoWasPausedRef.current = false;
+    clockPausedByVideoRef.current = false;
     videoPlaybackStateRef.current = null;
     setVideoPlaybackState(null);
     // `data` rather than `game`: this effect is declared above the `game` binding.
-  }, [isDesktopLayout, data?.game?.videoUrl]);
+  }, [isDesktopLayout, videoSourceKey]);
 
   useEffect(() => {
     if (activePanel !== 'court') {
@@ -692,6 +731,7 @@ export function GameTrackPage() {
   }
 
   function pauseVideo() {
+    muxRef.current?.pause();
     videoIframeRef.current?.contentWindow?.postMessage(
       '{"event":"command","func":"pauseVideo","args":""}',
       '*'
@@ -699,6 +739,7 @@ export function GameTrackPage() {
   }
 
   function playVideo() {
+    muxRef.current?.play()?.catch(() => {});
     videoIframeRef.current?.contentWindow?.postMessage(
       '{"event":"command","func":"playVideo","args":""}',
       '*'
@@ -1062,7 +1103,7 @@ export function GameTrackPage() {
   // Keep the game clock in step with the video so a scorekeeper never has to rewind: pausing the
   // video pauses game time, and playing it again resumes the clock the video itself paused.
   useEffect(() => {
-    if (!game?.videoUrl || !videoPlaybackState) return undefined;
+    if (!hasPlayableVideo(game) || !videoPlaybackState) return undefined;
     if (videoPlaybackState === 'playing') {
       resumeClockForVideo();
       return undefined;
@@ -1071,7 +1112,7 @@ export function GameTrackPage() {
     return () => clearTimeout(timer);
     // Re-running on anything else would restart the settle timer mid-pause.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoPlaybackState, game?.videoUrl]);
+  }, [videoPlaybackState, videoSourceKey]);
 
   // Anything that stops the scorekeeper tracking also holds playback, so they never come back to
   // a video that ran on without them. The pause/resume helpers are idempotent through their own
@@ -1269,10 +1310,14 @@ export function GameTrackPage() {
   }
 
   function captureVideoTimestamp() {
-    const timestamp =
-      typeof videoCurrentTimeRef.current === 'number'
-        ? Math.round(videoCurrentTimeRef.current)
-        : null;
+    const media = muxRef.current;
+    const time =
+      game.video?.provider === 'mux' && game.video.status === 'ready'
+        ? media?.readyState > 0 && !media.error
+          ? media.currentTime
+          : null
+        : videoCurrentTimeRef.current;
+    const timestamp = Number.isFinite(time) && time >= 0 ? Math.round(time) : null;
     setCurrentVideoTimestamp(timestamp);
     return timestamp;
   }
@@ -3013,7 +3058,7 @@ export function GameTrackPage() {
   };
   const recentEvents = [...game.events].reverse();
   const visibleRecentEvents = showAllRecentEvents ? recentEvents : recentEvents.slice(0, 3);
-  const trackingShellClassName = game.videoUrl
+  const trackingShellClassName = hasPlayableVideo(game)
     ? 'mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col lg:flex-row lg:gap-4'
     : 'mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col';
 
@@ -3021,7 +3066,7 @@ export function GameTrackPage() {
   // area edge-to-edge — no padding, no scroll — so the video is as large as possible below
   // the header/tabs/Track-Stat button.
   const isMobileVideoWatchView =
-    activePanel === 'court' && game.videoUrl && !isDesktopLayout && !isMobileEntryMode;
+    activePanel === 'court' && hasPlayableVideo(game) && !isDesktopLayout && !isMobileEntryMode;
 
   const followUpActorSide = pendingFollowUpPrompt?.actorTeamSide || activeSide;
   const followUpOtherSide =
@@ -3552,13 +3597,26 @@ export function GameTrackPage() {
         }
       />
 
+      <div className={activePanel === 'options' ? 'my-4' : 'hidden'}>
+        <GameVideoUploader
+          key={gameId}
+          gameId={gameId}
+          video={game.video}
+          videoUrl={game.videoUrl}
+          allowance={data.videoUpload}
+          onMediaChange={onMediaChange}
+        />
+      </div>
       <div className={trackingShellClassName}>
-        {game.videoUrl && isDesktopLayout ? (
+        {hasPlayableVideo(game) && isDesktopLayout ? (
           <div className="lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col">
             <GameVideoPanel
-              videoUrl={game.videoUrl}
+              game={game}
               title={game.title}
               videoIframeRef={videoIframeRef}
+              muxRef={muxRef}
+              onMuxPlay={onMuxPlay}
+              onMuxPause={onMuxPause}
             />
           </div>
         ) : null}
@@ -3710,7 +3768,7 @@ export function GameTrackPage() {
                     the video-first "watch" view; otherwise it's hidden (not unmounted). The
                     desktop video lives in its own persistent left column, so this mobile layer
                     only renders when !isDesktopLayout, avoiding a second live iframe. */}
-                {game.videoUrl && !isDesktopLayout ? (
+                {hasPlayableVideo(game) && !isDesktopLayout ? (
                   <div
                     className={isMobileVideoWatchView ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
                   >
@@ -3758,9 +3816,12 @@ export function GameTrackPage() {
                         </button>
                         <div className="min-h-0 flex-1">
                           <GameVideoPanel
-                            videoUrl={game.videoUrl}
+                            game={game}
                             title={game.title}
                             videoIframeRef={videoIframeRef}
+                            muxRef={muxRef}
+                            onMuxPlay={onMuxPlay}
+                            onMuxPause={onMuxPause}
                           />
                         </div>
                       </>
@@ -3777,7 +3838,7 @@ export function GameTrackPage() {
                   }`}
                 >
                   {activePanel === 'court' &&
-                  game.videoUrl &&
+                  hasPlayableVideo(game) &&
                   !isDesktopLayout &&
                   isMobileEntryMode ? (
                     <div className="flex min-h-0 flex-1 flex-col landscape-compact:flex-row landscape-compact:items-start landscape-compact:gap-1.5">
@@ -3832,7 +3893,7 @@ export function GameTrackPage() {
                         {inlineVoiceControl}
                       </div>
                     </div>
-                  ) : activePanel === 'court' && !(game.videoUrl && !isDesktopLayout) ? (
+                  ) : activePanel === 'court' && !(hasPlayableVideo(game) && !isDesktopLayout) ? (
                     <div className="space-y-4">
                       {insertBeforeEventId ? (
                         <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
@@ -4422,8 +4483,8 @@ export function GameTrackPage() {
                               </p>
                               <p className="text-xs text-slate-500">
                                 {pauseVideoOnEntry
-                                  ? `On — ${game.videoUrl ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
-                                  : `Off — ${game.videoUrl ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
+                                  ? `On — ${hasPlayableVideo(game) ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
+                                  : `Off — ${hasPlayableVideo(game) ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
                               </p>
                             </div>
                             <span

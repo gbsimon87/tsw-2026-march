@@ -2,6 +2,7 @@ const { ApiError } = require('../../utils/apiError');
 const videoService = require('./video.service');
 const {
   gameVideoParamsSchema,
+  videoPlaybackQuerySchema,
   videoUploadAttemptParamsSchema,
   createVideoUploadSchema,
 } = require('./video.validation');
@@ -44,7 +45,29 @@ async function remove(req, res) {
   res.status(200).json(result);
 }
 
+async function playback(req, res) {
+  const { gameId } = gameVideoParamsSchema.parse(req.params);
+  const { eventId } = videoPlaybackQuerySchema.parse(req.query);
+  res.json(
+    await videoService.getGameVideoPlayback({
+      userId: req.auth?.userId || null,
+      gameId,
+      eventId: eventId || null,
+    })
+  );
+}
+
+async function webhook(req, res) {
+  await videoService.handleMuxWebhook({
+    rawBody: req.body,
+    signatureHeader: req.headers['mux-signature'],
+  });
+  res.status(200).json({ received: true });
+}
+
 module.exports = {
+  playback,
+  webhook,
   createUpload,
   cancelUpload,
   remove,

@@ -18,6 +18,8 @@ const mockRepository = {
   deferCleanupJob: jest.fn(),
   releaseUploadSlot: jest.fn(),
   releaseStoredMinutes: jest.fn(),
+  listProviderAnchorAttempts: jest.fn(),
+  countForeignVideoWork: jest.fn(),
 };
 const mockMux = {
   isMuxConfigured: jest.fn(),
@@ -133,6 +135,8 @@ beforeEach(() => {
   mockRepository.claimDueCleanupJobs.mockResolvedValue([]);
   mockRepository.listStaleUploadAttempts.mockResolvedValue([]);
   mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
+  mockRepository.listProviderAnchorAttempts.mockResolvedValue([]);
+  mockRepository.countForeignVideoWork.mockResolvedValue({ attempts: 0, jobs: 0 });
   mockMux.isMuxConfigured.mockReturnValue(true);
 });
 
@@ -753,6 +757,79 @@ describe('runCleanupBatch', () => {
   });
 });
 
+// V6: a database paired with the wrong Mux environment sees every target as
+// 404 ("gone"). Before treating any 404 as gone, prove the credentials can see
+// this deployment's live (ready) media.
+describe('verifyMuxEnvironment', () => {
+  const notFound = () => new MuxApiError('not found', { status: 404, retryable: false });
+
+  test('verified when there is no live media to compare against', async () => {
+    await expect(cleanup.verifyMuxEnvironment()).resolves.toMatchObject({ verified: true });
+    expect(mockMux.getAsset).not.toHaveBeenCalled();
+  });
+
+  test('verified as soon as one live asset is visible', async () => {
+    mockRepository.listProviderAnchorAttempts.mockResolvedValue([
+      { assetId: 'as-removed' },
+      { assetId: 'as-live' },
+    ]);
+    mockMux.getAsset.mockRejectedValueOnce(notFound()).mockResolvedValueOnce({ id: 'as-live' });
+
+    await expect(cleanup.verifyMuxEnvironment()).resolves.toMatchObject({ verified: true });
+    expect(mockRepository.listProviderAnchorAttempts).toHaveBeenCalledWith({ limit: 3 });
+  });
+
+  test('not verified when every live asset is missing, and says so', async () => {
+    mockRepository.listProviderAnchorAttempts.mockResolvedValue([
+      { assetId: 'a' },
+      { assetId: 'b' },
+    ]);
+    mockMux.getAsset.mockRejectedValue(notFound());
+
+    await expect(cleanup.verifyMuxEnvironment()).resolves.toMatchObject({ verified: false });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ deployment: DEPLOYMENT, anchors: 2 }),
+      expect.stringMatching(/paused/)
+    );
+  });
+
+  test('a transient provider failure propagates (nothing is decided)', async () => {
+    mockRepository.listProviderAnchorAttempts.mockResolvedValue([{ assetId: 'a' }]);
+    mockMux.getAsset.mockRejectedValue(new MuxApiError('down', { status: 503, retryable: true }));
+
+    await expect(cleanup.verifyMuxEnvironment()).rejects.toMatchObject({ status: 503 });
+  });
+
+  test('runCleanupBatch claims nothing while the environment is unverified', async () => {
+    mockRepository.listProviderAnchorAttempts.mockResolvedValue([{ assetId: 'a' }]);
+    mockMux.getAsset.mockRejectedValue(notFound());
+
+    const summary = await cleanup.runCleanupBatch({ now: NOW });
+
+    expect(summary).toMatchObject({ skipped: 'mux_environment_unverified', claimed: 0 });
+    expect(mockRepository.claimDueCleanupJobs).not.toHaveBeenCalled();
+  });
+});
+
+// V6: a changed deployment label (APP_ENV/DB name) silently orphans every
+// attempt and job; surface it instead of reporting zero outstanding work.
+describe('warnForeignVideoWork', () => {
+  test('warns when another deployment label holds in-flight attempts or open jobs', async () => {
+    mockRepository.countForeignVideoWork.mockResolvedValue({ attempts: 2, jobs: 1 });
+
+    await expect(cleanup.warnForeignVideoWork()).resolves.toEqual({ attempts: 2, jobs: 1 });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ deployment: DEPLOYMENT, attempts: 2, jobs: 1 }),
+      expect.stringMatching(/another deployment/)
+    );
+  });
+
+  test('stays quiet when there is none', async () => {
+    await cleanup.warnForeignVideoWork();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+});
+
 describe('previewCleanupBatch (dry-run)', () => {
   test('lists due jobs without leasing them or calling Mux', async () => {
     mockRepository.listDueCleanupJobs.mockResolvedValue([
@@ -1050,6 +1127,8 @@ describe('startVideoCleanupSweep / stopVideoCleanupSweep', () => {
     const first = tick();
     tick();
     tick();
+    // The batch verifies the Mux environment (V6) before its first claim.
+    await flushPromises();
     expect(mockRepository.claimDueCleanupJobs).toHaveBeenCalledTimes(1);
 
     claim.resolve([]);
@@ -1078,6 +1157,7 @@ describe('startVideoCleanupSweep / stopVideoCleanupSweep', () => {
     cleanup.startVideoCleanupSweep({ intervalMs: 1000 });
 
     tick();
+    await flushPromises(); // past the V6 environment check, into the claim
     let stopped = false;
     const stopping = cleanup.stopVideoCleanupSweep().then(() => {
       stopped = true;

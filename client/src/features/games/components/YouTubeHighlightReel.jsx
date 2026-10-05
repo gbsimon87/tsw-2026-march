@@ -1,3 +1,6 @@
+import { activatePlayback, releasePlayback } from '../../video/playbackCoordinator';
+import { isMuxHighlight } from '../../video/videoSource';
+import { MuxVideo } from '../../video/components/MuxVideo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import gameConstants from '../constants';
 import { buildHighlightReelSegments } from '../highlightReel';
@@ -29,7 +32,12 @@ function buildEmbedUrl(segment) {
 
 export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) {
   const segments = useMemo(() => buildHighlightReelSegments(highlights), [highlights]);
-  const segmentsKey = segments.map((segment) => segment.eventId).join(':');
+  const segmentsKey = segments
+    .map(
+      (segment) =>
+        `${segment.gameId}:${segment.eventId}:${segment.videoProvider}:${segment.videoUrl}:${segment.videoVersion}:${segment.videoTimestamp}`
+    )
+    .join(':');
   const [activeIndex, setActiveIndex] = useState(0);
   const [playbackCycle, setPlaybackCycle] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
@@ -37,6 +45,7 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const iframeRef = useRef(null);
+  const muxRef = useRef(null);
   const videoContainerRef = useRef(null);
   const handledEndRef = useRef(false);
 
@@ -58,6 +67,22 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
     [segments.length]
   );
 
+  const finishSegment = useCallback(() => {
+    if (handledEndRef.current) return;
+    handledEndRef.current = true;
+    setActiveIndex((index) => {
+      if (index < segments.length - 1) {
+        setPlaybackCycle((cycle) => cycle + 1);
+        return index + 1;
+      }
+      setIsComplete(true);
+      return index;
+    });
+  }, [segments.length]);
+  useEffect(() => {
+    handledEndRef.current = false;
+  }, [activeIndex, playbackCycle, segmentsKey]);
+
   useEffect(() => {
     function onMessage(event) {
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) {
@@ -70,15 +95,7 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
           return;
         }
 
-        handledEndRef.current = true;
-        setActiveIndex((currentIndex) => {
-          if (currentIndex < segments.length - 1) {
-            setPlaybackCycle((cycle) => cycle + 1);
-            return currentIndex + 1;
-          }
-          setIsComplete(true);
-          return currentIndex;
-        });
+        finishSegment();
       } catch {
         // YouTube also emits non-JSON postMessage traffic; it is unrelated to player state.
       }
@@ -86,7 +103,7 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [segments.length]);
+  }, [finishSegment]);
 
   useEffect(() => {
     function onFullscreenChange() {
@@ -102,7 +119,19 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
     };
   }, []);
 
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    return () => releasePlayback(iframe);
+  }, [activeIndex, playbackCycle, segmentsKey]);
+
   function sendPlayerCommand(func, args = []) {
+    const player = muxRef.current;
+    if (player) {
+      if (func === 'setVolume') player.volume = args[0] / 100;
+      if (func === 'mute') player.muted = true;
+      if (func === 'unMute') player.muted = false;
+      return;
+    }
     iframeRef.current?.contentWindow?.postMessage(
       JSON.stringify({ event: 'command', func, args }),
       '*'
@@ -113,6 +142,10 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
     const playerWindow = event.currentTarget.contentWindow;
     if (!playerWindow) return;
     handledEndRef.current = false;
+    const iframe = event.currentTarget;
+    activatePlayback(iframe, () =>
+      playerWindow.postMessage('{"event":"command","func":"pauseVideo","args":[]}', '*')
+    );
     playerWindow.postMessage('{"event":"listening","id":"tsw-highlight-reel"}', '*');
     playerWindow.postMessage(
       '{"event":"command","func":"addEventListener","args":["onStateChange"]}',
@@ -160,12 +193,12 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
   if (segments.length === 0) {
     return (
       <div className="rounded-xl bg-slate-100 p-6 text-center text-sm text-slate-600">
-        No playable YouTube highlights are available for this game.
+        No playable highlights are available for this game.
       </div>
     );
   }
 
-  const activeSegment = segments[activeIndex];
+  const activeSegment = segments[Math.min(activeIndex, segments.length - 1)];
   const statLabel = STAT_LABELS[activeSegment.statType] || activeSegment.statType;
 
   return (
@@ -177,19 +210,38 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
           isFullscreen ? 'h-screen' : 'aspect-[4/3] sm:aspect-video'
         }`}
       >
-        <iframe
-          key={`${activeSegment.eventId}:${playbackCycle}`}
-          ref={iframeRef}
-          className={`absolute left-1/2 top-1/2 h-full max-w-none -translate-x-1/2 -translate-y-1/2 ${
-            isFullscreen ? 'w-full' : 'w-[133.333%] sm:w-full'
-          }`}
-          src={buildEmbedUrl(activeSegment)}
-          title={`${title} — highlight ${activeIndex + 1}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
-          onLoad={subscribeToPlayerEvents}
-        />
+        {isMuxHighlight(activeSegment) ? (
+          <MuxVideo
+            key={`${activeSegment.eventId}:${playbackCycle}`}
+            ref={muxRef}
+            gameId={activeSegment.gameId}
+            eventId={activeSegment.eventId}
+            version={`${activeSegment.videoVersion ?? ''}:${activeSegment.videoTimestamp}`}
+            title={`${title} — highlight ${activeIndex + 1}`}
+            autoPlay
+            active={!isComplete}
+            muted={isMuted}
+            volume={volume / 100}
+            fill
+            className="h-full w-full"
+            onEnded={finishSegment}
+            onUnavailable={finishSegment}
+          />
+        ) : (
+          <iframe
+            key={`${activeSegment.eventId}:${playbackCycle}`}
+            ref={iframeRef}
+            className={`absolute left-1/2 top-1/2 h-full max-w-none -translate-x-1/2 -translate-y-1/2 ${
+              isFullscreen ? 'w-full' : 'w-[133.333%] sm:w-full'
+            }`}
+            src={buildEmbedUrl(activeSegment)}
+            title={`${title} — highlight ${activeIndex + 1}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            onLoad={subscribeToPlayerEvents}
+          />
+        )}
 
         <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-xl bg-slate-950/85 px-2.5 py-2 shadow-lg backdrop-blur-sm">
           <button
@@ -297,8 +349,7 @@ export function YouTubeHighlightReel({ highlights, title = 'Game highlights' }) 
         </div>
 
         <p className="text-xs leading-5 text-slate-400">
-          These moments play directly from the game&apos;s YouTube video. TSW does not copy or
-          re-host the footage.
+          These moments play from the game video in the order they happened.
         </p>
       </div>
     </div>

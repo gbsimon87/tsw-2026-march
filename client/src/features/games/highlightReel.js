@@ -1,3 +1,4 @@
+import { highlightSourceKey, isMuxHighlight } from '../video/videoSource';
 import { extractYouTubeVideoId } from './youtube';
 
 const DEFAULT_MAX_HIGHLIGHTS = 5;
@@ -11,12 +12,17 @@ const HIGHLIGHT_PRIORITY = {
   FG2_MADE: 1,
 };
 
-function isPlayableHighlight(highlight) {
-  return Boolean(
-    highlight &&
-    Number.isFinite(highlight.videoTimestamp) &&
-    extractYouTubeVideoId(highlight.videoUrl)
-  );
+export function isPlayableHighlight(highlight) {
+  if (
+    !highlight ||
+    highlight.videoAvailable === false ||
+    !Number.isFinite(highlight.videoTimestamp) ||
+    highlight.videoTimestamp < 0
+  )
+    return false;
+  return isMuxHighlight(highlight)
+    ? Boolean(highlight.gameId && highlight.eventId)
+    : Boolean(extractYouTubeVideoId(highlight.videoUrl));
 }
 
 export function selectFeaturedHighlights(highlights, maxHighlights = DEFAULT_MAX_HIGHLIGHTS) {
@@ -46,7 +52,7 @@ export function buildHighlightReelSegments(
   for (const highlight of selectFeaturedHighlights(highlights, highlights?.length || 0)) {
     const overlapsSelectedMoment = selected.some(
       (existing) =>
-        existing.videoUrl === highlight.videoUrl &&
+        highlightSourceKey(existing) === highlightSourceKey(highlight) &&
         Math.abs(existing.videoTimestamp - highlight.videoTimestamp) <= dedupeWindowSeconds
     );
 

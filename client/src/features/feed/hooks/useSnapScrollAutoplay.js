@@ -1,3 +1,4 @@
+import { activatePlayback, releasePlayback } from '../../video/playbackCoordinator';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -17,10 +18,12 @@ export function useSnapScrollAutoplay(containerRef) {
           const video = entry.target.querySelector('video');
           if (!video) continue;
 
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            activatePlayback(video, () => video.pause());
             video.play().catch(() => {});
           } else {
             video.pause();
+            releasePlayback(video);
           }
         }
       },
@@ -37,6 +40,10 @@ export function useSnapScrollAutoplay(containerRef) {
 
     return () => {
       observerRef.current?.disconnect();
+      for (const video of container.querySelectorAll('video')) {
+        video.pause();
+        releasePlayback(video);
+      }
     };
   }, [containerRef]);
 

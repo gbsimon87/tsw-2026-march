@@ -1,3 +1,4 @@
+const { hasGameVideo, buildHighlightVideoFields } = require('../shared/gameVideo');
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const { buildCursorPage } = require('../../utils/pagination');
@@ -215,7 +216,7 @@ function sanitizePublicGame(game) {
     title: game.title,
     opponent: game.opponent ?? null,
     videoUrl: game.videoUrl ?? null,
-    hasVideo: Boolean(game.videoUrl),
+    hasVideo: hasGameVideo(game),
     status: game.status,
     scheduledAt: game.scheduledAt ?? null,
     completedAt: game.completedAt ?? null,
@@ -454,25 +455,25 @@ const HIGHLIGHT_STAT_TYPES = new Set([
 ]);
 
 function buildPlayerHighlights(games, playerIdStr) {
-  return games
-    .filter((game) => game.videoUrl)
-    .flatMap((game) =>
-      (game.events || [])
-        .filter(
-          (ev) =>
-            ev.playerId &&
-            String(ev.playerId) === playerIdStr &&
-            HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
-            typeof ev.videoTimestamp === 'number'
-        )
-        .map((ev) => ({
-          eventId: String(ev._id),
-          statType: ev.statType,
-          videoTimestamp: ev.videoTimestamp,
-          videoUrl: game.videoUrl,
-          gameTitle: game.title || game.opponent || null,
-        }))
-    );
+  return games.filter(hasGameVideo).flatMap((game) =>
+    (game.events || [])
+      .filter(
+        (ev) =>
+          ev.playerId &&
+          String(ev.playerId) === playerIdStr &&
+          HIGHLIGHT_STAT_TYPES.has(ev.statType) &&
+          typeof ev.videoTimestamp === 'number'
+      )
+      .map((ev) => ({
+        eventId: String(ev._id),
+        gameId: String(game._id),
+        statType: ev.statType,
+        videoTimestamp: ev.videoTimestamp,
+        ...buildHighlightVideoFields(game, ev),
+        videoVersion: game.video?.version ?? null,
+        gameTitle: game.title || game.opponent || null,
+      }))
+  );
 }
 
 function buildPublicPlayerGameRows(games, team, player, teamLookup = new Map()) {

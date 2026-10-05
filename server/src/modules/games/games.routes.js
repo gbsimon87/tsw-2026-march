@@ -23,6 +23,11 @@ gamesRouter.get(
 // credentials — every /video response is private, no-store, errors included,
 // so this runs before authentication.
 gamesRouter.use('/:gameId/video', noStoreMiddleware);
+gamesRouter.get(
+  '/:gameId/video/playback',
+  optionalAuthMiddleware,
+  asyncHandler(videoController.playback)
+);
 gamesRouter.use(authMiddleware);
 gamesRouter.post('/', asyncHandler(controller.create));
 gamesRouter.get('/', asyncHandler(controller.list));

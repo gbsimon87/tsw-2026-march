@@ -44,6 +44,26 @@ vi.mock('../api/gamesApi', () => ({
   gamesApi: apiMocks,
 }));
 
+vi.mock('../../video/components/MuxVideo', async () => {
+  const { forwardRef } = await import('react');
+  return {
+    MuxVideo: forwardRef(function MockMux({ title, onPlay, onPause, onEnded }, ref) {
+      return (
+        <video
+          ref={ref}
+          title={title}
+          data-testid="tracker-mux"
+          onPlay={onPlay}
+          onPause={onPause}
+          onEnded={onEnded}
+        >
+          <track kind="captions" />
+        </video>
+      );
+    }),
+  };
+});
+
 function createPlayers() {
   return [
     { id: 'player-1', displayName: 'Alex', isActive: true },
@@ -1842,6 +1862,94 @@ describe('GameTrackPage', () => {
       expect(apiMocks.updateClock).not.toHaveBeenCalledWith('game-1', { action: 'start' });
     } finally {
       restoreMatchMedia();
+    }
+  });
+
+  test.each([0, 4])(
+    'Mux captures actual currentTime only when media is ready (readyState %s)',
+    async (readyState) => {
+      const restore = stubMatchMedia(true);
+      const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+      try {
+        currentResponse = createResponse({
+          game: {
+            video: { provider: 'mux', status: 'ready', version: 1 },
+            startingLineupPlayerIds: ONE_SIDED_LINEUP,
+            currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          },
+        });
+        renderPage();
+        const media = await screen.findByTestId('tracker-mux');
+        Object.defineProperty(media, 'readyState', { configurable: true, value: readyState });
+        media.currentTime = 102.7;
+        fireEvent.play(media);
+        tapCourtAt(250, 800);
+        await screen.findAllByText(/Add Event/i);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'STL' }));
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalled());
+        expect(apiMocks.appendEvent.mock.calls[0][1].videoTimestamp).toBe(
+          readyState ? 103 : undefined
+        );
+        expect(pause).toHaveBeenCalled();
+      } finally {
+        restore();
+        pause.mockRestore();
+        play.mockRestore();
+      }
+    }
+  );
+
+  test('Mux pause and play events stop and resume only the clock held by video', async () => {
+    const restore = stubMatchMedia(true);
+    try {
+      currentResponse = createResponse({
+        game: {
+          video: { provider: 'mux', status: 'ready', version: 1 },
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          gameFormat: {
+            regulationSegmentType: 'quarter',
+            regulationSegmentDurationSeconds: 600,
+            overtimeDurationSeconds: 300,
+          },
+          clock: {
+            status: 'running',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 600000,
+            runningSince: new Date().toISOString(),
+          },
+        },
+      });
+      apiMocks.updateClock.mockImplementation((_id, command) => {
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              status: command.action === 'pause' ? 'paused' : 'running',
+            },
+          },
+        };
+        return Promise.resolve(currentResponse);
+      });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+      const media = await screen.findByTestId('tracker-mux');
+      fireEvent.pause(media);
+      await waitFor(
+        () => expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' }),
+        { timeout: 3000 }
+      );
+      fireEvent.play(media);
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+      );
+    } finally {
+      restore();
     }
   });
 

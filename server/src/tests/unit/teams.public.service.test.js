@@ -714,6 +714,46 @@ describe('teams public service', () => {
     ]);
   }
 
+  test('public player Mux highlights carry game references and timeline availability', async () => {
+    seedPlayerWithClip();
+    listGamesByTeamId.mockResolvedValue([
+      {
+        _id: 'g1',
+        title: 'Mux game',
+        status: 'completed',
+        createdAt: new Date(),
+        videoUrl: null,
+        video: {
+          provider: 'mux',
+          status: 'ready',
+          playbackId: 'private-playback',
+          generationId: 'generation',
+          durationSeconds: 500,
+          version: 42,
+        },
+        events: [
+          {
+            _id: 'e1',
+            playerId: 'p1',
+            statType: 'FG3_MADE',
+            videoTimestamp: 42,
+            videoTimelineId: 'mux:generation',
+          },
+        ],
+      },
+    ]);
+    const result = await getPublicPlayer('team-1', 'p1');
+    expect(result.highlights[0]).toMatchObject({
+      gameId: 'g1',
+      eventId: 'e1',
+      videoProvider: 'mux',
+      videoAvailable: true,
+      videoVersion: 42,
+      videoUrl: null,
+    });
+    expect(JSON.stringify(result)).not.toContain('private-playback');
+  });
+
   test('H6: exposes highlight clips for a free/lapsed team on the public profile', async () => {
     seedPlayerWithClip({ plan: 'starter', subscriptionStatus: 'inactive' });
 

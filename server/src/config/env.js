@@ -108,7 +108,9 @@ const baseEnvSchema = z.object({
   MUX_SIGNING_KEY_ID: z.string().min(1).optional(),
   // Base64 PEM, exactly as Mux shows it. Validated in the superRefine below.
   MUX_SIGNING_PRIVATE_KEY: z.string().min(1).optional(),
-  MUX_MAX_RESOLUTION_TIER: z.enum(['720p', '1080p']).default('1080p'),
+  // Mux's ingest cap accepts only 1080p/1440p/2160p (V5: 720p made every
+  // upload create fail). Higher tiers are not offered on cost grounds.
+  MUX_MAX_RESOLUTION_TIER: z.enum(['1080p']).default('1080p'),
   // Operator kill switch for hosted uploads (not part of the credential set).
   MUX_UPLOADS_ENABLED: z
     .string()
@@ -249,6 +251,17 @@ const envSchema = baseEnvSchema.superRefine((data, ctx) => {
         });
       }
     }
+  }
+
+  // V6: the video deployment label (video.repository getVideoDeployment)
+  // scopes cleanup ownership. Production must name it explicitly instead of
+  // falling back to NODE_ENV, which every deployed service shares.
+  if (configuredMuxKeys.length > 0 && data.NODE_ENV === 'production' && !data.APP_ENV) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['APP_ENV'],
+      message: 'APP_ENV is required in production when Mux is configured',
+    });
   }
 
   if (data.MUX_SIGNING_PRIVATE_KEY) {
