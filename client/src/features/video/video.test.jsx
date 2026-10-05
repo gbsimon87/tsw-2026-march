@@ -470,7 +470,6 @@ describe('uploads', () => {
   // The allowance reason decides the guidance; "not enabled for this game"
   // misled a League owner whose game was simply not started yet.
   test.each([
-    ['game_scheduled', /Start the game/],
     ['not_league_manager', /Only the league owner or a league manager/],
     ['league_not_granted', /isn't enabled for this league/],
     ['not_league_game', /only for league games/],

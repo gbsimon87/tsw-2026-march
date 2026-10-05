@@ -43,7 +43,6 @@ const UPLOAD_ALLOWANCE_REASONS = Object.freeze({
   HOSTING_DISABLED: 'hosting_disabled',
   UNAUTHENTICATED: 'unauthenticated',
   NOT_LEAGUE_GAME: 'not_league_game',
-  GAME_SCHEDULED: 'game_scheduled',
   LEAGUE_NOT_FOUND: 'league_not_found',
   NOT_LEAGUE_MANAGER: 'not_league_manager',
   LEAGUE_NOT_GRANTED: 'league_not_granted',
@@ -148,7 +147,6 @@ async function resolveUploadAllowance({ userId, game } = {}) {
   }
   if (!userId) return deniedUpload(R.UNAUTHENTICATED);
   if (!isLeagueGame(game)) return deniedUpload(R.NOT_LEAGUE_GAME);
-  if (game.status === 'scheduled') return deniedUpload(R.GAME_SCHEDULED);
 
   const league = await findLeagueVideoPolicyById(game.leagueId);
   if (!league) return deniedUpload(R.LEAGUE_NOT_FOUND);

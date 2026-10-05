@@ -6,8 +6,6 @@ export const MAX_VIDEO_UPLOAD_BYTES = 20 * 1024 ** 3;
 const POLL_INTERVAL_MS = 3000;
 // Why uploads are unavailable, keyed by the server's allowance reason.
 const DENIAL_MESSAGES = {
-  game_scheduled:
-    'Start the game to upload its video: set the starting lineups and begin tracking, then come back here.',
   not_league_manager: 'Only the league owner or a league manager can upload game video.',
   league_not_granted: "Hosted video isn't enabled for this league yet.",
   not_league_game: 'Hosted video is available only for league games.',

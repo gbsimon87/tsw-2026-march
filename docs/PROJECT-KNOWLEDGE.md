@@ -236,7 +236,7 @@ the setup and operations guide.
 - **Uploads** (`POST /games/:gameId/video/uploads`) are browser-to-Mux direct
   uploads from the tracker's Options tab. They need `MUX_UPLOADS_ENABLED`, an
   operator grant on the League (`League.videoHosting`, set with
-  `pnpm --filter server video:hosting`), a non-scheduled league game, writable
+  `pnpm --filter server video:hosting`), a league game (scheduled games included, so a recording can be uploaded before tracking), writable
   access as league owner or active manager, an allowlisted Origin, a per-user
   rate limit and an atomic per-League quota (concurrency, creates/day, stored
   minutes). No billing plan grants hosting (`CAN_HOST_GAME_VIDEO` is reserved).

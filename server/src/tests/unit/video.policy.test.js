@@ -195,7 +195,6 @@ describe('resolveUploadAllowance (P1 conditions 1, 2, 4, 5)', () => {
       { game: leagueGame({ leagueId: null }) },
       'not_league_game',
     ],
-    ['scheduled game', () => {}, { game: leagueGame({ status: 'scheduled' }) }, 'game_scheduled'],
     [
       'league missing',
       () => mockLeaguesRepository.findLeagueVideoPolicyById.mockResolvedValue(null),
@@ -276,6 +275,16 @@ describe('resolveUploadAllowance (P1 conditions 1, 2, 4, 5)', () => {
 });
 
 // ─── Narrow billing read ─────────────────────────────────────────────────────
+
+// Record first, track later: a manager may upload a game's recording before
+// tracking starts, then enter stats while watching it back.
+test('a scheduled league game accepts uploads', async () => {
+  const decision = await policy.resolveUploadAllowance({
+    userId: OWNER_ID,
+    game: leagueGame({ status: 'scheduled' }),
+  });
+  expect(decision).toMatchObject({ allowed: true, reason: null });
+});
 
 describe('resolveVideoManagerAccess (T4 cancel/remove: owner or active league manager)', () => {
   test('league owner is allowed — even with hosting disabled and the grant closed', async () => {
