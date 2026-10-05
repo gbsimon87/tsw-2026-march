@@ -2704,6 +2704,20 @@ async function deleteGameForUser(userId, gameId) {
     }
   }
 
+  // V12: deleting the row deletes its League-hosted video, so require the
+  // same league owner/manager role as DELETE /video (team managers and a
+  // former game owner may delete video-less games only).
+  if (game.gameContext === 'league' && game.video) {
+    const { resolveVideoManagerAccess } = require('../video/video.policy');
+    const access = await resolveVideoManagerAccess({ userId, game });
+    if (!access.allowed) {
+      throw new ApiError(
+        403,
+        'Only league owners and managers can remove a game with hosted video.'
+      );
+    }
+  }
+
   // OPT-010/013: capture context before deletion, then recompute the relevant
   // materialised aggregate after the row is gone (deleting a completed game
   // changes league standings or the team's season summary).

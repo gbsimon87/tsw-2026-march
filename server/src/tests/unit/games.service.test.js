@@ -88,6 +88,7 @@ jest.mock('../../modules/video/video.policy', () => ({
     billingResource: null,
     limits: null,
   })),
+  resolveVideoManagerAccess: jest.fn(async () => ({ allowed: true, reason: null })),
 }));
 jest.mock('../../modules/video/video.service', () => ({
   queueGameVideoCleanupForDeletion: jest.fn(async () => null),
@@ -2756,6 +2757,25 @@ describe('games service hosted video (Mux Task 4)', () => {
       expect(deleteGameIfVideoUnchanged).toHaveBeenCalledWith(game._id, null);
       expect(videoService.queueGameVideoCleanupForDeletion).not.toHaveBeenCalled();
       expect(videoService.finishGameVideoCleanupAfterDeletion).not.toHaveBeenCalled();
+    });
+
+    // V12: deleting the game deletes its League-hosted video, so the delete
+    // needs the same league owner/manager role as DELETE /video.
+    test('a league game with hosted video needs a league owner or manager', async () => {
+      const { resolveVideoManagerAccess } = require('../../modules/video/video.policy');
+      const game = deletableGame({
+        video: { provider: 'mux', status: 'ready', generationId: GENERATION_ID, version: 2 },
+      });
+      findGameById.mockResolvedValue(game);
+      resolveVideoManagerAccess.mockResolvedValueOnce({
+        allowed: false,
+        reason: 'not_league_manager',
+      });
+
+      await expect(deleteGameForUser(USER_ID, GAME_ID)).rejects.toMatchObject({ statusCode: 403 });
+      expect(resolveVideoManagerAccess).toHaveBeenCalledWith({ userId: USER_ID, game });
+      expect(videoService.queueGameVideoCleanupForDeletion).not.toHaveBeenCalled();
+      expect(deleteGameIfVideoUnchanged).not.toHaveBeenCalled();
     });
 
     // V7: an upload attached between the read and the delete must not be
