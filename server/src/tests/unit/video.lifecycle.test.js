@@ -246,3 +246,22 @@ test('recovery refuses mismatched provider identity', async () => {
   expect(repo.settleReadyGameVideo).not.toHaveBeenCalled();
   expect(repo.enqueueCleanupJob).not.toHaveBeenCalled();
 });
+// V13: a redelivered ready event for an attempt already accepted as ready
+// must not re-run ingest checks (e.g. a lowered tier) and discard live media.
+test('a retried asset.ready for an already-ready attempt never discards the live asset', async () => {
+  const readyAttempt = { ...attempt, status: 'ready', assetId: 'asset' };
+  repo.findUploadAttemptByUploadId.mockResolvedValue(readyAttempt);
+  repo.findUploadAttemptById.mockResolvedValue(readyAttempt);
+  repo.settleReadyGameVideo.mockResolvedValue(null);
+  findGameById.mockResolvedValue({
+    _id: GAME,
+    video: { generationId: 'generation', assetId: 'asset', status: 'ready' },
+  });
+
+  await expect(handleMuxWebhookEvent(ready({ resolution_tier: '2160p' }))).resolves.toMatchObject({
+    handled: true,
+    reason: 'ready',
+  });
+  expect(repo.enqueueCleanupJob).not.toHaveBeenCalled();
+  expect(repo.settleFailedGameVideo).not.toHaveBeenCalled();
+});

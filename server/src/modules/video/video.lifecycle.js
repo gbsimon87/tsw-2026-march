@@ -120,7 +120,10 @@ function sameRecordingTimelines(attempt) {
 }
 
 async function publishReady(attempt, asset) {
-  const reason = assetRejectionReason(asset, attempt);
+  // V13: a redelivered ready event for media already accepted skips the ingest
+  // checks — a since-lowered tier must not queue deletion of the live asset.
+  const alreadyAccepted = attempt.status === 'ready' && attempt.assetId === asset.id;
+  const reason = alreadyAccepted ? null : assetRejectionReason(asset, attempt);
   if (reason) return discard(attempt, reason);
   const equivalentTimelines = sameRecordingTimelines(attempt);
   const ready = await repository.settleReadyGameVideo({ attempt, asset, equivalentTimelines });
