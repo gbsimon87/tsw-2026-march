@@ -848,6 +848,48 @@ describe('isEventSubjectRestricted', () => {
   });
 });
 
+// V15: list payloads (profile highlights, Pulse) ask once per game whether
+// this viewer could get a clip token; the caller checks the live share.
+describe('resolveMuxHighlightViewerGate (V15)', () => {
+  const event = leagueGame().events[0];
+  const gate = (input = {}) =>
+    policy.resolveMuxHighlightViewerGate({ userId: null, game: leagueGame(), ...input });
+
+  test('a viewer with game access sees every event, without publication reads', async () => {
+    mockGamesService.canAccessGame.mockResolvedValue(true);
+    mockEnv.MUX_PUBLIC_CLIPS_ENABLED = false;
+    const visible = await gate({ userId: MANAGER_ID });
+    expect(visible(event)).toBe(true);
+    expect(mockGamesService.buildGameMarketing).not.toHaveBeenCalled();
+  });
+
+  test('anonymous viewer: every publication lock satisfied → visible', async () => {
+    expect((await gate())(event, true)).toBe(true);
+    expect(mockGamesService.canAccessGame).not.toHaveBeenCalled();
+  });
+
+  test('public viewer without a live share of the event → hidden', async () => {
+    expect((await gate())(event, false)).toBe(false);
+  });
+
+  test('publication not permitted → hidden', async () => {
+    mockEnv.MUX_PUBLIC_CLIPS_ENABLED = false;
+    expect((await gate({ userId: STRANGER_ID }))(event, true)).toBe(false);
+  });
+
+  test('restricted subject → that event hidden', async () => {
+    mockGamesService.buildGameMarketing.mockResolvedValue(
+      marketing({ restrictedPlayerIds: [PLAYER_ID] })
+    );
+    expect((await gate())(event, true)).toBe(false);
+  });
+
+  test('a failed read fails closed instead of throwing', async () => {
+    mockGamesService.buildGameMarketing.mockRejectedValue(new Error('listLeaguePlayers failed'));
+    expect((await gate())(event, true)).toBe(false);
+  });
+});
+
 describe('module shape', () => {
   test('exports the decision functions T4/T6/T7 consume', () => {
     expect(Object.keys(policy).sort()).toEqual(
@@ -858,6 +900,7 @@ describe('module shape', () => {
         'canPublishMuxClips',
         'isEventSubjectRestricted',
         'resolveClipPlaybackAccess',
+        'resolveMuxHighlightViewerGate',
         'resolveFullGamePlaybackAccess',
         'resolveGameReplayEntitlement',
         'resolveUploadAllowance',

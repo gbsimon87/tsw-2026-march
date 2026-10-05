@@ -511,7 +511,25 @@ function isSafeYouTubeUrl(url) {
   }
 }
 
-async function resolveHighlightClipPayload(post, gamesById) {
+// V15: one clip-token gate per Mux game for this viewer, from the FULL game
+// (the batched media projection lacks rosters and league fields). The post is
+// itself the live share. Single-post paths resolve it on demand.
+async function resolveMuxGatesForGames(viewerUserId, gamesById) {
+  const { resolveMuxHighlightViewerGate } = require('../video/video.policy');
+  const gates = new Map();
+  for (const [id, source] of gamesById) {
+    if (getGameVideoProvider(source) !== 'mux') continue;
+    const game = await findGameById(id);
+    gates.set(id, await resolveMuxHighlightViewerGate({ userId: viewerUserId, game }));
+  }
+  return gates;
+}
+
+async function resolveHighlightClipPayload(
+  post,
+  gamesById,
+  { viewerUserId = null, muxGates } = {}
+) {
   const clip = post.highlightClip;
   const game = gamesById ? gamesById.get(String(clip.gameId)) : await findGameById(clip.gameId);
   const event = game?.events?.find((ev) => String(ev._id) === String(clip.eventId));
@@ -520,6 +538,18 @@ async function resolveHighlightClipPayload(post, gamesById) {
     fields.videoUrl = null;
     fields.videoAvailable = false;
     fields.videoProvider = null;
+  }
+  if (fields.videoProvider === 'mux') {
+    const gate =
+      muxGates?.get(String(clip.gameId)) ??
+      (await require('../video/video.policy').resolveMuxHighlightViewerGate({
+        userId: viewerUserId,
+        game,
+      }));
+    if (!gate(event, true)) {
+      fields.videoAvailable = false;
+      fields.videoProvider = null;
+    }
   }
   return {
     image: null,
@@ -569,7 +599,7 @@ function resolvePlayerGameCardPayload(post) {
   };
 }
 
-async function resolvePostPayload(post, gamesById) {
+async function resolvePostPayload(post, gamesById, viewerContext = {}) {
   if (post.type === 'image') {
     return resolveImagePayload(post);
   }
@@ -595,7 +625,7 @@ async function resolvePostPayload(post, gamesById) {
   }
 
   if (post.type === 'highlight_clip') {
-    return resolveHighlightClipPayload(post, gamesById);
+    return resolveHighlightClipPayload(post, gamesById, viewerContext);
   }
 
   if (post.type === 'milestone') {
@@ -612,7 +642,7 @@ async function resolvePostPayload(post, gamesById) {
 async function sanitizePost(
   post,
   viewerUserId = null,
-  { creator: prefetchedCreator, gamesById } = {}
+  { creator: prefetchedCreator, gamesById, muxGates } = {}
 ) {
   const creator = prefetchedCreator ?? (await findUserById(post.creatorUserId));
   if (!creator) {
@@ -620,7 +650,7 @@ async function sanitizePost(
   }
 
   try {
-    const payload = await resolvePostPayload(post, gamesById);
+    const payload = await resolvePostPayload(post, gamesById, { viewerUserId, muxGates });
     return {
       id: String(post._id),
       type: post.type,
@@ -711,6 +741,7 @@ async function listFeedPosts(viewerUserId, options = {}) {
       )
     ).map((game) => [String(game._id), game])
   );
+  const muxGates = await resolveMuxGatesForGames(viewerUserId, gamesById);
 
   // PERF-003 (historical performance investigation): sanitize posts concurrently
   // instead of one-at-a-time — a page of snapshot-miss cards used to stack
@@ -727,8 +758,8 @@ async function listFeedPosts(viewerUserId, options = {}) {
         const post = rawPosts[index];
         const creator = creatorsById.get(String(post.creatorUserId));
         sanitizedByIndex[index] = creator
-          ? await sanitizePost(post, viewerUserId, { creator, gamesById })
-          : await sanitizePost(post, viewerUserId, { gamesById });
+          ? await sanitizePost(post, viewerUserId, { creator, gamesById, muxGates })
+          : await sanitizePost(post, viewerUserId, { gamesById, muxGates });
       }
     })
   );

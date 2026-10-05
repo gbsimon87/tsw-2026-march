@@ -1,6 +1,7 @@
 jest.mock('../../modules/video/video.policy', () => ({
   canPublishMuxClips: jest.fn(),
   isEventSubjectRestricted: jest.fn(() => false),
+  resolveMuxHighlightViewerGate: jest.fn(async () => () => true),
 }));
 jest.mock('../../modules/feed/feed.repository', () => ({
   createPost: jest.fn(),
@@ -1686,7 +1687,34 @@ describe('Mux highlight sources and footage publication', () => {
     findUserById.mockResolvedValue({ _id: 'user', name: 'Simon' });
     policy.canPublishMuxClips.mockResolvedValue({ allowed: true, restrictedPlayerIds: [] });
     policy.isEventSubjectRestricted.mockReturnValue(false);
+    policy.resolveMuxHighlightViewerGate.mockResolvedValue(() => true);
     findGameById.mockResolvedValue(current());
+  });
+  // V15: the post is the live share; the viewer must still pass the clip gate.
+  test('a Mux clip this viewer cannot play is marked unavailable', async () => {
+    const gate = jest.fn(() => false);
+    policy.resolveMuxHighlightViewerGate.mockResolvedValue(gate);
+    const post = await service.sanitizePost(legacy(), 'viewer');
+    expect(policy.resolveMuxHighlightViewerGate.mock.calls[0][0]).toMatchObject({
+      userId: 'viewer',
+    });
+    expect(gate).toHaveBeenCalledWith(expect.objectContaining({ _id: eventId }), true);
+    expect(post.highlightClip).toMatchObject({ videoAvailable: false, videoProvider: null });
+  });
+  test('feed pages resolve the Mux viewer gate once per game from the full game', async () => {
+    listPosts.mockResolvedValue([legacy(), { ...legacy(), _id: 'post2' }]);
+    findUsersByIds.mockResolvedValue([{ _id: 'user', name: 'Simon' }]);
+    findGameVideoSourcesByIds.mockResolvedValue([current()]);
+    const full = { ...current(), gameContext: 'league', status: 'completed' };
+    findGameById.mockResolvedValue(full);
+    policy.resolveMuxHighlightViewerGate.mockResolvedValue(() => false);
+    const { posts } = await service.listFeedPosts('viewer');
+    expect(posts.map((p) => p.highlightClip.videoAvailable)).toEqual([false, false]);
+    expect(policy.resolveMuxHighlightViewerGate).toHaveBeenCalledTimes(1);
+    expect(policy.resolveMuxHighlightViewerGate).toHaveBeenCalledWith({
+      userId: 'viewer',
+      game: full,
+    });
   });
   test('legacy posts resolve the current Mux provider and corrected event timestamp without secrets', async () => {
     const post = await service.sanitizePost(legacy());
@@ -1730,7 +1758,8 @@ describe('Mux highlight sources and footage publication', () => {
     findGameVideoSourcesByIds.mockResolvedValue([current()]);
     expect((await service.listFeedPosts(null)).posts).toHaveLength(2);
     expect(findGameVideoSourcesByIds).toHaveBeenCalledTimes(1);
-    expect(findGameById).not.toHaveBeenCalled();
+    // V15: one full read per distinct Mux game, for the viewer gate.
+    expect(findGameById).toHaveBeenCalledTimes(1);
   });
   test('late-ready Mux clips require current footage permission before auto-publishing', async () => {
     policy.canPublishMuxClips.mockResolvedValue({ allowed: false, restrictedPlayerIds: [] });

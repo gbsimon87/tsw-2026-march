@@ -1,3 +1,7 @@
+jest.mock('../../modules/feed/feed.repository', () => ({
+  ...jest.requireActual('../../modules/feed/feed.repository'),
+  findSharedEventIds: jest.fn(async () => []),
+}));
 jest.mock('../../modules/analytics/analytics.service', () => ({
   captureUserEventDetached: jest.fn(),
 }));
@@ -89,6 +93,7 @@ jest.mock('../../modules/video/video.policy', () => ({
     limits: null,
   })),
   resolveVideoManagerAccess: jest.fn(async () => ({ allowed: true, reason: null })),
+  resolveMuxHighlightViewerGate: jest.fn(async () => () => true),
 }));
 jest.mock('../../modules/video/video.service', () => ({
   queueGameVideoCleanupForDeletion: jest.fn(async () => null),
@@ -1336,6 +1341,44 @@ describe('games service frozen box score (OPT-012)', () => {
     ]) {
       expect(JSON.stringify(result)).not.toContain(secret);
     }
+  });
+
+  // V15: the public recap only offers Mux clips this viewer can get a token for.
+  test('public recap marks Mux highlights the viewer cannot play as unavailable', async () => {
+    const { resolveMuxHighlightViewerGate } = require('../../modules/video/video.policy');
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      videoUrl: null,
+      video: {
+        provider: 'mux',
+        status: 'ready',
+        generationId: 'gen',
+        playbackId: 'pb',
+        durationSeconds: 500,
+        version: 42,
+      },
+      events: [{ ...HIGHLIGHT_EVENT, videoTimelineId: 'mux:gen' }],
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+    });
+    findGameById.mockResolvedValue(game);
+    findLeagueById.mockResolvedValue({
+      _id: 'league-1',
+      plan: 'league',
+      subscriptionStatus: 'active',
+      billingSource: 'stripe',
+    });
+    const gate = jest.fn(() => false);
+    resolveMuxHighlightViewerGate.mockResolvedValueOnce(gate);
+
+    const result = await getPublicGame('game-1', null);
+
+    expect(resolveMuxHighlightViewerGate).toHaveBeenCalledWith({ userId: null, game });
+    expect(gate).toHaveBeenCalledWith(
+      expect.objectContaining({ statType: HIGHLIGHT_EVENT.statType }),
+      false
+    );
+    expect(result.highlights[0]).toMatchObject({ videoAvailable: false, videoProvider: null });
   });
 
   test('T-14: includes replay highlights and shot snapshot when entitled', async () => {

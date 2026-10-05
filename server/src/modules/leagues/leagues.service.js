@@ -1,4 +1,8 @@
-const { hasGameVideo, buildHighlightVideoFields } = require('../shared/gameVideo');
+const {
+  hasGameVideo,
+  buildHighlightVideoFields,
+  hideUnplayableMuxHighlights,
+} = require('../shared/gameVideo');
 const mongoose = require('mongoose');
 const { ApiError } = require('../../utils/apiError');
 const { buildCursorPage } = require('../../utils/pagination');
@@ -1409,6 +1413,7 @@ async function getPublicLeaguePlayerBySlug(
 
   const highlightEventIds = highlights.map((h) => h.eventId).filter(Boolean);
   const sharedEventIds = await findSharedEventIds(highlightEventIds);
+  await hideUnplayableMuxHighlights(highlights, games, viewerUserId, sharedEventIds);
 
   const sanitizedPlayer = sanitizeLeaguePlayer(player, usersById);
   sanitizedPlayer.isMe = Boolean(

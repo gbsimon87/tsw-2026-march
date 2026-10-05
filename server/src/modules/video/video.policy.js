@@ -20,6 +20,7 @@
 // stack into every video module. Repositories are leaves and load eagerly.
 
 const { env } = require('../../config/env');
+const { logger } = require('../../config/logger');
 const { ApiError } = require('../../utils/apiError');
 const { isMuxConfigured } = require('./mux.client');
 const { resolveForLeague, resolveForTeam } = require('../billing/entitlements.service');
@@ -430,6 +431,36 @@ async function resolveClipPlaybackAccess({ userId, game, eventId } = {}) {
   return { allowed: true, status: 200, reason: null, audience: 'public' };
 }
 
+/**
+ * V15: for list payloads (profile highlights, Pulse), whether THIS viewer
+ * could receive a clip token for a game's events — resolved once per game.
+ * Mirrors resolveClipPlaybackAccess except the live-share lookup, which the
+ * caller already has (a Pulse post, or its shared-event set). Read failures
+ * fail closed: the highlight shows as unavailable rather than dropping the page.
+ *
+ * @param {object} input
+ * @param {string|ObjectId|null} input.userId
+ * @param {object} input.game full Game document (rosters, league ids, status)
+ * @returns {Promise<(event: object, hasLiveShare: boolean) => boolean>} the
+ *   public audience additionally needs a live share of that event
+ */
+async function resolveMuxHighlightViewerGate({ userId, game } = {}) {
+  try {
+    if (userId && (await viewerCanAccessGame(userId, game))) return () => true;
+    const permission = await canPublishMuxClips({ game });
+    if (!permission.allowed) return () => false;
+    return (event, hasLiveShare) =>
+      hasLiveShare === true &&
+      eventSubjectRestriction(game, event, permission.restrictedPlayerIds) === null;
+  } catch (error) {
+    logger.warn(
+      { gameId: game?._id ? String(game._id) : null, err: error?.message },
+      'Mux highlight visibility check failed; hiding the clip'
+    );
+    return () => false;
+  }
+}
+
 module.exports = {
   UPLOAD_ALLOWANCE_REASONS,
   FULL_GAME_ACCESS_REASONS,
@@ -439,6 +470,7 @@ module.exports = {
   resolveGameReplayEntitlement,
   resolveFullGamePlaybackAccess,
   resolveClipPlaybackAccess,
+  resolveMuxHighlightViewerGate,
   canPublishMuxClips,
   isEventSubjectRestricted,
 };

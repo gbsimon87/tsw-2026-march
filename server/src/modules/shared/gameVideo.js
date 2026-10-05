@@ -166,6 +166,33 @@ function buildHighlightVideoFields(game, event) {
   };
 }
 
+// V15: a Mux highlight is only playable by viewers the clip token endpoint
+// accepts — managers, or the public for a live share that passes the
+// publication gate. Mark the rest unavailable instead of offering a Play that
+// ends in "Video unavailable". One gate per game, only for Mux games.
+async function hideUnplayableMuxHighlights(highlights, games, viewerUserId, sharedEventIds) {
+  const muxGameIds = new Set(
+    highlights.filter((h) => h.videoProvider === 'mux').map((h) => h.gameId)
+  );
+  if (muxGameIds.size === 0) return;
+  const { resolveMuxHighlightViewerGate } = require('../video/video.policy');
+  const shared = new Set((sharedEventIds || []).map(String));
+  const gates = new Map();
+  for (const game of games) {
+    const id = String(game._id);
+    if (!muxGameIds.has(id)) continue;
+    const gate = await resolveMuxHighlightViewerGate({ userId: viewerUserId, game });
+    const eventsById = new Map((game.events || []).map((ev) => [String(ev._id), ev]));
+    gates.set(id, (eventId) => gate(eventsById.get(eventId), shared.has(eventId)));
+  }
+  for (const highlight of highlights) {
+    if (highlight.videoProvider !== 'mux') continue;
+    if (gates.get(highlight.gameId)?.(highlight.eventId)) continue;
+    highlight.videoAvailable = false;
+    highlight.videoProvider = null;
+  }
+}
+
 module.exports = {
   GAME_VIDEO_STATUSES,
   HIGHLIGHT_CLIP_BUFFER_SECONDS,
@@ -181,4 +208,5 @@ module.exports = {
   bindLegacyEventsToCurrentLink,
   isEventOnCurrentTimeline,
   buildHighlightVideoFields,
+  hideUnplayableMuxHighlights,
 };

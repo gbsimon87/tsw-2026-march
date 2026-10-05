@@ -34,6 +34,7 @@ const {
   hasGameVideo,
   sanitizeGameVideo,
   buildHighlightVideoFields,
+  hideUnplayableMuxHighlights,
 } = require('../shared/gameVideo');
 const {
   getBillingSummary,
@@ -2163,8 +2164,19 @@ async function getPublicGame(gameId, viewerUserId = null) {
   result.canShareHighlights = false;
   result.canManageGame = false;
 
+  const needsMuxGate = (result.highlights || []).some((h) => h.videoProvider === 'mux');
+  const rawGame = viewerUserId || needsMuxGate ? await findGameById(gameId) : null;
+  // V15: only offer Mux clips this viewer can get a clip token for.
+  if (needsMuxGate && rawGame) {
+    await hideUnplayableMuxHighlights(
+      result.highlights,
+      [rawGame],
+      viewerUserId,
+      result.sharedEventIds
+    );
+  }
+
   if (viewerUserId) {
-    const rawGame = await findGameById(gameId);
     if (rawGame) {
       result.canManageGame = await canAccessGame(viewerUserId, rawGame);
       result.canShareHighlights =
