@@ -24,7 +24,11 @@
 const { logger } = require('../../config/logger');
 const { isAllowedClientOrigin } = require('../../config/cors');
 const { ApiError } = require('../../utils/apiError');
-const { sanitizeGameVideo, getCurrentVideoTimelineId } = require('../shared/gameVideo');
+const {
+  sanitizeGameVideo,
+  getCurrentVideoTimelineId,
+  getCurrentTimelineIds,
+} = require('../shared/gameVideo');
 const gamesService = require('../games/games.service');
 const muxClient = require('./mux.client');
 const repository = require('./video.repository');
@@ -228,6 +232,7 @@ async function reserveAttempt({ userId, game, allowance, sameRecording }) {
   try {
     // P6: the timeline in effect now; "same recording" only means something
     // when there is one.
+    // V8: plus every timeline it already plays, so the chain carries forward.
     const previousTimelineId = getCurrentVideoTimelineId(game);
     return await repository.createUploadAttempt({
       gameId: game._id,
@@ -235,6 +240,7 @@ async function reserveAttempt({ userId, game, allowance, sameRecording }) {
       createdBy: userId,
       sameRecording: Boolean(sameRecording && previousTimelineId),
       previousTimelineId,
+      previousTimelineIds: getCurrentTimelineIds(game),
       reservedMinutes: UPLOAD_RESERVATION_MINUTES,
     });
   } catch (error) {

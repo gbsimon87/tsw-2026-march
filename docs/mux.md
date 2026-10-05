@@ -91,7 +91,8 @@ detaching the source; provider failures leave deletion pending, with retries.
 
 Every event timestamp is bound to its recording. Confirmed equivalent uploads
 may reuse the previous timeline; other replacements leave old highlights
-unavailable until corrected. Feed pages resolve current provider and timestamp
+unavailable until corrected. Changing a game's YouTube link pins its older,
+unbound timestamps to the previous link first. Feed pages resolve current provider and timestamp
 in one media projection per page, including legacy posts. Late-ready uploads
 rerun permitted auto-publication, with existing event deduplication.
 

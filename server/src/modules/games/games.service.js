@@ -28,6 +28,7 @@ const {
 const { transformCloudinaryUrl } = require('../shared/cloudinaryUrl');
 const { LEGACY_COURT_LAYOUT_ID, resolveCourtLayoutId } = require('../shared/courtLayouts');
 const {
+  bindLegacyEventsToCurrentLink,
   getCurrentVideoTimelineId,
   getGameVideoProvider,
   hasGameVideo,
@@ -1889,14 +1890,20 @@ async function updateGameForUser(userId, gameId, payload) {
     game.venueAddress = normalizeVenueAddress(payload.venueAddress);
   }
 
+  let boundLegacyEvents = 0;
   if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
-    game.videoUrl = payload.videoUrl?.trim() || null;
+    const videoUrl = payload.videoUrl?.trim() || null;
+    if (videoUrl !== (game.videoUrl || null))
+      boundLegacyEvents = bindLegacyEventsToCurrentLink(game);
+    game.videoUrl = videoUrl;
   }
   if (payload.initialActiveSide && game.trackingMode === 'dual_team') {
     game.initialActiveSide = payload.initialActiveSide;
   }
 
-  await saveGame(game);
+  // Event writes are version-checked; a concurrent event edit becomes a 409.
+  if (boundLegacyEvents > 0) await saveGameEventMutation(game);
+  else await saveGame(game);
   return getGameForUser(userId, gameId);
 }
 

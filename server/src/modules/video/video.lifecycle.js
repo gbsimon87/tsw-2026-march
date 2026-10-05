@@ -111,11 +111,18 @@ function assetRejectionReason(asset, attempt) {
   return null;
 }
 
+// V8: the whole chain recorded at reservation; attempts created before it was
+// recorded carry only their previous timeline.
+function sameRecordingTimelines(attempt) {
+  if (!attempt.sameRecording) return [];
+  if (attempt.previousTimelineIds?.length) return attempt.previousTimelineIds;
+  return attempt.previousTimelineId ? [attempt.previousTimelineId] : [];
+}
+
 async function publishReady(attempt, asset) {
   const reason = assetRejectionReason(asset, attempt);
   if (reason) return discard(attempt, reason);
-  const equivalentTimelines =
-    attempt.sameRecording && attempt.previousTimelineId ? [attempt.previousTimelineId] : [];
+  const equivalentTimelines = sameRecordingTimelines(attempt);
   const ready = await repository.settleReadyGameVideo({ attempt, asset, equivalentTimelines });
   if (!ready) {
     const fresh = await repository.findUploadAttemptById(attempt._id);

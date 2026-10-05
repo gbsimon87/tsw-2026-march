@@ -182,6 +182,19 @@ test('same-recording upload carries only its server-recorded timeline', async ()
     expect.objectContaining({ equivalentTimelines: ['youtube:abcdef'] })
   );
 });
+test('same-recording upload carries the whole recorded equivalence chain (V8)', async () => {
+  repo.findUploadAttemptByUploadId.mockResolvedValue({
+    ...attempt,
+    assetId: 'asset',
+    sameRecording: true,
+    previousTimelineId: 'mux:gen-1',
+    previousTimelineIds: ['mux:gen-1', 'youtube:abcdef'],
+  });
+  await handleMuxWebhookEvent(ready());
+  expect(repo.settleReadyGameVideo).toHaveBeenCalledWith(
+    expect.objectContaining({ equivalentTimelines: ['mux:gen-1', 'youtube:abcdef'] })
+  );
+});
 test('late upload publication failure retries without marking webhook completion', async () => {
   env.AUTO_FEED_ENABLED = true;
   autoPublishForFinalizedGame

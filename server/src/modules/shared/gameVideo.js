@@ -127,6 +127,22 @@ function resolveEventTimelineId(game, event) {
   return game?.videoUrl ? youTubeTimelineId(game.videoUrl) : null;
 }
 
+// V9: before the YouTube link changes, pin every unbound timestamped event to
+// the link it was recorded against, so the new link never plays old
+// timestamps on different footage. → number of events bound
+function bindLegacyEventsToCurrentLink(game) {
+  const timelineId = game?.videoUrl ? youTubeTimelineId(game.videoUrl) : null;
+  if (!timelineId) return 0;
+  let bound = 0;
+  for (const event of game.events || []) {
+    if (typeof event.videoTimestamp === 'number' && !event.videoTimelineId) {
+      event.videoTimelineId = timelineId;
+      bound += 1;
+    }
+  }
+  return bound;
+}
+
 function isEventOnCurrentTimeline(game, event) {
   const eventTimelineId = resolveEventTimelineId(game, event);
   return Boolean(eventTimelineId) && getCurrentTimelineIds(game).includes(eventTimelineId);
@@ -162,6 +178,7 @@ module.exports = {
   getCurrentVideoTimelineId,
   getCurrentTimelineIds,
   resolveEventTimelineId,
+  bindLegacyEventsToCurrentLink,
   isEventOnCurrentTimeline,
   buildHighlightVideoFields,
 };

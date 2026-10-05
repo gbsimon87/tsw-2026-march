@@ -137,6 +137,7 @@ const {
   updateEventForUser,
   finishGameForUser,
   getGameForUser,
+  updateGameForUser,
   getPublicGame,
   deleteGameForUser,
   setGameLineup,
@@ -2660,6 +2661,44 @@ describe('games service hosted video (Mux Task 4)', () => {
 
       expect(result).not.toHaveProperty('videoUpload');
       expect(videoPolicy.resolveUploadAllowance).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateGameForUser videoUrl change (V9)', () => {
+    const OLD = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const NEW = 'https://www.youtube.com/watch?v=9bZkp7q19f0';
+
+    test('unbound timestamped events are pinned to the old link before it changes', async () => {
+      const game = leagueGame({
+        videoUrl: OLD,
+        events: buildEvents([
+          { _id: 'e1', videoTimestamp: 42 },
+          { _id: 'e2', videoTimestamp: 50, videoTimelineId: 'mux:gen-1' },
+          { _id: 'e3' },
+        ]),
+      });
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+
+      await updateGameForUser(USER_ID, GAME_ID, { videoUrl: NEW });
+
+      expect(game.videoUrl).toBe(NEW);
+      expect(game.events[0].videoTimelineId).toBe('youtube:dQw4w9WgXcQ');
+      expect(game.events[1].videoTimelineId).toBe('mux:gen-1');
+      expect(game.events[2].videoTimelineId).toBeUndefined();
+    });
+
+    test('re-saving the same link leaves unbound events alone', async () => {
+      const game = leagueGame({
+        videoUrl: OLD,
+        events: buildEvents([{ _id: 'e1', videoTimestamp: 42 }]),
+      });
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+
+      await updateGameForUser(USER_ID, GAME_ID, { videoUrl: ` ${OLD} ` });
+
+      expect(game.events[0].videoTimelineId).toBeUndefined();
     });
   });
 

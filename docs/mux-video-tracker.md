@@ -11,9 +11,9 @@ Task 14 and live Mux acceptance checks remain open. Starter replay access stays
 separate from hosted-upload allowance and viewer authorization. Setup and
 operations: [`mux.md`](mux.md). A bug and security review on 5 October found no
 authorization bypass or token leak, but logged 23 medium/low findings
-([review findings](#bug-and-security-review-5-october-2026)). V1–V7 (all the
-medium findings) are fixed in the working tree, and V8–V23 remain open. R3 and
-R5 stay reopened until V8–V11 are fixed.
+([review findings](#bug-and-security-review-5-october-2026)). V1–V11 (all the
+medium findings plus the four that reopened R3 and R5) are fixed, and V12–V23
+remain open.
 
 Update this file as work lands: tick the box, add the commit or PR, and record
 anything learned in **Notes**. Status values: `todo`, `in progress`, `blocked`,
@@ -86,12 +86,12 @@ The plan's R1–R9 sections name files, behavior and regression cases.
 | ------ | ------------------------------------------------------------------------------------- | ----------- | ----------- |
 | R1     | Viewer authorization separate from Starter entitlements; resolve upload packaging     | 4, 6, 7, 13 | in progress |
 | R2     | Atomic quotas, upload rate limits, spend controls and allowed-origin CORS             | 1, 3, 4, 12 | in progress |
-| R3     | Durable cleanup, reconciliation, proven ownership and bulk-deletion coverage          | 2–5, 14     | in progress |
+| R3     | Durable cleanup, reconciliation, proven ownership and bulk-deletion coverage          | 2–5, 14     | done        |
 | R4     | Atomic identity-checked webhook/upload transitions and valid test ids                 | 2, 4, 5     | done        |
-| R5     | Live Pulse provider/timestamp resolution, timeline binding and late-upload publishing | 2, 7, 8, 13 | in progress |
+| R5     | Live Pulse provider/timestamp resolution, timeline binding and late-upload publishing | 2, 7, 8, 13 | done        |
 
-R3 was reopened by review findings V4, V6, V7, V10 and V11 (V4, V6 and V7 fixed). R5 was
-reopened by V1, V8 and V9 (V1 fixed).
+R3 was reopened by review findings V4, V6, V7, V10 and V11, and R5 by V1, V8 and
+V9. All of them are fixed, so both are closed again.
 | R6 | Token renewal/invalidation, revocation policy, strict signing and webhook verification | 3, 6, 8, 9, 12 | in progress |
 | R7 | Playback-intent token fetch and shared mixed-provider autoplay coordination | 9–11 | in progress |
 | R8 | Upload cancellation/polling recovery and tracker readiness/currentTime integration | 9, 12, 13 | in progress |
@@ -121,10 +121,10 @@ reach public payloads, and every `/video` response is `no-store`.
 | V5  | M   | Config              | `MUX_MAX_RESOLUTION_TIER=720p` passes env validation, but Mux accepts only `1080p`/`1440p`/`2160p`, so every upload fails with 502. Send `1080p` to Mux and keep 720p as a post-ingest check only, or drop the option.                                                                                                                                                                                                           | `env.js`; `mux.client.js` `createDirectUpload`                                       | done   |
 | V6  | M   | Deployment identity | Pairing a database with the wrong Mux environment makes every target 404 ("gone"). Jobs complete, minutes are released and in-flight games are detached while the real assets leak. Separately, the label falls back to `NODE_ENV`, and `APP_ENV` is required only with Stripe. Changing it silently orphans every job and attempt. Store a Mux environment fingerprint, require `APP_ENV` with Mux, and warn on unmatched rows. | `video.repository.js` `getVideoDeployment`; `env.js`                                 | done   |
 | V7  | M/L | Game delete         | `deleteGameForUser` reads `game.video` once, then deletes by `_id`. A concurrent upload attach survives on a deleted game with a working upload URL and no cleanup job. It only recovers after the upload times out (up to 6 h). Make the delete conditional on the generation it read.                                                                                                                                          | `games.service.js` `deleteGameForUser`                                               | done   |
-| V8  | M/L | Timelines           | "Same recording" stores only `[previousTimelineId]`. After YouTube → Mux → Mux, the YouTube-bound and legacy events become unavailable. Copy the whole equivalence chain.                                                                                                                                                                                                                                                        | `video.lifecycle.js` `publishReady`                                                  | todo   |
-| V9  | M/L | Timelines           | Unbound legacy events resolve to the _current_ `videoUrl`. Changing the YouTube link to a different recording plays the new footage at the old timestamps, and old public Pulse posts expose the new URL. Bind unbound events to the old link on change, or backfill.                                                                                                                                                            | `gameVideo.js` `resolveEventTimelineId`; `games.service.js` `updateGameForUser`      | todo   |
-| V10 | L   | Scripts             | `retrack-league-games-dual.js` runs `Game.deleteMany` without the `video: null` guard, which strands a hosted asset on a deleted scheduled game.                                                                                                                                                                                                                                                                                 | `scripts/retrack-league-games-dual.js`                                               | todo   |
-| V11 | L   | Reconcile           | `reconcileAttempt` moves the attempt to `cancelled` before enqueueing cleanup, so a crash in between leaks the asset. A `releaseUploadSlot` failure leaks the slot permanently. Enqueue first.                                                                                                                                                                                                                                   | `video.cleanup.js` `reconcileAttempt`                                                | todo   |
+| V8  | M/L | Timelines           | "Same recording" stores only `[previousTimelineId]`. After YouTube → Mux → Mux, the YouTube-bound and legacy events become unavailable. Copy the whole equivalence chain.                                                                                                                                                                                                                                                        | `video.lifecycle.js` `publishReady`                                                  | done   |
+| V9  | M/L | Timelines           | Unbound legacy events resolve to the _current_ `videoUrl`. Changing the YouTube link to a different recording plays the new footage at the old timestamps, and old public Pulse posts expose the new URL. Bind unbound events to the old link on change, or backfill.                                                                                                                                                            | `gameVideo.js` `resolveEventTimelineId`; `games.service.js` `updateGameForUser`      | done   |
+| V10 | L   | Scripts             | `retrack-league-games-dual.js` runs `Game.deleteMany` without the `video: null` guard, which strands a hosted asset on a deleted scheduled game.                                                                                                                                                                                                                                                                                 | `scripts/retrack-league-games-dual.js`                                               | done   |
+| V11 | L   | Reconcile           | `reconcileAttempt` moves the attempt to `cancelled` before enqueueing cleanup, so a crash in between leaks the asset. A `releaseUploadSlot` failure leaks the slot permanently. Enqueue first.                                                                                                                                                                                                                                   | `video.cleanup.js` `reconcileAttempt`                                                | done   |
 | V12 | L   | Authorization       | Team managers (and a former game owner) can delete a league game, which deletes its league-hosted video. `DELETE /video` itself is limited to the league owner or a manager.                                                                                                                                                                                                                                                     | `games.service.js` `deleteGameForUser`                                               | todo   |
 | V13 | L   | Webhook             | A retried `asset.ready` for an already-ready video can queue `delete_asset` for the live asset, for example when the resolution tier was lowered in between. The reference deferral saves it, but after 24 h a false permanent-failure alert fires.                                                                                                                                                                              | `video.lifecycle.js` `discard`                                                       | todo   |
 | V14 | L   | Quota               | Remove, cancel and game delete release stored minutes before Mux confirms deletion. Permanent cleanup failures then let a League exceed `maxStoredMinutes`.                                                                                                                                                                                                                                                                      | `video.service.js` `retireAttempt`                                                   | todo   |
@@ -257,3 +257,23 @@ Sources: [Mux lazy-loading guide](https://www.mux.com/docs/guides/player-lazy-lo
     `check-env` passed.
   - **Residual V6 risk:** with no `ready` asset to compare against, a wrong
     environment is still not detected.
+- 2026-10-05 fixes V8–V11, with regression tests written first. R3 and R5 are
+  closed again.
+  - **V8:** the attempt now records the whole current timeline chain
+    (`previousTimelineIds`), and a ready settle copies it into
+    `equivalentTimelines`. On closer reading the reported YouTube → Mux → Mux
+    path cannot happen: a ready Mux video must be removed before another
+    upload, so the chain at reservation never holds a Mux timeline. The change
+    is a guard in case replaceable statuses widen. Events stamped on a removed
+    Mux generation stay unavailable after a re-upload, as designed.
+  - **V9:** changing or clearing a game's YouTube link first binds every
+    unbound timestamped event to the old link's timeline. The new link no
+    longer plays old timestamps, and old Pulse posts no longer expose it. The
+    save is version-checked, so a concurrent event edit returns 409.
+  - **V10:** `retrack-league-games-dual.js` skips games with hosted video and
+    re-asserts `video: null` in its delete filter. Its guards are now exported
+    and tested.
+  - **V11:** stale-upload reconcile enqueues cleanup before cancelling the
+    attempt. A failed slot release puts the attempt back in flight for the next
+    sweep.
+  - **Verification:** server 118 suites / 1,693 tests passed; lint passed.

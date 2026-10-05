@@ -211,6 +211,7 @@ describe('createGameVideoUpload', () => {
       createdBy: USER_ID,
       sameRecording: false,
       previousTimelineId: null,
+      previousTimelineIds: [],
       reservedMinutes: 180,
     });
     expect(mockMux.createDirectUpload).toHaveBeenCalledWith({
@@ -268,6 +269,18 @@ describe('createGameVideoUpload', () => {
 
     expect(mockRepository.createUploadAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ sameRecording: true, previousTimelineId: 'youtube:dQw4w9WgXcQ' })
+    );
+  });
+
+  test('the attempt records the whole current timeline chain (V8)', async () => {
+    mockGamesService.assertGameAccess.mockResolvedValue(
+      game({ videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })
+    );
+
+    await create({ sameRecording: true });
+
+    expect(mockRepository.createUploadAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ previousTimelineIds: ['youtube:dQw4w9WgXcQ'] })
     );
   });
 

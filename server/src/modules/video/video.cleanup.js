@@ -440,8 +440,22 @@ async function reconcileAttempt(attempt, { now, dryRun, summary }) {
     expectedUploadId: attempt.uploadId ?? null,
     expectedAssetId: attempt.assetId ?? null,
   };
+  // V11: enqueue before the transition, so a crash in between leaves the
+  // attempt in flight (retried next sweep) rather than cancelled with no record
+  // of its provider resource. The enqueue is idempotent per target, and the job
+  // rechecks references before touching Mux, so a lost race below is harmless.
+  if (cleanup) {
+    await repository.enqueueCleanupJob({
+      ...cleanup,
+      attemptId: attempt._id,
+      gameId: attempt.gameId,
+      reason: 'reconcile_stale',
+      now,
+    });
+  }
+
   // The transition out of an in-flight status is the claim: only the caller
-  // whose transition returned non-null enqueues and releases (exactly once).
+  // whose transition returned non-null releases the slot (exactly once).
   const transitioned = await repository.transitionUploadAttempt({
     attemptId: attempt._id,
     fromStatuses: [attempt.status],
@@ -453,47 +467,36 @@ async function reconcileAttempt(attempt, { now, dryRun, summary }) {
     summary.raced += 1;
     return;
   }
+  if (cleanup) summary.enqueued += 1;
 
-  if (cleanup) {
-    try {
-      await repository.enqueueCleanupJob({
-        ...cleanup,
+  try {
+    await repository.releaseUploadSlot({
+      resource: attempt.billingResource,
+      reservedMinutes: attempt.reservedMinutes,
+    });
+  } catch (error) {
+    // V11: a cancelled attempt is never scanned again, so put it back in
+    // flight (still holding its slot) for a later sweep to release.
+    await repository
+      .transitionUploadAttempt({
         attemptId: attempt._id,
-        gameId: attempt.gameId,
-        reason: 'reconcile_stale',
-        now,
+        fromStatuses: ['cancelled'],
+        toStatus: attempt.status,
+        ...identity,
+        set: { errorMessage: attempt.errorMessage ?? null },
+      })
+      .catch((restoreError) => {
+        logger.error(
+          {
+            attemptId: String(attempt._id),
+            gameId: String(attempt.gameId),
+            err: repository.summarizeCleanupError(restoreError),
+          },
+          'Video reconcile could not restore an attempt after a slot release failure; its quota slot needs manual release'
+        );
       });
-    } catch (error) {
-      // R3: never give up the only record of the provider resource. Put the
-      // attempt back in flight (it still holds its slot) so a later sweep
-      // retries it.
-      await repository
-        .transitionUploadAttempt({
-          attemptId: attempt._id,
-          fromStatuses: ['cancelled'],
-          toStatus: attempt.status,
-          ...identity,
-          set: { errorMessage: attempt.errorMessage ?? null },
-        })
-        .catch((restoreError) => {
-          logger.error(
-            {
-              attemptId: String(attempt._id),
-              gameId: String(attempt.gameId),
-              err: repository.summarizeCleanupError(restoreError),
-            },
-            'Video reconcile could not restore an attempt after an enqueue failure; needs manual cleanup'
-          );
-        });
-      throw error;
-    }
-    summary.enqueued += 1;
+    throw error;
   }
-
-  await repository.releaseUploadSlot({
-    resource: attempt.billingResource,
-    reservedMinutes: attempt.reservedMinutes,
-  });
   summary.reconciled += 1;
 }
 

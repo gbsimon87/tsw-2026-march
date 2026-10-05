@@ -107,8 +107,11 @@ const videoUploadAttemptSchema = new mongoose.Schema(
     createdBy: { type: ObjectId, ref: 'User', required: true },
     // P6: the uploader confirmed this is the same recording as the timeline
     // current when the attempt was created (previousTimelineId).
+    // previousTimelineIds (V8) is that timeline's whole equivalence chain, so a
+    // second "same recording" upload keeps the oldest timestamps playable.
     sameRecording: { type: Boolean, default: false },
     previousTimelineId: { type: String, default: null },
+    previousTimelineIds: { type: [String], default: undefined },
     status: {
       type: String,
       enum: UPLOAD_ATTEMPT_STATUSES,
@@ -258,6 +261,7 @@ async function createUploadAttempt({
   createdBy,
   sameRecording = false,
   previousTimelineId = null,
+  previousTimelineIds = [],
   reservedMinutes,
 }) {
   const attempt = await VideoUploadAttempt.create({
@@ -267,6 +271,7 @@ async function createUploadAttempt({
     createdBy,
     sameRecording: Boolean(sameRecording),
     previousTimelineId,
+    previousTimelineIds: normalizeTimelines(previousTimelineIds),
     reservedMinutes,
     status: 'reserved',
     deployment: getVideoDeployment(),

@@ -133,6 +133,7 @@ describe('upload attempts', () => {
       createdBy: USER_ID,
       sameRecording: true,
       previousTimelineId: 'youtube:dQw4w9WgXcQ',
+      previousTimelineIds: ['youtube:dQw4w9WgXcQ'],
       reservedMinutes: 180,
     });
 
@@ -143,6 +144,7 @@ describe('upload attempts', () => {
       createdBy: USER_ID,
       sameRecording: true,
       previousTimelineId: 'youtube:dQw4w9WgXcQ',
+      previousTimelineIds: ['youtube:dQw4w9WgXcQ'],
       reservedMinutes: 180,
       status: 'reserved',
       deployment: 'test:tsw_2026_test',

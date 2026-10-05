@@ -10,7 +10,7 @@
 //
 // THIS SCRIPT DELETES DOCUMENTS. Scope is narrow and heavily guarded:
 //   * only Games whose leagueId is the named league, AND
-//   * status 'scheduled', AND trackingMode 'one_sided', AND zero events, AND
+//   * status 'scheduled', AND trackingMode 'one_sided', AND zero events, AND no video, AND
 //   * whose _id appears in the verified snapshot taken before the run.
 // Deletes are issued by an explicit _id list, never by a filter. Anything that
 // fails a guard aborts the whole run before a single write. Nothing outside the
@@ -114,6 +114,33 @@ function buildParticipant(side, team, league) {
   };
 }
 
+// Why a game in the league must not be replaced; empty means replaceable.
+function replaceGuardReasons(game, snapshotGameIds) {
+  const reasons = [];
+  if (game.status !== 'scheduled') reasons.push(`status=${game.status}`);
+  if (game.trackingMode !== 'one_sided') reasons.push(`trackingMode=${game.trackingMode}`);
+  if ((game.events || []).length > 0) reasons.push(`${game.events.length} events`);
+  if (!snapshotGameIds.has(String(game._id))) reasons.push('not in snapshot');
+  if (!game.homeLeagueTeamId || !game.awayLeagueTeamId) reasons.push('missing a side');
+  // V10: deleting a game with hosted video would strand its billed Mux asset.
+  if (game.video) reasons.push('has hosted video');
+  return reasons;
+}
+
+function buildDeleteFilter({ ids, leagueId }) {
+  return {
+    _id: { $in: ids },
+    leagueId,
+    status: 'scheduled',
+    trackingMode: 'one_sided',
+    video: null,
+    // Must mirror the JS guard above exactly. `{ $size: 0 }` alone does NOT
+    // match a document whose `events` field is absent, so a doc the guard
+    // considered safe could survive the delete and leave a duplicate behind.
+    $or: [{ events: { $size: 0 } }, { events: { $exists: false } }],
+  };
+}
+
 async function main() {
   if (!process.env.ENV_FILE) {
     throw new Error('ENV_FILE is required. Refusing to guess which database to write to.');
@@ -180,12 +207,7 @@ async function main() {
   const untouched = [];
 
   for (const game of allGames) {
-    const reasons = [];
-    if (game.status !== 'scheduled') reasons.push(`status=${game.status}`);
-    if (game.trackingMode !== 'one_sided') reasons.push(`trackingMode=${game.trackingMode}`);
-    if ((game.events || []).length > 0) reasons.push(`${game.events.length} events`);
-    if (!snapshotGameIds.has(String(game._id))) reasons.push('not in snapshot');
-    if (!game.homeLeagueTeamId || !game.awayLeagueTeamId) reasons.push('missing a side');
+    const reasons = replaceGuardReasons(game, snapshotGameIds);
     if (reasons.length) {
       untouched.push({ game, reasons });
     } else {
@@ -323,19 +345,12 @@ async function main() {
     );
   }
 
-  const deleted = await Game.deleteMany({
-    _id: { $in: idsToDelete },
-    // Re-assert the guards at delete time so a concurrent edit (someone starting
-    // a game, or an event landing) removes it from the delete set instead of
-    // being destroyed.
-    leagueId: league._id,
-    status: 'scheduled',
-    trackingMode: 'one_sided',
-    // Must mirror the JS guard above exactly. `{ $size: 0 }` alone does NOT
-    // match a document whose `events` field is absent, so a doc the guard
-    // considered safe could survive the delete and leave a duplicate behind.
-    $or: [{ events: { $size: 0 } }, { events: { $exists: false } }],
-  });
+  // Re-assert the guards at delete time so a concurrent edit (someone starting
+  // a game, an event landing or a video upload) removes it from the delete set
+  // instead of being destroyed.
+  const deleted = await Game.deleteMany(
+    buildDeleteFilter({ ids: idsToDelete, leagueId: league._id })
+  );
   log(`\n[delete] ${deleted.deletedCount} original one_sided fixture(s) removed`);
 
   if (deleted.deletedCount !== idsToDelete.length) {
@@ -355,12 +370,16 @@ async function main() {
   await disconnectDb();
 }
 
-main().catch(async (error) => {
-  console.error(`\nFAILED: ${error.message}\n`);
-  try {
-    await disconnectDb();
-  } catch {
-    // already disconnected
-  }
-  process.exit(1);
-});
+module.exports = { replaceGuardReasons, buildDeleteFilter };
+
+if (require.main === module) {
+  main().catch(async (error) => {
+    console.error(`\nFAILED: ${error.message}\n`);
+    try {
+      await disconnectDb();
+    } catch {
+      // already disconnected
+    }
+    process.exit(1);
+  });
+}

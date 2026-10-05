@@ -886,7 +886,7 @@ describe('reconcileStaleAttempts', () => {
     expect(summary).toMatchObject({ scanned: 1, referenced: 1, reconciled: 0 });
   });
 
-  test('unreferenced uploading attempt: recheck → conditional transition → enqueue cancel → release slot once', async () => {
+  test('unreferenced uploading attempt: recheck → enqueue cancel → conditional transition → release slot once (V11)', async () => {
     mockRepository.listStaleUploadAttempts.mockResolvedValue([stale()]);
     mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
     mockRepository.transitionUploadAttempt.mockResolvedValue(stale({ status: 'cancelled' }));
@@ -916,8 +916,8 @@ describe('reconcileStaleAttempts', () => {
     });
     const order = [
       mockRepository.isGameVideoGenerationReferenced.mock.invocationCallOrder[0],
-      mockRepository.transitionUploadAttempt.mock.invocationCallOrder[0],
       mockRepository.enqueueCleanupJob.mock.invocationCallOrder[0],
+      mockRepository.transitionUploadAttempt.mock.invocationCallOrder[0],
       mockRepository.releaseUploadSlot.mock.invocationCallOrder[0],
     ];
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -962,14 +962,13 @@ describe('reconcileStaleAttempts', () => {
     expect(summary).toMatchObject({ reconciled: 1, enqueued: 0 });
   });
 
-  test('lost the transition race (null) → no enqueue and no slot release', async () => {
+  test('lost the transition race (null) → no slot release (the idempotent job rechecks references)', async () => {
     mockRepository.listStaleUploadAttempts.mockResolvedValue([stale()]);
     mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
     mockRepository.transitionUploadAttempt.mockResolvedValue(null);
 
     const summary = await cleanup.reconcileStaleAttempts({ now: NOW });
 
-    expect(mockRepository.enqueueCleanupJob).not.toHaveBeenCalled();
     expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
     expect(summary).toMatchObject({ raced: 1, reconciled: 0 });
   });
@@ -994,11 +993,23 @@ describe('reconcileStaleAttempts', () => {
     expect(mockLogger.error).toHaveBeenCalled();
   });
 
-  test('enqueue failure → the attempt is restored to its in-flight status (retried next sweep), slot kept', async () => {
+  test('enqueue failure → the attempt is never transitioned, slot kept (V11)', async () => {
+    mockRepository.listStaleUploadAttempts.mockResolvedValue([stale({ errorMessage: null })]);
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
+    mockRepository.enqueueCleanupJob.mockRejectedValue(new Error('connection lost'));
+
+    const summary = await cleanup.reconcileStaleAttempts({ now: NOW });
+
+    expect(mockRepository.transitionUploadAttempt).not.toHaveBeenCalled();
+    expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({ errors: 1, reconciled: 0 });
+  });
+
+  test('slot release failure → the attempt is restored in flight so a later sweep releases it (V11)', async () => {
     mockRepository.listStaleUploadAttempts.mockResolvedValue([stale({ errorMessage: null })]);
     mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(false);
     mockRepository.transitionUploadAttempt.mockResolvedValue({});
-    mockRepository.enqueueCleanupJob.mockRejectedValue(new Error('connection lost'));
+    mockRepository.releaseUploadSlot.mockRejectedValue(new Error('connection lost'));
 
     const summary = await cleanup.reconcileStaleAttempts({ now: NOW });
 
@@ -1011,7 +1022,6 @@ describe('reconcileStaleAttempts', () => {
       expectedAssetId: null,
       set: { errorMessage: null },
     });
-    expect(mockRepository.releaseUploadSlot).not.toHaveBeenCalled();
     expect(summary).toMatchObject({ errors: 1, reconciled: 0 });
   });
 
