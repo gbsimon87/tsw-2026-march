@@ -572,14 +572,33 @@ async function reconcileStaleAttempts({
 function kickCleanup() {
   try {
     if (!muxClient.isMuxConfigured()) return;
-    setImmediate(() => {
-      runCleanupBatch().catch((error) => {
+    // V23: tracked so shutdown and the manual script can wait for it; claims
+    // nothing once shutdown has begun (the jobs are durable).
+    const run = new Promise((resolve) => setImmediate(resolve))
+      .then(() => runCleanupBatch({ shouldStop: () => sweep.stopping }))
+      .catch((error) => {
         logger.error({ err: error }, 'Video cleanup kick failed');
-      });
-    });
+        return null;
+      })
+      .finally(() => kicks.delete(run));
+    kicks.add(run);
   } catch (error) {
     logger.error({ err: error }, 'Video cleanup kick failed');
   }
+}
+
+const kicks = new Set();
+
+/**
+ * Wait for every kicked batch, including any kicked while waiting.
+ * @returns {Promise<object[]>} the batches' summaries (failed kicks omitted)
+ */
+async function waitForCleanupKicks() {
+  const results = [];
+  while (kicks.size > 0) {
+    results.push(...(await Promise.all([...kicks])));
+  }
+  return results.filter(Boolean);
 }
 
 const sweep = { timer: null, running: null, stopping: false };
@@ -633,7 +652,7 @@ function stopVideoCleanupSweep() {
     sweep.timer = null;
   }
   sweep.stopping = true;
-  return sweep.running ?? Promise.resolve();
+  return Promise.all([sweep.running, waitForCleanupKicks()]).then(() => undefined);
 }
 
 module.exports = {
@@ -659,6 +678,7 @@ module.exports = {
   verifyMuxEnvironment,
   warnForeignVideoWork,
   kickCleanup,
+  waitForCleanupKicks,
   startVideoCleanupSweep,
   stopVideoCleanupSweep,
 };

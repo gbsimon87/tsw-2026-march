@@ -1072,6 +1072,46 @@ describe('reconcileStaleAttempts', () => {
 });
 
 describe('kickCleanup', () => {
+  // A stop in an earlier test's teardown leaves the sweep stopping; a fresh
+  // start clears it, as at boot.
+  beforeEach(() => {
+    cleanup.startVideoCleanupSweep({ intervalMs: 60 * 60 * 1000 });
+  });
+
+  // V23: shutdown and the manual script wait for kicked batches, so no job is
+  // left leased and the script's summary counts their work.
+  test('stop waits for a kicked batch', async () => {
+    const claim = deferred();
+    mockRepository.claimDueCleanupJobs.mockReturnValueOnce(claim.promise);
+    cleanup.kickCleanup();
+    await flushPromises();
+    await flushPromises();
+    let stopped = false;
+    const stopping = cleanup.stopVideoCleanupSweep().then(() => {
+      stopped = true;
+    });
+    await flushPromises();
+    expect(stopped).toBe(false);
+    claim.resolve([]);
+    await stopping;
+    expect(stopped).toBe(true);
+  });
+
+  test('a kick during shutdown claims nothing', async () => {
+    await cleanup.stopVideoCleanupSweep();
+    cleanup.kickCleanup();
+    await cleanup.waitForCleanupKicks();
+    expect(mockRepository.claimDueCleanupJobs).not.toHaveBeenCalled();
+  });
+
+  test('waitForCleanupKicks returns the kicked batches’ summaries', async () => {
+    mockRepository.claimDueCleanupJobs.mockResolvedValueOnce([]);
+    cleanup.kickCleanup();
+    const results = await cleanup.waitForCleanupKicks();
+    expect(results).toEqual([expect.objectContaining({ claimed: 0 })]);
+    expect(await cleanup.waitForCleanupKicks()).toEqual([]);
+  });
+
   test('runs one batch on setImmediate, after the caller returns', async () => {
     const returned = cleanup.kickCleanup();
 

@@ -220,8 +220,8 @@ generate a new video asset for the reel.
 Status on 5 October 2026: Phase 1 is implemented on `feat/media-provider-analysis`
 (Tasks 5–14 still uncommitted). No live Mux upload or browser acceptance has been
 run, and launch decisions (DPA, retention, quotas, revocation window) are open.
-A code review on 5 October found no authorization bypass or token leak. Its
-medium findings and V8–V11 are fixed, and its remaining low findings (V12–V23) are open. [`mux-video-tracker.md`](./mux-video-tracker.md)
+A code review on 5 October found no authorization bypass or token leak. All 23 of
+its findings (V1–V23) are fixed. [`mux-video-tracker.md`](./mux-video-tracker.md)
 is the status, review-findings and acceptance source; [`mux.md`](./mux.md) is
 the setup and operations guide.
 

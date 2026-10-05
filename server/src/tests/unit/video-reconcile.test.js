@@ -5,6 +5,7 @@ const mockCleanup = {
   runCleanupBatch: jest.fn(),
   previewCleanupBatch: jest.fn(),
   warnForeignVideoWork: jest.fn(() => Promise.resolve({ attempts: 0, jobs: 0 })),
+  waitForCleanupKicks: jest.fn(() => Promise.resolve([])),
 };
 const mockMux = { isMuxConfigured: jest.fn() };
 const mockRepository = {
@@ -65,6 +66,24 @@ describe('parseVideoReconcileArgs', () => {
 });
 
 describe('runVideoReconcile', () => {
+  // V23: batches kicked by reconcile/lifecycle finish before the counts, and
+  // their work is reported rather than understated.
+  test('waits for kicked batches before counting and reports their work', async () => {
+    mockCleanup.waitForCleanupKicks.mockResolvedValueOnce([
+      { claimed: 1, done: 1 },
+      { claimed: 2, done: 1, retry: 1 },
+    ]);
+    const summary = await runVideoReconcile({ dryRun: false, now: NOW });
+    expect(mockCleanup.waitForCleanupKicks.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRepository.countPendingCleanupJobs.mock.invocationCallOrder[0]
+    );
+    expect(summary.cleanup).toEqual({
+      claimed: 2,
+      done: 2,
+      kicked: { batches: 2, claimed: 3, done: 2, retry: 1 },
+    });
+  });
+
   test('live: reconcile (bounded), then one cleanup batch, then the outstanding counts', async () => {
     const summary = await runVideoReconcile({ dryRun: false, now: NOW });
 

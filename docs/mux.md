@@ -16,7 +16,10 @@ operator audit of both provider resources and persisted attempts/jobs first.
 Hosted video settlement uses MongoDB transactions to commit game readiness,
 upload status and quota conversion together. Use Atlas or a MongoDB replica
 set; a standalone MongoDB server cannot process ready/failure transitions.
-Configure this before enabling hosted uploads. Keep the ordinary standalone
+Configure this before enabling hosted uploads. With
+`MUX_UPLOADS_ENABLED=true`, the API checks for a replica set and every video
+index at boot. If either is missing, it turns uploads off for that process and
+logs `Hosted video uploads disabled`. Keep the ordinary standalone
 local database for development without Mux if preferred.
 
 The transaction regression suite uses an isolated replica-set database whose

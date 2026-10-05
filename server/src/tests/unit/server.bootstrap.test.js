@@ -17,6 +17,10 @@ jest.mock('../../modules/video/mux.client', () => ({ isMuxConfigured: jest.fn() 
 jest.mock('../../modules/video/video.cleanup', () => ({
   startVideoCleanupSweep: jest.fn(() => true),
   stopVideoCleanupSweep: jest.fn().mockResolvedValue(),
+  waitForCleanupKicks: jest.fn().mockResolvedValue([]),
+}));
+jest.mock('../../modules/video/video.prerequisites', () => ({
+  enforceVideoUploadPrerequisites: jest.fn().mockResolvedValue(),
 }));
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
@@ -36,6 +40,7 @@ function loadServer({ muxConfigured }) {
       app: require('../../app'),
       mux: require('../../modules/video/mux.client'),
       cleanup: require('../../modules/video/video.cleanup'),
+      prerequisites: require('../../modules/video/video.prerequisites'),
     };
     modules.mux.isMuxConfigured.mockReturnValue(muxConfigured);
     const httpServer = { close: jest.fn((callback) => callback()) };
@@ -76,4 +81,28 @@ test('starts the sweep when Mux is configured and stops it on shutdown before cl
     db.disconnectDb.mock.invocationCallOrder[0]
   );
   expect(exit).toHaveBeenCalledWith(0);
+});
+
+// V23: upload prerequisites are enforced before the API accepts requests, and
+// shutdown waits for batches kicked by requests drained during close.
+test('enforces video upload prerequisites before listening', async () => {
+  const { prerequisites, app } = loadServer({ muxConfigured: true });
+  await flushPromises();
+  expect(prerequisites.enforceVideoUploadPrerequisites).toHaveBeenCalledTimes(1);
+  const listen = app.createApp.mock.results[0].value.listen;
+  expect(prerequisites.enforceVideoUploadPrerequisites.mock.invocationCallOrder[0]).toBeLessThan(
+    listen.mock.invocationCallOrder[0]
+  );
+});
+
+test('shutdown waits for kicked cleanup batches before closing the DB', async () => {
+  const { cleanup, db, handlers } = loadServer({ muxConfigured: true });
+  await flushPromises();
+  handlers.SIGTERM();
+  await flushPromises();
+  await flushPromises();
+  expect(cleanup.waitForCleanupKicks).toHaveBeenCalled();
+  expect(cleanup.waitForCleanupKicks.mock.invocationCallOrder[0]).toBeLessThan(
+    db.disconnectDb.mock.invocationCallOrder[0]
+  );
 });

@@ -78,6 +78,11 @@ async function runVideoReconcile({ dryRun, retryFailed = false, now = new Date()
       }
     : await cleanup.runCleanupBatch({ limit: CLEANUP_SCRIPT_LIMIT });
 
+  // V23: reconcile/lifecycle kick their own batches; let them finish before
+  // counting (no job left leased at disconnect) and report their work.
+  const kicked = await cleanup.waitForCleanupKicks();
+  if (kicked.length > 0) cleanupResult.kicked = summarizeKickedBatches(kicked);
+
   const pending = await countPendingCleanupJobs();
   const pendingOrFailed = await countPendingCleanupJobs({ includeFailed: true });
 
@@ -93,6 +98,16 @@ async function runVideoReconcile({ dryRun, retryFailed = false, now = new Date()
     outstanding: { pending, failed: pendingOrFailed - pending },
     foreignDeployments,
   };
+}
+
+function summarizeKickedBatches(batches) {
+  const totals = { batches: batches.length };
+  for (const batch of batches) {
+    for (const [key, value] of Object.entries(batch)) {
+      if (typeof value === 'number' && value > 0) totals[key] = (totals[key] || 0) + value;
+    }
+  }
+  return totals;
 }
 
 async function main() {

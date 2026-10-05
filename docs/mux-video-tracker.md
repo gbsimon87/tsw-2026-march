@@ -11,9 +11,8 @@ Task 14 and live Mux acceptance checks remain open. Starter replay access stays
 separate from hosted-upload allowance and viewer authorization. Setup and
 operations: [`mux.md`](mux.md). A bug and security review on 5 October found no
 authorization bypass or token leak, but logged 23 medium/low findings
-([review findings](#bug-and-security-review-5-october-2026)). V1–V11 (all the
-medium findings plus the four that reopened R3 and R5) are fixed, and V12–V23
-remain open.
+([review findings](#bug-and-security-review-5-october-2026)). All 23 findings
+(V1–V23) are fixed.
 
 Update this file as work lands: tick the box, add the commit or PR, and record
 anything learned in **Notes**. Status values: `todo`, `in progress`, `blocked`,
@@ -101,8 +100,8 @@ V9. All of them are fixed, so both are closed again.
 
 A read-only review of everything on the branch since `abf8922`, committed and
 working tree, server and client. Each finding was traced through the code; V5
-was checked against Mux's create-upload API reference. V1–V7 were fixed the
-same day with regression tests (see Notes); V8–V23 are `todo`. Severity: M =
+was checked against Mux's create-upload API reference. All 23 were fixed the
+same day with regression tests (see Notes). Severity: M =
 medium, L = low.
 
 **No security finding.** Webhook verification uses raw bytes, timing-safe HMAC,
@@ -136,7 +135,7 @@ reach public payloads, and every `/video` response is `no-store`.
 | V20 | L   | Scripts             | `video:hosting`: the header's `pnpm … -- <leagueId>` usage fails with "Unknown argument --". It accepts `--max-stored-minutes` below 180, which blocks every upload, and it prints no target database.                                                                                                                                                                                                                           | `scripts/set-league-video-hosting.js`                                                | done   |
 | V21 | L   | Client edge cases   | Device clock skew → token refetch every second or permanent "Loading video…". A poll that returns `video: null` (replay entitlement lost) aborts a live transfer. Some cancel failures leave no Cancel button. The one-retry flag never resets. The feed card Play button does nothing.                                                                                                                                          | `useVideoPlayback.js`; `GameVideoUploader.jsx`; `MuxVideo.jsx`                       | done   |
 | V22 | L   | Upload API          | Replacing an `uploading` video can't work with `maxConcurrentUploads: 1` and returns a misleading allowance 429. `errored` is never persisted on `Game.video`. The client never calls this path.                                                                                                                                                                                                                                 | `video.service.js` `createGameVideoUpload`                                           | done   |
-| V23 | L   | Operations          | Nothing at runtime checks for the replica set or video indexes before `MUX_UPLOADS_ENABLED`. Without indexes, racing quota upserts can split a counter. Shutdown and `video:reconcile` don't await `kickCleanup` batches, which leaves leased jobs and an understated summary.                                                                                                                                                   | `server.js`; `video.cleanup.js`; `video-reconcile.js`                                | todo   |
+| V23 | L   | Operations          | Nothing at runtime checks for the replica set or video indexes before `MUX_UPLOADS_ENABLED`. Without indexes, racing quota upserts can split a counter. Shutdown and `video:reconcile` don't await `kickCleanup` batches, which leaves leased jobs and an understated summary.                                                                                                                                                   | `server.js`; `video.cleanup.js`; `video-reconcile.js`                                | done   |
 
 ## Verification of the three open questions
 
@@ -277,3 +276,43 @@ Sources: [Mux lazy-loading guide](https://www.mux.com/docs/guides/player-lazy-lo
     attempt. A failed slot release puts the attempt back in flight for the next
     sweep.
   - **Verification:** server 118 suites / 1,693 tests passed; lint passed.
+- 2026-10-05 fixes V12–V23 (all low), one commit each, regression tests first.
+  - **V12:** deleting a league game with hosted video needs a league owner or
+    manager, as `DELETE /video` does.
+  - **V13:** a redelivered `asset.ready` for an attempt already `ready` skips
+    the ingest checks, so a since-lowered tier cannot queue deletion of live
+    media.
+  - **V14:** remove, cancel, replace and game delete no longer hand back
+    stored minutes. The `delete_asset` job does that once Mux confirms
+    deletion.
+  - **V15:** recap (public game), league player profile and Pulse payloads
+    mark a Mux highlight unavailable unless the viewer has game access, or the
+    clip has a live share and passes the publication gate
+    (`resolveMuxHighlightViewerGate`, one per game). A failed check hides the
+    clip. Standalone team profiles are not gated because standalone games
+    cannot host Mux.
+  - **V16:** anonymous game payloads include `video` only when it is `ready`,
+    and never its `errorMessage`.
+  - **V17:** the upload limiter counts successful creates only.
+  - **V18:** blank `MUX_*=` values mean unset. The signing key must be RSA.
+  - **V19:** each sweep stamps the attempts it scanned (`sweptAt.lifecycle` /
+    `sweptAt.orphan`, never `updatedAt`) and scans least-recently-swept first.
+  - **V20:** `video:hosting` accepts a `--` separator, rejects an enabled
+    grant below 180 stored minutes and prints the target database first.
+  - **V21:** token renewal is timed from receipt plus the new
+    `expiresInSeconds`, so device clock skew no longer loops or hides
+    playback. A poll without `video` no longer aborts a live transfer. An
+    unconfirmed cancel keeps **Cancel upload**. The one-retry flag resets once
+    the refreshed source can play. Offscreen feed cards show a passive
+    placeholder instead of a Play button that did nothing.
+  - **V22:** any existing video, including an unfinished upload, returns 409
+    `video_exists` before a slot is reserved. The unreachable replace path is
+    removed.
+  - **V23:** when `MUX_UPLOADS_ENABLED` is on, boot checks for a replica set
+    and every video index. If either is missing, uploads are turned off for
+    that process and an error is logged. Shutdown and `video:reconcile` wait
+    for kicked cleanup batches. The script reports their work under
+    `cleanup.kicked`.
+  - **Verification:** server 120 suites / 1,730 tests passed (7 skipped); lint
+    passed. Client video tests passed. The full client run had one failure,
+    the caption-assistant hashtag test, which also fails without these changes.

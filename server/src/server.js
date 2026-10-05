@@ -4,10 +4,17 @@ const { env } = require('./config/env');
 const { logger } = require('./config/logger');
 const { shutdownAnalytics } = require('./modules/analytics/analytics.service');
 const { isMuxConfigured } = require('./modules/video/mux.client');
-const { startVideoCleanupSweep, stopVideoCleanupSweep } = require('./modules/video/video.cleanup');
+const {
+  startVideoCleanupSweep,
+  stopVideoCleanupSweep,
+  waitForCleanupKicks,
+} = require('./modules/video/video.cleanup');
+const { enforceVideoUploadPrerequisites } = require('./modules/video/video.prerequisites');
 
 async function bootstrap() {
   await connectDb();
+  // V23: replica set + video indexes, before any upload request is served.
+  await enforceVideoUploadPrerequisites();
 
   const app = createApp();
   const server = app.listen(env.PORT, '0.0.0.0', () => {
@@ -53,6 +60,8 @@ function registerGracefulShutdown(server) {
         server.close((err) => (err ? reject(err) : resolve()));
       });
       await videoSweepStopped;
+      // V23: requests drained by close may have kicked cleanup batches.
+      await waitForCleanupKicks();
       // Flush batched analytics before the process goes away, otherwise a
       // restart or deploy silently discards whatever is still queued.
       await shutdownAnalytics();
