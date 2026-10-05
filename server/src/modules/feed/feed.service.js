@@ -520,7 +520,11 @@ async function resolveMuxGatesForGames(viewerUserId, gamesById) {
   for (const [id, source] of gamesById) {
     if (getGameVideoProvider(source) !== 'mux') continue;
     const game = await findGameById(id);
-    gates.set(id, await resolveMuxHighlightViewerGate({ userId: viewerUserId, game }));
+    const gate = await resolveMuxHighlightViewerGate({ userId: viewerUserId, game });
+    // Judge the FULL game's event: the media projection lacks playerId, and an
+    // unattributed event can never be cleared for publication.
+    const events = new Map((game?.events || []).map((ev) => [String(ev._id), ev]));
+    gates.set(id, (eventId, hasLiveShare) => gate(events.get(String(eventId)), hasLiveShare));
   }
   return gates;
 }
@@ -540,13 +544,16 @@ async function resolveHighlightClipPayload(
     fields.videoProvider = null;
   }
   if (fields.videoProvider === 'mux') {
-    const gate =
-      muxGates?.get(String(clip.gameId)) ??
-      (await require('../video/video.policy').resolveMuxHighlightViewerGate({
+    let visible = muxGates?.get(String(clip.gameId));
+    if (!visible) {
+      // Single-post paths load the full game above.
+      const gate = await require('../video/video.policy').resolveMuxHighlightViewerGate({
         userId: viewerUserId,
         game,
-      }));
-    if (!gate(event, true)) {
+      });
+      visible = (_eventId, hasLiveShare) => gate(event, hasLiveShare);
+    }
+    if (!visible(clip.eventId, true)) {
       fields.videoAvailable = false;
       fields.videoProvider = null;
     }

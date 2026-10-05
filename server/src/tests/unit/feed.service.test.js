@@ -1701,6 +1701,19 @@ describe('Mux highlight sources and footage publication', () => {
     expect(gate).toHaveBeenCalledWith(expect.objectContaining({ _id: eventId }), true);
     expect(post.highlightClip).toMatchObject({ videoAvailable: false, videoProvider: null });
   });
+  // V15 regression: the page's media projection has no playerId, so the gate
+  // must judge the FULL game's event (else every public clip looks restricted).
+  test('feed pages judge each clip by the full game event, not the media projection', async () => {
+    listPosts.mockResolvedValue([legacy()]);
+    findUsersByIds.mockResolvedValue([{ _id: 'user', name: 'Simon' }]);
+    const projected = current();
+    delete projected.events[0].playerId;
+    findGameVideoSourcesByIds.mockResolvedValue([projected]);
+    findGameById.mockResolvedValue(current());
+    policy.resolveMuxHighlightViewerGate.mockResolvedValue((event) => Boolean(event?.playerId));
+    const { posts } = await service.listFeedPosts(null);
+    expect(posts[0].highlightClip.videoAvailable).toBe(true);
+  });
   test('feed pages resolve the Mux viewer gate once per game from the full game', async () => {
     listPosts.mockResolvedValue([legacy(), { ...legacy(), _id: 'post2' }]);
     findUsersByIds.mockResolvedValue([{ _id: 'user', name: 'Simon' }]);
