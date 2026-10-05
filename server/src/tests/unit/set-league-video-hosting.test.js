@@ -125,3 +125,34 @@ describe('planVideoHostingUpdate', () => {
     });
   });
 });
+
+describe('V20 operator safety', () => {
+  test('a bare `--` from pnpm script forwarding is ignored', () => {
+    expect(parseVideoHostingArgs(['--', LEAGUE_ID, '--enable']).leagueId).toBe(LEAGUE_ID);
+  });
+
+  test('enabled hosting below one 180-minute reservation is rejected', () => {
+    expect(() => planVideoHostingUpdate(null, { enabled: true, maxStoredMinutes: 120 })).toThrow(
+      /at least 180/
+    );
+    expect(() =>
+      planVideoHostingUpdate(
+        { ...DEFAULTS, enabled: true, maxStoredMinutes: 600 },
+        {
+          maxStoredMinutes: 60,
+        }
+      )
+    ).toThrow(/at least 180/);
+  });
+
+  test('a disabled grant may keep any limit', () => {
+    expect(planVideoHostingUpdate(null, { maxStoredMinutes: 60 }).next.maxStoredMinutes).toBe(60);
+  });
+
+  test('describeTarget names the database without credentials', () => {
+    const { describeTarget } = require('../../scripts/set-league-video-hosting');
+    expect(describeTarget({ name: 'tsw_prod', host: 'cluster0.example.net' })).toBe(
+      'database tsw_prod on cluster0.example.net'
+    );
+  });
+});

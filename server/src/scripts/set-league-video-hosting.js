@@ -5,14 +5,15 @@
 // Idempotent: re-running with the same values changes nothing. With no change
 // flags it prints the league's current grant.
 //
-// Usage:
-//   pnpm --filter server video:hosting -- <leagueId>
-//   pnpm --filter server video:hosting -- <leagueId> --enable \
+// Usage (a `--` separator before the id is accepted too):
+//   pnpm --filter server video:hosting <leagueId>
+//   pnpm --filter server video:hosting <leagueId> --enable \
 //     --max-stored-minutes 600 --max-concurrent-uploads 1 --max-creates-per-day 3
-//   pnpm --filter server video:hosting -- <leagueId> --disable
-//   pnpm --filter server video:hosting -- <leagueId> \
+//   pnpm --filter server video:hosting <leagueId> --disable
+//   pnpm --filter server video:hosting <leagueId> \
 //     --public-clips granted|withdrawn|unrecorded --by operator@example.com
-//   add --dry-run to print the change without writing it.
+//   add --dry-run to print the change without writing it. The target database
+//   is printed first; check it before applying.
 
 const mongoose = require('mongoose');
 
@@ -29,6 +30,9 @@ const LIMIT_FLAGS = {
   '--max-creates-per-day': 'maxCreatesPerDay',
 };
 const VALUE_FLAGS = [...Object.keys(LIMIT_FLAGS), '--public-clips', '--by'];
+// Every upload reserves this many minutes up front (video.service
+// UPLOAD_RESERVATION_MINUTES); an enabled grant below it blocks every upload.
+const MIN_ENABLED_STORED_MINUTES = 180;
 
 function parseVideoHostingArgs(argv) {
   const values = {};
@@ -37,6 +41,8 @@ function parseVideoHostingArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    // V20: `pnpm … video:hosting -- <id>` forwards the separator itself.
+    if (argument === '--') continue;
     const [flag, inlineValue] = argument.split(/=(.*)/s);
     if (VALUE_FLAGS.includes(flag)) {
       const value = inlineValue ?? argv[index + 1];
@@ -134,7 +140,19 @@ function planVideoHostingUpdate(
     changed.push('publicClips');
   }
 
+  if (next.enabled && next.maxStoredMinutes < MIN_ENABLED_STORED_MINUTES) {
+    throw new Error(
+      `--max-stored-minutes must be at least ${MIN_ENABLED_STORED_MINUTES} while hosting is enabled (each upload reserves ${MIN_ENABLED_STORED_MINUTES})`
+    );
+  }
+
   return { next, changed };
+}
+
+// V20: name the target so a run against the wrong environment is visible.
+// Never prints the connection string (it carries credentials).
+function describeTarget(connection) {
+  return `database ${connection?.name || 'unknown'} on ${connection?.host || 'unknown host'}`;
 }
 
 async function main() {
@@ -146,6 +164,7 @@ async function main() {
   const { findUserByEmail } = require('../modules/auth/auth.repository');
 
   await connectDb();
+  console.log(`Target: ${describeTarget(mongoose.connection)}`);
   const league = await League.findById(leagueId);
   if (!league) throw new Error(`No league found for ${leagueId}`);
 
@@ -190,4 +209,5 @@ if (require.main === module) {
 module.exports = {
   parseVideoHostingArgs,
   planVideoHostingUpdate,
+  describeTarget,
 };
