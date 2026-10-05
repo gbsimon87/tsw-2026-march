@@ -328,6 +328,36 @@ describe('upload attempts', () => {
     expect(filter.status).toEqual({ $in: ['errored'] });
     expect(options.limit).toBe(10);
   });
+
+  // V19: a named sweep scans least-recently-swept first, so rows it skipped
+  // rotate behind newer ones instead of filling every batch.
+  test('listStaleUploadAttempts with a sweep sorts by that sweep, then age', async () => {
+    const find = jest.spyOn(VideoUploadAttempt, 'find').mockResolvedValue([]);
+    await videoRepository.listStaleUploadAttempts({ olderThan: NOW, sweep: 'lifecycle' });
+    expect(find.mock.calls[0][2].sort).toEqual({ 'sweptAt.lifecycle': 1, updatedAt: 1 });
+  });
+
+  test('listStaleUploadAttempts rejects an unknown sweep name', async () => {
+    await expect(
+      videoRepository.listStaleUploadAttempts({ olderThan: NOW, sweep: 'nope' })
+    ).rejects.toThrow(TypeError);
+  });
+
+  test('markUploadAttemptsSwept stamps the sweep without touching updatedAt', async () => {
+    const updateMany = jest
+      .spyOn(VideoUploadAttempt, 'updateMany')
+      .mockResolvedValue({ modifiedCount: 1 });
+    await videoRepository.markUploadAttemptsSwept({
+      attemptIds: [ATTEMPT_ID],
+      sweep: 'orphan',
+      now: NOW,
+    });
+    expect(updateMany).toHaveBeenCalledWith(
+      { _id: { $in: [ATTEMPT_ID] } },
+      { $set: { 'sweptAt.orphan': NOW } },
+      { timestamps: false }
+    );
+  });
 });
 
 describe('VideoCleanupJob', () => {

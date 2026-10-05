@@ -527,6 +527,7 @@ async function reconcileStaleAttempts({
     olderThan: new Date(now.getTime() - graceMs),
     limit,
     statuses: repository.UPLOAD_ATTEMPT_IN_FLIGHT_STATUSES,
+    sweep: 'orphan',
   });
 
   for (const attempt of attempts) {
@@ -542,6 +543,22 @@ async function reconcileStaleAttempts({
           err: repository.summarizeCleanupError(error),
         },
         'Video reconcile failed for an upload attempt'
+      );
+    }
+  }
+  // V19: rotate scanned rows (best effort) so 25+ long-lived referenced
+  // attempts cannot fill every batch.
+  if (!dryRun && attempts.length > 0) {
+    try {
+      await repository.markUploadAttemptsSwept({
+        attemptIds: attempts.map((attempt) => attempt._id),
+        sweep: 'orphan',
+        now,
+      });
+    } catch (error) {
+      logger.warn(
+        { err: repository.summarizeCleanupError(error) },
+        'Could not stamp swept attempts'
       );
     }
   }

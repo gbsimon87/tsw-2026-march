@@ -265,3 +265,23 @@ test('a retried asset.ready for an already-ready attempt never discards the live
   expect(repo.enqueueCleanupJob).not.toHaveBeenCalled();
   expect(repo.settleFailedGameVideo).not.toHaveBeenCalled();
 });
+
+// V19: the lifecycle sweep rotates through stale attempts instead of
+// re-reading the same oldest batch forever.
+test('lifecycle recovery scans by its own sweep and stamps what it scanned', async () => {
+  const stale = { ...attempt, status: 'processing', assetId: 'asset' };
+  repo.listStaleUploadAttempts.mockResolvedValue([stale]);
+  mux.getAsset.mockResolvedValue({ ...asset, status: 'preparing' });
+  const now = new Date('2026-10-05T12:00:00.000Z');
+
+  await reconcileVideoLifecycle({ now });
+
+  expect(repo.listStaleUploadAttempts).toHaveBeenCalledWith(
+    expect.objectContaining({ sweep: 'lifecycle' })
+  );
+  expect(repo.markUploadAttemptsSwept).toHaveBeenCalledWith({
+    attemptIds: [stale._id],
+    sweep: 'lifecycle',
+    now,
+  });
+});

@@ -9,6 +9,7 @@ const mockRepository = {
   transitionUploadAttempt: jest.fn(),
   takeUploadAttemptStoredMinutes: jest.fn(),
   listStaleUploadAttempts: jest.fn(),
+  markUploadAttemptsSwept: jest.fn(),
   isGameVideoGenerationReferenced: jest.fn(),
   enqueueCleanupJob: jest.fn(),
   claimDueCleanupJobs: jest.fn(),
@@ -867,7 +868,25 @@ describe('reconcileStaleAttempts', () => {
       olderThan: new Date(NOW.getTime() - 24 * 60 * 60 * 1000),
       limit: 7,
       statuses: ['reserved', 'uploading', 'processing'],
+      sweep: 'orphan',
     });
+  });
+
+  // V19: scanned rows rotate behind unscanned ones on the next sweep.
+  test('stamps every scanned attempt, referenced or not, but not on a dry run', async () => {
+    mockRepository.listStaleUploadAttempts.mockResolvedValue([stale()]);
+    mockRepository.isGameVideoGenerationReferenced.mockResolvedValue(true);
+
+    await cleanup.reconcileStaleAttempts({ now: NOW });
+    expect(mockRepository.markUploadAttemptsSwept).toHaveBeenCalledWith({
+      attemptIds: [ATTEMPT_ID],
+      sweep: 'orphan',
+      now: NOW,
+    });
+
+    mockRepository.markUploadAttemptsSwept.mockClear();
+    await cleanup.reconcileStaleAttempts({ now: NOW, dryRun: true });
+    expect(mockRepository.markUploadAttemptsSwept).not.toHaveBeenCalled();
   });
 
   test('an attempt still referenced by its Game is left alone', async () => {

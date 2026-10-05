@@ -124,6 +124,13 @@ const videoUploadAttemptSchema = new mongoose.Schema(
     storedMinutes: nonNegativeInteger('storedMinutes', { default: 0 }),
     errorMessage: { type: String, default: null, maxlength: 500 },
     deployment: { type: String, required: true },
+    // V19: when each recovery sweep last scanned this attempt. Sweeps scan
+    // least-recently-swept first so rows they skip cannot starve newer ones.
+    // Kept apart from updatedAt, which the sweeps' age checks read.
+    sweptAt: {
+      lifecycle: { type: Date, default: undefined },
+      orphan: { type: Date, default: undefined },
+    },
   },
   { timestamps: true }
 );
@@ -487,12 +494,22 @@ async function takeUploadAttemptStoredMinutes(attemptId) {
 // Reconciliation (R3): this deployment's attempts that have not moved since
 // `olderThan`, oldest first, bounded.
 // → attempt[]
+const UPLOAD_ATTEMPT_SWEEPS = ['lifecycle', 'orphan'];
+
+function assertSweep(sweep) {
+  if (!UPLOAD_ATTEMPT_SWEEPS.includes(sweep)) throw new TypeError(`Unknown sweep ${sweep}`);
+}
+
 async function listStaleUploadAttempts({
   olderThan,
   limit = MAX_STALE_ATTEMPTS_PER_SWEEP,
   statuses = UPLOAD_ATTEMPT_IN_FLIGHT_STATUSES,
+  sweep,
 }) {
   assertStatusList(statuses, UPLOAD_ATTEMPT_STATUSES, 'statuses');
+  if (sweep !== undefined) assertSweep(sweep);
+  // Never-swept rows (missing field) sort first.
+  const sort = sweep ? { [`sweptAt.${sweep}`]: 1, updatedAt: 1 } : { updatedAt: 1 };
   const boundedLimit = Math.min(Math.max(1, Math.trunc(limit) || 1), MAX_STALE_ATTEMPTS_PER_SWEEP);
   return VideoUploadAttempt.find(
     {
@@ -501,7 +518,19 @@ async function listStaleUploadAttempts({
       updatedAt: { $lt: olderThan },
     },
     null,
-    { sort: { updatedAt: 1 }, limit: boundedLimit, lean: true }
+    { sort, limit: boundedLimit, lean: true }
+  );
+}
+
+// V19: stamp the attempts a sweep scanned. timestamps:false keeps updatedAt
+// (the staleness clock) unchanged.
+async function markUploadAttemptsSwept({ attemptIds, sweep, now = new Date() }) {
+  assertSweep(sweep);
+  if (!attemptIds?.length) return;
+  await VideoUploadAttempt.updateMany(
+    { _id: { $in: attemptIds } },
+    { $set: { [`sweptAt.${sweep}`]: now } },
+    { timestamps: false }
   );
 }
 
@@ -1145,6 +1174,7 @@ module.exports = {
   settleReadyGameVideo,
   settleFailedGameVideo,
   listStaleUploadAttempts,
+  markUploadAttemptsSwept,
   // cleanup jobs
   enqueueCleanupJob,
   requeueFailedCleanupJobs,

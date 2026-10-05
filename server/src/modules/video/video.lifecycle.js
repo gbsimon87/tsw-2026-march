@@ -234,11 +234,28 @@ async function handleMuxWebhook({ rawBody, signatureHeader }) {
 // Bounded recovery for attached attempts too: previously the orphan sweep
 // skipped these forever, so a missed ready/error webhook stranded the game.
 // Dry-run performs database reads only. Every provider read proves identity.
+// V19: best effort — a failed stamp only delays rotation to the next sweep.
+async function markSwept(attempts, sweep, now) {
+  try {
+    await repository.markUploadAttemptsSwept({
+      attemptIds: attempts.map((attempt) => attempt._id),
+      sweep,
+      now,
+    });
+  } catch (error) {
+    logger.warn(
+      { sweep, err: repository.summarizeCleanupError(error) },
+      'Could not stamp swept attempts'
+    );
+  }
+}
+
 async function reconcileVideoLifecycle({ now = new Date(), dryRun = false, limit = 25 } = {}) {
   const attempts = await repository.listStaleUploadAttempts({
     olderThan: new Date(now.getTime() - 10 * 60 * 1000),
     limit,
     statuses: ['uploading', 'processing'],
+    sweep: 'lifecycle',
   });
   const summary = { scanned: attempts.length, recovered: 0, errors: 0, planned: [] };
   // V6: recovery reads a 404 as "media gone" and discards the attempt; never
@@ -302,6 +319,7 @@ async function reconcileVideoLifecycle({ now = new Date(), dryRun = false, limit
       }
     }
   }
+  if (!dryRun) await markSwept(attempts, 'lifecycle', now);
   return summary;
 }
 
