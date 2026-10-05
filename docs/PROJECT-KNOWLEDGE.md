@@ -16,6 +16,8 @@ It supports:
   data-health checks;
 - public game, team, league, and player pages;
 - box scores, recaps, shot maps, replay, highlights, and shareable cards;
+- linked YouTube game video and, in development behind kill switches, hosted
+  game video on Mux (direct uploads, signed full-game playback and clips);
 - The Pulse public feed, player discovery, and follows for users, leagues, and
   league teams;
 - CSV exports for claimed league profiles, leagues, and league teams;
@@ -117,7 +119,8 @@ Schemas are defined in repository files. Main models:
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Auth       | `User`, `Session`, `AuthToken`                                                                                                                                                 |
 | Teams      | `Team`, `TeamSeasonSummary`                                                                                                                                                    |
-| Games      | `Game` with embedded events and roster snapshots                                                                                                                               |
+| Games      | `Game` with embedded events, roster snapshots, optional `videoUrl` (YouTube) and `video` (hosted Mux media)                                                                    |
+| Video      | `VideoUploadAttempt`, `VideoCleanupJob`, `VideoWebhookEvent`, `VideoQuotaCounter`                                                                                              |
 | Feed       | `Post`                                                                                                                                                                         |
 | Follows    | `Follow`                                                                                                                                                                       |
 | Milestones | `PlayerMilestone`                                                                                                                                                              |
@@ -205,12 +208,72 @@ secure context and supported browser and remains a progressive enhancement over 
 workflow. The command schema, examples, release checks, open questions, and deferred extensions are
 maintained in [`superpowers/plans/2026-09-06-voice-tracking.md`](./superpowers/plans/2026-09-06-voice-tracking.md).
 
-Completed games with entitled YouTube highlights expose a storage-free virtual
-highlight reel on the game recap. The client selects up to five playable events,
+Completed games with entitled highlights expose a storage-free virtual highlight
+reel on the game recap. The client selects up to five playable events,
 deduplicates nearby timestamps from the same play, restores chronological order,
-and advances between timestamp-bounded YouTube embeds. Sharing uses the canonical
-`/games/:gameId?reel=1` page URL; TSW does not download, generate, or host a new
-video asset.
+and advances between timestamp-bounded YouTube embeds or signed Mux instant
+clips. Sharing uses the canonical `/games/:gameId?reel=1` page URL; TSW does not
+generate a new video asset for the reel.
+
+## Hosted Game Video (Mux)
+
+Status on 5 October 2026: Phase 1 is implemented on `feat/media-provider-analysis`
+(Tasks 5–14 still uncommitted). No live Mux upload or browser acceptance has been
+run, and launch decisions (DPA, retention, quotas, revocation window) are open.
+A code review on 5 October found no authorization bypass or token leak. Its
+medium findings (V1–V7) are fixed and its low findings remain open. [`mux-video-tracker.md`](./mux-video-tracker.md)
+is the status, review-findings and acceptance source; [`mux.md`](./mux.md) is
+the setup and operations guide.
+
+- **Provider rule**: a ready Mux video with a signed playback id and verified
+  duration wins over `Game.videoUrl`; otherwise YouTube plays as before
+  (`server/src/modules/shared/gameVideo.js`). Clients receive only provider,
+  status, duration and a non-secret `version`; upload, asset, playback and
+  generation ids stay server-side.
+- **Timelines**: every event timestamp is bound to the recording it was taken
+  against (`mux:<generationId>` or `youtube:<videoId>`). A replacement only keeps
+  old highlights playable when the uploader confirms "same recording".
+- **Uploads** (`POST /games/:gameId/video/uploads`) are browser-to-Mux direct
+  uploads from the tracker's Options tab. They need `MUX_UPLOADS_ENABLED`, an
+  operator grant on the League (`League.videoHosting`, set with
+  `pnpm --filter server video:hosting`), a non-scheduled league game, writable
+  access as league owner or active manager, an allowlisted Origin, a per-user
+  rate limit and an atomic per-League quota (concurrency, creates/day, stored
+  minutes). No billing plan grants hosting (`CAN_HOST_GAME_VIDEO` is reserved).
+  Cancel and `DELETE /games/:gameId/video` work for owners/managers even on a
+  lapsed League.
+- **Playback** (`GET /games/:gameId/video/playback[?eventId=]`, `private,
+no-store`) signs RS256 Mux JWTs on each request: 12 h for full games
+  (authenticated, game access, replay entitlement) and 1 h for ±5 s event clips.
+  Anonymous clip access requires `MUX_PUBLIC_CLIPS_ENABLED`, a live Pulse share
+  of that game and event, a completed public League, a recorded footage grant
+  and current marketing/player permission. Issued tokens cannot be revoked
+  before expiry.
+- **Webhook** `POST /api/v1/videos/webhooks/mux` is mounted with a raw body
+  before JSON/CSRF, verifies the HMAC signature and 5-minute tolerance,
+  deduplicates event ids, and settles ready/failed states in MongoDB
+  transactions. **Hosted video therefore needs Atlas or a replica set.**
+- **Cleanup**: provider deletion is a durable, lease-claimed `VideoCleanupJob`
+  queued before media is detached (remove, replace, cancel, game delete). The
+  API sweeps every five minutes when Mux is configured and reconciles stale
+  attempts; `pnpm --filter server video:reconcile [--dry-run]` runs it manually.
+  Ownership is scoped to a deployment label (`APP_ENV`/`NODE_ENV` plus database
+  name; production requires `APP_ENV`). Before treating any Mux 404 as "gone",
+  cleanup and recovery check that the credentials can see this deployment's live
+  assets. Schedule rebuilds never delete games carrying hosted video, and
+  deleting a single game is conditional on the video it read. Run
+  `video:ensure-indexes` before enabling uploads (production has `autoIndex`
+  off).
+- **Pulse and profiles** resolve each highlight's current provider and
+  timestamp from the live game in one batched projection per page, so legacy
+  posts follow replacements. A newly ready upload reruns permitted automatic
+  highlight publication, but each game publishes automatic highlights only once
+  (`Game.autoHighlightsPublishedAt`).
+- **Client** code is in `client/src/features/video/` (lazy
+  `@mux/mux-player-react`, UpChunk uploader, token hook, shared playback
+  coordinator so only one YouTube/Mux player plays at a time). Tokens are
+  requested on play intent or Pulse visibility, kept in memory only, and renewed
+  before expiry.
 
 ## Leagues
 
@@ -408,6 +471,9 @@ manual-action, and launch-status guide.
 ## Integrations
 
 - Cloudinary stores avatars, logos, feed media, and generated card assets.
+- Mux hosts uploaded game video (signed playback only, no MP4 renditions). It
+  is off unless all five `MUX_*` credentials are set, and uploads and public
+  clips each have their own kill switch. See [`mux.md`](./mux.md).
 - Resend sends verification, password-reset, contact, and billing emails, through its API
   rather than SMTP. Setup and outstanding DNS work: [`email-delivery.md`](./email-delivery.md).
 - PostHog is off by default. Client tracking records explicit route events and
@@ -417,7 +483,8 @@ manual-action, and launch-status guide.
 
 Environment validation is in `server/src/config/env.js` and
 `client/src/lib/env.js`. A configured Stripe secret requires all Stripe price,
-webhook, success, and cancel settings.
+webhook, success, and cancel settings. Mux credentials are all-or-nothing, and
+`MUX_SIGNING_PRIVATE_KEY` must be a base64-encoded PEM private key.
 
 ## Engineering Conventions
 
@@ -457,6 +524,7 @@ auto-deploys; production deploys are manual. Secrets belong in Render, not
 | Game events and derived stats | `games.repository.js`, `games.service.js`, `stats.constants.js`                                                                          |
 | Voice tracking                | [`superpowers/plans/2026-09-06-voice-tracking.md`](./superpowers/plans/2026-09-06-voice-tracking.md), `client/src/features/games/voice/` |
 | Billing and entitlements      | [`stripe.md`](./stripe.md), `billing.service.js`, `entitlements.service.js`                                                              |
+| Hosted game video (Mux)       | [`mux.md`](./mux.md), [`mux-video-tracker.md`](./mux-video-tracker.md), `server/src/modules/video/`, `client/src/features/video/`        |
 | Deployment and environment    | [`deployment-render.md`](./deployment-render.md), `render.yaml`, env validators                                                          |
 | Product backlog               | [`ideas.md`](./ideas.md)                                                                                                                 |
 | Database maintenance          | [`mongodb-production-backup.md`](./mongodb-production-backup.md), `server/src/scripts/`                                                  |
