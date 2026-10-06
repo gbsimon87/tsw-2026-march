@@ -3110,6 +3110,49 @@ describe('GameTrackPage', () => {
     });
   });
 
+  test.each(['STL', 'FT+'])(
+    'ignores a second %s tap while an inserted stat is still saving',
+    async (statButton) => {
+      currentResponse = createResponse({
+        game: {
+          events: [
+            { id: 'event-1', playerId: 'player-1', statType: 'FG2_MADE' },
+            { id: 'event-2', playerId: 'player-2', statType: 'STL' },
+          ],
+          startingLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+          currentLineupPlayerIds: ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'],
+        },
+      });
+      let releaseInsert;
+      apiMocks.insertEventBefore.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            releaseInsert = () => resolve(currentResponse);
+          })
+      );
+
+      renderPage();
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+        expect(screen.getByText(/Recent Events/i)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Insert stat before this event' })[1]);
+      pointerDown(getActiveCourt(), { clientX: 250, clientY: 800 });
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+
+      // Insert mode keeps the picker open while the write is in flight, so the button is still
+      // there to be tapped again.
+      const button = within(getEventPicker()).getByRole('button', { name: statButton });
+      fireEvent.click(button);
+      await waitFor(() => expect(apiMocks.insertEventBefore).toHaveBeenCalledTimes(1));
+      fireEvent.click(button);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(apiMocks.insertEventBefore).toHaveBeenCalledTimes(1);
+      releaseInsert();
+    }
+  );
+
   test('saves the starting five and enables full-screen tracking', async () => {
     renderPage();
 
@@ -3454,6 +3497,35 @@ describe('GameTrackPage', () => {
       gameSummary: { homePoints: 0, awayPoints: 0 },
     };
   }
+
+  test.each([
+    ['FOUL', /Who was fouled\?/i],
+    ['STL', /Who turned over the ball\?/i],
+    ['TOV', /Who got the steal\?/i],
+    ['BLK', /Who missed the shot\?/i],
+  ])('keeps the court tappable after answering the %s follow-up', async (stat, question) => {
+    currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+    apiMocks.getById.mockResolvedValue(currentResponse);
+    renderPage();
+    await screen.findByRole('button', { name: 'Select Home Squad' });
+
+    pointerDown(getActiveCourt());
+    await screen.findAllByText(/Add Event/i);
+    // Clicks that land right after the court tap are dropped as ghost clicks.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: stat }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await within(getEventPicker()).findByText(question);
+
+    fireEvent.click(within(getEventPicker()).getAllByRole('button', { name: /Away 1/ })[0]);
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+
+    // Answering must release the saving lock, or the next court tap is silently ignored.
+    pointerDown(getActiveCourt());
+    await waitFor(() => expect(screen.getAllByText(/Add Event/i).length).toBeGreaterThan(0));
+  });
 
   test('gates a brand-new league dual-team game through home lineup then away lineup before showing normal tabs', async () => {
     currentResponse = createLeagueDualTeamResponse();

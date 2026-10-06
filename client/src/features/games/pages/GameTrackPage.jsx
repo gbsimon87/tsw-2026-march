@@ -1671,6 +1671,9 @@ export function GameTrackPage() {
         };
         label = STAT_LABELS[prompt.statType] || prompt.statType;
       } else if (prompt.kind === 'who_was_fouled') {
+        // Nothing is stored, so this returns before the write chain whose finally would
+        // release the saving lock. Release it here, or every later court tap is ignored.
+        setIsSaving(false);
         clearEventPicker();
         return true;
       } else {
@@ -1705,7 +1708,10 @@ export function GameTrackPage() {
       await inflightRef.current;
       return true;
     } catch {
-      // Error already handled and displayed by the promise chain above.
+      // Error already handled and displayed by the promise chain above. Its finally releases the
+      // saving lock, but anything that throws before the chain starts never reaches it — release
+      // it here too so a failed answer can never leave the court ignoring every tap.
+      setIsSaving(false);
       return false;
     }
   }
