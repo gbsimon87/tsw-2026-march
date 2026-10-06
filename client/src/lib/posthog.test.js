@@ -208,7 +208,11 @@ describe('posthog lib', () => {
       })
     ).toEqual({
       event: 'safe',
-      properties: { route_pattern: '/games/:gameId', nested: { allowed: true } },
+      properties: {
+        route_pattern: '/games/:gameId',
+        nested: { allowed: true },
+        $pathname: '/games/:gameId',
+      },
     });
   });
 
@@ -227,7 +231,7 @@ describe('posthog lib', () => {
       })
     ).toEqual({
       event: '$pageview',
-      properties: { token: 'phc_project_key', route_pattern: '/about' },
+      properties: { token: 'phc_project_key', route_pattern: '/about', $pathname: '/about' },
     });
   });
 
@@ -248,7 +252,12 @@ describe('posthog lib', () => {
       })
     ).toEqual({
       event: '$pageview',
-      properties: { token: 'phc_project_key', nested: {}, route_pattern: '/about' },
+      properties: {
+        token: 'phc_project_key',
+        nested: {},
+        route_pattern: '/about',
+        $pathname: '/about',
+      },
     });
   });
 
@@ -260,5 +269,45 @@ describe('posthog lib', () => {
     const [, options] = posthog.init.mock.calls[0];
     expect(options.property_denylist).not.toContain('token');
     expect(options.property_denylist).toContain('$current_url');
+  });
+
+  // Regression: Web analytics scopes every KPI to the project's authorized
+  // domain with a `$host` filter. Deny-listing `$host` made production show 0
+  // visitors, pageviews and sessions while events were arriving normally.
+  test('keeps $host so Web analytics can match the authorized domain', async () => {
+    const { default: posthog } = await import('posthog-js');
+    const { initPostHog } = await loadPostHogModule({ analytics: 'true' });
+    initPostHog();
+
+    const [, options] = posthog.init.mock.calls[0];
+    expect(options.property_denylist).not.toContain('$host');
+    expect(options.property_denylist).toEqual(
+      expect.arrayContaining(['$current_url', '$pathname', '$referrer', '$referring_domain'])
+    );
+  });
+
+  test('reports the route pattern, never the raw path, as $pathname', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: '$pageview',
+        properties: {
+          $pathname: '/games/abc123',
+          route_pattern: '/games/:gameId',
+        },
+      }).properties
+    ).toEqual({ $pathname: '/games/:gameId', route_pattern: '/games/:gameId' });
+  });
+
+  test('drops $pathname when the event has no route pattern', async () => {
+    const { sanitizePostHogEvent } = await loadPostHogModule({ analytics: 'false' });
+
+    expect(
+      sanitizePostHogEvent({
+        event: 'user_logged_in',
+        properties: { $pathname: '/reset-password', auth_provider: 'local' },
+      }).properties
+    ).toEqual({ auth_provider: 'local' });
   });
 });

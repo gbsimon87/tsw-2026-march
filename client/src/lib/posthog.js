@@ -35,12 +35,16 @@ export function initPostHog() {
     persistence: accepted ? 'localStorage+cookie' : 'memory',
     secure_cookie: window.location.protocol === 'https:',
     respect_dnt: true,
+    // `$host` is deliberately NOT here: it is only the site's domain, and Web
+    // analytics filters every KPI to the authorized domain by `$host`, so
+    // stripping it showed 0 visitors/pageviews/sessions in production.
+    // `$pathname` is stripped here and re-added from the route pattern in
+    // sanitizePostHogEvent.
     property_denylist: [
       '$current_url',
       '$pathname',
       '$referrer',
       '$referring_domain',
-      '$host',
       '$raw_user_agent',
       '$ip',
       'url',
@@ -133,6 +137,15 @@ export function sanitizePostHogEvent(event) {
   const properties = sanitizeValue(event.properties);
   for (const key of SDK_RESERVED_PROPERTY_KEYS) {
     if (key in event.properties) properties[key] = event.properties[key];
+  }
+
+  // Web analytics builds its pages and entry-page reports from `$pathname`.
+  // Feed it the route pattern (`/games/:gameId`), never the raw path, so those
+  // reports work without IDs, slugs or tokens leaving the browser. before_send
+  // runs after posthog-js applies property_denylist, so this survives.
+  delete properties.$pathname;
+  if (typeof properties.route_pattern === 'string') {
+    properties.$pathname = properties.route_pattern;
   }
 
   return { ...event, properties };
