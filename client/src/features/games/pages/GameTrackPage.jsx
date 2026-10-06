@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
@@ -7,8 +8,13 @@ import { gamesApi } from '../api/gamesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { MuxVideo } from '../../video/components/MuxVideo';
 import { GameVideoUploader } from '../../video/components/GameVideoUploader';
-import { hasPlayableVideo, gameVideoSourceKey } from '../../video/videoSource';
+import {
+  getHostedVideoStatus,
+  hasPlayableVideo,
+  gameVideoSourceKey,
+} from '../../video/videoSource';
 import { GameVideoEmbed } from '../components/GameVideoEmbed';
+import { extractYouTubeVideoId } from '../youtube';
 import { InteractiveCourtImage } from '../components/InteractiveCourtImage';
 import { AddRosterPlayerDialog } from '../components/AddRosterPlayerDialog';
 import { ConfirmSubInDialog } from '../components/ConfirmSubInDialog';
@@ -531,6 +537,15 @@ export function GameTrackPage() {
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [videoUrlDraft, setVideoUrlDraft] = useState('');
   const [isVideoUrlEditOpen, setIsVideoUrlEditOpen] = useState(false);
+  // Unmounting GameVideoUploader aborts an in-flight upload, so it stays mounted at the page root
+  // and is portaled into this fixed node; the Options panel adopts the node whenever it renders.
+  const [videoUploaderNode] = useState(() => document.createElement('div'));
+  const videoUploaderSlotRef = useCallback(
+    (slot) => {
+      if (slot) slot.appendChild(videoUploaderNode);
+    },
+    [videoUploaderNode]
+  );
   const [error, setError] = useState('');
   const [lastActionLabel, setLastActionLabel] = useState('');
   const [lastActionMeta, setLastActionMeta] = useState({ playerId: null });
@@ -924,6 +939,13 @@ export function GameTrackPage() {
   const boxScore = data?.boxScore || null;
   const game = data?.game || null;
   const isCompleted = game?.status === 'completed';
+  // An uploaded (Mux) video takes priority over a YouTube link once it is ready.
+  const gameVideoSourceSummary =
+    getHostedVideoStatus(game) === 'ready'
+      ? 'Playing your uploaded video.'
+      : extractYouTubeVideoId(game?.videoUrl)
+        ? 'Playing the linked YouTube video.'
+        : 'Add a video to watch the game while you track. Use one source or the other.';
   const homeLineupCount = (data?.lineups?.[TEAM_SIDES.HOME]?.currentPlayerIds || []).length;
   const awayLineupCount = (data?.lineups?.[TEAM_SIDES.AWAY]?.currentPlayerIds || []).length;
   const homeLineupReady = homeLineupCount > 0;
@@ -3597,7 +3619,7 @@ export function GameTrackPage() {
         }
       />
 
-      <div className={activePanel === 'options' ? 'my-4' : 'hidden'}>
+      {createPortal(
         <GameVideoUploader
           key={gameId}
           gameId={gameId}
@@ -3605,8 +3627,9 @@ export function GameTrackPage() {
           videoUrl={game.videoUrl}
           allowance={data.videoUpload}
           onMediaChange={onMediaChange}
-        />
-      </div>
+        />,
+        videoUploaderNode
+      )}
       <div className={trackingShellClassName}>
         {hasPlayableVideo(game) && isDesktopLayout ? (
           <div className="lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col">
@@ -4372,8 +4395,8 @@ export function GameTrackPage() {
                                       ? 'Requires a secure HTTPS connection.'
                                       : 'Not supported by this browser.'
                                     : voiceEnabled
-                                      ? 'On — select a court position to start listening.'
-                                      : 'Off — tap to enable for this tracking session.'}
+                                      ? 'On - select a court position to start listening.'
+                                      : 'Off - tap to enable for this tracking session.'}
                               </p>
                               {speechSupport.supported && voiceSportSupported ? (
                                 <p className="mt-1 text-[11px] leading-4 text-slate-400">
@@ -4455,7 +4478,7 @@ export function GameTrackPage() {
                             <div>
                               <p className="text-sm font-semibold text-slate-900">Rotate Court</p>
                               <p className="text-xs text-slate-500">
-                                Currently {courtOrientation} — tap to rotate{' '}
+                                Currently {courtOrientation} - tap to rotate{' '}
                                 {courtOrientation === 'vertical' ? 'horizontal' : 'vertical'}
                               </p>
                             </div>
@@ -4483,8 +4506,8 @@ export function GameTrackPage() {
                               </p>
                               <p className="text-xs text-slate-500">
                                 {pauseVideoOnEntry
-                                  ? `On — ${hasPlayableVideo(game) ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
-                                  : `Off — ${hasPlayableVideo(game) ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
+                                  ? `On - ${hasPlayableVideo(game) ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
+                                  : `Off - ${hasPlayableVideo(game) ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
                               </p>
                             </div>
                             <span
@@ -4493,7 +4516,18 @@ export function GameTrackPage() {
                               {pauseVideoOnEntry ? 'On' : 'Off'}
                             </span>
                           </button>
+                        </div>
+                      </section>
 
+                      <section aria-labelledby="game-video-heading">
+                        <h2
+                          id="game-video-heading"
+                          className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
+                        >
+                          Game video
+                        </h2>
+                        <p className="mb-2 px-1 text-xs text-slate-500">{gameVideoSourceSummary}</p>
+                        <div className="space-y-2">
                           <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
                             <button
                               type="button"
@@ -4521,12 +4555,12 @@ export function GameTrackPage() {
                               </span>
                               <div>
                                 <p className="text-sm font-semibold text-slate-900">
-                                  {game.videoUrl ? 'Update Video' : 'Add Video'}
+                                  {game.videoUrl ? 'Change YouTube Link' : 'Link YouTube Video'}
                                 </p>
                                 <p className="text-xs text-slate-500">
                                   {game.videoUrl
-                                    ? 'Change the linked game video URL.'
-                                    : 'Link a YouTube video to sync with tracking.'}
+                                    ? 'Replace or remove the linked YouTube video.'
+                                    : 'Paste a YouTube link to watch while you track.'}
                                 </p>
                               </div>
                             </button>
@@ -4562,6 +4596,7 @@ export function GameTrackPage() {
                               </div>
                             ) : null}
                           </div>
+                          <div ref={videoUploaderSlotRef} className="has-[>div:empty]:hidden" />
                         </div>
                       </section>
 

@@ -4246,8 +4246,8 @@ describe('GameTrackPage', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: 'Options' }));
 
-      expect(screen.getByText('Add Video')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: /Add Video/i }));
+      expect(screen.getByText('Link YouTube Video')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Link YouTube Video/i }));
 
       const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
       fireEvent.change(input, {
@@ -4262,7 +4262,7 @@ describe('GameTrackPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Update Video')).toBeInTheDocument();
+        expect(screen.getByText('Change YouTube Link')).toBeInTheDocument();
       });
       fireEvent.click(screen.getByRole('button', { name: 'Court' }));
       expect(screen.getByTitle('Dev Scrimmage')).toBeInTheDocument();
@@ -4271,7 +4271,7 @@ describe('GameTrackPage', () => {
     }
   });
 
-  test('updating an existing video URL from the More tab shows "Update Video" and persists the change', async () => {
+  test('updating an existing video URL from the More tab shows "Change YouTube Link" and persists the change', async () => {
     const restoreMatchMedia = stubMatchMedia(true);
     try {
       currentResponse = createResponse({
@@ -4289,8 +4289,8 @@ describe('GameTrackPage', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: 'Options' }));
 
-      expect(screen.getByText('Update Video')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: /Update Video/i }));
+      expect(screen.getByText('Change YouTube Link')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Change YouTube Link/i }));
 
       const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
       expect(input.value).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
@@ -4327,7 +4327,7 @@ describe('GameTrackPage', () => {
         expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument();
       });
       fireEvent.click(screen.getByRole('button', { name: 'Options' }));
-      fireEvent.click(screen.getByRole('button', { name: /Update Video/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Change YouTube Link/i }));
 
       const input = screen.getByPlaceholderText('https://www.youtube.com/watch?v=...');
       fireEvent.change(input, { target: { value: '   ' } });

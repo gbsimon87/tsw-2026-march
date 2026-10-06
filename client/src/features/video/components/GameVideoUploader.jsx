@@ -254,7 +254,27 @@ export function GameVideoUploader({ gameId, video, videoUrl = null, allowance, o
       className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
       aria-label="Hosted game video"
     >
-      <p className="text-sm font-semibold text-slate-900">Upload game video</p>
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+          <svg
+            viewBox="0 0 20 20"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M10 13V3M6 7l4-4 4 4" />
+            <path d="M3 12v3.5A1.5 1.5 0 0 0 4.5 17h11a1.5 1.5 0 0 0 1.5-1.5V12" />
+          </svg>
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Upload Video File</p>
+          <p className="text-xs text-slate-500">
+            Host the recording on TSW. Once ready, it plays instead of a YouTube link.
+          </p>
+        </div>
+      </div>
       {error ? (
         <p role="alert" className="text-sm text-red-700">
           {error}
@@ -332,20 +352,17 @@ export function GameVideoUploader({ gameId, video, videoUrl = null, allowance, o
               Same recording and timing as the linked video
             </label>
           ) : null}
-          <label className="block text-sm font-semibold">
-            Choose game video
-            <input
-              aria-label="Choose game video"
-              type="file"
-              accept="video/*"
-              className="mt-2 block w-full text-sm"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                start(file);
-              }}
-            />
-          </label>
+          <input
+            aria-label="Choose game video"
+            type="file"
+            accept="video/*"
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-700"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              start(file);
+            }}
+          />
           <p className="text-xs text-slate-500">
             Up to 20 GB and 3 hours. A different recording makes existing highlights unavailable
             until their timestamps are corrected.
