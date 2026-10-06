@@ -143,7 +143,7 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_APP_NAME
-        value: tsw-2026-march
+        value: TSW
       - key: VITE_APP_ENV
         value: production
       - key: VITE_APP_VERSION
@@ -301,7 +301,7 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_APP_NAME
-        value: tsw-2026-march (Dev)
+        value: TSW Dev
       - key: VITE_APP_ENV
         value: development
       - key: VITE_APP_VERSION
