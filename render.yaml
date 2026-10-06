@@ -16,7 +16,7 @@ services:
       - key: APP_VERSION
         sync: false
       - key: ENABLE_ANALYTICS
-        value: false
+        value: true
       - key: PORT
         value: 10000
       - key: CLIENT_ORIGIN
@@ -116,9 +116,9 @@ services:
       - key: MUX_MAX_RESOLUTION_TIER
         value: 1080p
       - key: MUX_UPLOADS_ENABLED
-        value: false
+        value: true
       - key: MUX_PUBLIC_CLIPS_ENABLED
-        value: false
+        value: true
       - key: TEAM_LOGO_MAX_BYTES
         value: 2097152
       - key: FEED_IMAGE_MAX_BYTES
@@ -128,7 +128,7 @@ services:
       - key: AUTO_FEED_ENABLED
         sync: false
       - key: AUTO_FEED_MILESTONES_ENABLED
-        value: false
+        value: true
 
   - type: web
     name: tsw-2026-march-client-prod
@@ -151,7 +151,7 @@ services:
       - key: VITE_API_BASE_URL
         sync: false
       - key: VITE_ENABLE_ANALYTICS
-        value: false
+        value: true
       - key: VITE_POSTHOG_KEY
         sync: false
       - key: VITE_POSTHOG_HOST
