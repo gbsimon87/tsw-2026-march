@@ -228,7 +228,6 @@ describe('hashtags and handles', () => {
     });
     // An all-digit tag is invalid on Instagram, so only the standing tags remain.
     expect(kit.hashtags).toEqual(['#Basketball', '#TheSportyWay']);
-    expect(kit.hashtags.length).toBeGreaterThanOrEqual(3);
   });
 
   it('strips accents rather than emitting a tag Instagram will split', () => {
