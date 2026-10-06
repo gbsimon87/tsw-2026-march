@@ -626,9 +626,13 @@ export function GameTrackPage() {
   const entryVideoWasPausedRef = useRef(false);
   const entryClockTransitionRef = useRef(Promise.resolve());
   const clockOperatedThisMountRef = useRef(false);
-  // Records that the VIDEO is what paused the clock. Only a clock paused this way is restarted
-  // when the video plays again, so a clock stopped by hand — or never started — is left alone.
+  // Records that the clock is paused together with the video — by the video pausing, or by the
+  // clock's Pause button pausing a playing video. Only a clock paused this way is restarted when
+  // the video plays again, so a clock stopped on its own — or never started — is left alone.
   const clockPausedByVideoRef = useRef(false);
+  // The mirror case: the clock's Pause button paused a playing video. Only a video paused this
+  // way is played again by the Start button, so footage paused by hand stays where it was left.
+  const videoPausedByClockRef = useRef(false);
   const videoPlaybackStateRef = useRef(null);
   const playbackHeldByUiRef = useRef(false);
   const liveClockStatusRef = useRef(null);
@@ -694,6 +698,7 @@ export function GameTrackPage() {
     setCurrentVideoTimestamp(null);
     entryVideoWasPausedRef.current = false;
     clockPausedByVideoRef.current = false;
+    videoPausedByClockRef.current = false;
     videoPlaybackStateRef.current = null;
     setVideoPlaybackState(null);
     // `data` rather than `game`: this effect is declared above the `game` binding.
@@ -1127,6 +1132,8 @@ export function GameTrackPage() {
   useEffect(() => {
     if (!hasPlayableVideo(game) || !videoPlaybackState) return undefined;
     if (videoPlaybackState === 'playing') {
+      // Playing the video by hand settles the link: Start must not try to play it again.
+      videoPausedByClockRef.current = false;
       resumeClockForVideo();
       return undefined;
     }
@@ -2437,14 +2444,31 @@ export function GameTrackPage() {
     clockOperatedThisMountRef.current = true;
     // Operating the clock by hand takes it back from the video: a later play must not restart a
     // clock the scorekeeper just stopped, nor stop one they just started.
+    const clockWasPausedByVideo = clockPausedByVideoRef.current;
+    const videoWasPausedByClock = videoPausedByClockRef.current;
     clockPausedByVideoRef.current = false;
+    videoPausedByClockRef.current = false;
     setError('');
     setIsSaving(true);
     try {
       const response = await gamesApi.updateClock(gameId, command);
       updateData(response);
+      // Pause and Start carry the video with them, but only footage the clock itself paused.
+      // Both run after the clock write lands, so the video's own pause/play event finds the clock
+      // already in the matching state and never sends a second clock write.
+      if (command.action === 'pause' && videoPlaybackStateRef.current === 'playing') {
+        pauseVideo();
+        videoPausedByClockRef.current = true;
+        // Hand the clock to the link, so playing the video by hand restarts it as well.
+        clockPausedByVideoRef.current = true;
+      } else if (command.action === 'start' && videoWasPausedByClock) {
+        playVideo();
+      }
       return true;
     } catch (clockError) {
+      // Nothing changed, so the link between the clock and the video still stands.
+      clockPausedByVideoRef.current = clockWasPausedByVideo;
+      videoPausedByClockRef.current = videoWasPausedByClock;
       if (clockError.status === 409) {
         await loadGame();
         setError('The game changed in another tracking session. The latest clock was loaded.');

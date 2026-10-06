@@ -1953,6 +1953,164 @@ describe('GameTrackPage', () => {
     }
   });
 
+  test('pausing the clock by hand pauses the Mux video', async () => {
+    const restore = stubMatchMedia(true);
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    try {
+      currentResponse = createResponse({
+        game: {
+          video: { provider: 'mux', status: 'ready', version: 1 },
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          gameFormat: {
+            regulationSegmentType: 'quarter',
+            regulationSegmentDurationSeconds: 600,
+            overtimeDurationSeconds: 300,
+          },
+          clock: {
+            status: 'running',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 600000,
+            runningSince: new Date().toISOString(),
+          },
+        },
+      });
+      apiMocks.updateClock.mockImplementation((_id, command) => {
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              status: command.action === 'pause' ? 'paused' : 'running',
+            },
+          },
+        };
+        return Promise.resolve(currentResponse);
+      });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+      const media = await screen.findByTestId('tracker-mux');
+      fireEvent.play(media);
+      pause.mockClear();
+
+      fireEvent.click(getLastButtonByName(/^Pause$/i));
+      await waitFor(() => expect(pause).toHaveBeenCalled());
+      expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' });
+
+      // The video's own pause event must not send a second clock pause.
+      apiMocks.updateClock.mockClear();
+      fireEvent.pause(media);
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      expect(apiMocks.updateClock).not.toHaveBeenCalled();
+
+      // Playing the video by hand restarts the clock the Pause button stopped with it.
+      fireEvent.play(media);
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'start' })
+      );
+    } finally {
+      restore();
+      pause.mockRestore();
+    }
+  });
+
+  test('Start plays the Mux video only when the Pause button paused it', async () => {
+    const restore = stubMatchMedia(true);
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    try {
+      currentResponse = createResponse({
+        game: {
+          video: { provider: 'mux', status: 'ready', version: 1 },
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          gameFormat: {
+            regulationSegmentType: 'quarter',
+            regulationSegmentDurationSeconds: 600,
+            overtimeDurationSeconds: 300,
+          },
+          clock: {
+            status: 'running',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 600000,
+            runningSince: new Date().toISOString(),
+          },
+        },
+      });
+      apiMocks.updateClock.mockImplementation((_id, command) => {
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              status: command.action === 'pause' ? 'paused' : 'running',
+            },
+          },
+        };
+        return Promise.resolve(currentResponse);
+      });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept elapsed time' }));
+      const media = await screen.findByTestId('tracker-mux');
+      fireEvent.play(media);
+
+      // Pause button pauses the playing video; Start plays it again.
+      fireEvent.click(getLastButtonByName(/^Pause$/i));
+      await waitFor(() => expect(pause).toHaveBeenCalled());
+      fireEvent.pause(media);
+      play.mockClear();
+      fireEvent.click((await screen.findAllByRole('button', { name: /^Start$/i })).at(-1));
+      await waitFor(() => expect(play).toHaveBeenCalled());
+      fireEvent.play(media);
+
+      // A video paused by hand is not resumed by Start. Pausing the video pauses the clock.
+      fireEvent.pause(media);
+      await waitFor(
+        () => expect(screen.getAllByRole('button', { name: /^Start$/i }).length).toBeGreaterThan(0),
+        { timeout: 3000 }
+      );
+      play.mockClear();
+      fireEvent.click(getLastButtonByName(/^Start$/i));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(play).not.toHaveBeenCalled();
+    } finally {
+      restore();
+      pause.mockRestore();
+      play.mockRestore();
+    }
+  });
+
+  test('pausing the clock by hand pauses the YouTube video', async () => {
+    const restoreMatchMedia = stubMatchMedia(true);
+    try {
+      const iframe = await renderVideoGameWithRunningClock();
+      emitPlayerState(iframe, 1);
+      const postMessage = vi.spyOn(iframe.contentWindow, 'postMessage');
+
+      fireEvent.click(getLastButtonByName(/^Pause$/i));
+      await waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.stringContaining('pauseVideo'),
+          expect.anything()
+        )
+      );
+      emitPlayerState(iframe, 2);
+      fireEvent.click((await screen.findAllByRole('button', { name: /^Start$/i })).at(-1));
+      await waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.stringContaining('playVideo'),
+          expect.anything()
+        )
+      );
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
   test('pauses the game clock when the video is paused, and resumes it when the video plays', async () => {
     const restoreMatchMedia = stubMatchMedia(true);
     try {
