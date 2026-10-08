@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { getFieldGoalPercentage } from '../constants';
 
 // Chart palette.
 //
@@ -50,33 +51,45 @@ function toPercentage(value) {
 
 export function GameStatsCharts({
   isDualTeam,
+  isScrimmage = false,
   homeStats,
   awayStats,
   teamStats,
   homeLabel = 'Home',
   awayLabel = 'Away',
 }) {
+  const statRows = isScrimmage
+    ? STAT_ROWS.filter(({ key }) => ['points', 'tov'].includes(key))
+    : STAT_ROWS;
   const statsData = isDualTeam
-    ? STAT_ROWS.map(({ label, key }) => ({
+    ? statRows.map(({ label, key }) => ({
         stat: label,
         [homeLabel]: homeStats?.[key] ?? 0,
         [awayLabel]: awayStats?.[key] ?? 0,
       }))
-    : STAT_ROWS.map(({ label, key }) => ({
+    : statRows.map(({ label, key }) => ({
         stat: label,
         Team: teamStats?.[key] ?? 0,
       }));
 
-  const shootingData = isDualTeam
-    ? SHOOTING_ROWS.map(({ label, key }) => ({
-        stat: label,
-        [homeLabel]: toPercentage(homeStats?.[key]?.percentage),
-        [awayLabel]: toPercentage(awayStats?.[key]?.percentage),
-      }))
-    : SHOOTING_ROWS.map(({ label, key }) => ({
-        stat: label,
-        Team: toPercentage(teamStats?.[key]?.percentage),
-      }));
+  const shootingData = isScrimmage
+    ? [
+        {
+          stat: 'FG%',
+          [homeLabel]: toPercentage(getFieldGoalPercentage(homeStats)),
+          [awayLabel]: toPercentage(getFieldGoalPercentage(awayStats)),
+        },
+      ]
+    : isDualTeam
+      ? SHOOTING_ROWS.map(({ label, key }) => ({
+          stat: label,
+          [homeLabel]: toPercentage(homeStats?.[key]?.percentage),
+          [awayLabel]: toPercentage(awayStats?.[key]?.percentage),
+        }))
+      : SHOOTING_ROWS.map(({ label, key }) => ({
+          stat: label,
+          Team: toPercentage(teamStats?.[key]?.percentage),
+        }));
 
   return (
     <div className="mt-5 grid gap-5 sm:grid-cols-2">

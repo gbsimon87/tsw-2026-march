@@ -158,7 +158,7 @@ test('additive seed refuses a non-demo email collision and preserves demo creden
   expect(existing.passwordHash).toBe('changed-password');
 });
 
-test.each([[[]], [['--demo']]])(
+test.each([[[]], [['--demo']], [['--scrimmages']]])(
   'CLI dry run avoids database connections and rejects production for mode %j',
   (mode) => {
     const script = path.resolve(__dirname, '../../scripts/seed.js');

@@ -36,14 +36,14 @@ function isOpponentStat(statType) {
   return statType.startsWith('OPP_');
 }
 
-function buildSingleTeamSeries(events, teamKey, opponentKey) {
+function buildSingleTeamSeries(events, teamKey, opponentKey, pointValues) {
   let teamPoints = 0;
   let opponentPoints = 0;
 
   return events
-    .filter((event) => POINT_VALUES[event?.statType] != null)
+    .filter((event) => pointValues[event?.statType] != null)
     .map((event, index) => {
-      const value = POINT_VALUES[event.statType];
+      const value = pointValues[event.statType];
       if (isOpponentStat(event.statType)) {
         opponentPoints += value;
       } else {
@@ -54,14 +54,14 @@ function buildSingleTeamSeries(events, teamKey, opponentKey) {
     });
 }
 
-function buildDualTeamSeries(events, homeKey, awayKey) {
+function buildDualTeamSeries(events, homeKey, awayKey, pointValues) {
   let homePoints = 0;
   let awayPoints = 0;
 
   return events
-    .filter((event) => POINT_VALUES[event?.statType] != null && event.teamSide)
+    .filter((event) => pointValues[event?.statType] != null && event.teamSide)
     .map((event, index) => {
-      const value = POINT_VALUES[event.statType];
+      const value = pointValues[event.statType];
       if (event.teamSide === 'home') {
         homePoints += value;
       } else if (event.teamSide === 'away') {
@@ -77,13 +77,19 @@ export function ScoringTimelineChart({
   isDualTeam = false,
   homeLabel = 'Home',
   awayLabel = 'Away',
+  scoringRules = null,
 }) {
+  const pointValues = {
+    ...POINT_VALUES,
+    FG2_MADE: scoringRules?.insideArc ?? 2,
+    FG3_MADE: scoringRules?.outsideArc ?? 3,
+  };
   const safeEvents = events || [];
   const teamKey = isDualTeam ? homeLabel : 'Team';
   const opponentKey = isDualTeam ? awayLabel : 'Opponent';
   const series = isDualTeam
-    ? buildDualTeamSeries(safeEvents, teamKey, opponentKey)
-    : buildSingleTeamSeries(safeEvents, teamKey, opponentKey);
+    ? buildDualTeamSeries(safeEvents, teamKey, opponentKey, pointValues)
+    : buildSingleTeamSeries(safeEvents, teamKey, opponentKey, pointValues);
 
   if (series.length === 0) {
     return (

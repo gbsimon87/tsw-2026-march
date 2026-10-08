@@ -318,6 +318,7 @@ const addRosterPlayerSchema = z.object({
 });
 
 module.exports = {
+  isSupportedYouTubeUrl,
   createGameSchema,
   updateGameSchema,
   appendEventSchema,

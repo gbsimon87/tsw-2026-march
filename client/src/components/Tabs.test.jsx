@@ -13,7 +13,7 @@ describe('Tabs', () => {
 
     const tablist = screen.getByRole('tablist');
     expect(tablist).not.toHaveClass('sticky');
-    expect(tablist).not.toHaveClass('h-14');
+    expect(tablist).not.toHaveClass('h-[4.5rem]');
     expect(screen.getByRole('tab', { name: 'First' })).not.toHaveClass('h-full');
   });
 
@@ -22,10 +22,10 @@ describe('Tabs', () => {
 
     expect(screen.getByRole('tablist', { name: 'Sticky sections' })).toHaveClass(
       'sticky',
-      'h-14',
+      'h-[4.5rem]',
       'sm:h-12'
     );
-    // The tab fills the fixed row height so the sticky strip is exactly h-14 /
+    // The tab fills the fixed row height so the sticky strip is exactly 4.5rem /
     // sm:h-12 — that is what a sticky element inside the panel offsets against.
     expect(screen.getByRole('tab', { name: 'First' })).toHaveClass('h-full');
 

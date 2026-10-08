@@ -54,7 +54,7 @@ function finalizeFullTeamStatSummary(summary) {
   return summary;
 }
 
-function applyEventToTeamStatSummary(summary, statType) {
+function applyEventToTeamStatSummary(summary, statType, scoringRules = null) {
   if (statType === STAT_TYPES.FT_MADE) {
     summary.ft.made += 1;
     summary.points += 1;
@@ -68,7 +68,7 @@ function applyEventToTeamStatSummary(summary, statType) {
 
   if (statType === STAT_TYPES.FG2_MADE) {
     summary.fg2.made += 1;
-    summary.points += 2;
+    summary.points += scoringRules?.insideArc ?? 2;
     return summary;
   }
 
@@ -79,7 +79,7 @@ function applyEventToTeamStatSummary(summary, statType) {
 
   if (statType === STAT_TYPES.FG3_MADE) {
     summary.fg3.made += 1;
-    summary.points += 3;
+    summary.points += scoringRules?.outsideArc ?? 3;
     return summary;
   }
 
@@ -105,7 +105,7 @@ function applyEventToTeamStatSummary(summary, statType) {
   return summary;
 }
 
-function applyEventToFullTeamStatSummary(summary, statType) {
+function applyEventToFullTeamStatSummary(summary, statType, scoringRules = null) {
   if (statType === STAT_TYPES.FT_MADE) {
     summary.ft.made += 1;
     summary.points += 1;
@@ -119,7 +119,7 @@ function applyEventToFullTeamStatSummary(summary, statType) {
 
   if (statType === STAT_TYPES.FG2_MADE) {
     summary.fg2.made += 1;
-    summary.points += 2;
+    summary.points += scoringRules?.insideArc ?? 2;
     return summary;
   }
 
@@ -130,7 +130,7 @@ function applyEventToFullTeamStatSummary(summary, statType) {
 
   if (statType === STAT_TYPES.FG3_MADE) {
     summary.fg3.made += 1;
-    summary.points += 3;
+    summary.points += scoringRules?.outsideArc ?? 3;
     return summary;
   }
 
@@ -198,7 +198,7 @@ function createEmptyPlayerStatLine(playerId, displayName, options = {}) {
   };
 }
 
-function applyEventToPlayerStatLine(line, statType) {
+function applyEventToPlayerStatLine(line, statType, scoringRules = null) {
   if (statType === STAT_TYPES.FT_MADE) {
     line.ftm += 1;
     line.fta += 1;
@@ -212,7 +212,7 @@ function applyEventToPlayerStatLine(line, statType) {
   if (statType === STAT_TYPES.FG2_MADE) {
     line.fg2m += 1;
     line.fg2a += 1;
-    line.points += 2;
+    line.points += scoringRules?.insideArc ?? 2;
     return line;
   }
   if (statType === STAT_TYPES.FG2_MISS) {
@@ -222,7 +222,7 @@ function applyEventToPlayerStatLine(line, statType) {
   if (statType === STAT_TYPES.FG3_MADE) {
     line.fg3m += 1;
     line.fg3a += 1;
-    line.points += 3;
+    line.points += scoringRules?.outsideArc ?? 3;
     return line;
   }
   if (statType === STAT_TYPES.FG3_MISS) {
@@ -261,11 +261,11 @@ function applyEventToPlayerStatLine(line, statType) {
   return line;
 }
 
-function summarizeEvents(events = []) {
+function summarizeEvents(events = [], scoringRules = null) {
   const summary = createEmptyTeamStatSummary();
 
   for (const event of events) {
-    applyEventToTeamStatSummary(summary, event.statType);
+    applyEventToTeamStatSummary(summary, event.statType, scoringRules);
   }
 
   return finalizeTeamStatSummary(summary);
@@ -275,7 +275,7 @@ function summarizeEventsOneSided(events = []) {
   return summarizeEvents(events);
 }
 
-function summarizeEventsBySide(events = []) {
+function summarizeEventsBySide(events = [], scoringRules = null) {
   const summaries = {
     [TEAM_SIDES.HOME]: createEmptyFullTeamStatSummary(),
     [TEAM_SIDES.AWAY]: createEmptyFullTeamStatSummary(),
@@ -285,7 +285,7 @@ function summarizeEventsBySide(events = []) {
     if (!event?.teamSide || !summaries[event.teamSide]) {
       continue;
     }
-    applyEventToFullTeamStatSummary(summaries[event.teamSide], event.statType);
+    applyEventToFullTeamStatSummary(summaries[event.teamSide], event.statType, scoringRules);
   }
 
   return {

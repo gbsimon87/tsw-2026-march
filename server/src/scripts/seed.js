@@ -48,6 +48,8 @@ const {
   HIGHLIGHT_STAT_TYPES,
 } = require('../modules/games/games.service');
 
+const { seedScrimmages } = require('./seed-scrimmages');
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TEAM_COLORS = ['#2563eb', '#dc2626', '#7c3aed', '#059669', '#ea580c'];
 
@@ -2346,6 +2348,7 @@ async function resetSeedData() {
       LeagueDataIssueDismissal,
       Follow,
       PlayerMilestone,
+      ...Object.values(require('../modules/scrimmages/scrimmages.repository')),
     ].map((model) => model.createIndexes())
   );
 }
@@ -2627,12 +2630,24 @@ async function main() {
   // Checked before connecting, so a misconfigured target never even opens a
   // connection to something it might drop.
   const target = assertDevTarget();
+  if (DRY_RUN && process.argv.includes('--scrimmages')) {
+    console.log(
+      `DRY RUN: additive We-ball scrimmages in ${target.dbName}. No connection or writes.`
+    );
+    console.log(
+      '2 series, 4 colors, 23 pool players per series plus optional league imports, 12 weeks, 66 games, published weekly/season MVP, draft review, live tracking and approved/pending claims.'
+    );
+    return;
+  }
   if (DRY_RUN) {
     console.log(
       `DRY RUN: ${process.argv.includes('--demo') ? 'additive demo seed' : 'full development reset'} of ${target.dbName}. No connection or writes.`
     );
     console.log(
       'Demo dataset: 3 leagues, 15 teams, 120 roster players, 60 current and 20 historical completed games, 12 upcoming fixtures, community follows, earned milestones and social cards.'
+    );
+    console.log(
+      'We-ball scrimmages: 2 series, 4 colors, 12 weeks, 66 games, weekly/season MVP, recap sharing, claims and live tracking.'
     );
     if (!process.argv.includes('--demo'))
       console.log(
@@ -2644,8 +2659,13 @@ async function main() {
   await connectDb();
 
   try {
+    if (process.argv.includes('--scrimmages')) {
+      await seedScrimmages({ upsertUser });
+      return;
+    }
     if (process.argv.includes('--demo')) {
       await seedDemoData();
+      await seedScrimmages({ upsertUser });
       return;
     }
     console.log(`Seeding ${target.dbName} at ${target.redactedUri}`);
@@ -2752,6 +2772,7 @@ async function main() {
     postTypeCounts = seededPosts.counts;
 
     await seedDemoData();
+    await seedScrimmages({ upsertUser });
 
     console.log('Seed complete');
     console.log(`Users: ${seededUsers.length}`);

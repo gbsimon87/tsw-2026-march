@@ -6,6 +6,10 @@ import { MySportyPage } from './MySportyPage';
 import { leaguesApi } from '../api/leaguesApi';
 import { teamsApi } from '../../teams/api/teamsApi';
 
+vi.mock('../../scrimmages/api/scrimmagesApi', () => ({
+  scrimmagesApi: { profiles: vi.fn(async () => ({ profiles: [] })) },
+}));
+
 vi.mock('../api/leaguesApi', () => ({
   leaguesApi: { getMyProfiles: vi.fn() },
 }));

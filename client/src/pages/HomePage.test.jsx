@@ -58,7 +58,11 @@ describe('HomePage', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Discover' })).toHaveClass('sr-only');
     expect(screen.getByRole('tablist', { name: 'Discover categories' })).toHaveClass('sticky');
-    expect(screen.getByTestId('discover-search-bar')).toHaveClass('sticky', 'top-14', 'sm:top-12');
+    expect(screen.getByTestId('discover-search-bar')).toHaveClass(
+      'sticky',
+      'top-[4.5rem]',
+      'sm:top-12'
+    );
 
     await screen.findByPlaceholderText('Search leagues');
 
@@ -70,7 +74,11 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Teams' }));
 
     await screen.findByPlaceholderText('Search teams');
-    expect(screen.getByTestId('discover-search-bar')).toHaveClass('sticky', 'top-14', 'sm:top-12');
+    expect(screen.getByTestId('discover-search-bar')).toHaveClass(
+      'sticky',
+      'top-[4.5rem]',
+      'sm:top-12'
+    );
     expect(screen.getByRole('link', { name: /TSW Blue/ })).toHaveAttribute('href', '/teams/team-1');
   });
 

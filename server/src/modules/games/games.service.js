@@ -432,6 +432,11 @@ function sanitizeGame(game, options = {}) {
     ...(options.includeOwnerUserId ? { ownerUserId: String(game.ownerUserId) } : {}),
     teamId: game.teamId ? String(game.teamId) : null,
     gameContext: game.gameContext || 'standalone',
+    scrimmageId: game.scrimmageId ? String(game.scrimmageId) : null,
+    scrimmageSessionId: game.scrimmageSessionId ? String(game.scrimmageSessionId) : null,
+    scrimmageSeasonId: game.scrimmageSeasonId ? String(game.scrimmageSeasonId) : null,
+    videoStartTimestamp: game.videoStartTimestamp || 0,
+    scoringRules: game.scoringRules?.toObject?.() || game.scoringRules || null,
     trackingMode: game.trackingMode || 'one_sided',
     courtLayoutId: resolveCourtLayoutId(game.courtLayoutId),
     sport: game.sport,
@@ -556,8 +561,8 @@ function emptyStats(playerId, displayName, options = {}) {
   });
 }
 
-function applyEventToRow(row, statType) {
-  applyEventToPlayerStatLine(row, statType);
+function applyEventToRow(row, statType, scoringRules) {
+  applyEventToPlayerStatLine(row, statType, scoringRules);
 }
 
 function isOpponentEvent(statType) {
@@ -646,7 +651,7 @@ function recalculateCurrentLineup(game) {
 
 function buildGameSummary(game) {
   if (game.trackingMode === 'dual_team') {
-    const summary = summarizeEventsBySide(game.events);
+    const summary = summarizeEventsBySide(game.events, game.scoringRules);
     return {
       homePoints: summary.home.points,
       awayPoints: summary.away.points,
@@ -656,7 +661,7 @@ function buildGameSummary(game) {
     };
   }
 
-  const summary = summarizeEvents(game.events);
+  const summary = summarizeEvents(game.events, game.scoringRules);
   return {
     teamPoints: summary.points,
     opponentPoints: summary.opponentPoints || 0,
@@ -669,10 +674,10 @@ function buildGameSummary(game) {
 // opponent is "away", matching how buildGameSummary maps teamPoints/opponentPoints.
 function computeGameFinalScore(game) {
   if (game.trackingMode === 'dual_team') {
-    const summary = summarizeEventsBySide(game.events);
+    const summary = summarizeEventsBySide(game.events, game.scoringRules);
     return { home: summary.home.points, away: summary.away.points };
   }
-  const summary = summarizeEvents(game.events);
+  const summary = summarizeEvents(game.events, game.scoringRules);
   return { home: summary.points, away: summary.opponentPoints || 0 };
 }
 
@@ -747,13 +752,13 @@ function buildBoxScoreForSide(game, team, side) {
     if (!map.has(key)) {
       map.set(key, emptyStats(key, `Unknown (${key.slice(-6)})`));
     }
-    applyEventToRow(map.get(key), event.statType);
+    applyEventToRow(map.get(key), event.statType, game.scoringRules);
   }
 
   const players = Array.from(map.values()).sort((a, b) =>
     a.displayName.localeCompare(b.displayName)
   );
-  const summary = summarizeEventsBySide(game.events)[side];
+  const summary = summarizeEventsBySide(game.events, game.scoringRules)[side];
 
   return {
     players,
@@ -804,13 +809,13 @@ function computeBoxScore(game, team, options = {}) {
     if (!map.has(key)) {
       map.set(key, emptyStats(key, `Unknown (${key.slice(-6)})`));
     }
-    applyEventToRow(map.get(key), event.statType);
+    applyEventToRow(map.get(key), event.statType, game.scoringRules);
   }
 
   const players = Array.from(map.values()).sort((a, b) =>
     a.displayName.localeCompare(b.displayName)
   );
-  const summary = summarizeEvents(game.events);
+  const summary = summarizeEvents(game.events, game.scoringRules);
 
   return {
     players,
@@ -846,6 +851,10 @@ async function assertTeamOwnership(userId, teamId) {
 }
 
 async function assertGameBillingWriteAllowed(userId, game) {
+  if (game.gameContext === 'scrimmage') {
+    await require('../scrimmages/scrimmages.service').assertGameManager(userId, game);
+    return;
+  }
   if (game.gameContext === 'league') {
     const league = await findLeagueById(game.leagueId);
     if (!league || !resolveForLeague(league).entitlements.canManageLeague) {
@@ -899,6 +908,13 @@ async function assertGameAccess(userId, gameId, { requireWritable = false } = {}
     throw new ApiError(404, 'Game not found');
   }
 
+  if (game.gameContext === 'scrimmage') {
+    const service = require('../scrimmages/scrimmages.service');
+    if (userId) await service.assertGameManager(userId, game);
+    else await service.assertGameViewer(null, game);
+    return game;
+  }
+
   if (!userId) {
     return game;
   }
@@ -925,6 +941,12 @@ async function assertGameAccess(userId, gameId, { requireWritable = false } = {}
 
 async function canAccessGame(userId, game) {
   if (!userId || !game) return false;
+  if (game.gameContext === 'scrimmage') {
+    const series = await require('../scrimmages/scrimmages.repository').Scrimmage.findById(
+      game.scrimmageId
+    );
+    return Boolean(series && require('../scrimmages/scrimmages.service').canManage(series, userId));
+  }
   if (String(game.ownerUserId) === String(userId)) return true;
   if (game.trackingMode === 'dual_team' && game.gameContext === 'standalone') {
     if (await canAccessStandaloneDualGame(userId, game)) return true;
@@ -1097,6 +1119,8 @@ const ROSTER_EDITABLE_STATUSES = new Set(['in_progress', 'scheduled']);
 // the leaguePlayerId linkage LeaguePlayerStats and public player pages rely on.
 async function addPlayerToGameRoster(userId, gameId, payload) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  if (game.gameContext === 'scrimmage')
+    throw new ApiError(400, 'Manage players in the scrimmage pool and weekly color assignments');
 
   if (!ROSTER_EDITABLE_STATUSES.has(game.status)) {
     throw new ApiError(409, 'Cannot add a player to a completed game');
@@ -1159,6 +1183,7 @@ async function addPlayerToGameRoster(userId, gameId, payload) {
 // Reuses assertTeamManagerOrOwner rather than re-deriving the rule; it throws
 // instead of returning a boolean, hence the wrapper.
 async function canManageGameRoster(userId, game) {
+  if (game?.gameContext === 'scrimmage') return false;
   if (!userId || !game) return false;
 
   const sides =
@@ -1289,6 +1314,7 @@ async function appendPlayerToGameSnapshot(gameId, game, snapshotField, targetKin
 }
 
 async function repairGameRosterSnapshots(game) {
+  if (game?.gameContext === 'scrimmage') return false;
   if (!game || game.status !== 'in_progress') {
     return false;
   }
@@ -1481,6 +1507,14 @@ async function resolveGameTeamContext(userId, game) {
       for (const participant of [participants.home, participants.away]) {
         participant.billing = billing;
         participant.entitlements = entitlements;
+      }
+    } else if (game.gameContext === 'scrimmage') {
+      for (const participant of [participants.home, participants.away]) {
+        participant.entitlements = {
+          canViewReplay: true,
+          canViewShotMaps: true,
+          canManageTeam: true,
+        };
       }
     } else {
       const [homeTeam, awayTeam] = await Promise.all([
@@ -1850,6 +1884,10 @@ async function listGamesForUser(userId, filter = {}) {
       id: String(game._id),
       teamId: game.teamId ? String(game.teamId) : null,
       gameContext: game.gameContext || 'standalone',
+      scrimmageId: game.scrimmageId ? String(game.scrimmageId) : null,
+      scrimmageSessionId: game.scrimmageSessionId ? String(game.scrimmageSessionId) : null,
+      videoStartTimestamp: game.videoStartTimestamp || 0,
+      scoringRules: game.scoringRules?.toObject?.() || game.scoringRules || null,
       trackingMode: game.trackingMode || 'one_sided',
       leagueId: game.leagueId ? String(game.leagueId) : null,
       homeLeagueTeamId: game.homeLeagueTeamId ? String(game.homeLeagueTeamId) : null,
@@ -1971,6 +2009,8 @@ function buildSlimGameEventDelta(userId, game, context) {
 // canFeature stays true, which would publish footage of a minor without
 // guardian consent (R9). With strict: true every read error propagates.
 async function buildGameMarketing(game, { league, teamDoc, participants, strict = false }) {
+  if (game.gameContext === 'scrimmage')
+    return resolveMarketingPermission({ org: null, teams: [], subjects: [], scope: 'team' });
   const completed = game.status === 'completed';
   const read = (promise, fallback) => (strict ? promise : promise.catch(() => fallback));
 
@@ -2021,8 +2061,17 @@ async function buildGameMarketing(game, { league, teamDoc, participants, strict 
 // `includeVideoUpload: false` is for the per-stat event response (one-sided
 // append), which must not pay for the E8 flag's reads on every stat; the
 // client merges that response over the full payload, keeping the flag.
-async function getGameForUser(userId, gameId, { includeVideoUpload = true } = {}) {
-  const game = await assertGameAccess(userId, gameId);
+async function getGameForUser(
+  userId,
+  gameId,
+  { includeVideoUpload = true, scrimmageViewerId } = {}
+) {
+  let game;
+  if (scrimmageViewerId) {
+    game = await findGameById(gameId);
+    if (!game || game.gameContext !== 'scrimmage') throw new ApiError(404, 'Game not found');
+    await require('../scrimmages/scrimmages.service').assertGameViewer(scrimmageViewerId, game);
+  } else game = await assertGameAccess(userId, gameId);
   const responseTime = new Date();
   if (game.clock) game.clock = normalizeClock(game.clock.toObject?.() || game.clock, responseTime);
   const { team, opponentTeam, teamDoc, participants, league } = await resolveGameTeamContext(
@@ -2162,7 +2211,19 @@ function isClaimedPlayerInGameSnapshot(userId, game) {
 }
 
 async function getPublicGame(gameId, viewerUserId = null) {
-  const result = await getGameForUser(null, gameId);
+  if (!mongoose.Types.ObjectId.isValid(gameId)) throw new ApiError(404, 'Game not found');
+  const candidate = await findGameById(gameId);
+  if (candidate?.gameContext === 'scrimmage') {
+    await require('../scrimmages/scrimmages.service').assertGameViewer(viewerUserId, candidate);
+  }
+  const result =
+    candidate?.gameContext === 'scrimmage' &&
+    viewerUserId &&
+    (await canAccessGame(viewerUserId, candidate))
+      ? await getGameForUser(viewerUserId, gameId)
+      : await getGameForUser(null, gameId, {
+          scrimmageViewerId: candidate?.gameContext === 'scrimmage' ? viewerUserId : undefined,
+        });
 
   const highlightEventIds = (result.highlights || []).map((h) => h.eventId).filter(Boolean);
   result.sharedEventIds = await findSharedEventIds(highlightEventIds);
@@ -2192,7 +2253,8 @@ async function getPublicGame(gameId, viewerUserId = null) {
         });
       }
       result.canShareHighlights =
-        result.canManageGame || isClaimedPlayerInGameSnapshot(viewerUserId, rawGame);
+        rawGame.gameContext !== 'scrimmage' &&
+        (result.canManageGame || isClaimedPlayerInGameSnapshot(viewerUserId, rawGame));
       result.videoUpload = await resolveVideoUploadFlag(viewerUserId, rawGame, {
         canAccess: result.canManageGame,
       });
@@ -2253,6 +2315,11 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
     payload.courtLayoutId,
     typeof payload.x === 'number' || typeof payload.y === 'number'
   );
+  if (
+    game.gameContext === 'scrimmage' &&
+    !require('../scrimmages/scrimmages.scoring').ALLOWED_STATS.has(payload.statType)
+  )
+    throw new ApiError(400, 'Scrimmages track field goals and turnovers only');
   const gameFormat = game.gameFormat;
   const eventSnapshot = payload;
   const insertBeforeEventId = options.insertBeforeEventId || null;
@@ -2667,6 +2734,12 @@ async function removeEventForUser(userId, gameId, eventId) {
 
 async function updateEventForUser(userId, gameId, eventId, patch) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  if (
+    game.gameContext === 'scrimmage' &&
+    patch.statType &&
+    !require('../scrimmages/scrimmages.scoring').ALLOWED_STATS.has(patch.statType)
+  )
+    throw new ApiError(400, 'Scrimmages track field goals and turnovers only');
   assertCourtLayoutPrecondition(
     game,
     patch.courtLayoutId,
@@ -2797,6 +2870,7 @@ async function finishGameForUser(userId, gameId, metadata = {}) {
   assertLeagueScoreNotTied(game.gameContext, finalScore);
 
   game.status = 'completed';
+  if (game.gameContext === 'scrimmage') game.scrimmageActive = false;
   game.completedAt = new Date();
   if (game.clock)
     game.clock = normalizeClock(game.clock.toObject?.() || game.clock, game.completedAt);

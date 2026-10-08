@@ -11,6 +11,7 @@ import { ExportCsvButton } from '../../export/components/ExportCsvButton';
 import { exportApi } from '../../export/api/exportApi';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/ui/formStyles';
 import { teamsApi } from '../../teams/api/teamsApi';
+import { scrimmagesApi } from '../../scrimmages/api/scrimmagesApi';
 
 export function MySportyPage() {
   const { user, updateUser } = useAuth();
@@ -29,19 +30,22 @@ export function MySportyPage() {
   } = useQuery({
     queryKey: ['myProfiles'],
     queryFn: async () => {
-      const [leagueResult, standaloneResult] = await Promise.all([
+      const [leagueResult, standaloneResult, scrimmageResult] = await Promise.all([
         leaguesApi.getMyProfiles(),
         teamsApi.getMyPlayerProfiles(),
+        scrimmagesApi.profiles(),
       ]);
       return {
         leagueProfiles: leagueResult.profiles || [],
         standaloneProfiles: standaloneResult.profiles || [],
+        scrimmageProfiles: scrimmageResult.profiles || [],
       };
     },
   });
 
   const leagueProfiles = data?.leagueProfiles || [];
   const standaloneProfiles = data?.standaloneProfiles || [];
+  const scrimmageProfiles = data?.scrimmageProfiles || [];
   const profiles = [...leagueProfiles, ...standaloneProfiles];
   const error = isError ? queryError?.message || 'Failed to load profiles' : '';
 
@@ -203,7 +207,7 @@ export function MySportyPage() {
 
         {error ? (
           <p className="mt-4 text-sm text-red-600">{error}</p>
-        ) : profiles.length === 0 ? (
+        ) : profiles.length === 0 && scrimmageProfiles.length === 0 ? (
           // This empty state used to explain what it would one day contain and
           // offer nothing to do — the first dead end a new account hits. The
           // two things a new user actually wants from here are now present.
@@ -228,6 +232,27 @@ export function MySportyPage() {
           </div>
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {scrimmageProfiles.map((profile) => (
+              <Link
+                key={`scrimmage:${profile.id}`}
+                to={`${profile.scrimmage.canManage ? '/admin' : ''}/scrimmage/${profile.scrimmage.id}/players/${profile.id}`}
+                className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5 hover:border-[#F4A300]"
+              >
+                <p className="font-semibold">{profile.displayName}</p>
+                <p className="text-sm text-slate-600">{profile.scrimmage.name}</p>
+                <p className="text-xs font-semibold uppercase text-[#1B4332]">Scrimmage profile</p>
+                {profile.stats && (
+                  <p className="text-sm">
+                    {profile.stats.points} PTS ·{' '}
+                    {profile.stats.fgPercentage == null
+                      ? '—'
+                      : `${profile.stats.fgPercentage.toFixed(1)}%`}{' '}
+                    FG · {profile.stats.turnovers} TOV · {profile.stats.wins}–{profile.stats.losses}
+                  </p>
+                )}
+                <span className="block text-sm underline">View profile & stats →</span>
+              </Link>
+            ))}
             {profiles.map((profile) => (
               <ProfileCard key={profile.id} profile={profile} avatarUrl={user?.avatarUrl} />
             ))}

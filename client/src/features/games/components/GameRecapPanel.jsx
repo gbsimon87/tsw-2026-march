@@ -10,18 +10,7 @@ import { GameVideoEmbed } from './GameVideoEmbed';
 import { GameStatsCharts } from './GameStatsCharts';
 import { YouTubeHighlightReel } from './YouTubeHighlightReel';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
-
-const HIGHLIGHT_LABELS = {
-  FG2_MADE: '2PT Make',
-  FG2_MISS: '2PT Miss',
-  FG3_MADE: '3PT Make',
-  FG3_MISS: '3PT Miss',
-  FT_MADE: 'FT Make',
-  FT_MISS: 'FT Miss',
-  AST: 'Assist',
-  STL: 'Steal',
-  BLK: 'Block',
-};
+import { getFieldGoalPercentage, getStatLabels } from '../constants';
 
 function getParticipantName(participants, side) {
   return participants?.[side]?.displayName || side;
@@ -39,8 +28,15 @@ function HorizontalScrollRow({ children, className = '' }) {
   );
 }
 
-function GameHighlightClip({ highlight, statType, playerName, teamSide, participantName }) {
-  const label = HIGHLIGHT_LABELS[statType] || statType;
+function GameHighlightClip({
+  highlight,
+  statType,
+  playerName,
+  teamSide,
+  participantName,
+  scoringRules,
+}) {
+  const label = getStatLabels(scoringRules)[statType] || statType;
   const sideLabel = participantName || teamSide || null;
   return (
     <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -85,12 +81,15 @@ export function GameRecapPanel({
   league = null,
   participants,
   isDualTeam = false,
+  isScrimmage = false,
   recap,
   aiSummary = null,
   gameId = null,
   video = null,
   videoUrl = null,
   videoTitle = null,
+  scoringRules = null,
+  videoStartTimestamp = 0,
   highlights = [],
   sharedEventIds = [],
   canShareHighlights = false,
@@ -121,7 +120,7 @@ export function GameRecapPanel({
       {video?.provider === 'mux' && video.status === 'ready' ? (
         <MuxVideo gameId={gameId} version={video.version} title={videoTitle || 'Game video'} />
       ) : videoUrl ? (
-        <GameVideoEmbed videoUrl={videoUrl} title={videoTitle} />
+        <GameVideoEmbed videoUrl={videoUrl} title={videoTitle} startSeconds={videoStartTimestamp} />
       ) : null}
 
       {featuredHighlights.length > 0 ? (
@@ -180,6 +179,7 @@ export function GameRecapPanel({
                 <div key={h.eventId} className="flex shrink-0 flex-col">
                   <GameHighlightClip
                     highlight={h}
+                    scoringRules={scoringRules}
                     statType={h.statType}
                     playerName={h.playerName}
                     teamSide={h.teamSide}
@@ -354,36 +354,53 @@ export function GameRecapPanel({
                     { label: 'Blocks', key: 'blk' },
                     { label: 'Turnovers', key: 'tov' },
                     { label: 'Fouls', key: 'foul' },
-                  ].map(({ label, key }) => (
-                    <tr key={key}>
-                      <td className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {label}
-                      </td>
-                      <td className="px-3 py-2 text-center text-lg font-bold tabular-nums text-slate-900">
-                        {recap?.homeStats?.[key] ?? 0}
-                      </td>
-                      <td className="px-3 py-2 text-center text-lg font-bold tabular-nums text-slate-900">
-                        {recap?.awayStats?.[key] ?? 0}
-                      </td>
-                    </tr>
-                  ))}
-                  {[
-                    {
-                      label: 'FG2%',
-                      homeVal: formatPercentage(recap?.homeStats?.fg2?.percentage),
-                      awayVal: formatPercentage(recap?.awayStats?.fg2?.percentage),
-                    },
-                    {
-                      label: 'FG3%',
-                      homeVal: formatPercentage(recap?.homeStats?.fg3?.percentage),
-                      awayVal: formatPercentage(recap?.awayStats?.fg3?.percentage),
-                    },
-                    {
-                      label: 'FT%',
-                      homeVal: formatPercentage(recap?.homeStats?.ft?.percentage),
-                      awayVal: formatPercentage(recap?.awayStats?.ft?.percentage),
-                    },
-                  ].map(({ label, homeVal, awayVal }) => (
+                  ]
+                    .filter(({ key }) => !isScrimmage || ['points', 'tov'].includes(key))
+                    .map(({ label, key }) => (
+                      <tr key={key}>
+                        <td className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {label}
+                        </td>
+                        <td className="px-3 py-2 text-center text-lg font-bold tabular-nums text-slate-900">
+                          {recap?.homeStats?.[key] ?? 0}
+                        </td>
+                        <td className="px-3 py-2 text-center text-lg font-bold tabular-nums text-slate-900">
+                          {recap?.awayStats?.[key] ?? 0}
+                        </td>
+                      </tr>
+                    ))}
+                  {(isScrimmage
+                    ? [
+                        {
+                          label: 'FG%',
+                          homeVal:
+                            getFieldGoalPercentage(recap?.homeStats) == null
+                              ? '—'
+                              : formatPercentage(getFieldGoalPercentage(recap?.homeStats)),
+                          awayVal:
+                            getFieldGoalPercentage(recap?.awayStats) == null
+                              ? '—'
+                              : formatPercentage(getFieldGoalPercentage(recap?.awayStats)),
+                        },
+                      ]
+                    : [
+                        {
+                          label: 'FG2%',
+                          homeVal: formatPercentage(recap?.homeStats?.fg2?.percentage),
+                          awayVal: formatPercentage(recap?.awayStats?.fg2?.percentage),
+                        },
+                        {
+                          label: 'FG3%',
+                          homeVal: formatPercentage(recap?.homeStats?.fg3?.percentage),
+                          awayVal: formatPercentage(recap?.awayStats?.fg3?.percentage),
+                        },
+                        {
+                          label: 'FT%',
+                          homeVal: formatPercentage(recap?.homeStats?.ft?.percentage),
+                          awayVal: formatPercentage(recap?.awayStats?.ft?.percentage),
+                        },
+                      ]
+                  ).map(({ label, homeVal, awayVal }) => (
                     <tr key={label}>
                       <td className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         {label}
@@ -427,6 +444,7 @@ export function GameRecapPanel({
 
           <GameStatsCharts
             isDualTeam={isDualTeam}
+            isScrimmage={isScrimmage}
             homeStats={recap?.homeStats}
             awayStats={recap?.awayStats}
             teamStats={recap?.teamStats}
@@ -486,7 +504,9 @@ export function GameRecapPanel({
                     </div>
                   ) : null}
                   <p className="mt-3 text-sm font-semibold text-slate-700">
-                    {player.points} PTS · {player.reb} REB · {player.ast} AST
+                    {isScrimmage
+                      ? `${player.points} PTS`
+                      : `${player.points} PTS · ${player.reb} REB · ${player.ast} AST`}
                   </p>
                 </>
               );

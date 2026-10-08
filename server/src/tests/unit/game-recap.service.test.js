@@ -1,6 +1,34 @@
 const { buildGameRecap } = require('../../modules/games/gameRecap.service');
 
 describe('game recap service', () => {
+  test('scrimmage recap uses pickup values for scores and moment labels', () => {
+    const recap = buildGameRecap(
+      {
+        gameContext: 'scrimmage',
+        trackingMode: 'dual_team',
+        status: 'completed',
+        scoringRules: { insideArc: 1, outsideArc: 2 },
+        events: [
+          { _id: 'inside', playerId: 'p1', teamSide: 'home', statType: 'FG2_MADE' },
+          { _id: 'outside', playerId: 'p2', teamSide: 'away', statType: 'FG3_MADE' },
+        ],
+      },
+      {
+        home: { displayName: 'Red', players: [{ id: 'p1', displayName: 'Alex' }] },
+        away: { displayName: 'White', players: [{ id: 'p2', displayName: 'Kyle' }] },
+      },
+      {
+        home: { totals: { points: 1 }, players: [] },
+        away: { totals: { points: 2 }, players: [] },
+      }
+    );
+    expect(recap.home.points).toBe(1);
+    expect(recap.away.points).toBe(2);
+    expect(recap.homeStats.fg2.made).toBe(1);
+    expect(recap.awayStats.fg3.made).toBe(1);
+    expect(recap.keyMoments.map((moment) => moment.statLabel)).toEqual(['2PT Make', '1PT Make']);
+  });
+
   test('builds recap from game events and box score', () => {
     const game = {
       status: 'completed',

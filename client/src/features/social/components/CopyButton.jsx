@@ -13,7 +13,7 @@ const COPY_LABELS = {
   unsupported: 'Select and copy',
 };
 
-export function CopyButton({ value, label, disabled = false }) {
+export function CopyButton({ value, label, disabled = false, resolveValue, onCopied }) {
   const [state, setState] = useState('idle');
   const timer = useRef(null);
 
@@ -25,8 +25,10 @@ export function CopyButton({ value, label, disabled = false }) {
       setState('unsupported');
     } else {
       try {
-        await navigator.clipboard.writeText(value);
+        const copyValue = resolveValue ? await resolveValue() : value;
+        await navigator.clipboard.writeText(copyValue);
         setState('copied');
+        onCopied?.();
       } catch {
         setState('failed');
       }

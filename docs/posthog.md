@@ -927,6 +927,12 @@ sent the item. In that case `share_completed` means the share sheet opened
 successfully, not that a recipient received anything. State that meaning in the
 PostHog definition.
 
+Weekly scrimmage recaps use `target_type=scrimmage_recap` and
+`source=scrimmage_session` with `method=native` or `clipboard`. Events contain no
+player names, stats or recap URLs. Access and publication are checked before
+`share_initiated`; `share_completed` confirms clipboard writing or the native
+share sheet finishing without cancellation.
+
 Migrate existing clip/reel-specific names deliberately. Keep old charts labelled
 as legacy; do not silently combine events with different meanings.
 

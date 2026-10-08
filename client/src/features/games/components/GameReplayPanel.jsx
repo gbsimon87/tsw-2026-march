@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StatsTable } from '../../teams/components/StatsTable';
-import gameConstants from '../constants';
+import gameConstants, { getStatLabels } from '../constants';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { useCourtLayout } from '../court/useCourtLayout';
 
-const { STAT_LABELS, ZONE_LABELS } = gameConstants;
+const { ZONE_LABELS } = gameConstants;
 
 function eventTime(value) {
   if (!value) {
@@ -61,7 +61,7 @@ function getPlayerName(player) {
   return player?.displayName || player?.name || 'Unknown Player';
 }
 
-function buildReplayLines({ players, events }) {
+function buildReplayLines({ players, events, scoringRules }) {
   const basePlayers = players?.length
     ? players.map((player) => ({ id: getPlayerId(player), displayName: getPlayerName(player) }))
     : Array.from(
@@ -84,13 +84,13 @@ function buildReplayLines({ players, events }) {
       lines.push(fallback);
       byId.set(event.playerId, fallback);
     }
-    applyEventToLine(byId.get(event.playerId), event.statType);
+    applyEventToLine(byId.get(event.playerId), event.statType, scoringRules);
   }
 
   return lines;
 }
 
-function applyEventToLine(line, statType) {
+function applyEventToLine(line, statType, scoringRules) {
   if (statType === 'FT_MADE') {
     line.ftm += 1;
     line.fta += 1;
@@ -104,7 +104,7 @@ function applyEventToLine(line, statType) {
   if (statType === 'FG2_MADE') {
     line.fg2m += 1;
     line.fg2a += 1;
-    line.points += 2;
+    line.points += scoringRules?.insideArc ?? 2;
     return;
   }
   if (statType === 'FG2_MISS') {
@@ -114,7 +114,7 @@ function applyEventToLine(line, statType) {
   if (statType === 'FG3_MADE') {
     line.fg3m += 1;
     line.fg3a += 1;
-    line.points += 3;
+    line.points += scoringRules?.outsideArc ?? 3;
     return;
   }
   if (statType === 'FG3_MISS') {
@@ -159,7 +159,10 @@ export function GameReplayPanel({
   participants = null,
   replayFilters = ['all'],
   courtLayoutId,
+  scoringRules = null,
+  isScrimmage = false,
 }) {
+  const statLabels = getStatLabels(scoringRules);
   const layout = useCourtLayout(courtLayoutId);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const replayEvents = useMemo(() => {
@@ -190,7 +193,7 @@ export function GameReplayPanel({
         {
           id: 'all',
           label: 'Replay Box Score',
-          rows: buildReplayLines({ players, events: countableEvents }),
+          rows: buildReplayLines({ players, events: countableEvents, scoringRules }),
         },
       ];
     }
@@ -203,13 +206,14 @@ export function GameReplayPanel({
         rows: buildReplayLines({
           players: participants?.[side]?.players || [],
           events: countableEvents.filter((event) => event.teamSide === side),
+          scoringRules,
         }),
       }));
-  }, [currentSourceIndex, events, isDualTeam, participants, players, selectedFilter]);
+  }, [currentSourceIndex, events, isDualTeam, participants, players, selectedFilter, scoringRules]);
 
   const activeTeamName =
     isDualTeam && currentEvent?.teamSide ? participants?.[currentEvent.teamSide]?.displayName : '';
-  const replayColumns = [
+  const allReplayColumns = [
     {
       id: 'player',
       label: 'Player',
@@ -255,6 +259,27 @@ export function GameReplayPanel({
     { id: 'oreb', label: 'OREB', align: 'right', sortKey: 'oreb', render: (row) => row.oreb },
     { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
   ];
+  const replayColumns = isScrimmage
+    ? [
+        ...allReplayColumns.filter((column) => ['player', 'pts'].includes(column.id)),
+        {
+          id: 'fg',
+          label: 'FG',
+          align: 'right',
+          render: (row) => `${row.fg2m + row.fg3m}/${row.fg2a + row.fg3a}`,
+        },
+        {
+          id: 'fgpct',
+          label: 'FG%',
+          align: 'right',
+          render: (row) =>
+            row.fg2a + row.fg3a
+              ? `${((100 * (row.fg2m + row.fg3m)) / (row.fg2a + row.fg3a)).toFixed(1)}%`
+              : '—',
+        },
+        ...allReplayColumns.filter((column) => column.id === 'tov'),
+      ]
+    : allReplayColumns;
   const availableFilters = isDualTeam ? replayFilters.filter((filter) => filter !== 'all') : [];
 
   return (
@@ -355,7 +380,7 @@ export function GameReplayPanel({
             <p className="font-medium">
               {activeTeamName ? `${activeTeamName}: ` : ''}
               {currentEvent?.playerName || (currentEvent?.playerId ? 'Unknown Player' : 'Opponent')}
-              : {STAT_LABELS[currentEvent?.statType] || currentEvent?.statType}
+              : {statLabels[currentEvent?.statType] || currentEvent?.statType}
             </p>
             <p>
               {ZONE_LABELS[currentEvent?.zoneId] || currentEvent?.zoneId} | (

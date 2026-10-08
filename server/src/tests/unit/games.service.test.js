@@ -5,6 +5,10 @@ jest.mock('../../modules/feed/feed.repository', () => ({
 jest.mock('../../modules/analytics/analytics.service', () => ({
   captureUserEventDetached: jest.fn(),
 }));
+jest.mock('../../modules/scrimmages/scrimmages.service', () => ({
+  assertGameManager: jest.fn(async () => ({})),
+  assertGameViewer: jest.fn(async () => ({})),
+}));
 
 jest.mock('../../modules/teams/teams.repository', () => ({
   findTeamByIdAndOwner: jest.fn(),
@@ -1501,6 +1505,32 @@ describe('games service clock commands', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     canEditCompletedLeagueGame.mockImplementation(() => false);
+  });
+
+  test('starts a scrimmage with fewer than five players on either side', async () => {
+    const game = buildDualLeagueGame({
+      gameContext: 'scrimmage',
+      status: 'scheduled',
+      homeCurrentLineupPlayerIds: ['home-1', 'home-2'],
+      awayCurrentLineupPlayerIds: ['away-1'],
+      gameFormat: {
+        regulationSegmentType: 'scrimmage',
+        regulationSegmentDurationSeconds: 240,
+        overtimeDurationSeconds: 240,
+      },
+      clock: {
+        status: 'ready',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 240000,
+        runningSince: null,
+      },
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    await updateClockForUser('user-1', 'game-1', { action: 'start' });
+    expect(game.status).toBe('in_progress');
+    expect(game.clock.status).toBe('running');
   });
 
   test('starts a scheduled game only after both starting fives are set', async () => {

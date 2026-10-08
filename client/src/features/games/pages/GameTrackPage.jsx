@@ -1,3 +1,4 @@
+import { formatVideoTime } from '../../scrimmages/videoTime';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -5,6 +6,8 @@ import { trackEvent } from '../../analytics/trackEvent';
 import { SportsLoader } from '../../../components/SportsLoader';
 import { Modal } from '../../../components/ui/Modal';
 import { gamesApi } from '../api/gamesApi';
+import { ScrimmageGameNavigator } from '../../scrimmages/components/ScrimmageGameNavigator';
+import { NewScrimmageGameDialog } from '../../scrimmages/components/NewScrimmageGameDialog';
 import { teamsApi } from '../../teams/api/teamsApi';
 import { MuxVideo } from '../../video/components/MuxVideo';
 import { GameVideoUploader } from '../../video/components/GameVideoUploader';
@@ -28,7 +31,7 @@ import {
   inferCourtSelection,
 } from '../court/courtInference';
 import { useCourtLayout } from '../court/useCourtLayout';
-import gameConstants from '../constants';
+import gameConstants, { getStatLabels } from '../constants';
 import teamPlaceholder from '../../../assets/placeholders/team-logo-placeholder.svg';
 import { CloudinaryImage } from '../../media/CloudinaryImage';
 import { createParticipantIndex, resolveParticipant } from '../voice/resolveParticipant';
@@ -74,7 +77,7 @@ function formatEventMeta(event, gameFormat) {
   return parts.join(' ');
 }
 
-function parseEventParts(event, playersById, gameFormat) {
+function parseEventParts(event, playersById, gameFormat, labels = STAT_LABELS) {
   const player = event.playerId ? playersById.get(event.playerId) : null;
   const isSub = event.statType === 'SUB_IN' || event.statType === 'SUB_OUT';
 
@@ -89,7 +92,7 @@ function parseEventParts(event, playersById, gameFormat) {
 
   return {
     actor,
-    statLabel: isSub ? null : STAT_LABELS[event.statType] || event.statType,
+    statLabel: isSub ? null : labels[event.statType] || event.statType,
     meta: formatEventMeta(event, gameFormat) || null,
   };
 }
@@ -276,7 +279,15 @@ function GameVideoPanel({ game, title, videoIframeRef, muxRef, onMuxPlay, onMuxP
       />
     );
   }
-  return <GameVideoEmbed ref={videoIframeRef} videoUrl={game.videoUrl} title={title} fill />;
+  return (
+    <GameVideoEmbed
+      ref={videoIframeRef}
+      videoUrl={game.videoUrl}
+      title={title}
+      startSeconds={game.playbackStartTimestamp ?? game.videoStartTimestamp ?? 0}
+      fill
+    />
+  );
 }
 
 // Voice grammar differs only by tracking mode: a dual-team command must name a side, a one-team
@@ -533,8 +544,14 @@ export function GameTrackPage() {
   const [pendingFollowUpPrompt, setPendingFollowUpPrompt] = useState(null);
   const [lastTappedHoop, setLastTappedHoop] = useState('south');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('synced');
+  const [resumeCheckpoint, setResumeCheckpoint] = useState(null);
+  const [resumeVideoPosition, setResumeVideoPosition] = useState(null);
+  const checkedCheckpointRef = useRef(false);
   const [isTrackingFullscreen, setIsTrackingFullscreen] = useState(false);
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+  const [showNewScrimmageGame, setShowNewScrimmageGame] = useState(false);
+  const [showScrimmageNavigator, setShowScrimmageNavigator] = useState(false);
   const [videoUrlDraft, setVideoUrlDraft] = useState('');
   const [isVideoUrlEditOpen, setIsVideoUrlEditOpen] = useState(false);
   // Unmounting GameVideoUploader aborts an in-flight upload, so it stays mounted at the page root
@@ -865,6 +882,32 @@ export function GameTrackPage() {
 
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
   const isLeagueGame = data?.game?.gameContext === 'league';
+  const isScrimmage = data?.game?.gameContext === 'scrimmage';
+  useEffect(() => {
+    if (!data?.game || checkedCheckpointRef.current) return;
+    checkedCheckpointRef.current = true;
+    if (data.game.gameContext !== 'scrimmage' || data.game.status === 'completed') return;
+    let checkpoint;
+    try {
+      checkpoint = JSON.parse(window.localStorage.getItem(`scrimmageTracking.${gameId}`));
+    } catch {
+      /* Storage may be unavailable. */
+    }
+    const events = data.game.events || data.events || [];
+    const lastTimestamp = [...events]
+      .reverse()
+      .find((event) => Number.isFinite(event.videoTimestamp))?.videoTimestamp;
+    const position =
+      checkpoint?.videoUrl === data.game.videoUrl ? checkpoint.position : lastTimestamp;
+    if (
+      Number.isFinite(position) &&
+      position > (data.game.videoStartTimestamp || 0) + 1 &&
+      position <= 86400
+    )
+      setResumeCheckpoint(position);
+  }, [data, gameId]);
+
+  const statLabels = getStatLabels(data?.game?.scoringRules);
   const canManageRoster = Boolean(data?.canManageRoster);
   // Reaching this page for a league game already requires being the league
   // owner, an active league manager, or a manager of one of the two teams —
@@ -1125,7 +1168,8 @@ export function GameTrackPage() {
     pendingExitDestination ||
     isStandaloneLineupEditing ||
     isAddPlayerOpen ||
-    isVoiceSubInOpen
+    isVoiceSubInOpen ||
+    showScrimmageNavigator
   );
   // Keep the game clock in step with the video so a scorekeeper never has to rewind: pausing the
   // video pauses game time, and playing it again resumes the clock the video itself paused.
@@ -1156,7 +1200,9 @@ export function GameTrackPage() {
     editingEvent ||
     isStandaloneLineupEditing ||
     lineupSetupStep ||
-    showFinishConfirm
+    showFinishConfirm ||
+    showNewScrimmageGame ||
+    showScrimmageNavigator
   );
 
   playbackHeldByUiRef.current = playbackHeldByUi;
@@ -1200,6 +1246,7 @@ export function GameTrackPage() {
   }
 
   function updateData(response, actionLabel = '') {
+    setSaveStatus('saved');
     if (response.serverTime) {
       setServerOffsetMilliseconds(new Date(response.serverTime).getTime() - Date.now());
     }
@@ -1316,10 +1363,24 @@ export function GameTrackPage() {
     // FT+ (or another stat) cannot race that write and receive a false 409.
     await entryClockTransitionRef.current.catch(() => undefined);
     try {
-      return insertBeforeId
+      setSaveStatus('saving');
+      const response = insertBeforeId
         ? await gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
         : await gamesApi.appendEvent(gameId, eventPayload);
+      setSaveStatus('saved');
+      if (isScrimmage && !insertBeforeId && Number.isFinite(eventPayload.videoTimestamp)) {
+        try {
+          window.localStorage.setItem(
+            `scrimmageTracking.${gameId}`,
+            JSON.stringify({ videoUrl: game.videoUrl, position: eventPayload.videoTimestamp })
+          );
+        } catch {
+          /* Tracking works without browser storage. */
+        }
+      }
+      return response;
     } catch (submitError) {
+      setSaveStatus('failed');
       // A conflict or transport failure can mean that local Events are stale, or that the
       // response was lost after the server wrote. Reconcile once, but never replay a mutation.
       if (submitError?.status === 409 || submitError?.status == null) {
@@ -1544,7 +1605,7 @@ export function GameTrackPage() {
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(shot);
     const payload = { playerId: reboundPlayerId, statType, ...courtFields };
-    const label = STAT_LABELS[statType] || statType;
+    const label = statLabels[statType] || statType;
 
     // Transition UI immediately.
     if (isInsert) {
@@ -1648,7 +1709,7 @@ export function GameTrackPage() {
         const isOffensive = rebounderSide === actorTeamSide;
         const statType = isOffensive ? 'OREB' : 'DREB';
         payload = { playerId: option, statType, teamSide: rebounderSide, ...followUpCourt };
-        label = STAT_LABELS[statType] || statType;
+        label = statLabels[statType] || statType;
       } else if (prompt.kind === 'who_missed_shot') {
         const playerSide = isDualTeam
           ? playerSideMap.get(option) ||
@@ -1660,7 +1721,7 @@ export function GameTrackPage() {
           ...followUpCourt,
           ...(playerSide ? { teamSide: playerSide } : {}),
         };
-        label = STAT_LABELS['FG2_MISS'] || 'FG2 Miss';
+        label = statLabels['FG2_MISS'] || 'FG2 Miss';
       } else if (prompt.kind === 'who_turned_over' || prompt.kind === 'who_got_steal') {
         const playerSide = isDualTeam ? playerSideMap.get(option) || opposingActorSide : undefined;
         payload = {
@@ -1669,7 +1730,7 @@ export function GameTrackPage() {
           ...followUpCourt,
           ...(playerSide ? { teamSide: playerSide } : {}),
         };
-        label = STAT_LABELS[prompt.statType] || prompt.statType;
+        label = statLabels[prompt.statType] || prompt.statType;
       } else if (prompt.kind === 'who_was_fouled') {
         // Nothing is stored, so this returns before the write chain whose finally would
         // release the saving lock. Release it here, or every later court tap is ignored.
@@ -1682,7 +1743,7 @@ export function GameTrackPage() {
           statType: prompt.statType,
           ...followUpCourt,
         };
-        label = STAT_LABELS[prompt.statType] || prompt.statType;
+        label = statLabels[prompt.statType] || prompt.statType;
       }
 
       const followUpKind = prompt.kind;
@@ -1743,7 +1804,7 @@ export function GameTrackPage() {
       statType: buildShotStatType(shot.shotFamily, outcome),
       ...buildCourtFields(shot),
     };
-    const shotLabel = STAT_LABELS[payload.statType] || payload.statType;
+    const shotLabel = statLabels[payload.statType] || payload.statType;
     const actorPlayerId = playerId;
     const isInsert = Boolean(insertBeforeEventId);
 
@@ -1756,6 +1817,8 @@ export function GameTrackPage() {
     // Transition UI immediately — don't wait for the API.
     if (isInsert) {
       // Insert mode: keep picker open until confirmed.
+    } else if (isScrimmage) {
+      clearEventPicker();
     } else if (outcome === 'miss') {
       setSelectedShot(null);
       setPendingFollowUpPrompt({
@@ -1834,7 +1897,7 @@ export function GameTrackPage() {
       x: inferred.x,
       y: inferred.y,
     };
-    const ftLabel = STAT_LABELS[payload.statType] || payload.statType;
+    const ftLabel = statLabels[payload.statType] || payload.statType;
     const actorPlayerId = playerId;
     const isInsert = Boolean(insertBeforeEventId);
 
@@ -1924,7 +1987,7 @@ export function GameTrackPage() {
       statType,
       ...courtFields,
     };
-    const quickLabel = STAT_LABELS[statType] || statType;
+    const quickLabel = statLabels[statType] || statType;
     const actorPlayerId = playerId;
 
     // Transition UI immediately.
@@ -1950,7 +2013,7 @@ export function GameTrackPage() {
         playerPool: 'other',
         courtLocation: courtFields,
       });
-    } else if (statType === 'TOV' && isDualTeam) {
+    } else if (statType === 'TOV' && isDualTeam && !isScrimmage) {
       setSelectedShot(null);
       setPendingFollowUpPrompt({
         kind: 'who_got_steal',
@@ -2023,7 +2086,7 @@ export function GameTrackPage() {
         },
         resolvedEventContext
       );
-      updateData(response, STAT_LABELS[statType] || statType);
+      updateData(response, statLabels[statType] || statType);
       clearEventPicker();
       return true;
     } catch (submitError) {
@@ -2076,6 +2139,7 @@ export function GameTrackPage() {
       updateData(response, 'Event updated');
       setEditingEvent(null);
     } catch (err) {
+      setSaveStatus('failed');
       setError(err.message || 'Failed to update event');
     } finally {
       setIsSaving(false);
@@ -2337,6 +2401,7 @@ export function GameTrackPage() {
       setLineupRevisitSide(null);
       setIsStandaloneLineupEditing(false);
     } catch (saveError) {
+      setSaveStatus('failed');
       setError(saveError.message || 'Failed to save lineup');
     } finally {
       setIsSaving(false);
@@ -2423,6 +2488,7 @@ export function GameTrackPage() {
       updateData(response);
       setIsVideoUrlEditOpen(false);
     } catch (err) {
+      setSaveStatus('failed');
       setError(err.message || 'Failed to save video URL');
     } finally {
       setIsSaving(false);
@@ -2437,8 +2503,13 @@ export function GameTrackPage() {
     setIsSaving(true);
     try {
       await gamesApi.finish(gameId);
-      navigate(`/games/${gameId}`);
+      navigate(
+        isScrimmage
+          ? `/admin/scrimmage/${data.game.scrimmageId}/sessions/${data.game.scrimmageSessionId}`
+          : `/games/${gameId}`
+      );
     } catch (finishError) {
+      setSaveStatus('failed');
       setError(finishError.message || 'Failed to finish game');
     } finally {
       setIsSaving(false);
@@ -2764,17 +2835,17 @@ export function GameTrackPage() {
 
   function voiceStatLabelFor(intent, shot) {
     if (intent.action === 'field_goal' && shot) {
-      return STAT_LABELS[buildShotStatType(shot.shotFamily, intent.outcome)];
+      return statLabels[buildShotStatType(shot.shotFamily, intent.outcome)];
     }
     if (intent.action === 'free_throw') {
       return intent.outcome === 'made' ? 'Free throw made' : 'Free throw missed';
     }
-    // Rebounds keep their spoken-sentence casing rather than STAT_LABELS' title case, because
+    // Rebounds keep their spoken-sentence casing rather than statLabels' title case, because
     // these strings land mid-sentence in voice feedback and the add-player confirmation.
     if (intent.action === 'defensive_rebound') return 'Defensive rebound';
     if (intent.action === 'offensive_rebound') return 'Offensive rebound';
     const statType = VOICE_QUICK_STAT_TYPES[intent.action];
-    return (statType && STAT_LABELS[statType]) || 'Stat';
+    return (statType && statLabels[statType]) || 'Stat';
   }
 
   // Both voice recovery paths need the same picture of the side being corrected: who is on the
@@ -2949,11 +3020,16 @@ export function GameTrackPage() {
         finishVoiceAttempt(context);
         return voiceRejection('write_failed');
       }
-      return { ok: true, message: `${STAT_LABELS[statType]} recorded.` };
+      return { ok: true, message: `${statLabels[statType]} recorded.` };
     }
     if (parsed.intent.kind !== 'primary') {
       finishVoiceAttempt(context);
       return voiceRejection('unsupported_control');
+    }
+
+    if (isScrimmage && !['field_goal', 'turnover'].includes(parsed.intent.action)) {
+      finishVoiceAttempt(context);
+      return voiceRejection('unsupported_action');
     }
 
     const isShot = ['field_goal', 'free_throw'].includes(parsed.intent.action);
@@ -2964,7 +3040,10 @@ export function GameTrackPage() {
     if (
       parsed.intent.action === 'field_goal' &&
       parsed.intent.points &&
-      parsed.intent.points !== (context.selectedShot.shotFamily === 'FG3' ? 3 : 2)
+      parsed.intent.points !==
+        (context.selectedShot.shotFamily === 'FG3'
+          ? (game.scoringRules?.outsideArc ?? 3)
+          : (game.scoringRules?.insideArc ?? 2))
     ) {
       return voiceRejection('location_conflict');
     }
@@ -3029,6 +3108,37 @@ export function GameTrackPage() {
     setIsStandaloneLineupEditing(true);
     if (isDualTeam) {
       setActiveSide(homeLineupCount < 5 ? TEAM_SIDES.HOME : TEAM_SIDES.AWAY);
+    }
+  }
+
+  async function openScrimmageDialog(kind) {
+    if (isSaving || voiceBusy || isEventPickerOpen || editingEvent || showClockRecovery) return;
+    setIsSaving(true);
+    setError('');
+    pauseVideo();
+    videoPlaybackStateRef.current = 'paused';
+    setVideoPlaybackState('paused');
+    entryVideoWasPausedRef.current = false;
+    clockPausedByVideoRef.current = false;
+    videoPausedByClockRef.current = false;
+    // Claim the clock during the transition so video-pause synchronization cannot
+    // write a second pause while this one is still in flight.
+    entryClockWasRunningRef.current = true;
+    try {
+      await inflightRef.current.catch(() => {});
+      await entryClockTransitionRef.current.catch(() => {});
+      if (liveClockStatusRef.current === 'running') {
+        const response = await gamesApi.updateClock(gameId, { action: 'pause' });
+        updateData(response);
+      }
+      if (kind === 'navigator') setShowScrimmageNavigator(true);
+      else setShowNewScrimmageGame(true);
+    } catch (err) {
+      setSaveStatus('failed');
+      setError(err.message || 'Could not pause the game clock');
+    } finally {
+      entryClockWasRunningRef.current = false;
+      setIsSaving(false);
     }
   }
 
@@ -3484,73 +3594,8 @@ export function GameTrackPage() {
                           </button>
                         </div>
                       </div>
-                      <div className={actionGroupClass}>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                          Free Throw
-                        </p>
-                        <div className={actionPairClass}>
-                          <button
-                            type="button"
-                            className={actionButtonClass('ft')}
-                            disabled={isSaving}
-                            onClick={() => addFreeThrowEvent('made')}
-                          >
-                            FT+
-                          </button>
-                          <button
-                            type="button"
-                            className={actionButtonClass('miss')}
-                            disabled={isSaving}
-                            onClick={() => addFreeThrowEvent('miss')}
-                          >
-                            FT-
-                          </button>
-                        </div>
-                      </div>
-                      <div className={actionGroupClass}>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                          Rebound
-                        </p>
-                        <div className={actionPairClass}>
-                          <button
-                            type="button"
-                            className={actionButtonClass('rebound')}
-                            disabled={isSaving}
-                            onClick={() => addReboundEvent('DREB')}
-                          >
-                            DREB
-                          </button>
-                          <button
-                            type="button"
-                            className={actionButtonClass('rebound')}
-                            disabled={isSaving}
-                            onClick={() => addReboundEvent('OREB')}
-                          >
-                            OREB
-                          </button>
-                        </div>
-                      </div>
-                      <div className={actionGroupClass}>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                          Possession
-                        </p>
-                        <div className={actionTripleClass}>
-                          <button
-                            type="button"
-                            className={actionButtonClass('defense')}
-                            disabled={isSaving}
-                            onClick={() => addQuickStatEvent('STL')}
-                          >
-                            STL
-                          </button>
-                          <button
-                            type="button"
-                            className={actionButtonClass('defense')}
-                            disabled={isSaving}
-                            onClick={() => addQuickStatEvent('BLK')}
-                          >
-                            BLK
-                          </button>
+                      {isScrimmage ? (
+                        <div className={actionGroupClass}>
                           <button
                             type="button"
                             className={actionButtonClass('foul')}
@@ -3560,20 +3605,100 @@ export function GameTrackPage() {
                             TOV
                           </button>
                         </div>
-                      </div>
-                      <div className={actionGroupClass}>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                          Foul
-                        </p>
-                        <button
-                          type="button"
-                          className={actionButtonClass('foul')}
-                          disabled={isSaving}
-                          onClick={() => addQuickStatEvent('FOUL')}
-                        >
-                          FOUL
-                        </button>
-                      </div>
+                      ) : (
+                        <>
+                          <div className={actionGroupClass}>
+                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Free Throw
+                            </p>
+                            <div className={actionPairClass}>
+                              <button
+                                type="button"
+                                className={actionButtonClass('ft')}
+                                disabled={isSaving}
+                                onClick={() => addFreeThrowEvent('made')}
+                              >
+                                FT+
+                              </button>
+                              <button
+                                type="button"
+                                className={actionButtonClass('miss')}
+                                disabled={isSaving}
+                                onClick={() => addFreeThrowEvent('miss')}
+                              >
+                                FT-
+                              </button>
+                            </div>
+                          </div>
+                          <div className={actionGroupClass}>
+                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Rebound
+                            </p>
+                            <div className={actionPairClass}>
+                              <button
+                                type="button"
+                                className={actionButtonClass('rebound')}
+                                disabled={isSaving}
+                                onClick={() => addReboundEvent('DREB')}
+                              >
+                                DREB
+                              </button>
+                              <button
+                                type="button"
+                                className={actionButtonClass('rebound')}
+                                disabled={isSaving}
+                                onClick={() => addReboundEvent('OREB')}
+                              >
+                                OREB
+                              </button>
+                            </div>
+                          </div>
+                          <div className={actionGroupClass}>
+                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Possession
+                            </p>
+                            <div className={actionTripleClass}>
+                              <button
+                                type="button"
+                                className={actionButtonClass('defense')}
+                                disabled={isSaving}
+                                onClick={() => addQuickStatEvent('STL')}
+                              >
+                                STL
+                              </button>
+                              <button
+                                type="button"
+                                className={actionButtonClass('defense')}
+                                disabled={isSaving}
+                                onClick={() => addQuickStatEvent('BLK')}
+                              >
+                                BLK
+                              </button>
+                              <button
+                                type="button"
+                                className={actionButtonClass('foul')}
+                                disabled={isSaving}
+                                onClick={() => addQuickStatEvent('TOV')}
+                              >
+                                TOV
+                              </button>
+                            </div>
+                          </div>
+                          <div className={actionGroupClass}>
+                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Foul
+                            </p>
+                            <button
+                              type="button"
+                              className={actionButtonClass('foul')}
+                              disabled={isSaving}
+                              onClick={() => addQuickStatEvent('FOUL')}
+                            >
+                              FOUL
+                            </button>
+                          </div>
+                        </>
+                      )}
                       {!isDualTeam ? (
                         <div className={actionGroupClass}>
                           <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -3620,6 +3745,126 @@ export function GameTrackPage() {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
+      {isScrimmage && (
+        <div className="flex items-center justify-between gap-3 border-b bg-white px-4 py-2 text-sm">
+          <button
+            type="button"
+            className="underline"
+            onClick={() =>
+              leaveTracker(
+                `/admin/scrimmage/${game.scrimmageId}/sessions/${game.scrimmageSessionId}`
+              )
+            }
+          >
+            Weekly session
+          </button>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            disabled={
+              isSaving ||
+              voiceBusy ||
+              isEventPickerOpen ||
+              Boolean(editingEvent) ||
+              showClockRecovery
+            }
+            className="rounded-lg border border-slate-300 px-3 py-2 font-semibold disabled:opacity-50"
+            onClick={() => openScrimmageDialog('navigator')}
+          >
+            Games
+          </button>
+          <span className="hidden text-slate-500 sm:block">
+            {game.scoringRules?.insideArc}/{game.scoringRules?.outsideArc} scoring · Finish games
+            manually
+          </span>
+          <button
+            type="button"
+            disabled={
+              isSaving ||
+              voiceBusy ||
+              isEventPickerOpen ||
+              Boolean(editingEvent) ||
+              showClockRecovery
+            }
+            className="rounded-lg bg-[#1B4332] px-4 py-2 font-semibold text-white disabled:opacity-50"
+            onClick={() => openScrimmageDialog('new')}
+          >
+            New Game
+          </button>
+        </div>
+      )}
+      {isScrimmage && (
+        <p
+          role="status"
+          className={`border-b px-4 py-2 text-xs ${saveStatus === 'failed' ? 'bg-red-50 text-red-700' : 'bg-white text-slate-600'}`}
+        >
+          {isSaving || saveStatus === 'saving'
+            ? 'Saving…'
+            : saveStatus === 'failed'
+              ? 'Save could not be confirmed. The game was refreshed where possible; check the event list before recording it again.'
+              : saveStatus === 'saved'
+                ? 'Saved'
+                : 'Synced with saved game'}
+        </p>
+      )}
+      {isScrimmage && resumeCheckpoint !== null && !showClockRecovery && (
+        <Modal open title="Resume tracking" onClose={() => setResumeCheckpoint(null)}>
+          <p className="text-sm text-slate-600">
+            Your last confirmed stat was at {formatVideoTime(resumeCheckpoint)}. Resume the video
+            there and check the event list before continuing. The game clock remains under your
+            control.
+          </p>
+          <div className="mt-4 flex gap-3">
+            <button
+              className="rounded-lg bg-[#1B4332] px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => {
+                setResumeVideoPosition(resumeCheckpoint);
+                videoCurrentTimeRef.current = null;
+                setResumeCheckpoint(null);
+              }}
+            >
+              Resume at {formatVideoTime(resumeCheckpoint)}
+            </button>
+            <button className="text-sm underline" onClick={() => setResumeCheckpoint(null)}>
+              Start at game beginning
+            </button>
+          </div>
+        </Modal>
+      )}
+      {showScrimmageNavigator &&
+        createPortal(
+          <ScrimmageGameNavigator
+            scrimmageId={game.scrimmageId}
+            sessionId={game.scrimmageSessionId}
+            currentGameId={gameId}
+            currentScore={{ home: gameSummary?.homePoints, away: gameSummary?.awayPoints }}
+            onClose={() => setShowScrimmageNavigator(false)}
+            onSelect={(nextId) => {
+              setShowScrimmageNavigator(false);
+              leaveTracker(`/games/${nextId}/track`);
+            }}
+          />,
+          document.body
+        )}
+      {showNewScrimmageGame && (
+        <NewScrimmageGameDialog
+          scrimmageId={game.scrimmageId}
+          sessionId={game.scrimmageSessionId}
+          previousGameId={isCompleted ? undefined : gameId}
+          initialTimestamp={videoCurrentTimeRef.current || 0}
+          getCurrentVideoTime={() => videoCurrentTimeRef.current}
+          onClose={() => setShowNewScrimmageGame(false)}
+          onCreated={(nextId) => {
+            setShowNewScrimmageGame(false);
+            clearEventPicker();
+            clockOperatedThisMountRef.current = false;
+            setShowClockRecovery(false);
+            entryClockWasRunningRef.current = false;
+            navigate(`/games/${nextId}/track`);
+          }}
+        />
+      )}
+
       {isCompleted ? (
         <div className="px-4 pt-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -3664,7 +3909,10 @@ export function GameTrackPage() {
         {hasPlayableVideo(game) && isDesktopLayout ? (
           <div className="lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col">
             <GameVideoPanel
-              game={game}
+              game={{
+                ...game,
+                playbackStartTimestamp: resumeVideoPosition ?? game.videoStartTimestamp,
+              }}
               title={game.title}
               videoIframeRef={videoIframeRef}
               muxRef={muxRef}
@@ -3869,7 +4117,11 @@ export function GameTrackPage() {
                         </button>
                         <div className="min-h-0 flex-1">
                           <GameVideoPanel
-                            game={game}
+                            game={{
+                              ...game,
+                              playbackStartTimestamp:
+                                resumeVideoPosition ?? game.videoStartTimestamp,
+                            }}
                             title={game.title}
                             videoIframeRef={videoIframeRef}
                             muxRef={muxRef}
@@ -4287,7 +4539,8 @@ export function GameTrackPage() {
                           const { actor, statLabel, meta } = parseEventParts(
                             event,
                             playersById,
-                            game.gameFormat
+                            game.gameFormat,
+                            statLabels
                           );
                           return (
                             <div
@@ -4725,7 +4978,7 @@ export function GameTrackPage() {
 
         {editingEvent
           ? (() => {
-              const allStatTypes = Object.keys(STAT_LABELS);
+              const allStatTypes = Object.keys(statLabels);
               return (
                 // Escape handling only — the actual dismiss control is the invisible
                 // backdrop <button> beneath this dialog.
@@ -4842,7 +5095,7 @@ export function GameTrackPage() {
                         >
                           {allStatTypes.map((st) => (
                             <option key={st} value={st}>
-                              {STAT_LABELS[st]}
+                              {statLabels[st]}
                             </option>
                           ))}
                         </select>
@@ -5327,6 +5580,23 @@ export function GameTrackPage() {
                   </div>
                 ) : null}
               </div>
+              {isScrimmage && (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  disabled={
+                    isSaving ||
+                    voiceBusy ||
+                    isEventPickerOpen ||
+                    Boolean(editingEvent) ||
+                    showClockRecovery
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+                  onClick={() => openScrimmageDialog('navigator')}
+                >
+                  Games
+                </button>
+              )}
               <button
                 type="button"
                 onClick={closeTrackingOverlay}
