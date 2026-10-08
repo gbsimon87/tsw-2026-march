@@ -40,6 +40,9 @@ const apiMocks = vi.hoisted(() => ({
   addRosterPlayer: vi.fn(),
 }));
 
+const scrimmageMocks = vi.hoisted(() => ({ session: vi.fn(), newGame: vi.fn() }));
+vi.mock('../../scrimmages/api/scrimmagesApi', () => ({ scrimmagesApi: scrimmageMocks }));
+
 vi.mock('../api/gamesApi', () => ({
   gamesApi: apiMocks,
 }));
@@ -156,6 +159,10 @@ function renderPage() {
       <Routes>
         <Route path="/games/:gameId/track" element={<GameTrackPage />} />
         <Route path="/admin" element={<div>Admin destination</div>} />
+        <Route
+          path="/games/earlier-game/track"
+          element={<div>Earlier game correction destination</div>}
+        />
       </Routes>
     </MemoryRouter>
   );
@@ -1320,7 +1327,9 @@ describe('GameTrackPage', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText('Off — tap to enable for this tracking session.')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Off [—-] tap to enable for this tracking session\./)
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Court' }));
     await waitFor(() =>
@@ -4417,10 +4426,10 @@ describe('GameTrackPage', () => {
       });
 
       fireEvent.click(screen.getByRole('button', { name: 'Options' }));
-      expect(screen.getByText(/On — video and clock pause/i)).toBeInTheDocument();
+      expect(screen.getByText(/On [—-] video and clock pause/i)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /Pause During Stat Entry/i }));
-      expect(screen.getByText(/Off — video and clock keep running/i)).toBeInTheDocument();
+      expect(screen.getByText(/Off [—-] video and clock keep running/i)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: 'Court' }));
       fireEvent.click(screen.getByRole('button', { name: /Track Stat/i }));
@@ -4651,6 +4660,250 @@ describe('GameTrackPage', () => {
     } finally {
       restoreMatchMedia();
     }
+  });
+});
+
+describe('Scrimmage tracking', () => {
+  const originalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  beforeEach(() => {
+    const storage = new Map();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key) => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, String(value)),
+        removeItem: (key) => storage.delete(key),
+      },
+    });
+    apiMocks.appendEvent.mockReset();
+    const home = createPlayers().slice(0, 5);
+    const away = home.map((p) => ({
+      ...p,
+      id: `away-${p.id}`,
+      displayName: `Away ${p.displayName}`,
+    }));
+    apiMocks.getById.mockResolvedValue({
+      ...createResponse(),
+      game: {
+        id: 'game-1',
+        title: 'Week 1',
+        gameContext: 'scrimmage',
+        trackingMode: 'dual_team',
+        scrimmageId: 'series-1',
+        scrimmageSessionId: 'week-1',
+        status: 'in_progress',
+        events: [],
+        scoringRules: { insideArc: 1, outsideArc: 2 },
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoStartTimestamp: 3690,
+        gameFormat: {
+          regulationSegmentType: 'scrimmage',
+          regulationSegmentDurationSeconds: 240,
+          overtimeDurationSeconds: 240,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 240000,
+          runningSince: null,
+        },
+      },
+      participants: {
+        home: { displayName: 'Team red', players: home },
+        away: { displayName: 'Team white', players: away },
+      },
+      lineups: {
+        home: { startingPlayerIds: home.map((p) => p.id), currentPlayerIds: home.map((p) => p.id) },
+        away: { startingPlayerIds: away.map((p) => p.id), currentPlayerIds: away.map((p) => p.id) },
+      },
+      canManageRoster: false,
+      gameSummary: { homePoints: 0, awayPoints: 0 },
+      boxScore: {
+        home: { players: createBoxPlayers(home), totals: {} },
+        away: { players: createBoxPlayers(away), totals: {} },
+      },
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    Object.defineProperty(window, 'localStorage', originalStorage);
+    apiMocks.updateClock.mockReset();
+    scrimmageMocks.session.mockReset();
+  });
+  test.each([false, true])(
+    'waits for the clock pause before browsing games (failure: %s)',
+    async (fails) => {
+      const response = await apiMocks.getById();
+      apiMocks.updateClock.mockReset();
+      scrimmageMocks.session.mockReset();
+      scrimmageMocks.session.mockResolvedValue({ session: { label: 'Week 1' }, games: [] });
+      apiMocks.updateClock.mockResolvedValueOnce({
+        ...response,
+        game: {
+          ...response.game,
+          clock: {
+            ...response.game.clock,
+            status: 'running',
+            runningSince: new Date().toISOString(),
+          },
+        },
+      });
+      let resolvePause, rejectPause;
+      apiMocks.updateClock.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            resolvePause = resolve;
+            rejectPause = reject;
+          })
+      );
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Start', exact: true }));
+      await screen.findByRole('button', { name: 'Pause', exact: true });
+      fireEvent.click(screen.getByRole('button', { name: 'Games', exact: true }));
+      await waitFor(() =>
+        expect(apiMocks.updateClock).toHaveBeenLastCalledWith('game-1', { action: 'pause' })
+      );
+      expect(scrimmageMocks.session).not.toHaveBeenCalled();
+      await act(async () => {
+        if (fails) rejectPause(new Error('Could not pause the game clock'));
+        else resolvePause(response);
+      });
+      if (fails) {
+        expect(await screen.findByText('Could not pause the game clock')).toBeInTheDocument();
+        expect(scrimmageMocks.session).not.toHaveBeenCalled();
+      } else {
+        expect(
+          await screen.findByRole('dialog', { name: 'This week’s games' })
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Return to current game' }));
+        expect(screen.getByRole('button', { name: 'Start', exact: true })).toBeInTheDocument();
+      }
+      expect(apiMocks.updateClock).toHaveBeenCalledTimes(2);
+    }
+  );
+  test('opens an earlier game for correction without finishing the current game', async () => {
+    scrimmageMocks.session.mockResolvedValue({
+      session: { label: 'Week 1' },
+      games: [
+        {
+          id: 'earlier-game',
+          title: 'Game 1',
+          status: 'completed',
+          finalScore: { home: 5, away: 3 },
+          videoStartTimestamp: 120,
+        },
+        { id: 'game-1', title: 'Game 2', status: 'in_progress', videoStartTimestamp: 3690 },
+      ],
+    });
+    const finishCalls = apiMocks.finish.mock.calls.length;
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Games', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct Game 1' }));
+    expect(await screen.findByText('Earlier game correction destination')).toBeInTheDocument();
+    expect(scrimmageMocks.session).toHaveBeenCalledWith('series-1', 'week-1');
+    expect(apiMocks.finish.mock.calls.length).toBe(finishCalls);
+  });
+  test('shows a New Game control, pickup rules and the chosen full-video offset', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'New Game' })).toBeInTheDocument();
+    expect(screen.getByText('1/2 scoring · Finish games manually')).toBeInTheDocument();
+    expect(screen.getByTitle('Week 1')).toHaveAttribute(
+      'src',
+      expect.stringContaining('start=3690')
+    );
+  });
+  test('scrimmage stat entry contains makes, misses and turnovers only', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'New Game' });
+    const track = screen.queryByRole('button', { name: /Track Stat/i });
+    if (track) fireEvent.click(track);
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    const picker = within(getEventPicker());
+    expect(picker.getByRole('button', { name: 'Make', exact: true })).toBeInTheDocument();
+    expect(picker.getByRole('button', { name: 'Miss', exact: true })).toBeInTheDocument();
+    expect(picker.getByRole('button', { name: 'TOV', exact: true })).toBeInTheDocument();
+    expect(picker.queryByRole('button', { name: 'FT+' })).not.toBeInTheDocument();
+    expect(picker.queryByRole('button', { name: 'STL' })).not.toBeInTheDocument();
+    expect(picker.queryByRole('button', { name: 'DREB' })).not.toBeInTheDocument();
+  });
+  test('offers to resume from a saved position and leaves the game clock untouched', async () => {
+    window.localStorage.setItem(
+      'scrimmageTracking.game-1',
+      JSON.stringify({ videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', position: 4355 })
+    );
+    const clockCalls = apiMocks.updateClock.mock.calls.length;
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume at 1:12:35' }));
+    expect(screen.getByTitle('Week 1')).toHaveAttribute(
+      'src',
+      expect.stringContaining('start=4355')
+    );
+    expect(apiMocks.updateClock.mock.calls.length).toBe(clockCalls);
+  });
+  test('ignores a saved position from a different recording', async () => {
+    window.localStorage.setItem(
+      'scrimmageTracking.game-1',
+      JSON.stringify({ videoUrl: 'https://youtu.be/other-video', position: 4355 })
+    );
+    renderPage();
+    await screen.findByRole('button', { name: 'New Game' });
+    expect(screen.queryByRole('dialog', { name: 'Resume tracking' })).not.toBeInTheDocument();
+    expect(screen.getByTitle('Week 1')).toHaveAttribute(
+      'src',
+      expect.stringContaining('start=3690')
+    );
+  });
+  test('a confirmed stat shows saving feedback and stores its full-video recovery position', async () => {
+    const response = await apiMocks.getById();
+    let resolveWrite;
+    apiMocks.appendEvent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveWrite = resolve;
+        })
+    );
+    renderPage();
+    await screen.findByRole('button', { name: 'New Game' });
+    const iframe = screen.getByTitle('Week 1');
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: iframe.contentWindow,
+        data: JSON.stringify({ event: 'infoDelivery', info: { currentTime: 4355 } }),
+      })
+    );
+    const track = screen.queryByRole('button', { name: /Track Stat/i });
+    if (track) fireEvent.click(track);
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'TOV', exact: true }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('status')).toHaveTextContent('Saving…');
+    await act(async () => resolveWrite(response));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'));
+    expect(JSON.parse(window.localStorage.getItem('scrimmageTracking.game-1'))).toMatchObject({
+      position: 4355,
+      videoUrl: response.game.videoUrl,
+    });
+  });
+  test('a failed stat shows an unconfirmed save and never automatically replays the write', async () => {
+    apiMocks.appendEvent.mockRejectedValue(new Error('Connection lost'));
+    renderPage();
+    await screen.findByRole('button', { name: 'New Game' });
+    const track = screen.queryByRole('button', { name: /Track Stat/i });
+    if (track) fireEvent.click(track);
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'TOV', exact: true }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Save could not be confirmed')
+    );
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem('scrimmageTracking.game-1')).toBeNull();
   });
 });
 

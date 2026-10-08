@@ -1,5 +1,5 @@
 const stickyClassName =
-  'sticky top-14 z-10 -mx-4 -mt-4 border-b border-slate-100 bg-white px-4 py-4 shadow-sm sm:top-12 sm:-mx-5 sm:-mt-5 sm:px-5';
+  'sticky top-[4.5rem] z-10 -mx-4 -mt-4 border-b border-slate-100 bg-white px-4 py-4 shadow-sm sm:top-12 sm:-mx-5 sm:-mt-5 sm:px-5';
 
 export function DiscoverSearchBar({ label, placeholder, value, onChange, sticky = false }) {
   return (

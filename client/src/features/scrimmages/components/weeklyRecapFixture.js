@@ -1,0 +1,63 @@
+export const recapData = {
+  scrimmage: {
+    id: 'series-1',
+    name: 'We-ball Wednesdays',
+    isPublic: true,
+    seasons: [
+      {
+        id: 'season-1',
+        mvpRules: {
+          missPenalty: 1,
+          turnoverPenalty: 2,
+          winBonus: 2,
+          lossPenalty: 1,
+          weeklyMinGames: 3,
+        },
+      },
+    ],
+  },
+  session: {
+    id: 'week-1',
+    seasonId: 'season-1',
+    label: 'Week 1',
+    date: '2026-10-07T00:00:00.000Z',
+    publishedAt: '2026-10-08T12:00:00Z',
+    videoUrl: 'https://youtu.be/recording',
+  },
+  games: [
+    { id: 'g1', status: 'completed' },
+    { id: 'g2', status: 'in_progress' },
+  ],
+  standings: [
+    {
+      playerId: 'john',
+      displayName: 'John',
+      eligible: true,
+      mvpScore: 3.5,
+      points: 12,
+      fgPercentage: 50,
+      turnovers: 2,
+      gamesPlayed: 3,
+      makes: 6,
+      attempts: 12,
+      misses: 6,
+      wins: 2,
+      losses: 1,
+    },
+    {
+      playerId: 'kyle',
+      displayName: 'Kyle',
+      eligible: false,
+      mvpScore: 9,
+      points: 8,
+      fgPercentage: null,
+      turnovers: 1,
+      gamesPlayed: 1,
+      makes: 0,
+      attempts: 0,
+      misses: 0,
+      wins: 1,
+      losses: 0,
+    },
+  ],
+};

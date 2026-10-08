@@ -7,7 +7,7 @@ const { GAME_VIDEO_STATUSES } = require('../shared/gameVideo');
 
 const gameFormatSchema = new mongoose.Schema(
   {
-    regulationSegmentType: { type: String, enum: ['quarter', 'half'], required: true },
+    regulationSegmentType: { type: String, enum: ['quarter', 'half', 'scrimmage'], required: true },
     regulationSegmentDurationSeconds: { type: Number, required: true, min: 60, max: 3600 },
     overtimeDurationSeconds: { type: Number, required: true, min: 60, max: 3600 },
   },
@@ -32,7 +32,11 @@ const clockSchema = new mongoose.Schema(
 const participantSchema = new mongoose.Schema(
   {
     side: { type: String, enum: [TEAM_SIDES.HOME, TEAM_SIDES.AWAY], required: true },
-    participantType: { type: String, enum: ['team', 'league_team'], required: true },
+    participantType: {
+      type: String,
+      enum: ['team', 'league_team', 'scrimmage_color'],
+      required: true,
+    },
     // OPT-007: no query ever filters on homeParticipant.teamId/leagueTeamId (or
     // the away side) — dropped the per-field index; it only cost writes.
     teamId: { type: mongoose.Schema.Types.ObjectId, default: null },
@@ -154,7 +158,11 @@ const shotEventSchema = new mongoose.Schema(
 const rosterSnapshotPlayerSchema = new mongoose.Schema(
   {
     leaguePlayerId: { type: mongoose.Schema.Types.ObjectId, default: null },
-    sourceType: { type: String, enum: ['team_player', 'league_player'], default: null },
+    sourceType: {
+      type: String,
+      enum: ['team_player', 'league_player', 'scrimmage_player'],
+      default: null,
+    },
     sourcePlayerId: { type: mongoose.Schema.Types.ObjectId, default: null },
     displayName: { type: String, required: true, trim: true },
     jerseyNumber: { type: Number, default: null },
@@ -235,7 +243,7 @@ const gameSchema = new mongoose.Schema(
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: false, index: true },
     gameContext: {
       type: String,
-      enum: ['standalone', 'league'],
+      enum: ['standalone', 'league', 'scrimmage'],
       default: 'standalone',
       index: true,
     },
@@ -246,6 +254,22 @@ const gameSchema = new mongoose.Schema(
       index: true,
     },
     sport: { type: String, enum: [SPORTS.BASKETBALL], default: SPORTS.BASKETBALL, required: true },
+    scrimmageId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    scrimmageSessionId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    scrimmageSeasonId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    scrimmageRequestId: { type: String },
+    scrimmageActive: { type: Boolean, default: false },
+    videoStartTimestamp: { type: Number, min: 0, default: 0 },
+    scoringRules: {
+      type: new mongoose.Schema(
+        {
+          insideArc: { type: Number, min: 1, max: 3 },
+          outsideArc: { type: Number, min: 1, max: 4 },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
     // Which court image this game's event x/y percentages belong to. No schema
     // default on purpose - an absent value means the game predates versioning
     // and must render on the original court. Stamped at creation and never
@@ -382,6 +406,16 @@ const gameSchema = new mongoose.Schema(
   }
 );
 
+gameSchema.index({ scrimmageId: 1, scrimmageSeasonId: 1, status: 1 });
+gameSchema.index({ scrimmageSessionId: 1, createdAt: 1 });
+gameSchema.index(
+  { scrimmageSessionId: 1 },
+  { unique: true, partialFilterExpression: { scrimmageActive: true } }
+);
+gameSchema.index(
+  { scrimmageSessionId: 1, scrimmageRequestId: 1 },
+  { unique: true, partialFilterExpression: { scrimmageRequestId: { $type: 'string' } } }
+);
 gameSchema.index({ ownerUserId: 1, teamId: 1, createdAt: -1 });
 gameSchema.index({ homeTeamId: 1, createdAt: -1 });
 gameSchema.index({ awayTeamId: 1, createdAt: -1 });
@@ -472,7 +506,7 @@ async function listPublicCompletedGames(limit = 100) {
   // OPT-022: all 3 callers (teams.service.js) only read plain fields (opponent
   // matching, computeTeamPoints via summarizeEvents(game.events), display
   // projection) and never save — safe to skip document hydration.
-  return Game.find({ status: 'completed' })
+  return Game.find({ status: 'completed', gameContext: { $ne: 'scrimmage' } })
     .select('-events -rosterSnapshot -boxScore')
     .lean()
     .sort({

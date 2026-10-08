@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/store/AuthContext';
 
 const TABS = [
@@ -36,9 +36,26 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: 'scrimmages',
+    label: 'Managed Scrimmages',
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <circle cx="8" cy="8" r="6" />
+        <path d="M2 8h12M8 2v12M4 3.5c4 2 4 7 0 9M12 3.5c-4 2-4 7 0 9" />
+      </svg>
+    ),
+  },
 ];
 import { teamsApi } from '../teams/api/teamsApi';
 import { leaguesApi } from '../leagues/api/leaguesApi';
+import { scrimmagesApi } from '../scrimmages/api/scrimmagesApi';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
 import { getLeagueHeaderImage } from '../feed/cardImage';
 import teamPlaceholder from '../../assets/placeholders/team-logo-placeholder.svg';
@@ -60,13 +77,23 @@ export function AdminPage() {
   const [leagues, setLeagues] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('leagues');
+  const [scrimmages, setScrimmages] = useState([]);
+  const [search, setSearch] = useSearchParams();
+  const activeTab = TABS.some((tab) => tab.id === search.get('tab'))
+    ? search.get('tab')
+    : 'leagues';
+  function setActiveTab(tab) {
+    const next = new URLSearchParams(search);
+    next.set('tab', tab);
+    setSearch(next, { replace: true });
+  }
 
   useEffect(() => {
-    Promise.all([teamsApi.list(), leaguesApi.list()])
-      .then(([teamsResponse, leaguesResponse]) => {
+    Promise.all([teamsApi.list(), leaguesApi.list(), scrimmagesApi.managed()])
+      .then(([teamsResponse, leaguesResponse, scrimmagesResponse]) => {
         setTeams(teamsResponse.teams || []);
         setLeagues(leaguesResponse.leagues || []);
+        setScrimmages(scrimmagesResponse.scrimmages || []);
       })
       .catch((loadError) => setError(loadError.message || 'Failed to load admin'))
       .finally(() => setIsLoading(false));
@@ -132,6 +159,7 @@ export function AdminPage() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
+              aria-pressed={activeTab === tab.id}
               aria-label={tab.label}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-semibold transition ${
                 index < TABS.length - 1 ? 'border-r border-slate-200' : ''
@@ -148,6 +176,73 @@ export function AdminPage() {
         </div>
 
         <div className="p-5">
+          {activeTab === 'scrimmages' && (
+            <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2
+                    className="text-lg text-slate-900"
+                    style={{ fontFamily: "'Archivo Black', sans-serif" }}
+                  >
+                    Managed Scrimmages
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Manage weekly sessions, player pools and season MVP standings.
+                  </p>
+                </div>
+                <Link
+                  to="/admin/scrimmages?create=1"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#F4A300]/60 hover:bg-slate-50"
+                >
+                  New Scrimmage
+                </Link>
+              </div>
+              {isLoading ? (
+                <p className="mt-3 text-sm text-slate-500">Loading scrimmages…</p>
+              ) : !scrimmages.length ? (
+                <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                  <p className="text-sm text-slate-600">
+                    No scrimmages yet.{' '}
+                    <Link className="font-medium underline" to="/admin/scrimmages?create=1">
+                      Create your first scrimmage →
+                    </Link>
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  {scrimmages.map((scrimmage) => (
+                    <Link
+                      key={scrimmage.id}
+                      to={`/admin/scrimmage/${scrimmage.id}`}
+                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#F4A300]/60 hover:bg-white"
+                    >
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1B4332]/10 font-bold text-[#1B4332]"
+                        aria-hidden="true"
+                      >
+                        {scrimmage.name.slice(0, 1)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900">{scrimmage.name}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span>
+                            {scrimmage.seasons.find(
+                              (season) => season.id === scrimmage.activeSeasonId
+                            )?.label || 'Season'}
+                          </span>
+                          <span>•</span>
+                          <span className="rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-700">
+                            {scrimmage.isOwner ? 'Scrimmage Owner' : 'Scrimmage Admin'}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'leagues' ? (
             <div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

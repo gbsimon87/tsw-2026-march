@@ -15,6 +15,7 @@ const DEFAULT_GAME_FORMAT = Object.freeze({
 });
 
 function regulationSegmentCount(format) {
+  if (format.regulationSegmentType === 'scrimmage') return 1;
   return format.regulationSegmentType === SEGMENT_TYPES.HALF ? 2 : 4;
 }
 

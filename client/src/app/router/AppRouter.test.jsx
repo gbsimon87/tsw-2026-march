@@ -56,6 +56,19 @@ vi.mock('../../features/feed/api/feedApi', () => ({
   feedApi: feedApiMocks,
 }));
 
+vi.mock('../../features/scrimmages/pages/ScrimmagePages', () => ({
+  ScrimmagePage: ({ adminMode }) => <p>{adminMode ? 'Admin scrimmage' : 'Public scrimmage'}</p>,
+  ScrimmageSessionPage: ({ adminMode }) => (
+    <p>{adminMode ? 'Admin weekly session' : 'Public weekly session'}</p>
+  ),
+  ScrimmageAdminListPage: () => <p>Scrimmage creation</p>,
+}));
+vi.mock('../../features/scrimmages/pages/ScrimmagePlayerPage', () => ({
+  ScrimmagePlayerPage: ({ adminMode }) => (
+    <p>{adminMode ? 'Admin scrimmage player' : 'Public scrimmage player'}</p>
+  ),
+}));
+
 function LocationProbe() {
   const location = useLocation();
 
@@ -69,6 +82,58 @@ describe('AppRouter', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  test.each([
+    ['/scrimmages/s1?seasonId=season-2', '/scrimmage/s1?seasonId=season-2', 'Public scrimmage'],
+    [
+      '/scrimmages/s1/players/p1?sessionId=w1',
+      '/scrimmage/s1/players/p1?sessionId=w1',
+      'Public scrimmage player',
+    ],
+    ['/scrimmages/s1/sessions/w1', '/scrimmage/s1/sessions/w1', 'Public weekly session'],
+  ])(
+    'redirects old scrimmage URL %s without losing filters',
+    async (oldPath, canonicalPath, label) => {
+      authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+      renderWithProviders(
+        <MemoryRouter initialEntries={[oldPath]}>
+          <AppRouter />
+          <LocationProbe />
+        </MemoryRouter>
+      );
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(screen.getByTestId('location')).toHaveTextContent(canonicalPath);
+    }
+  );
+
+  test('requires login for the admin scrimmage URL and preserves the destination', async () => {
+    authMocks.useAuth.mockReturnValue({ user: null, isLoading: false });
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/admin/scrimmage/s1?tab=players']}>
+        <AppRouter />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/login?redirectTo=%2Fadmin%2Fscrimmage%2Fs1%3Ftab%3Dplayers'
+      )
+    );
+  });
+
+  test.each([
+    ['/admin/scrimmage/s1', 'Admin scrimmage'],
+    ['/admin/scrimmage/s1/players/p1', 'Admin scrimmage player'],
+    ['/admin/scrimmage/s1/sessions/w1', 'Admin weekly session'],
+  ])('renders admin mode on %s', async (path, label) => {
+    authMocks.useAuth.mockReturnValue({ user: { id: 'user-1' }, isLoading: false });
+    renderWithProviders(
+      <MemoryRouter initialEntries={[path]}>
+        <AppRouter />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(label)).toBeInTheDocument();
   });
 
   test('redirects logged-out users from root to The Pulse', async () => {

@@ -2,7 +2,7 @@ import { forwardRef, useCallback } from 'react';
 import { buildYouTubeEmbedUrl } from '../youtube';
 
 export const GameVideoEmbed = forwardRef(function GameVideoEmbed(
-  { videoUrl, title, fill = false },
+  { videoUrl, title, fill = false, startSeconds = 0 },
   ref
 ) {
   const embedUrl = buildYouTubeEmbedUrl(videoUrl);
@@ -20,7 +20,7 @@ export const GameVideoEmbed = forwardRef(function GameVideoEmbed(
     return null;
   }
 
-  const src = `${embedUrl}?enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1`;
+  const src = `${embedUrl}?enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1${startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : ''}`;
 
   return (
     <div

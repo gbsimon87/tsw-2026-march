@@ -155,3 +155,19 @@ describe('browser analytics contract', () => {
     }
   });
 });
+test('weekly scrimmage recaps reuse the generic sharing event contract without player data', () => {
+  const properties = {
+    target_type: 'scrimmage_recap',
+    source: 'scrimmage_session',
+    method: 'clipboard',
+    result: 'succeeded',
+  };
+  expect(parseBrowserEvent('share_completed', properties)).toEqual(properties);
+  expect(
+    parseBrowserEvent('share_completed', {
+      ...properties,
+      player_name: 'John',
+      recap_url: 'https://example.com/recap',
+    })
+  ).toBeNull();
+});

@@ -49,7 +49,9 @@ export function Tabs({ items, defaultValue, onChange, ariaLabel, stickyTabList =
         // inside a panel (e.g. Discover's search bar) offset itself to sit
         // flush beneath the tabs.
         className={`grid gap-1 border-b border-slate-200 p-2 ${
-          stickyTabList ? 'sticky top-0 z-20 h-14 rounded-t-2xl bg-white shadow-sm sm:h-12' : ''
+          stickyTabList
+            ? 'sticky top-0 z-20 h-[4.5rem] rounded-t-2xl bg-white shadow-sm sm:h-12'
+            : ''
         }`}
         role="tablist"
         aria-label={ariaLabel || 'Game detail sections'}

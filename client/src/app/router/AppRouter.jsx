@@ -16,6 +16,26 @@ import { useAuth } from '../store/AuthContext';
 const PricingPage = lazy(() =>
   import('../../features/billing/pages/PricingPage').then((m) => ({ default: m.PricingPage }))
 );
+const ScrimmagePage = lazy(() =>
+  import('../../features/scrimmages/pages/ScrimmagePages').then((m) => ({
+    default: m.ScrimmagePage,
+  }))
+);
+const ScrimmagePlayerPage = lazy(() =>
+  import('../../features/scrimmages/pages/ScrimmagePlayerPage').then((m) => ({
+    default: m.ScrimmagePlayerPage,
+  }))
+);
+const ScrimmageSessionPage = lazy(() =>
+  import('../../features/scrimmages/pages/ScrimmagePages').then((m) => ({
+    default: m.ScrimmageSessionPage,
+  }))
+);
+const ScrimmageAdminListPage = lazy(() =>
+  import('../../features/scrimmages/pages/ScrimmagePages').then((m) => ({
+    default: m.ScrimmageAdminListPage,
+  }))
+);
 const AdminPage = lazy(() =>
   import('../../features/dashboard/AdminPage').then((m) => ({ default: m.AdminPage }))
 );
@@ -228,6 +248,23 @@ function LegacyLeagueRedirect({ target }) {
   return <Navigate to={targetPath} replace />;
 }
 
+function LegacyScrimmageRedirect({ kind }) {
+  const { scrimmageId, playerId, sessionId } = useParams();
+  const { search } = useLocation();
+  const suffix =
+    kind === 'players'
+      ? `/players/${playerId}`
+      : kind === 'sessions'
+        ? `/sessions/${sessionId}`
+        : '';
+  return <Navigate to={`/scrimmage/${scrimmageId}${suffix}${search}`} replace />;
+}
+
+function GameTrackerRoute() {
+  const { gameId } = useParams();
+  return <GameTrackPage key={gameId} />;
+}
+
 export function AppRouter() {
   return (
     <Suspense fallback={<SportsLoader label="Loading" fullPage />}>
@@ -235,6 +272,56 @@ export function AppRouter() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/pulse" replace />} />
           <Route path="/home" element={<HomePage />} />
+          <Route path="/scrimmage/:scrimmageId" element={<ScrimmagePage />} />
+          <Route
+            path="/scrimmage/:scrimmageId/players/:playerId"
+            element={<ScrimmagePlayerPage />}
+          />
+          <Route
+            path="/scrimmage/:scrimmageId/sessions/:sessionId"
+            element={<ScrimmageSessionPage />}
+          />
+          <Route
+            path="/admin/scrimmage/:scrimmageId"
+            element={
+              <ProtectedRoute>
+                <ScrimmagePage adminMode />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/scrimmage/:scrimmageId/players/:playerId"
+            element={
+              <ProtectedRoute>
+                <ScrimmagePlayerPage adminMode />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/scrimmage/:scrimmageId/sessions/:sessionId"
+            element={
+              <ProtectedRoute>
+                <ScrimmageSessionPage adminMode />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/scrimmages/:scrimmageId" element={<LegacyScrimmageRedirect />} />
+          <Route
+            path="/scrimmages/:scrimmageId/players/:playerId"
+            element={<LegacyScrimmageRedirect kind="players" />}
+          />
+          <Route
+            path="/scrimmages/:scrimmageId/sessions/:sessionId"
+            element={<LegacyScrimmageRedirect kind="sessions" />}
+          />
+          <Route
+            path="/admin/scrimmages"
+            element={
+              <ProtectedRoute>
+                <ScrimmageAdminListPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
@@ -431,7 +518,7 @@ export function AppRouter() {
           path="/games/:gameId/track"
           element={
             <ProtectedRoute>
-              <GameTrackPage />
+              <GameTrackerRoute />
             </ProtectedRoute>
           }
         />

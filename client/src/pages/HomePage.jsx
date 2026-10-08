@@ -11,6 +11,7 @@ import { Tabs } from '../components/Tabs';
 import { DiscoverSearchBar } from '../components/DiscoverSearchBar';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { resolveShareImage } from '../hooks/resolveShareImage';
+import { ScrimmageDiscovery } from '../features/scrimmages/components/ScrimmageDiscovery';
 
 function LeaguesTabIcon() {
   return (
@@ -78,7 +79,7 @@ export function HomePage() {
   const [leagueQuery, setLeagueQuery] = useState('');
   const [teamQuery, setTeamQuery] = useState('');
   const requestedTab = searchParams.get('tab');
-  const discoverTab = ['leagues', 'teams', 'players'].includes(requestedTab)
+  const discoverTab = ['leagues', 'teams', 'players', 'scrimmages'].includes(requestedTab)
     ? requestedTab
     : 'leagues';
 
@@ -302,6 +303,12 @@ export function HomePage() {
               label: 'Players',
               icon: <PlayersTabIcon />,
               content: <DiscoverablePlayers stickySearch />,
+            },
+            {
+              value: 'scrimmages',
+              label: 'Scrimmages',
+              icon: <TeamsTabIcon />,
+              content: <ScrimmageDiscovery />,
             },
           ]}
         />

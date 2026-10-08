@@ -1476,6 +1476,27 @@ describe('GameDetailPage — per-game player card', () => {
 
     expect(screen.getByRole('button', { name: /share alex/i })).toBeInTheDocument();
   });
+  test('scrimmage box scores show only core metrics and link the series profile', async () => {
+    const data = payload();
+    await renderStats({
+      ...data,
+      game: {
+        ...data.game,
+        gameContext: 'scrimmage',
+        scrimmageId: 'series-1',
+        scrimmageSessionId: 'week-1',
+        scrimmageSeasonId: 'season-1',
+      },
+    });
+    expect(screen.getByRole('columnheader', { name: /FG%/ })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /TOV/ })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /REB O\/D\/T/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /share alex/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alex', exact: true })).toHaveAttribute(
+      'href',
+      '/scrimmage/series-1/players/p1?seasonId=season-1'
+    );
+  });
 
   test('opens the image chooser from the box-score row in one click', async () => {
     await renderStats({

@@ -95,6 +95,19 @@ the row names it and describes only the delta.
 | Stat-correction queue           | XL   | Crosses immutable game history, aggregates, and audit.                                                                                                                                                                                                                                                              |
 | Multi-league organization view  | XL   | Deferred; see **Not Now**. New organization and cross-league authorization model.                                                                                                                                                                                                                                   |
 
+## Scrimmages
+
+Added 8 October 2026. These are the remaining suggestions for scrimmages.
+
+| Idea                      | Size | Notes                                                                                                                                                               |
+| ------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stat-correction history   | M    | Record who changed an event, when, and its previous and new values. Let admins inspect changes affecting published results. Reuse shared game tracking write paths. |
+| Player progress over time | M    | Weekly trends for points, FG%, turnovers and MVP score on scrimmage player profiles. Show games played alongside each week to provide context.                      |
+| MVP score breakdown       | S    | Expand a player’s score to show the contributions from points, misses, turnovers, wins and losses, using the season’s saved weights and games-played denominator.   |
+
+Before rollout, complete the pending mobile and two-hour YouTube acceptance
+check documented in [scrimmages.md](scrimmages.md#browser-acceptance-checklist).
+
 ## Other Opportunities
 
 - lineup and stint analytics;

@@ -41,7 +41,9 @@ export function GameClockControls({
   const finishLabel =
     clock.segmentKind === 'overtime'
       ? 'Finish overtime'
-      : `Finish ${game.gameFormat.regulationSegmentType}`;
+      : game.gameFormat.regulationSegmentType === 'scrimmage'
+        ? 'Finish regulation'
+        : `Finish ${game.gameFormat.regulationSegmentType}`;
   const statusLabel = {
     running: 'Live',
     paused: 'Paused',

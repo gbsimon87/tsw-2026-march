@@ -27,9 +27,9 @@ import { HighlightReceiptModal } from '../../social/components/HighlightReceiptM
 import { Breadcrumbs } from '../../../components/Breadcrumbs';
 import { useDocumentMeta } from '../../../hooks/useDocumentMeta';
 import { resolveShareImage } from '../../../hooks/resolveShareImage';
-import gameConstants from '../constants';
+import gameConstants, { getStatLabels } from '../constants';
 
-const { STAT_LABELS, ZONE_LABELS } = gameConstants;
+const { ZONE_LABELS } = gameConstants;
 
 function eventTime(value) {
   if (!value) {
@@ -412,7 +412,14 @@ export function GameDetailPage() {
       align: 'left',
       sortKey: 'displayName',
       render: (row) =>
-        row.playerHref ? (
+        game.gameContext === 'scrimmage' && !row.isTeamTotal ? (
+          <Link
+            to={`${data.canManageGame ? '/admin' : ''}/scrimmage/${game.scrimmageId}/players/${row.playerId}?seasonId=${game.scrimmageSeasonId}`}
+            className="font-medium text-slate-900 underline"
+          >
+            {row.displayName}
+          </Link>
+        ) : row.playerHref ? (
           <Link
             to={row.playerHref}
             className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 transition hover:text-[#1B4332] hover:decoration-[#F4A300]"
@@ -498,7 +505,11 @@ export function GameDetailPage() {
       sortValue: (row) => shotPercentage(row.fg3m, row.fg3a),
       render: (row) => formatShotPercentage(row.fg3m, row.fg3a),
     },
-  ];
+  ].filter(
+    (column) =>
+      game.gameContext !== 'scrimmage' ||
+      ['player', 'pts', 'fg', 'fgPct', 'tov'].includes(column.id)
+  );
 
   // Social backlog rank 2: the share control lives in its own column so the
   // print view can keep boxScoreColumns untouched. Completed games only — the
@@ -565,7 +576,9 @@ export function GameDetailPage() {
   }
 
   const shareableColumns = (side) =>
-    game.status === 'completed' ? [...boxScoreColumns, shareColumn(side)] : boxScoreColumns;
+    game.status === 'completed' && game.gameContext !== 'scrimmage'
+      ? [...boxScoreColumns, shareColumn(side)]
+      : boxScoreColumns;
 
   const statsContent = (
     <div className="space-y-4">
@@ -678,6 +691,7 @@ export function GameDetailPage() {
           <p className="text-sm text-slate-600">How the score progressed as the game went on.</p>
           <ScoringTimelineChart
             events={sortedEvents}
+            scoringRules={game.scoringRules}
             isDualTeam={isDualTeam}
             homeLabel={getParticipantName(participants, 'home')}
             awayLabel={getParticipantName(participants, 'away')}
@@ -712,7 +726,7 @@ export function GameDetailPage() {
               const player = event.playerId ? playersById.get(event.playerId) : null;
               const playerName =
                 player?.displayName || (event.playerId ? 'Unknown Player' : 'Opponent');
-              const statLabel = STAT_LABELS[event.statType] || event.statType;
+              const statLabel = getStatLabels(game.scoringRules)[event.statType] || event.statType;
               const sideLabel =
                 isDualTeam && event.teamSide
                   ? `${getParticipantName(participants, event.teamSide)}: `
@@ -744,6 +758,8 @@ export function GameDetailPage() {
       participants={participants}
       replayFilters={data.replayFilters || ['all']}
       courtLayoutId={game.courtLayoutId}
+      scoringRules={game.scoringRules}
+      isScrimmage={game.gameContext === 'scrimmage'}
     />
   );
 
@@ -974,13 +990,22 @@ export function GameDetailPage() {
   );
 
   const leagueBreadcrumbs =
-    isDualTeam && data.league
+    game.gameContext === 'scrimmage'
       ? [
-          { label: 'Discover', href: '/home' },
-          { label: data.league.name, href: `/league/${data.league.slug}` },
+          { label: 'Scrimmages', href: '/home?tab=scrimmages' },
+          {
+            label: 'Weekly session',
+            href: `${data.canManageGame ? '/admin' : ''}/scrimmage/${game.scrimmageId}/sessions/${game.scrimmageSessionId}`,
+          },
           { label: game.title || 'Game' },
         ]
-      : null;
+      : isDualTeam && data.league
+        ? [
+            { label: 'Discover', href: '/home' },
+            { label: data.league.name, href: `/league/${data.league.slug}` },
+            { label: game.title || 'Game' },
+          ]
+        : null;
 
   return (
     <section className="space-y-4">
@@ -1115,12 +1140,15 @@ export function GameDetailPage() {
                   league={data.league}
                   participants={participants}
                   isDualTeam={isDualTeam}
+                  isScrimmage={game.gameContext === 'scrimmage'}
                   recap={recap}
                   aiSummary={aiSummary}
                   gameId={game.id}
                   video={game.video}
                   videoUrl={game.videoUrl}
                   videoTitle={game.title}
+                  scoringRules={game.scoringRules}
+                  videoStartTimestamp={game.videoStartTimestamp}
                   highlights={data.highlights}
                   sharedEventIds={data.sharedEventIds}
                   canShareHighlights={canShareHighlights}

@@ -38,6 +38,23 @@ export const TEAM_SIDES = {
   AWAY: 'away',
 };
 
+export function getStatLabels(scoringRules) {
+  if (!scoringRules) return STAT_LABELS;
+  return {
+    ...STAT_LABELS,
+    FG2_MADE: `${scoringRules.insideArc ?? 2}PT Make`,
+    FG2_MISS: `${scoringRules.insideArc ?? 2}PT Miss`,
+    FG3_MADE: `${scoringRules.outsideArc ?? 3}PT Make`,
+    FG3_MISS: `${scoringRules.outsideArc ?? 3}PT Miss`,
+  };
+}
+
+export function getFieldGoalPercentage(stats) {
+  const attempts = (stats?.fg2?.attempts || 0) + (stats?.fg3?.attempts || 0);
+  const makes = (stats?.fg2?.made || 0) + (stats?.fg3?.made || 0);
+  return attempts ? (100 * makes) / attempts : null;
+}
+
 export default {
   ZONE_LABELS,
   STAT_LABELS,

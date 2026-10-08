@@ -114,7 +114,7 @@ describe('DiscoverablePlayers link routing', () => {
 
     expect(await screen.findByTestId('discover-search-bar')).toHaveClass(
       'sticky',
-      'top-14',
+      'top-[4.5rem]',
       'sm:top-12'
     );
   });

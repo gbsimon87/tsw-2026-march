@@ -14,6 +14,9 @@ It supports:
 - optional browser-native voice commands for live basketball tracking;
 - leagues, seasons, teams, members, join requests, schedules, standings, and
   data-health checks;
+- recurring scrimmages with independent reusable pools, manually created weeks,
+  fixed weekly colors, games with one to five players per side, signed profile
+  claims, efficiency MVP, player video profiles and published weekly recap sharing;
 - public game, team, league, and player pages;
 - box scores, recaps, shot maps, replay, highlights, and shareable cards;
 - linked YouTube game video and, in development behind kill switches, hosted
@@ -55,25 +58,34 @@ Cross-domain utilities are in `server/src/services/`, `server/src/utils/`, and
 
 ## Main Product Routes
 
-| Route                               | Purpose                                         | Access        |
-| ----------------------------------- | ----------------------------------------------- | ------------- |
-| `/pulse`                            | Public feed; `/` and `/feed` redirect here      | Public        |
-| `/home`                             | Player and game discovery                       | Public        |
-| `/games/:gameId`                    | Game detail, box score, recap, replay           | Public        |
-| `/league/:leagueSlug/*`             | Public league, standings, games, teams, players | Public        |
-| `/teams/:teamId/*`                  | Public standalone team and player pages         | Public        |
-| `/players/:userId`                  | Claimed league profiles grouped by user         | Public        |
-| `/admin`                            | Team and league administration                  | Authenticated |
-| `/admin/leagues/:leagueId`          | League administration                           | Authenticated |
-| `/admin/leagues/:leagueId/schedule` | Bulk schedule builder                           | Authenticated |
-| `/games/:gameId/track`              | Full-screen live tracker                        | Authenticated |
-| `/my-sporty`                        | Current user's claimed league profiles          | Authenticated |
-| `/following`                        | Followed players, leagues, and league teams     | Authenticated |
-| `/onboarding`                       | Post-signup role wizard; resumes from the user  | Authenticated |
-| `/pricing`                          | Plans and pricing                               | Public        |
+| Route                                         | Purpose                                               | Access            |
+| --------------------------------------------- | ----------------------------------------------------- | ----------------- |
+| `/pulse`                                      | Public feed; `/` and `/feed` redirect here            | Public            |
+| `/home`                                       | Player and game discovery                             | Public            |
+| `/home?tab=scrimmages`                        | Discover public recurring scrimmages                  | Public            |
+| `/scrimmage/:scrimmageId`                     | Pool claims, seasons, sessions and MVP                | Visibility-scoped |
+| `/scrimmage/:scrimmageId/players/:playerId`   | Scrimmage player stats, game history and video plays  | Visibility-scoped |
+| `/scrimmage/:scrimmageId/sessions/:sessionId` | Weekly colors, games, stats and published recap       | Visibility-scoped |
+| `/admin?tab=scrimmages`                       | Managed Scrimmages tab                                | Authenticated     |
+| `/admin/scrimmage/:scrimmageId/*`             | Scrimmage administration, players and weekly sessions | Scrimmage manager |
+| `/admin/scrimmages`                           | Create and administer recurring scrimmages            | Authenticated     |
+| `/games/:gameId`                              | Game detail, box score, recap, replay                 | Public            |
+| `/league/:leagueSlug/*`                       | Public league, standings, games, teams, players       | Public            |
+| `/teams/:teamId/*`                            | Public standalone team and player pages               | Public            |
+| `/players/:userId`                            | Claimed league profiles grouped by user               | Public            |
+| `/admin`                                      | Team, league and scrimmage administration             | Authenticated     |
+| `/admin/leagues/:leagueId`                    | League administration                                 | Authenticated     |
+| `/admin/leagues/:leagueId/schedule`           | Bulk schedule builder                                 | Authenticated     |
+| `/games/:gameId/track`                        | Full-screen live tracker                              | Authenticated     |
+| `/my-sporty`                                  | Current user's claimed league and scrimmage profiles  | Authenticated     |
+| `/following`                                  | Followed players, leagues, and league teams           | Authenticated     |
+| `/onboarding`                                 | Post-signup role wizard; resumes from the user        | Authenticated     |
+| `/pricing`                                    | Plans and pricing                                     | Public            |
 
 `client/src/app/router/AppRouter.jsx` is the complete route source of truth.
 Legacy `/leagues/...` admin URLs redirect to `/admin/leagues/...`.
+Legacy `/scrimmages/...` URLs redirect to the matching canonical
+`/scrimmage/...` or `/admin/scrimmage/...` route.
 
 ## Request And Session Flow
 
@@ -120,6 +132,7 @@ Schemas are defined in repository files. Main models:
 | Auth       | `User`, `Session`, `AuthToken`                                                                                                                                                 |
 | Teams      | `Team`, `TeamSeasonSummary`                                                                                                                                                    |
 | Games      | `Game` with embedded events, roster snapshots, optional `videoUrl` (YouTube) and `video` (hosted Mux media)                                                                    |
+| Scrimmages | `Scrimmage` (embedded seasons), `ScrimmagePlayer`, `ScrimmageSession`, `ScrimmageAcceptance`, `ScrimmageJoinRequest`                                                           |
 | Video      | `VideoUploadAttempt`, `VideoCleanupJob`, `VideoWebhookEvent`, `VideoQuotaCounter`                                                                                              |
 | Feed       | `Post`                                                                                                                                                                         |
 | Follows    | `Follow`                                                                                                                                                                       |
@@ -165,7 +178,8 @@ posts when `AUTO_FEED_ENABLED=true` and the league is public. Milestone posts
 also require `AUTO_FEED_MILESTONES_ENABLED=true`.
 
 Games are currently basketball-only and have an immutable format snapshot:
-four quarters or two halves, a per-segment duration, and an overtime duration.
+four quarters, two halves, or one scrimmage regulation period, a per-segment
+duration, and an overtime duration.
 The default is four 10-minute quarters and five-minute overtimes. The server
 owns a persisted, anchored countdown clock; it stops at zero and period/OT
 transitions are manual. A tracker may also finish a running or paused quarter,
@@ -280,6 +294,194 @@ no-store`) signs RS256 Mux JWTs on each request: 12 h for full games
 Every league game, standing, player-stat record, export, schedule, and
 data-health result is season-scoped. New league-game flows must resolve an
 active `seasonId`.
+
+## Scrimmages
+
+`server/src/modules/scrimmages/` and `client/src/features/scrimmages/` own recurring
+series, reusable player pools, embedded seasons and manually created dated weekly
+sessions. We-ball Wednesdays and We-ball Saturdays are independent series with
+separate pools, claims and MVP standings. Scrimmages do not provision permanent
+Team or League resources. Skipped weeks need no record; a season reset retains the
+pool and previous seasons and requires all current-season weeks to be finished.
+
+### Discovery, navigation and administration
+
+Public series appear on `/home?tab=scrimmages`; mobile discovery tabs include
+extra space beneath the text. `/admin?tab=scrimmages` is the Managed Scrimmages
+tab, alongside the existing administration tabs. Series creation is available
+at `/admin/scrimmages?create=1`.
+
+Regular viewers use `/scrimmage/:scrimmageId`; managers use the protected
+`/admin/scrimmage/:scrimmageId` routes, including matching `/players/:playerId`
+and `/sessions/:sessionId` pages. Pages redirect to the appropriate public/admin
+route while preserving filters. Legacy `/scrimmages/...` links redirect to these
+canonical routes; API paths remain under `/api/v1/scrimmages`.
+
+Series pages separate Sessions, Players and MVP, with Claims for admins and
+Settings for the owner. The current open week and active tracker are featured;
+season selectors expose previous seasons. Weekly pages separate Games, Players
+and Results, adding Recap after publication. New Game / Resume game actions stay
+above the tabs. Attendance and week creation forms open on request. Existing
+participation terms appear in the explicit claim dialog or collapsed settings
+editor, rather than expanding on every admin visit.
+
+### Player pools, profiles and claims
+
+Admins create profiles, rename them, deactivate/reactivate them, or import players
+from leagues they own/manage and standalone teams they own. Search imports by
+name and filter by source league/team. Already imported players, including
+inactive and merged records, link to their retained profile instead of being
+imported again. Each created/imported player has a durable scrimmage-specific
+profile before claiming or playing; source league/team identities and statistics
+stay in their original resource. Deactivation preserves historical snapshots.
+
+Pool lists, standings, weekly colors, game box scores and My Sporty link to
+scrimmage player profiles. Profiles show completed-game statistics, game history
+and video plays with season/week filters. Made shots, missed shots and turnovers
+have play-type filters and incremental loading. Clips reuse `HighlightPlayer`
+with full-recording YouTube timestamps; missing video or timestamps show an
+unavailable message. Regular viewers receive published-week stats and plays;
+admins can preview completed games in draft weeks.
+
+Users claim an existing pool profile by accepting the current versioned terms
+and typing their full signed name. Admins approve/reject claims; approved
+profiles appear in My Sporty. Source-account claims constrain who may claim an
+imported profile. Terms default to series scope, with optional weekly acceptance
+and per-week overrides. `ScrimmageAcceptance` stores the signed text, SHA-256
+content version, signer, signature and time. Acceptance does not imply marketing
+or footage consent.
+
+### Weekly setup and game tracking
+
+Weekly attendance is separate from the reusable pool. Each attending player has
+one color for the entire week; colors lock once a game exists. Repeat last week
+prefills editable active attendance, colors, scoring and durations, leaving the
+new label, date and recording explicit. Attendance/colors can also be copied
+separately. Attach the full weekly YouTube recording, including long sessions,
+and select each game's start using seconds, minutes:seconds or
+hours:minutes:seconds; Use current video position captures the tracker playhead.
+
+Games reuse `GameTrackPage` and embedded Game events with
+`gameContext: 'scrimmage'`, series/week/season IDs, stable pool-player roster
+snapshots and two temporary colors. Select **one to five players per side**;
+unequal roster sizes are allowed and there is no five-player minimum. Jersey
+numbers can change between games and must be unique within a color; matching
+numbers across colors are allowed. Core stat entry is field-goal makes/misses
+and turnovers, supporting points, FG% and missed-shot MVP penalties. Events keep
+full-video timestamps and independent game-clock/period snapshots; substitutions
+and lineup tracking reuse the existing tracker.
+
+Weekly scoring/durations are configurable and snapshotted per game. Defaults are
+1 inside / 2 outside the arc, one four-minute regulation period and four-minute
+overtime. Games finish manually: reaching five points or clock expiry does not
+automatically end a game. Overtime is manual; stats remain recordable at zero.
+Scoring timelines, replay, box scores and stat labels use the game's snapshot.
+
+New Game pauses video/clock and opens empty roster selection; creating the next
+game can finish the previous one. Resuming an existing game does not create a
+new game. The Games navigator pauses playback and the running clock before
+showing scores, statuses and full-video offsets. It opens earlier games for
+corrections without finishing the current game. Playback and the clock must be
+resumed explicitly after browsing; a failed pause prevents opening the navigator.
+
+Tracking shows Saving, Saved and unconfirmed-save feedback. Failed stat writes
+reconcile from the server where possible and are never replayed implicitly.
+Confirmed appends save a local video checkpoint scoped to game/recording; the
+last saved server event is the fallback. Reload/resume offers the checkpoint
+without starting the game clock. Browser storage failures do not block tracking.
+
+### Results, MVP and weekly recap sharing
+
+Only completed games contribute. Weekly totals are scoped to that week; season
+MVP uses pooled season totals, not an average of weekly scores. FG% is total
+makes / total attempts, with no attempts displayed as `—`. Standings include
+points, makes, attempts, misses, turnovers, games played and W–L. Starting players
+and players who sub in count as appearances; unused bench players do not. Ties
+count as draws with no win bonus or loss penalty.
+
+Default MVP is `(points − misses − 2×turnovers + 2×wins − losses) / games played`.
+Weekly eligibility is 3 games; season eligibility is 6 games across 2 weeks.
+Weights and thresholds are configurable at series creation or for a new season
+and remain snapshotted per season. Both tables show the formula and eligibility;
+mobile cards show core stats, expandable supporting stats and remaining
+eligibility progress. Provisional scores have no award rank. Eligible players
+sort first, then by MVP, FG%, wins, fewer turnovers and name. Aggregates recompute
+from events on reads, so corrections and deletions update historical totals.
+
+Admins finish/review weeks, inspecting scores, unfinished games, missing video
+and missing timestamps, then publish explicitly. Publication requires a finished,
+nonempty week with all games completed; missing footage/timestamps are warnings.
+Regular weekly/season standings, player stats/history and plays include published
+weeks only. Existing game pages and box scores follow series visibility rather
+than the weekly publication gate. Corrections after publication update results
+immediately; finishing alone does not publish a week.
+
+Published weeks have a Recap tab and View & share weekly recap action in Results.
+The canonical recipient link is
+`/scrimmage/:scrimmageId/sessions/:sessionId?tab=recap`, including when copied by
+an admin. Recaps show the eligible weekly MVP (or no eligible player), completed
+game count, core stats, formula and week-filtered player video links. They reuse
+weekly standings, player profiles and the social `CopyButton`. Native/clipboard
+sharing refreshes access, publication, privacy and totals first. Public weeks
+can share recap text and a link; private weeks share only their protected link.
+Draft or inaccessible weeks cannot be shared. Selectable link/text fields cover
+browsers without clipboard support. Analytics reuse `share_initiated` /
+`share_completed` with `target_type=scrimmage_recap` and
+`source=scrimmage_session`, without player names, statistics or URLs.
+
+### Permissions, duplicate identities and deployment
+
+Owners configure visibility, terms, additional admins (existing accounts by
+email) and new seasons. Owners/admins manage pools, claims, weeks and tracking.
+Private series, sessions, profiles and games are readable only by admins and
+approved members; other viewers receive 404. Mutations require authentication,
+existing CSRF protection and service-level authorization. Scrimmage APIs use
+`no-store` responses. Scrimmages currently have no Stripe subscription/capacity
+policy and support YouTube only.
+
+Players → Resolve duplicate profiles requires an explicit confirmation and records
+an audited atomic identity map on `Scrimmage`. Original pool records, sources,
+claims, rosters, events and timestamps remain intact. Reads combine aliases under
+the retained profile across seasons; old links preserve filters, My Sporty uses
+the retained identity, and new game snapshots inherit its approved account.
+Merged duplicates cannot be reactivated or assigned again. Merges reject foreign
+profiles, self-merges, conflicting accounts, open weekly attendance and profiles
+rostered together in a game. Repeated merges flatten alias groups.
+
+A series setup lease serializes merges, claim approvals, attendance edits and game creation. A
+weekly creation/completion lease, idempotent request keys and a partial unique
+Game index prevent simultaneous active games or duplicate retry-created games.
+Ordinary `/games` creation cannot bypass the scrimmage attendance/color checks.
+
+The model inventory is listed above; `Scrimmage` embeds seasons and merge audit,
+`ScrimmagePlayer` holds durable pool identities, `ScrimmageSession` snapshots
+attendance/settings and publication, and acceptance/join-request records retain
+signatures and claim review. Shared `Game` holds scrimmage events and rosters.
+See [`scrimmages.md`](./scrimmages.md) for the full workflow and API catalog.
+
+Before production rollout, run `pnpm --filter server scrimmages:ensure-indexes`
+with the intended environment to create declared collection and Game indexes.
+Do not run `syncIndexes` on Game; it can drop unrelated indexes. Existing finished
+weeks without `publishedAt` require publication before regular viewers see their
+aggregates/plays. Live phone/desktop acceptance and a full two-hour YouTube
+tracking session remain pending in the linked browser acceptance checklist.
+`pnpm --filter server seed:scrimmages --dry-run` previews, and
+`pnpm --filter server seed:scrimmages` adds, presentation fixtures through the
+existing development-only `seed.js` safeguards. Fixture definitions are in
+`server/src/scripts/seed-scrimmages.js`; full `seed` and additive `seed:demo`
+also include them. Two public We-ball series each have four colors, 20 regulars,
+two provisional guests, an inactive profile, previous/current seasons, six weeks
+and 33 games. Published weeks populate weekly/season MVP and recap sharing;
+a finished draft week demonstrates publication; an open week has a paused live
+game. Approved/pending claims and optional existing league imports exercise
+profiles, My Sporty and import markers. Reruns preserve existing IDs, edits,
+credentials and saved week dates. See
+[`demo-data-generation.md`](./demo-data-generation.md#we-ball-scrimmage-presentation)
+for logins, commands, safeguards and the client presentation walkthrough.
+
+Remaining feature ideas are listed under Scrimmages in [`ideas.md`](./ideas.md).
+
+## League Configuration
 
 League owners configure the default game format in Settings. Managers can read
 but cannot edit it. Single-game creation can override the league default;

@@ -524,7 +524,7 @@
     <script id="data" type="application/json">
       {
         "meta": {
-          "project": "TSW — The Sporty Way",
+          "project": "TSW \u2014 The Sporty Way",
           "subtitle": "Basketball stat-tracking + league-management platform (pnpm monorepo)",
           "generatedFrom": {
             "commit": "9b7e07b65879afa0f0c65b7be47f10b37ef22d7a",
@@ -537,12 +537,16 @@
             "tests": "Jest+Supertest (server) / Vitest+RTL (client)"
           },
           "counts": {
-            "serverModules": 12,
-            "clientFeatures": 9,
-            "serverTestFiles": 91,
-            "clientTestFiles": 87,
-            "mongooseModels": 20,
-            "primaryNodes": 34
+            "serverModules": 16,
+            "clientFeatures": 17,
+            "serverTestFiles": 125,
+            "clientTestFiles": 126,
+            "mongooseModels": 25,
+            "primaryNodes": 36
+          },
+          "scrimmageUpdate": {
+            "baseCommit": "7064b718424b46f9a241944555d0e955e5f87871",
+            "workingTree": true
           }
         },
         "nodes": [
@@ -552,10 +556,10 @@
             "kind": "server-module",
             "group": "Server domain modules",
             "path": "server/src/modules/auth",
-            "role": "Cookie-based JWT auth with rotating refresh sessions, CSRF double-submit, Google OAuth, email verification and password reset. Local registration signs the user in with emailVerified=false, persists a single-use verification token and dispatches a welcome email; Google-created accounts are already verified. Verification resend and forgot-password responses remain enumeration-resistant, including a Google-account reminder branch. Also owns the onboarding profile — User.onboarding { status, roles, completedSteps } behind PATCH /auth/onboarding. Owns the User, Session and AuthToken models.",
+            "role": "Cookie-based JWT auth with rotating refresh sessions, CSRF double-submit, Google OAuth, email verification and password reset. Local registration signs the user in with emailVerified=false, persists a single-use verification token and dispatches a welcome email; Google-created accounts are already verified. Verification resend and forgot-password responses remain enumeration-resistant, including a Google-account reminder branch. Also owns the onboarding profile \u2014 User.onboarding { status, roles, completedSteps } behind PATCH /auth/onboarding. Owns the User, Session and AuthToken models.",
             "models": ["User", "Session", "AuthToken"],
             "mount": "/api/v1/auth",
-            "loc": 1151,
+            "loc": 1198,
             "files": [
               "server/src/modules/auth/auth.controller.js",
               "server/src/modules/auth/auth.repository.js",
@@ -631,6 +635,11 @@
                 "id": "teams",
                 "kind": "calls",
                 "labels": []
+              },
+              {
+                "id": "scrimmages",
+                "kind": "calls",
+                "labels": ["resolve additional admins"]
               }
             ],
             "downstream": [
@@ -702,7 +711,7 @@
               "LeagueDataIssueDismissal"
             ],
             "mount": "/api/v1/leagues + /api/v1/public/leagues + /api/v1/public/players",
-            "loc": 5041,
+            "loc": 5349,
             "files": [
               "server/src/modules/leagues/dataCompleteness.checks.js",
               "server/src/modules/leagues/dataCompleteness.repository.js",
@@ -777,6 +786,11 @@
                 "id": "c-players",
                 "kind": "http",
                 "labels": ["/public/players"]
+              },
+              {
+                "id": "scrimmages",
+                "kind": "calls",
+                "labels": ["import league player identity with manager authorization"]
               }
             ],
             "downstream": [
@@ -849,7 +863,7 @@
             "role": "Live game tracking and derived stats: event recording, clock, lineups, rosters, box score, final score, AI recap. finishGame is the hub that fans out to standings, team summaries, feed cards, auto-feed and milestone detection. Every game is stamped with an immutable `courtLayoutId` at creation (absence = the legacy court) so stored shot x/y percentages always read back against the image they were tapped on; fixtures also carry an optional structured `venueAddress`.",
             "models": ["Game"],
             "mount": "/api/v1/games",
-            "loc": 4045,
+            "loc": 4671,
             "files": [
               "server/src/modules/games/gameRecap.service.js",
               "server/src/modules/games/gameSummaryAi.service.js",
@@ -912,6 +926,11 @@
                 "id": "c-games",
                 "kind": "http",
                 "labels": ["/games"]
+              },
+              {
+                "id": "scrimmages",
+                "kind": "calls",
+                "labels": ["createGame, finishGameForUser, computeGameFinalScore"]
               }
             ],
             "downstream": [
@@ -969,9 +988,14 @@
                 "id": "cloudinary",
                 "kind": "external",
                 "labels": []
+              },
+              {
+                "id": "scrimmages",
+                "kind": "calls",
+                "labels": ["game access and allowed scrimmage stats"]
               }
             ],
-            "flows": ["flow-finish-game", "flow-court-layout"]
+            "flows": ["flow-finish-game", "flow-court-layout", "flow-scrimmage"]
           },
           {
             "id": "feed",
@@ -982,7 +1006,7 @@
             "role": "The social pulse feed (/pulse). Owns Post, shareable/discoverable card generation, auto-published game posts, highlight clips, and the Cloudinary upload client.",
             "models": ["Post"],
             "mount": "/api/v1/feed",
-            "loc": 2025,
+            "loc": 2499,
             "files": [
               "server/src/modules/feed/cloudinary.client.js",
               "server/src/modules/feed/feed.controller.js",
@@ -1109,10 +1133,10 @@
             "kind": "server-module",
             "group": "Server domain modules",
             "path": "server/src/modules/teams",
-            "role": "Standalone (non-league) teams, their rosters and materialized per-season summaries, plus public team and opponent pages. Carries the billing capacity flag (`capacityType` free/paid — a unique partial index guarantees at most one free team per owner) and player-profile claims: a signed-in user requests a roster player, the team owner approves, and `player.claimedByUserId` links them.",
+            "role": "Standalone (non-league) teams, their rosters and materialized per-season summaries, plus public team and opponent pages. Carries the billing capacity flag (`capacityType` free/paid \u2014 a unique partial index guarantees at most one free team per owner) and player-profile claims: a signed-in user requests a roster player, the team owner approves, and `player.claimedByUserId` links them.",
             "models": ["PlayerClaimRequest", "Team", "TeamSeasonSummary"],
             "mount": "/api/v1/teams + /api/v1/public/teams + /api/v1/public/opponents",
-            "loc": 1761,
+            "loc": 1879,
             "files": [
               "server/src/modules/teams/teams.controller.js",
               "server/src/modules/teams/teams.repository.js",
@@ -1167,6 +1191,11 @@
                 "id": "c-leagues",
                 "kind": "http",
                 "labels": ["/teams/player-profiles/mine"]
+              },
+              {
+                "id": "scrimmages",
+                "kind": "calls",
+                "labels": ["import managed team players"]
               }
             ],
             "downstream": [
@@ -1224,10 +1253,10 @@
             "kind": "server-module",
             "group": "Server domain modules",
             "path": "server/src/modules/billing",
-            "role": "Resource-scoped Stripe billing (per Team / per League) via hosted Checkout. Stripe is the source of truth; the webhook router is mounted before express.json(). Team billing is capacity-based, not feature-based — every built team feature is free, and an owner pays £5/mo per standalone team beyond their first (`assertTeamCreationAllowed` / `chooseFreeTeam`); leagues pay per plan (£29 League, £49 League Plus) and can switch in place via league-plan-change. entitlements.service.js resolves plan gates for every other module.",
+            "role": "Resource-scoped Stripe billing (per Team / per League) via hosted Checkout. Stripe is the source of truth; the webhook router is mounted before express.json(). Team billing is capacity-based, not feature-based \u2014 every built team feature is free, and an owner pays \u00a35/mo per standalone team beyond their first (`assertTeamCreationAllowed` / `chooseFreeTeam`); leagues pay per plan (\u00a329 League, \u00a349 League Plus) and can switch in place via league-plan-change. entitlements.service.js resolves plan gates for every other module.",
             "models": [],
             "mount": "/api/v1/billing (+ webhook mounted pre-JSON in app.js)",
-            "loc": 1878,
+            "loc": 1884,
             "files": [
               "server/src/modules/billing/billing.controller.js",
               "server/src/modules/billing/billing.routes.js",
@@ -1347,7 +1376,7 @@
             "role": "Career-milestone detection for league players. Detects on game finalization, re-evaluates after edits, re-keys on identity changes, and publishes milestone posts through feed.",
             "models": ["PlayerMilestone"],
             "mount": "/api/v1/public/milestones",
-            "loc": 816,
+            "loc": 810,
             "files": [
               "server/src/modules/milestones/milestones.catalog.js",
               "server/src/modules/milestones/milestones.controller.js",
@@ -1436,7 +1465,7 @@
             "role": "Follow graph for leagues, teams and players; powers the Following page and feed personalization.",
             "models": ["Follow"],
             "mount": "/api/v1/follows",
-            "loc": 497,
+            "loc": 492,
             "files": [
               "server/src/modules/follows/follows.controller.js",
               "server/src/modules/follows/follows.repository.js",
@@ -1502,10 +1531,10 @@
             "kind": "server-module",
             "group": "Server domain modules",
             "path": "server/src/modules/export",
-            "role": "CSV export of league data. No longer billing-gated — the existing league-role checks in leagues.service protect each league's data, and payment now controls mutations rather than data access.",
+            "role": "CSV export of league data. No longer billing-gated \u2014 the existing league-role checks in leagues.service protect each league's data, and payment now controls mutations rather than data access.",
             "models": [],
             "mount": "/api/v1/export",
-            "loc": 461,
+            "loc": 457,
             "files": [
               "server/src/modules/export/export.controller.js",
               "server/src/modules/export/export.routes.js",
@@ -1556,7 +1585,7 @@
             "role": "Server-side PostHog event capture, consent-aware.",
             "models": [],
             "mount": "/api/v1/analytics",
-            "loc": 137,
+            "loc": 116,
             "files": [
               "server/src/modules/analytics/analytics.controller.js",
               "server/src/modules/analytics/analytics.routes.js",
@@ -1611,7 +1640,7 @@
             "role": "Contact form; rate-limited, sends mail through the shared email service. Route-only module (no controller/service split).",
             "models": [],
             "mount": "/api/v1/contact",
-            "loc": 88,
+            "loc": 79,
             "files": ["server/src/modules/contact/contact.routes.js"],
             "tests": ["server/src/tests/integration/contact.test.js"],
             "upstream": [
@@ -1659,7 +1688,7 @@
             "role": "Liveness/readiness probe.",
             "models": [],
             "mount": "/api/v1/health",
-            "loc": 40,
+            "loc": 38,
             "files": [
               "server/src/modules/health/health.controller.js",
               "server/src/modules/health/health.routes.js"
@@ -1687,10 +1716,10 @@
             "kind": "client-feature",
             "group": "Client features",
             "path": "client/src/features/games",
-            "role": "Game tracking UI: the interactive court (tap-to-infer shot zones), clock controls, event log, box score, highlight reels, and the game list/detail pages. court/courtLayouts.js is the client half of the court contract — it pairs each court image with its intrinsic size and calibration, and useCourtLayout resolves a game’s stored layout id (falling back to the legacy court) so replays and recap snapshots never move an old game’s markers.",
+            "role": "Game tracking UI: the interactive court (tap-to-infer shot zones), clock controls, event log, box score, highlight reels, and the game list/detail pages. court/courtLayouts.js is the client half of the court contract \u2014 it pairs each court image with its intrinsic size and calibration, and useCourtLayout resolves a game\u2019s stored layout id (falling back to the legacy court) so replays and recap snapshots never move an old game\u2019s markers.",
             "models": [],
             "mount": null,
-            "loc": 9009,
+            "loc": 11429,
             "files": [
               "client/src/features/games/api/gamesApi.js",
               "client/src/features/games/components/AddRosterPlayerDialog.jsx",
@@ -1745,7 +1774,13 @@
               "client/src/features/games/pages/GamesListPage.test.jsx",
               "client/src/features/games/pages/NewGamePage.test.jsx"
             ],
-            "upstream": [],
+            "upstream": [
+              {
+                "id": "c-scrimmages",
+                "kind": "uses",
+                "labels": ["NewScrimmageGameDialog in GameTrackPage"]
+              }
+            ],
             "downstream": [
               {
                 "id": "games",
@@ -1758,7 +1793,7 @@
                 "labels": ["apiClient / router / store"]
               }
             ],
-            "flows": ["flow-finish-game", "flow-court-layout"]
+            "flows": ["flow-finish-game", "flow-court-layout", "flow-scrimmage"]
           },
           {
             "id": "c-leagues",
@@ -1769,7 +1804,7 @@
             "role": "The biggest client feature: 18 pages covering league admin (teams, players, managers, schedule builder, data completeness) and the public league/standings/team/player views.",
             "models": [],
             "mount": null,
-            "loc": 7427,
+            "loc": 7561,
             "files": [
               "client/src/features/leagues/api/leaguesApi.js",
               "client/src/features/leagues/components/DataCompletenessPanel.jsx",
@@ -1840,7 +1875,7 @@
             "role": "The /pulse feed: post cards, shareable card export (html2canvas), share-image hooks.",
             "models": [],
             "mount": null,
-            "loc": 3508,
+            "loc": 3841,
             "files": [
               "client/src/features/feed/api/feedApi.js",
               "client/src/features/feed/cardImage.js",
@@ -1918,7 +1953,7 @@
             "role": "Standalone team pages: create/edit, roster, public team and public player pages, stats tables. PublicPlayerPage is where a user requests to claim a roster profile; EditTeamPage is where the owner approves or rejects those requests.",
             "models": [],
             "mount": null,
-            "loc": 3336,
+            "loc": 3379,
             "files": [
               "client/src/features/teams/api/teamsApi.js",
               "client/src/features/teams/components/StatsTable.jsx",
@@ -2025,10 +2060,10 @@
             "kind": "client-feature",
             "group": "Client features",
             "path": "client/src/features/billing",
-            "role": "Public pricing page, checkout redirect, billing success/cancel and status pills. Uses Stripe hosted Checkout — no client Stripe.js card flows. Also drives the capacity choices: picking which standalone team is the free one, and switching a league between plans in place.",
+            "role": "Public pricing page, checkout redirect, billing success/cancel and status pills. Uses Stripe hosted Checkout \u2014 no client Stripe.js card flows. Also drives the capacity choices: picking which standalone team is the free one, and switching a league between plans in place.",
             "models": [],
             "mount": null,
-            "loc": 957,
+            "loc": 1000,
             "files": [
               "client/src/features/billing/api/billingApi.js",
               "client/src/features/billing/components/BillingStatusPill.jsx",
@@ -2079,7 +2114,7 @@
             "role": "Public user profiles, profile cards, player milestones, discoverable players.",
             "models": [],
             "mount": null,
-            "loc": 622,
+            "loc": 615,
             "files": [
               "client/src/features/players/api/playersApi.js",
               "client/src/features/players/components/DiscoverablePlayers.jsx",
@@ -2117,10 +2152,10 @@
             "kind": "client-feature",
             "group": "Client features",
             "path": "client/src/features/onboarding",
-            "role": "The two-step first-run wizard at /onboarding. Step 1 collects self-declared roles (league manager, league team manager, managed team manager, player, fan); step 2 turns each into a concrete next action and hands off by role — /admin for anyone who administers something, /my-sporty for a player, /pulse for a browse-only fan. State lives on the user document, so the wizard resumes on any device.",
+            "role": "The two-step first-run wizard at /onboarding. Step 1 collects self-declared roles (league manager, league team manager, managed team manager, player, fan); step 2 turns each into a concrete next action and hands off by role \u2014 /admin for anyone who administers something, /my-sporty for a player, /pulse for a browse-only fan. State lives on the user document, so the wizard resumes on any device.",
             "models": [],
             "mount": null,
-            "loc": 329,
+            "loc": 328,
             "files": ["client/src/features/onboarding/pages/OnboardingPage.jsx"],
             "tests": ["client/src/features/onboarding/pages/OnboardingPage.test.jsx"],
             "upstream": [],
@@ -2147,7 +2182,7 @@
             "role": "Composition root and shared plumbing: app/providers, app/router (lazily code-split routes, OPT-001), app/store, lib/apiClient, layouts, components/ui, analytics and media helpers.",
             "models": [],
             "mount": null,
-            "loc": 4919,
+            "loc": 5423,
             "files": [
               "client/src/app/providers/AppProviders.jsx",
               "client/src/app/providers/queryClient.js",
@@ -2267,6 +2302,11 @@
                 "id": "c-onboarding",
                 "kind": "uses",
                 "labels": ["apiClient / router / store"]
+              },
+              {
+                "id": "c-scrimmages",
+                "kind": "uses",
+                "labels": ["apiClient, router, auth, Query"]
               }
             ],
             "downstream": [
@@ -2314,10 +2354,10 @@
             "kind": "infra",
             "group": "Platform & infrastructure",
             "path": "server/src/app.js",
-            "role": "createApp() composes the middleware chain in a load-bearing order: requestId → pino-http → helmet → cors → **billing webhook with express.raw (before express.json)** → express.json → cookieParser → passport → CSRF attach/protect → rate limit → /api/v1 router → notFound → error.",
+            "role": "createApp() composes the middleware chain in a load-bearing order: requestId \u2192 pino-http \u2192 helmet \u2192 cors \u2192 **billing webhook with express.raw (before express.json)** \u2192 express.json \u2192 cookieParser \u2192 passport \u2192 CSRF attach/protect \u2192 rate limit \u2192 /api/v1 router \u2192 notFound \u2192 error.",
             "models": [],
             "mount": null,
-            "loc": 170,
+            "loc": 200,
             "files": ["server/src/app.js", "server/src/server.js", "server/src/routes/index.js"],
             "tests": [
               "server/src/tests/integration/health.test.js",
@@ -2394,6 +2434,11 @@
                 "id": "config",
                 "kind": "uses",
                 "labels": []
+              },
+              {
+                "id": "scrimmages",
+                "kind": "routes",
+                "labels": ["/api/v1/scrimmages"]
               }
             ],
             "flows": [
@@ -2403,7 +2448,8 @@
               "flow-public-league",
               "flow-feed",
               "flow-onboarding",
-              "flow-player-claim"
+              "flow-player-claim",
+              "flow-scrimmage"
             ]
           },
           {
@@ -2415,7 +2461,7 @@
             "role": "Cross-cutting request plumbing. auth.middleware verifies the JWT access cookie; csrf.middleware does double-submit; publicCache.middleware (OPT-019) caches anonymous public GETs and degrades to no-cache when auth is present; rateLimit, requestId, error and notFound complete the chain.",
             "models": [],
             "mount": null,
-            "loc": 316,
+            "loc": 355,
             "files": [
               "server/src/middleware/auth.middleware.js",
               "server/src/middleware/csrf.middleware.js",
@@ -2555,10 +2601,10 @@
             "kind": "infra",
             "group": "Platform & infrastructure",
             "path": "server/src/utils",
-            "role": "Pure helpers with no domain state: ApiError/apiResponse/asyncHandler (the error contract), pagination, csv, crypto, escapeHtml, stripeUrl, webhookIdempotency — plus modules/shared (statSummary, gameClock, stats.constants, cloudinaryUrl, pagination.validation, courtLayouts — the court-image compatibility contract shared with the client).",
+            "role": "Pure helpers with no domain state: ApiError/apiResponse/asyncHandler (the error contract), pagination, csv, crypto, escapeHtml, stripeUrl, webhookIdempotency \u2014 plus modules/shared (statSummary, gameClock, stats.constants, cloudinaryUrl, pagination.validation, courtLayouts \u2014 the court-image compatibility contract shared with the client).",
             "models": [],
             "mount": null,
-            "loc": 842,
+            "loc": 871,
             "files": [
               "server/src/modules/shared/cloudinaryUrl.js",
               "server/src/modules/shared/courtLayouts.js",
@@ -2645,6 +2691,11 @@
                 "id": "health",
                 "kind": "uses",
                 "labels": []
+              },
+              {
+                "id": "scrimmages",
+                "kind": "uses",
+                "labels": ["gameClock, courtLayouts, asyncHandler, ApiError"]
               }
             ],
             "downstream": [],
@@ -2656,10 +2707,10 @@
             "kind": "infra",
             "group": "Platform & infrastructure",
             "path": "server/src/config",
-            "role": "Boot-time configuration. env.js Zod-validates the environment (loaded from env/server/.env.* via ENV_FILE) and fails fast — including a production check that every required Stripe price, portal configuration and redirect URL is present; db.js opens the Mongoose connection; cors, cookie and logger (pino) configure the rest.",
+            "role": "Boot-time configuration. env.js Zod-validates the environment (loaded from env/server/.env.* via ENV_FILE) and fails fast \u2014 including a production check that every required Stripe price, portal configuration and redirect URL is present; db.js opens the Mongoose connection; cors, cookie and logger (pino) configure the rest.",
             "models": [],
             "mount": null,
-            "loc": 392,
+            "loc": 670,
             "files": [
               "server/src/config/cookie.js",
               "server/src/config/cors.js",
@@ -2739,10 +2790,10 @@
             "kind": "infra",
             "group": "Platform & infrastructure",
             "path": "server/src/scripts",
-            "role": "Idempotent operational scripts (all support --dry-run), run as ENV_FILE=… node src/scripts/<name>.js. Covers seeding — which now refuses to run against anything but a development database — migrations (index drops, plan-enum unification, capacity-pricing assignment), the Stripe customer-portal configuration bootstrap, and backfills for derived data: standings, seasons, milestones, team-season summaries, finalScore, auto-feed.",
+            "role": "Idempotent operational scripts (all support --dry-run), run as ENV_FILE=\u2026 node src/scripts/<name>.js. Covers seeding \u2014 which now refuses to run against anything but a development database \u2014 migrations (index drops, plan-enum unification, capacity-pricing assignment), the Stripe customer-portal configuration bootstrap, and backfills for derived data: standings, seasons, milestones, team-season summaries, finalScore, auto-feed. Additive We-ball scrimmage fixtures share the guarded seed.js entry point, support --scrimmages/--dry-run, preserve existing data and populate historical/published/draft/live weeks with MVP and claims.",
             "models": [],
             "mount": null,
-            "loc": 4851,
+            "loc": 5773,
             "files": [
               "server/src/scripts/backfill-auto-feed.js",
               "server/src/scripts/backfill-game-finalscore.js",
@@ -2765,11 +2816,13 @@
               "server/src/scripts/migrate-unify-plan-enums.js",
               "server/src/scripts/retrack-league-games-dual.js",
               "server/src/scripts/seed-demo-account.js",
-              "server/src/scripts/seed.js"
+              "server/src/scripts/seed.js",
+              "server/src/scripts/seed-scrimmages.js"
             ],
             "tests": [
               "server/src/tests/unit/planMigration.test.js",
-              "server/src/tests/unit/seed.safety.test.js"
+              "server/src/tests/unit/seed.safety.test.js",
+              "server/src/tests/unit/seed.scrimmages.test.js"
             ],
             "upstream": [],
             "downstream": [
@@ -2792,7 +2845,7 @@
             "kind": "datastore",
             "group": "Data store",
             "path": null,
-            "role": "The single datastore, via Mongoose 8. **There is no models/ directory** — every schema is declared inline in its owning *.repository.js. Derived/materialized data (standings, boxScore, finalScore, season summaries) is written back into documents rather than recomputed per request.",
+            "role": "The single datastore, via Mongoose 8. **There is no models/ directory** \u2014 every schema is declared inline in its owning *.repository.js. Derived/materialized data (standings, boxScore, finalScore, season summaries) is written back into documents rather than recomputed per request.",
             "models": [
               "AuthToken",
               "Follow",
@@ -2860,6 +2913,13 @@
                 "id": "scripts",
                 "kind": "persists",
                 "labels": ["backfills derived data"]
+              },
+              {
+                "id": "scrimmages",
+                "kind": "persists",
+                "labels": [
+                  "Scrimmage, ScrimmagePlayer, ScrimmageSession, ScrimmageAcceptance, ScrimmageJoinRequest"
+                ]
               }
             ],
             "downstream": [],
@@ -2882,7 +2942,7 @@
             "role": "Hosted Checkout + Customer Portal + webhooks. Source of truth for subscription state; the webhook handler claims each event through utils/webhookIdempotency before applying it.",
             "models": [],
             "mount": null,
-            "loc": 0,
+            "loc": 1317,
             "files": ["server/src/modules/billing/billing.service.js"],
             "tests": [],
             "upstream": [
@@ -2909,7 +2969,7 @@
             "role": "Image storage and transformation for logos, avatars and feed media. Uploads go through feed/cloudinary.client.js; URL building is shared in modules/shared/cloudinaryUrl.js.",
             "models": [],
             "mount": null,
-            "loc": 0,
+            "loc": 205,
             "files": [
               "server/src/modules/feed/cloudinary.client.js",
               "server/src/modules/shared/cloudinaryUrl.js"
@@ -2964,7 +3024,7 @@
             "role": "Generates the natural-language game recap after a game is finalized, called at https://api.openai.com/v1/responses. Fired off-response so finishing a game never blocks on it.",
             "models": [],
             "mount": null,
-            "loc": 0,
+            "loc": 210,
             "files": ["server/src/modules/games/gameSummaryAi.service.js"],
             "tests": [],
             "upstream": [
@@ -2983,10 +3043,10 @@
             "kind": "external",
             "group": "External services",
             "path": null,
-            "role": "Product analytics on both sides — posthog-node on the server, posthog-js on the client behind a consent banner.",
+            "role": "Product analytics on both sides \u2014 posthog-node on the server, posthog-js on the client behind a consent banner.",
             "models": [],
             "mount": null,
-            "loc": 0,
+            "loc": 116,
             "files": ["server/src/modules/analytics/analytics.service.js"],
             "tests": [],
             "upstream": [
@@ -3013,7 +3073,7 @@
             "role": "Social sign-in via passport-google-oauth20, exchanged for the app's own session cookies.",
             "models": [],
             "mount": null,
-            "loc": 0,
+            "loc": 45,
             "files": ["server/src/modules/auth/oauth.google.js"],
             "tests": [],
             "upstream": [
@@ -3035,7 +3095,7 @@
             "role": "Resend transactional delivery for local and Google welcome messages, verification and password-reset links, Google-account reminders, Stripe payment-failed and trial-ending notices, and the internal contact form. Every message is dispatched off the request path with matching HTML/plain-text bodies rendered through one image-free template.",
             "models": [],
             "mount": null,
-            "loc": 0,
+            "loc": 346,
             "files": [
               "server/src/services/email.service.js",
               "server/src/services/email.template.js"
@@ -3063,6 +3123,149 @@
             ],
             "downstream": [],
             "flows": ["flow-email-verification"]
+          },
+          {
+            "id": "scrimmages",
+            "label": "scrimmages",
+            "kind": "server-module",
+            "group": "Server domain modules",
+            "path": "server/src/modules/scrimmages",
+            "role": "Recurring scrimmage series with independent reusable pools, signed admin-approved profile claims, embedded seasons, dated weekly color assignments, Game creation with one to five players per side and efficiency MVP aggregation. Reuses Game tracking with scoring snapshots and full-week YouTube offsets. Audited atomic identity aliases preserve duplicate profile history and claims. Explicit publication gates public standings and player plays while admins preview drafts.",
+            "models": [
+              "Scrimmage",
+              "ScrimmagePlayer",
+              "ScrimmageSession",
+              "ScrimmageAcceptance",
+              "ScrimmageJoinRequest"
+            ],
+            "mount": "/api/v1/scrimmages",
+            "loc": 1677,
+            "files": [
+              "server/src/modules/scrimmages/scrimmages.controller.js",
+              "server/src/modules/scrimmages/scrimmages.repository.js",
+              "server/src/modules/scrimmages/scrimmages.routes.js",
+              "server/src/modules/scrimmages/scrimmages.scoring.js",
+              "server/src/modules/scrimmages/scrimmages.service.js",
+              "server/src/modules/scrimmages/scrimmages.validation.js",
+              "server/src/scripts/ensure-scrimmage-indexes.js",
+              "server/src/modules/scrimmages/scrimmages.identity.js"
+            ],
+            "tests": [
+              "server/src/tests/unit/scrimmages.scoring.test.js",
+              "server/src/tests/unit/scrimmages.service.test.js",
+              "server/src/tests/integration/scrimmages.test.js",
+              "server/src/tests/unit/scrimmages.identity.test.js"
+            ],
+            "upstream": [
+              {
+                "id": "c-scrimmages",
+                "kind": "http",
+                "labels": ["/scrimmages"]
+              },
+              {
+                "id": "app-shell",
+                "kind": "routes",
+                "labels": ["/api/v1/scrimmages"]
+              },
+              {
+                "id": "games",
+                "kind": "calls",
+                "labels": ["game access and allowed scrimmage stats"]
+              }
+            ],
+            "downstream": [
+              {
+                "id": "games",
+                "kind": "calls",
+                "labels": ["createGame, finishGameForUser, computeGameFinalScore"]
+              },
+              {
+                "id": "leagues",
+                "kind": "calls",
+                "labels": ["import league player identity with manager authorization"]
+              },
+              {
+                "id": "teams",
+                "kind": "calls",
+                "labels": ["import managed team players"]
+              },
+              {
+                "id": "auth",
+                "kind": "calls",
+                "labels": ["resolve additional admins"]
+              },
+              {
+                "id": "mongodb",
+                "kind": "persists",
+                "labels": [
+                  "Scrimmage, ScrimmagePlayer, ScrimmageSession, ScrimmageAcceptance, ScrimmageJoinRequest"
+                ]
+              },
+              {
+                "id": "shared-utils",
+                "kind": "uses",
+                "labels": ["gameClock, courtLayouts, asyncHandler, ApiError"]
+              }
+            ],
+            "flows": ["flow-scrimmage"]
+          },
+          {
+            "id": "c-scrimmages",
+            "label": "scrimmages (UI)",
+            "kind": "client-feature",
+            "group": "Client features",
+            "path": "client/src/features/scrimmages",
+            "role": "Discover tab, series administration, pool imports and edits, signed profile claims, weekly sessions, New Game roster selection, weekly and season MVP tables with formulas, and My Sporty integration. Dedicated player profiles show season/week stats, game history and timestamped makes/misses/turnover clips through the shared HighlightPlayer. Tabbed Sessions/Players/MVP hierarchy with Claims and owner Settings for admins; terms are shown only in the claim dialog or collapsed settings editor. Canonical public /scrimmage/:id and protected /admin/scrimmage/:id routes retain legacy redirects. Managed Scrimmages is an Admin dashboard tab. Featured current week and active tracker, weekly Games/Players/Results tabs, readable video offsets, mobile eligibility cards, review/publication and duplicate-resolution UI. Repeat-last-week prefill, searchable source-filtered imports with existing-profile links, and a tracker game navigator for corrections. Published weekly recaps reuse standings, filtered player video profiles and social clipboard controls, with native sharing and privacy/publication rechecks.",
+            "models": [],
+            "mount": null,
+            "loc": 2784,
+            "files": [
+              "client/src/features/scrimmages/api/scrimmagesApi.js",
+              "client/src/features/scrimmages/components/NewScrimmageGameDialog.jsx",
+              "client/src/features/scrimmages/components/ScrimmageDiscovery.jsx",
+              "client/src/features/scrimmages/components/ScrimmageStandings.jsx",
+              "client/src/features/scrimmages/pages/ScrimmagePages.jsx",
+              "client/src/features/scrimmages/pages/ScrimmagePlayerPage.jsx",
+              "client/src/features/scrimmages/videoTime.js",
+              "client/src/features/scrimmages/components/ScrimmageResultsReview.jsx",
+              "client/src/features/scrimmages/components/MergeScrimmagePlayers.jsx",
+              "client/src/features/scrimmages/components/ScrimmagePlayerImport.jsx",
+              "client/src/features/scrimmages/components/ScrimmageGameNavigator.jsx",
+              "client/src/features/scrimmages/weeklyRecap.js",
+              "client/src/features/scrimmages/components/ScrimmageWeeklyRecap.jsx"
+            ],
+            "tests": [
+              "client/src/features/scrimmages/pages/ScrimmageGameViews.test.jsx",
+              "client/src/features/scrimmages/pages/ScrimmagePages.test.jsx",
+              "client/src/features/scrimmages/pages/ScrimmagePlayerPage.test.jsx",
+              "client/src/features/scrimmages/videoTime.test.js",
+              "client/src/features/scrimmages/components/ScrimmageStandings.test.jsx",
+              "client/src/features/scrimmages/components/MergeScrimmagePlayers.test.jsx",
+              "client/src/features/scrimmages/components/ScrimmagePlayerImport.test.jsx",
+              "client/src/features/scrimmages/components/ScrimmageGameNavigator.test.jsx",
+              "client/src/features/scrimmages/weeklyRecap.test.js",
+              "client/src/features/scrimmages/components/ScrimmageWeeklyRecap.test.jsx",
+              "client/src/features/scrimmages/components/weeklyRecapFixture.js"
+            ],
+            "upstream": [],
+            "downstream": [
+              {
+                "id": "scrimmages",
+                "kind": "http",
+                "labels": ["/scrimmages"]
+              },
+              {
+                "id": "c-games",
+                "kind": "uses",
+                "labels": ["NewScrimmageGameDialog in GameTrackPage"]
+              },
+              {
+                "id": "c-shared",
+                "kind": "uses",
+                "labels": ["apiClient, router, auth, Query"]
+              }
+            ],
+            "flows": ["flow-scrimmage"]
           }
         ],
         "edges": [
@@ -3871,17 +4074,85 @@
             "to": "auth",
             "kind": "calls",
             "labels": []
+          },
+          {
+            "to": "scrimmages",
+            "kind": "http",
+            "labels": ["/scrimmages"],
+            "from": "c-scrimmages"
+          },
+          {
+            "to": "c-games",
+            "kind": "uses",
+            "labels": ["NewScrimmageGameDialog in GameTrackPage"],
+            "from": "c-scrimmages"
+          },
+          {
+            "to": "c-shared",
+            "kind": "uses",
+            "labels": ["apiClient, router, auth, Query"],
+            "from": "c-scrimmages"
+          },
+          {
+            "to": "scrimmages",
+            "kind": "routes",
+            "labels": ["/api/v1/scrimmages"],
+            "from": "app-shell"
+          },
+          {
+            "to": "games",
+            "kind": "calls",
+            "labels": ["createGame, finishGameForUser, computeGameFinalScore"],
+            "from": "scrimmages"
+          },
+          {
+            "to": "scrimmages",
+            "kind": "calls",
+            "labels": ["game access and allowed scrimmage stats"],
+            "from": "games"
+          },
+          {
+            "to": "leagues",
+            "kind": "calls",
+            "labels": ["import league player identity with manager authorization"],
+            "from": "scrimmages"
+          },
+          {
+            "to": "teams",
+            "kind": "calls",
+            "labels": ["import managed team players"],
+            "from": "scrimmages"
+          },
+          {
+            "to": "auth",
+            "kind": "calls",
+            "labels": ["resolve additional admins"],
+            "from": "scrimmages"
+          },
+          {
+            "to": "mongodb",
+            "kind": "persists",
+            "labels": [
+              "Scrimmage, ScrimmagePlayer, ScrimmageSession, ScrimmageAcceptance, ScrimmageJoinRequest"
+            ],
+            "from": "scrimmages"
+          },
+          {
+            "to": "shared-utils",
+            "kind": "uses",
+            "labels": ["gameClock, courtLayouts, asyncHandler, ApiError"],
+            "from": "scrimmages"
           }
         ],
         "flows": [
           {
             "id": "flow-finish-game",
-            "name": "Finish a game → the derived-data fan-out",
+            "name": "Finish a game \u2192 the derived-data fan-out",
             "why": "The most consequential write path in the codebase. One request flips a game to completed, freezes its box score, then fans out to five independent recompute jobs. Almost every materialized field in the product is written here.",
             "steps": [
               {
                 "node": "c-games",
-                "label": "GameTrackPage → finishGame()",
+                "label": "GameTrackPage \u2192 finishGame()",
                 "file": "client/src/features/games/api/gamesApi.js",
                 "symbol": "apiClient.post(`/games/${gameId}/finish"
               },
@@ -3893,37 +4164,37 @@
               },
               {
                 "node": "games",
-                "label": "finishGameForUser — assertGameAccess, then canFinalizeLeagueGame for league games",
+                "label": "finishGameForUser \u2014 assertGameAccess, then canFinalizeLeagueGame for league games",
                 "file": "server/src/modules/games/games.service.js",
                 "symbol": "async function finishGameForUser"
               },
               {
                 "node": "games",
-                "label": "status=completed, pause clock, syncGameEventCount, syncGameFinalScore, computeBoxScore → game.boxScore, then save",
+                "label": "status=completed, pause clock, syncGameEventCount, syncGameFinalScore, computeBoxScore \u2192 game.boxScore, then save",
                 "file": "server/src/modules/games/games.service.js",
                 "symbol": "function computeBoxScore"
               },
               {
                 "node": "leagues",
-                "label": "fan-out 1 — scheduleLeagueRecomputeForGame rebuilds LeagueStandings + LeaguePlayerStats",
+                "label": "fan-out 1 \u2014 scheduleLeagueRecomputeForGame rebuilds LeagueStandings + LeaguePlayerStats",
                 "file": "server/src/modules/games/games.service.js",
                 "symbol": "function scheduleLeagueRecomputeForGame"
               },
               {
                 "node": "teams",
-                "label": "fan-out 2 — scheduleTeamSummaryRecomputeForGame rewrites TeamSeasonSummary",
+                "label": "fan-out 2 \u2014 scheduleTeamSummaryRecomputeForGame rewrites TeamSeasonSummary",
                 "file": "server/src/modules/games/games.service.js",
                 "symbol": "function scheduleTeamSummaryRecomputeForGame"
               },
               {
                 "node": "feed",
-                "label": "fan-out 3 + 4 — refresh existing feed cards, then auto-publish the game post",
+                "label": "fan-out 3 + 4 \u2014 refresh existing feed cards, then auto-publish the game post",
                 "file": "server/src/modules/games/games.service.js",
                 "symbol": "function scheduleAutoFeedForGame"
               },
               {
                 "node": "milestones",
-                "label": "fan-out 5 — detectForFinalizedGame reads boxScore lines against career totals",
+                "label": "fan-out 5 \u2014 detectForFinalizedGame reads boxScore lines against career totals",
                 "file": "server/src/modules/milestones/milestones.service.js",
                 "symbol": "async function detectForFinalizedGame"
               },
@@ -3935,7 +4206,7 @@
               },
               {
                 "node": "openai",
-                "label": "off-response: buildPersistedGameSummary → OpenAI /v1/responses for the recap",
+                "label": "off-response: buildPersistedGameSummary \u2192 OpenAI /v1/responses for the recap",
                 "file": "server/src/modules/games/gameSummaryAi.service.js",
                 "symbol": "OPENAI_RESPONSES_URL"
               },
@@ -3949,8 +4220,8 @@
           },
           {
             "id": "flow-auth",
-            "name": "Login → rotating session + CSRF",
-            "why": "Establishes the identity every other flow depends on. Notable because authorization is deliberately NOT middleware RBAC — User.roles is unused; permission checks happen later, in leagues.service assert* helpers.",
+            "name": "Login \u2192 rotating session + CSRF",
+            "why": "Establishes the identity every other flow depends on. Notable because authorization is deliberately NOT middleware RBAC \u2014 User.roles is unused; permission checks happen later, in leagues.service assert* helpers.",
             "steps": [
               {
                 "node": "c-auth",
@@ -3960,7 +4231,7 @@
               },
               {
                 "node": "app-shell",
-                "label": "POST /api/v1/auth/login — behind authLimiter, after attachCsrfToken/csrfProtection",
+                "label": "POST /api/v1/auth/login \u2014 behind authLimiter, after attachCsrfToken/csrfProtection",
                 "file": "server/src/modules/auth/auth.routes.js",
                 "symbol": "login"
               },
@@ -3998,7 +4269,7 @@
           },
           {
             "id": "flow-email-verification",
-            "name": "Local signup → Resend verification → onboarding",
+            "name": "Local signup \u2192 Resend verification \u2192 onboarding",
             "why": "Local signup stays usable immediately but records emailVerified=false and persists a single-use verification token before dispatching mail. Delivery is deliberately fire-and-forget so Resend latency or failure cannot roll back registration. The link auto-verifies once and continues to onboarding; resend and recovery endpoints keep identical responses to avoid account enumeration.",
             "steps": [
               {
@@ -4047,18 +4318,18 @@
           },
           {
             "id": "flow-billing",
-            "name": "Checkout → Stripe webhook → entitlement gates",
-            "why": "Billing is resource-scoped (per Team / per League), not per user, and for teams it sells capacity rather than features: the first standalone team an owner creates is free, every later one needs its own £5/mo subscription. The webhook is mounted before express.json() with express.raw so signature verification sees the untouched body — reordering that line silently breaks payments.",
+            "name": "Checkout \u2192 Stripe webhook \u2192 entitlement gates",
+            "why": "Billing is resource-scoped (per Team / per League), not per user, and for teams it sells capacity rather than features: the first standalone team an owner creates is free, every later one needs its own \u00a35/mo subscription. The webhook is mounted before express.json() with express.raw so signature verification sees the untouched body \u2014 reordering that line silently breaks payments.",
             "steps": [
               {
                 "node": "billing",
-                "label": "assertTeamCreationAllowed marks an owner’s first standalone team capacityType=free; every later one is paid",
+                "label": "assertTeamCreationAllowed marks an owner\u2019s first standalone team capacityType=free; every later one is paid",
                 "file": "server/src/modules/billing/billing.service.js",
                 "symbol": "async function assertTeamCreationAllowed"
               },
               {
                 "node": "c-billing",
-                "label": "PricingPage → team-checkout / league-checkout",
+                "label": "PricingPage \u2192 team-checkout / league-checkout",
                 "file": "client/src/features/billing/api/billingApi.js",
                 "symbol": "apiClient.post('/billing/team-checkout'"
               },
@@ -4076,7 +4347,7 @@
               },
               {
                 "node": "app-shell",
-                "label": "POST /api/v1/billing/webhooks — express.raw, mounted BEFORE express.json()",
+                "label": "POST /api/v1/billing/webhooks \u2014 express.raw, mounted BEFORE express.json()",
                 "file": "server/src/app.js",
                 "symbol": "'/api/v1/billing/webhooks'"
               },
@@ -4100,7 +4371,7 @@
               },
               {
                 "node": "teams",
-                "label": "Downstream gate example — an unpaid additional team goes read-only, while its data stays visible",
+                "label": "Downstream gate example \u2014 an unpaid additional team goes read-only, while its data stays visible",
                 "file": "server/src/modules/teams/teams.service.js",
                 "symbol": "assertTeamManagementAllowed(team)"
               }
@@ -4108,8 +4379,8 @@
           },
           {
             "id": "flow-public-league",
-            "name": "Public league page → cached materialized reads",
-            "why": "The main anonymous read path. It is fast because it serves pre-materialized standings rather than aggregating on request, and because publicCacheMiddleware (OPT-019) lets browsers and CDNs cache it — degrading to no-cache the moment a request carries auth.",
+            "name": "Public league page \u2192 cached materialized reads",
+            "why": "The main anonymous read path. It is fast because it serves pre-materialized standings rather than aggregating on request, and because publicCacheMiddleware (OPT-019) lets browsers and CDNs cache it \u2014 degrading to no-cache the moment a request carries auth.",
             "steps": [
               {
                 "node": "c-leagues",
@@ -4125,7 +4396,7 @@
               },
               {
                 "node": "middleware",
-                "label": "OPT-019 — cacheable for anonymous viewers, private/no-cache when authenticated",
+                "label": "OPT-019 \u2014 cacheable for anonymous viewers, private/no-cache when authenticated",
                 "file": "server/src/middleware/publicCache.middleware.js",
                 "symbol": "publicCache"
               },
@@ -4137,7 +4408,7 @@
               },
               {
                 "node": "mongodb",
-                "label": "Reads materialized LeagueStandings / LeaguePlayerStats — no per-request aggregation",
+                "label": "Reads materialized LeagueStandings / LeaguePlayerStats \u2014 no per-request aggregation",
                 "file": "server/src/modules/leagues/leagues.repository.js",
                 "symbol": "mongoose.model('LeagueStandings'"
               },
@@ -4151,7 +4422,7 @@
           },
           {
             "id": "flow-feed",
-            "name": "Share a card → the /pulse feed",
+            "name": "Share a card \u2192 the /pulse feed",
             "why": "The social loop, and the clearest example of the feed module being written to by others rather than only read. Cards are generated server-side from already-frozen game data, so a shared card cannot drift from the box score.",
             "steps": [
               {
@@ -4162,7 +4433,7 @@
               },
               {
                 "node": "app-shell",
-                "label": "POST /api/v1/feed/* — authenticated",
+                "label": "POST /api/v1/feed/* \u2014 authenticated",
                 "file": "server/src/modules/feed/feed.routes.js",
                 "symbol": "card"
               },
@@ -4200,7 +4471,7 @@
           },
           {
             "id": "flow-onboarding",
-            "name": "New account → onboarding → the right landing page",
+            "name": "New account \u2192 onboarding \u2192 the right landing page",
             "why": "The only flow that branches on who the user says they are. `onboarding.status` is the discriminator and it is deliberately asymmetric: account-creation paths opt new users into `not_started`, while the schema default is `completed` so the millions of rows that predate the wizard keep their existing landing experience. Progress is stored on the user, not in the URL, so the wizard resumes across devices.",
             "steps": [
               {
@@ -4217,7 +4488,7 @@
               },
               {
                 "node": "c-onboarding",
-                "label": "Step 1 — pick one or more roles; each carries its own concrete next action",
+                "label": "Step 1 \u2014 pick one or more roles; each carries its own concrete next action",
                 "file": "client/src/features/onboarding/pages/OnboardingPage.jsx",
                 "symbol": "const ROLE_OPTIONS"
               },
@@ -4229,7 +4500,7 @@
               },
               {
                 "node": "app-shell",
-                "label": "PATCH /api/v1/auth/onboarding — behind authMiddleware",
+                "label": "PATCH /api/v1/auth/onboarding \u2014 behind authMiddleware",
                 "file": "server/src/modules/auth/auth.routes.js",
                 "symbol": "'/onboarding'"
               },
@@ -4247,7 +4518,7 @@
               },
               {
                 "node": "c-onboarding",
-                "label": "Step 2 hands off by role — /admin for managers, /my-sporty for players, /pulse for fans",
+                "label": "Step 2 hands off by role \u2014 /admin for managers, /my-sporty for players, /pulse for fans",
                 "file": "client/src/features/onboarding/pages/OnboardingPage.jsx",
                 "symbol": "export function getOnboardingHandoff"
               }
@@ -4255,12 +4526,12 @@
           },
           {
             "id": "flow-court-layout",
-            "name": "Court image versioning — a tracked shot stays where it was tapped",
-            "why": "Shot events store x/y as percentages of the court image that was on screen when they were recorded, which makes the image part of the data contract rather than a display preference. A game is stamped with its layout at creation and never re-stamped, and an ABSENT stamp is the durable legacy discriminator — which is why courtLayoutId has no Mongoose default. Swapping the court art without this contract would silently move every historical marker.",
+            "name": "Court image versioning \u2014 a tracked shot stays where it was tapped",
+            "why": "Shot events store x/y as percentages of the court image that was on screen when they were recorded, which makes the image part of the data contract rather than a display preference. A game is stamped with its layout at creation and never re-stamped, and an ABSENT stamp is the durable legacy discriminator \u2014 which is why courtLayoutId has no Mongoose default. Swapping the court art without this contract would silently move every historical marker.",
             "steps": [
               {
                 "node": "shared-utils",
-                "label": "The contract itself — legacy-v1 + court-v2, with resolveCourtLayoutId failing closed to legacy",
+                "label": "The contract itself \u2014 legacy-v1 + court-v2, with resolveCourtLayoutId failing closed to legacy",
                 "file": "server/src/modules/shared/courtLayouts.js",
                 "symbol": "function resolveCourtLayoutId"
               },
@@ -4272,13 +4543,13 @@
               },
               {
                 "node": "c-games",
-                "label": "COURT_LAYOUTS pairs each image with its intrinsic size and calibration — never mixed across layouts",
+                "label": "COURT_LAYOUTS pairs each image with its intrinsic size and calibration \u2014 never mixed across layouts",
                 "file": "client/src/features/games/court/courtLayouts.js",
                 "symbol": "export const COURT_LAYOUTS"
               },
               {
                 "node": "c-games",
-                "label": "useCourtLayout resolves the game’s stamp; an unknown id renders legacy and reports once per session",
+                "label": "useCourtLayout resolves the game\u2019s stamp; an unknown id renders legacy and reports once per session",
                 "file": "client/src/features/games/court/useCourtLayout.js",
                 "symbol": "export function useCourtLayout"
               },
@@ -4290,7 +4561,7 @@
               },
               {
                 "node": "games",
-                "label": "The posted id is a write PRECONDITION, not a selection — the server refuses a mismatch",
+                "label": "The posted id is a write PRECONDITION, not a selection \u2014 the server refuses a mismatch",
                 "file": "server/src/modules/games/games.validation.js",
                 "symbol": "const courtLayoutPreconditionSchema"
               },
@@ -4302,7 +4573,7 @@
               },
               {
                 "node": "c-games",
-                "label": "Replay and recap snapshots read the game’s own layout, so old games keep the old court forever",
+                "label": "Replay and recap snapshots read the game\u2019s own layout, so old games keep the old court forever",
                 "file": "client/src/features/games/components/GameReplayPanel.jsx",
                 "symbol": "useCourtLayout(courtLayoutId)"
               }
@@ -4311,17 +4582,17 @@
           {
             "id": "flow-player-claim",
             "name": "Claim a managed-team player profile",
-            "why": "The bridge between a roster row (created by a team owner, with no account behind it) and a real user. It is owner-approved rather than self-serve, and every uniqueness rule is enforced twice — once when the request is made and again at approval — because a second claim can land in between. A partial unique index keeps duplicate PENDING requests out of the collection.",
+            "why": "The bridge between a roster row (created by a team owner, with no account behind it) and a real user. It is owner-approved rather than self-serve, and every uniqueness rule is enforced twice \u2014 once when the request is made and again at approval \u2014 because a second claim can land in between. A partial unique index keeps duplicate PENDING requests out of the collection.",
             "steps": [
               {
                 "node": "c-teams",
-                "label": "PublicPlayerPage — a signed-in visitor asks to be linked to this roster profile",
+                "label": "PublicPlayerPage \u2014 a signed-in visitor asks to be linked to this roster profile",
                 "file": "client/src/features/teams/api/teamsApi.js",
                 "symbol": "createPlayerClaimRequest"
               },
               {
                 "node": "app-shell",
-                "label": "POST /api/v1/teams/:teamId/players/:playerId/claim-requests — authenticated",
+                "label": "POST /api/v1/teams/:teamId/players/:playerId/claim-requests \u2014 authenticated",
                 "file": "server/src/modules/teams/teams.routes.js",
                 "symbol": "claim-requests"
               },
@@ -4333,7 +4604,7 @@
               },
               {
                 "node": "mongodb",
-                "label": "PlayerClaimRequest — unique per (team, player, requester) while status is pending",
+                "label": "PlayerClaimRequest \u2014 unique per (team, player, requester) while status is pending",
                 "file": "server/src/modules/teams/teams.repository.js",
                 "symbol": "mongoose.model('PlayerClaimRequest'"
               },
@@ -4351,9 +4622,106 @@
               },
               {
                 "node": "c-leagues",
-                "label": "My Sporty then lists the claimed managed-team profile beside the user’s league ones",
+                "label": "My Sporty then lists the claimed managed-team profile beside the user\u2019s league ones",
                 "file": "client/src/features/leagues/pages/MySportyPage.jsx",
                 "symbol": "getMyPlayerProfiles"
+              }
+            ]
+          },
+          {
+            "id": "flow-scrimmage",
+            "name": "A weekly scrimmage \u2192 tracking \u2192 efficiency MVP",
+            "why": "Reusable identities and fixed weekly colors connect many temporary games to one weekly session and one season without permanent teams or averaged FG percentages. Admins review and publish weekly results explicitly; identity aliases combine duplicates without rewriting event history.",
+            "steps": [
+              {
+                "node": "c-scrimmages",
+                "label": "Review duplicate identities and select the retained player profile",
+                "file": "client/src/features/scrimmages/components/MergeScrimmagePlayers.jsx",
+                "symbol": "export function MergeScrimmagePlayers"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Check account and roster conflicts; atomically save an audited alias map",
+                "file": "server/src/modules/scrimmages/scrimmages.service.js",
+                "symbol": "async function mergePlayers"
+              },
+              {
+                "node": "c-scrimmages",
+                "label": "Create a dated week and select attendance/colors",
+                "file": "client/src/features/scrimmages/pages/ScrimmagePages.jsx",
+                "symbol": "function WeeklyForm"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Validate pool assignments and snapshot weekly settings",
+                "file": "server/src/modules/scrimmages/scrimmages.service.js",
+                "symbol": "async function createSession"
+              },
+              {
+                "node": "c-scrimmages",
+                "label": "Select two colors, one to five players each and a full-video timestamp",
+                "file": "client/src/features/scrimmages/components/NewScrimmageGameDialog.jsx",
+                "symbol": "export function NewScrimmageGameDialog"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Lease the weekly game slot, enforce rosters and create a retry-safe Game",
+                "file": "server/src/modules/scrimmages/scrimmages.service.js",
+                "symbol": "async function newGame"
+              },
+              {
+                "node": "c-games",
+                "label": "Record core stats and finish games manually",
+                "file": "client/src/features/games/pages/GameTrackPage.jsx",
+                "symbol": "export function GameTrackPage"
+              },
+              {
+                "node": "c-scrimmages",
+                "label": "Review weekly game scores and video coverage before publication",
+                "file": "client/src/features/scrimmages/components/ScrimmageResultsReview.jsx",
+                "symbol": "export function ScrimmageResultsReview"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Publish a completed nonempty week; public stats and player plays include published weeks only",
+                "file": "server/src/modules/scrimmages/scrimmages.service.js",
+                "symbol": "publishSession:"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Replay completed game events for weekly/season MVP and FG%",
+                "file": "server/src/modules/scrimmages/scrimmages.scoring.js",
+                "symbol": "function aggregateScrimmageStats"
+              },
+              {
+                "node": "c-scrimmages",
+                "label": "Show standings with the formula and eligibility below the table",
+                "file": "client/src/features/scrimmages/components/ScrimmageStandings.jsx",
+                "symbol": "export function ScrimmageStandings"
+              },
+              {
+                "node": "c-scrimmages",
+                "label": "Open a scrimmage player profile with season/week stats and video plays",
+                "file": "client/src/features/scrimmages/pages/ScrimmagePlayerPage.jsx",
+                "symbol": "export function ScrimmagePlayerPage"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Authorize profile visibility and scope completed-game plays to the attached pool ID",
+                "file": "server/src/modules/scrimmages/scrimmages.service.js",
+                "symbol": "async function playerProfile"
+              },
+              {
+                "node": "scrimmages",
+                "label": "Project historical aliases onto the retained identity without changing rosters or event timestamps",
+                "file": "server/src/modules/scrimmages/scrimmages.identity.js",
+                "symbol": "function identityGames"
+              },
+              {
+                "node": "c-scrimmages",
+                "label": "Share published weekly recaps with MVP, core stats and week-filtered player video links after checking visibility",
+                "file": "client/src/features/scrimmages/components/ScrimmageWeeklyRecap.jsx",
+                "symbol": "ScrimmageWeeklyRecap"
               }
             ]
           }

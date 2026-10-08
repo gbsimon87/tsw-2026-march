@@ -5,10 +5,12 @@ export const DEFAULT_GAME_FORMAT = Object.freeze({
 });
 
 export function regulationSegmentCount(format) {
+  if (format.regulationSegmentType === 'scrimmage') return 1;
   return format.regulationSegmentType === 'half' ? 2 : 4;
 }
 
 export function segmentLabel(format, kind, number) {
+  if (kind === 'regulation' && format.regulationSegmentType === 'scrimmage') return 'REG';
   if (kind === 'overtime') return `OT${number}`;
   return `${format.regulationSegmentType === 'half' ? 'H' : 'Q'}${number}`;
 }

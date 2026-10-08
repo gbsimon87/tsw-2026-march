@@ -63,7 +63,7 @@ function buildTopPerformers(boxScore) {
     }));
 }
 
-function buildKeyMoments(events, playersById) {
+function buildKeyMoments(events, playersById, scoringRules) {
   return [...(events || [])]
     .filter((event) => MOMENT_PRIORITY[event.statType])
     .sort((left, right) => {
@@ -82,7 +82,12 @@ function buildKeyMoments(events, playersById) {
         ? playersById.get(String(event.playerId)) || 'Unknown Player'
         : 'Opponent',
       statType: event.statType,
-      statLabel: MOMENT_LABELS[event.statType] || event.statType,
+      statLabel:
+        scoringRules && event.statType === 'FG2_MADE'
+          ? `${scoringRules.insideArc}PT Make`
+          : scoringRules && event.statType === 'FG3_MADE'
+            ? `${scoringRules.outsideArc}PT Make`
+            : MOMENT_LABELS[event.statType] || event.statType,
       occurredAt: event.occurredAt || null,
     }));
 }
@@ -118,7 +123,7 @@ function buildShotSnapshot(events, playersById, courtLayoutId) {
 
 function buildGameRecap(game, team, boxScore) {
   if (game?.trackingMode === 'dual_team') {
-    const bySide = summarizeEventsBySide(game?.events || []);
+    const bySide = summarizeEventsBySide(game?.events || [], game?.scoringRules);
     const players = [
       ...(team?.home?.players || []).map((player) => ({
         ...player,
@@ -192,7 +197,7 @@ function buildGameRecap(game, team, boxScore) {
         tov: boxScore?.home?.totals?.tov || 0,
         foul: boxScore?.home?.totals?.foul || 0,
       },
-      keyMoments: buildKeyMoments(game?.events || [], playersById),
+      keyMoments: buildKeyMoments(game?.events || [], playersById, game?.scoringRules),
       shotSnapshot: buildShotSnapshot(game?.events || [], playersById, game?.courtLayoutId),
     };
   }
@@ -200,7 +205,7 @@ function buildGameRecap(game, team, boxScore) {
   const playersById = new Map(
     (team?.players || []).map((player) => [String(player._id || player.id), player.displayName])
   );
-  const teamSummary = summarizeEvents(game?.events || []);
+  const teamSummary = summarizeEvents(game?.events || [], game?.scoringRules);
 
   return {
     statusLabel: formatStatusLabel(game?.status),
@@ -227,7 +232,7 @@ function buildGameRecap(game, team, boxScore) {
       tov: boxScore?.teamTotals?.tov || 0,
       foul: boxScore?.teamTotals?.foul || 0,
     },
-    keyMoments: buildKeyMoments(game?.events || [], playersById),
+    keyMoments: buildKeyMoments(game?.events || [], playersById, game?.scoringRules),
     shotSnapshot: buildShotSnapshot(game?.events || [], playersById, game?.courtLayoutId),
   };
 }

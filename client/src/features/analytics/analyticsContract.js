@@ -33,6 +33,7 @@ const shareShape = {
     'carousel_slide',
     // Social backlog rank 8: a league leaders or league table card.
     'leaderboard_card',
+    'scrimmage_recap',
   ]),
   method: z.enum(['native', 'clipboard', 'download']),
   source: z.enum([
@@ -42,6 +43,7 @@ const shareShape = {
     'team_profile',
     'admin_social',
     'league_page',
+    'scrimmage_session',
   ]),
   format: z.enum(['post', 'story', 'link']).optional(),
 };
