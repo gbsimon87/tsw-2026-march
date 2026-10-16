@@ -6,6 +6,7 @@ const {
   updateGameSchema,
   appendEventSchema,
   setLineupSchema,
+  substitutionSchema,
   updateEventSchema,
   listGamesSchema,
   addRosterPlayerSchema,
@@ -137,6 +138,13 @@ async function addRosterPlayer(req, res) {
   res.status(201).json(result);
 }
 
+async function substitute(req, res) {
+  const userId = requireAuthUserId(req);
+  const payload = substitutionSchema.parse(req.body);
+  const result = await gamesService.substituteForUser(userId, req.params.gameId, payload);
+  res.status(200).json(result);
+}
+
 module.exports = {
   create,
   list,
@@ -147,6 +155,7 @@ module.exports = {
   insertEventBefore,
   updateEvent,
   setLineup,
+  substitute,
   removeEvent,
   updateClock,
   deleteGame,

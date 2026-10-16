@@ -33,6 +33,7 @@ const apiMocks = vi.hoisted(() => ({
   appendEvent: vi.fn(),
   insertEventBefore: vi.fn(),
   setLineup: vi.fn(),
+  substitute: vi.fn(),
   removeEvent: vi.fn(),
   finish: vi.fn(),
   update: vi.fn(),
@@ -309,6 +310,7 @@ describe('GameTrackPage', () => {
     apiMocks.appendEvent.mockReset();
     apiMocks.insertEventBefore.mockReset();
     apiMocks.setLineup.mockReset();
+    apiMocks.substitute.mockReset();
     apiMocks.removeEvent.mockReset();
     apiMocks.finish.mockReset();
     apiMocks.update.mockReset();
@@ -439,6 +441,24 @@ describe('GameTrackPage', () => {
         lineups: currentResponse.lineups,
         boxScore: currentResponse.boxScore,
         gameSummary: currentResponse.gameSummary,
+      });
+    });
+
+    apiMocks.substitute.mockImplementation(async (gameId, payload) => {
+      const appendEvent = apiMocks.appendEvent.getMockImplementation();
+      const { playerOutId, playerInId, ...context } = payload;
+      if (context.teamSide) context.relatedTeamSide = context.teamSide;
+      await appendEvent(gameId, {
+        ...context,
+        playerId: playerOutId,
+        relatedPlayerId: playerInId,
+        statType: 'SUB_OUT',
+      });
+      return appendEvent(gameId, {
+        ...context,
+        playerId: playerInId,
+        relatedPlayerId: playerOutId,
+        statType: 'SUB_IN',
       });
     });
 
@@ -1452,7 +1472,7 @@ describe('GameTrackPage', () => {
       within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
     );
 
-    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
     expect(apiMocks.addRosterPlayer).toHaveBeenCalledTimes(1);
     expect(apiMocks.addRosterPlayer).toHaveBeenCalledWith('game-1', {
       side: 'home',
@@ -1460,7 +1480,11 @@ describe('GameTrackPage', () => {
       jerseyNumber: 8,
     });
 
-    const payloads = apiMocks.appendEvent.mock.calls.map(([, payload]) => payload);
+    expect(apiMocks.substitute).toHaveBeenCalledTimes(1);
+    const payloads = [
+      ...currentResponse.game.events.slice(0, 2),
+      apiMocks.appendEvent.mock.calls[0][1],
+    ];
     for (const payload of payloads) {
       expect(payload).toEqual(
         expect.objectContaining({
@@ -1616,8 +1640,12 @@ describe('GameTrackPage', () => {
     await userEvent.selectOptions(within(dialog).getByLabelText('Sub out'), 'player-1');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Sub in & record stat' }));
 
-    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
-    const payloads = apiMocks.appendEvent.mock.calls.map(([, payload]) => payload);
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.substitute).toHaveBeenCalledTimes(1);
+    const payloads = [
+      ...currentResponse.game.events.slice(0, 2),
+      apiMocks.appendEvent.mock.calls[0][1],
+    ];
     expect(payloads[0]).toEqual(
       expect.objectContaining({
         playerId: 'player-1',
@@ -1737,14 +1765,7 @@ describe('GameTrackPage', () => {
     installSpeechRecognition();
     currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
     const substitutionError = Object.assign(new Error('Lineup changed'), { status: 400 });
-    apiMocks.appendEvent
-      .mockResolvedValueOnce({
-        game: currentResponse.game,
-        lineups: currentResponse.lineups,
-        boxScore: currentResponse.boxScore,
-        gameSummary: currentResponse.gameSummary,
-      })
-      .mockRejectedValueOnce(substitutionError);
+    apiMocks.substitute.mockRejectedValueOnce(substitutionError);
 
     renderPage();
     await enableVoiceTracking();
@@ -1760,11 +1781,9 @@ describe('GameTrackPage', () => {
     await waitForEventPicker();
     expect(screen.queryByRole('dialog', { name: 'Add missing player?' })).not.toBeInTheDocument();
     expect(apiMocks.addRosterPlayer).toHaveBeenCalledTimes(1);
-    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
-    expect(apiMocks.appendEvent.mock.calls.map(([, payload]) => payload.statType)).toEqual([
-      'SUB_OUT',
-      'SUB_IN',
-    ]);
+    expect(apiMocks.substitute).toHaveBeenCalledTimes(1);
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+    expect(currentResponse.game.events).toEqual([]);
     expect(
       screen.getAllByText(
         'Taylor Reed was added, but the lineup could not be updated. Check Subs and finish with the buttons.'
@@ -2259,7 +2278,7 @@ describe('GameTrackPage', () => {
       within(dialog).getByRole('button', { name: 'Add, sub in & record stat' })
     );
 
-    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
 
     // The away side must still be the active one after the reload; before the fix loadGame reset
     // it to home, so the scorekeeper's next command went to the wrong team.
@@ -2607,6 +2626,57 @@ describe('GameTrackPage', () => {
     expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
   });
 
+  test.each(['assist', 'rebound'])(
+    'ignores repeated player clicks while a %s follow-up is saving',
+    async (kind) => {
+      currentResponse =
+        kind === 'rebound'
+          ? createLeagueDualTeamResponse({ homeReady: true, awayReady: true })
+          : createResponse({
+              game: {
+                startingLineupPlayerIds: ONE_SIDED_LINEUP,
+                currentLineupPlayerIds: ONE_SIDED_LINEUP,
+              },
+            });
+      renderPage();
+      await screen.findByTestId('interactive-court-image');
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+      fireEvent.click(
+        within(getEventPicker()).getByRole('button', {
+          name: kind === 'rebound' ? 'FT-' : 'Make',
+        })
+      );
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      const appendEvent = apiMocks.appendEvent.getMockImplementation();
+      let releaseSave;
+      const pendingSave = new Promise((resolve) => {
+        releaseSave = resolve;
+      });
+      apiMocks.appendEvent.mockImplementation(async (...args) => {
+        await pendingSave;
+        return appendEvent(...args);
+      });
+      const answer = within(getEventPicker()).getByRole('button', {
+        name: 'Blake',
+      });
+      try {
+        fireEvent.click(answer);
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+        fireEvent.click(answer);
+        expect(answer).toBeDisabled();
+      } finally {
+        await act(async () => releaseSave());
+      }
+      await waitFor(() =>
+        expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+      );
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+      expect(currentResponse.game.events).toHaveLength(2);
+    }
+  );
+
   test('lets a follow-up answer succeed after an earlier answer failed to save', async () => {
     currentResponse = createResponse({
       game: {
@@ -2626,7 +2696,10 @@ describe('GameTrackPage', () => {
     await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
     await expectFollowUpQuestion(/Who assisted\?/i);
 
-    apiMocks.appendEvent.mockRejectedValueOnce(new Error('Assist write failed'));
+    // A validation rejection is a definite non-write, so answering again is safe.
+    apiMocks.appendEvent.mockRejectedValueOnce(
+      Object.assign(new Error('Assist write failed'), { status: 400 })
+    );
     fireEvent.click(
       within(getEventPicker()).getByRole('button', { name: playerButtonName('Blake') })
     );
@@ -2643,6 +2716,45 @@ describe('GameTrackPage', () => {
       expect.objectContaining({ playerId: 'player-3', statType: 'AST' })
     );
   });
+
+  test.each([
+    [false, undefined],
+    [true, undefined],
+    [false, 500],
+    [true, 500],
+  ])(
+    'closes a follow-up after an uncertain response (committed: %s, status: %s)',
+    async (committed, status) => {
+      currentResponse = createResponse({
+        game: {
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        },
+      });
+      renderPage();
+      await screen.findByTestId('interactive-court-image');
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Make' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      const appendEvent = apiMocks.appendEvent.getMockImplementation();
+      apiMocks.appendEvent.mockImplementationOnce(async (...args) => {
+        if (committed) await appendEvent(...args);
+        throw Object.assign(new Error('Connection lost'), { status });
+      });
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Blake' }));
+      await screen.findByText('Connection lost');
+      expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0);
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+      fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+      expect(screen.getByText('Recent Events')).toBeInTheDocument();
+      expect(currentResponse.game.events.filter((event) => event.statType === 'AST')).toHaveLength(
+        committed ? 1 : 0
+      );
+    }
+  );
 
   test('still stamps a voice event with the video timestamp after a skipped follow-up', async () => {
     const restoreMatchMedia = stubMatchMedia(true);
@@ -3216,6 +3328,56 @@ describe('GameTrackPage', () => {
     expect(await screen.findByRole('button', { name: 'Court' })).toBeInTheDocument();
     expect(screen.queryByText(/Set TSW Team Starting Lineup/i)).not.toBeInTheDocument();
   });
+
+  test.each([false, true])(
+    'resumes the entry clock after the stat request settles (fails: %s)',
+    async (fails) => {
+      const restore = stubMatchMedia(true);
+      try {
+        await renderVideoGameWithRunningClock();
+        const appendEvent = apiMocks.appendEvent.getMockImplementation();
+        let releaseSave;
+        const pendingSave = new Promise((resolve) => {
+          releaseSave = resolve;
+        });
+        apiMocks.appendEvent.mockImplementation(async (...args) => {
+          await pendingSave;
+          if (fails) throw Object.assign(new Error('Game changed elsewhere'), { status: 409 });
+          return appendEvent(...args);
+        });
+
+        tapCourtAt(250, 800);
+        await waitForEventPicker();
+        await selectPickerPlayer('Alex');
+        await waitFor(() => expect(apiMocks.updateClock).toHaveBeenCalledTimes(1));
+        fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'FT+' }));
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+
+        try {
+          // Closing the picker resumes playback while the stat request is still pending.
+          // Both writes touch the same Game document and must never overlap.
+          expect(apiMocks.updateClock.mock.calls.map(([, command]) => command.action)).toEqual([
+            'pause',
+          ]);
+        } finally {
+          await act(async () => releaseSave());
+        }
+
+        await waitFor(() =>
+          expect(apiMocks.updateClock).toHaveBeenLastCalledWith('game-1', { action: 'start' })
+        );
+        expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+        expect(currentResponse.game.events).toHaveLength(fails ? 0 : 1);
+        expect(currentResponse.game.clock.status).toBe('running');
+        if (fails) {
+          expect(await screen.findByText('Game changed elsewhere')).toBeInTheDocument();
+          expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+        }
+      } finally {
+        restore();
+      }
+    }
+  );
 
   test('waits for the entry clock pause before saving a quickly tapped free throw', async () => {
     const playerIds = ['player-1', 'player-2', 'player-3', 'player-4', 'player-5'];
@@ -3835,6 +3997,72 @@ describe('GameTrackPage', () => {
     expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    [false, undefined],
+    [true, undefined],
+    [false, 500],
+    [true, 500],
+    [false, 409],
+  ])(
+    'closes manual opponent scoring after an uncertain save (committed: %s, status: %s)',
+    async (committed, status) => {
+      currentResponse = createResponse({
+        game: {
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        },
+      });
+      renderPage();
+      await screen.findByTestId('interactive-court-image');
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+      const appendEvent = apiMocks.appendEvent.getMockImplementation();
+      apiMocks.appendEvent.mockImplementationOnce(async (...args) => {
+        if (committed) await appendEvent(...args);
+        throw Object.assign(new Error('Opponent score response failed'), { status });
+      });
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: '+2' }));
+      await screen.findByText('Opponent score response failed');
+      expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0);
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+      expect(screen.queryAllByRole('button', { name: 'Edit this event' })).toHaveLength(
+        committed ? 1 : 0
+      );
+      expect(currentResponse.game.events.map((event) => event.statType)).toEqual(
+        committed ? ['OPP_FG2_MADE'] : []
+      );
+    }
+  );
+
+  test('allows retrying manual opponent scoring after a definite validation rejection', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+      },
+    });
+    apiMocks.appendEvent.mockRejectedValueOnce(
+      Object.assign(new Error('Invalid score'), { status: 400 })
+    );
+    renderPage();
+    await screen.findByTestId('interactive-court-image');
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: '+2' }));
+    await screen.findByText('Invalid score');
+    expect(apiMocks.getById).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: '+2' }));
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2);
+    expect(currentResponse.game.events.map((event) => event.statType)).toEqual(['OPP_FG2_MADE']);
+  });
+
   test('records court quick stats and opponent scoring', async () => {
     currentResponse = createResponse({
       game: {
@@ -3899,6 +4127,275 @@ describe('GameTrackPage', () => {
     );
   });
 
+  test.each(['saved', 'deselected', 'left panel'])(
+    'releases the substitution clock and snapshot when the draft is %s',
+    async (ending) => {
+      const restore = stubMatchMedia(true);
+      const nowSpy = vi.spyOn(Date, 'now');
+      try {
+        const iframe = await renderVideoGameWithRunningClock();
+        const postMessage = vi.spyOn(iframe.contentWindow, 'postMessage');
+        emitPlayerState(iframe, 1);
+        fireEvent.click(screen.getByRole('button', { name: 'Subs' }));
+        fireEvent.click(getLastButtonByName('Alex'));
+        await waitFor(() =>
+          expect(apiMocks.updateClock).toHaveBeenCalledWith('game-1', { action: 'pause' })
+        );
+        if (ending === 'saved') {
+          fireEvent.click(getLastButtonByName('Flynn'));
+          fireEvent.click(screen.getByRole('button', { name: /Record Sub/i }));
+          await waitFor(() => expect(apiMocks.substitute).toHaveBeenCalledTimes(1));
+        } else if (ending === 'deselected') {
+          fireEvent.click(getLastButtonByName('Alex'));
+        } else {
+          fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+        }
+        await waitFor(() =>
+          expect(apiMocks.updateClock).toHaveBeenLastCalledWith('game-1', { action: 'start' })
+        );
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.stringContaining('pauseVideo'),
+          expect.anything()
+        );
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.stringContaining('playVideo'),
+          expect.anything()
+        );
+        expect(screen.queryByText('The game clock kept running')).not.toBeInTheDocument();
+        // A later court tap must capture the new clock time, not the substitution time.
+        nowSpy.mockReturnValue(Date.now() + 10000);
+        fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+        tapCourtAt(250, 800);
+        await waitForEventPicker();
+        // Consume the synthetic click guarded immediately after a court pointerdown.
+        fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Blake' }));
+        await selectPickerPlayer('Blake');
+        fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Miss' }));
+        const eventCount = 1;
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(eventCount));
+        expect(apiMocks.appendEvent.mock.calls.at(-1)[1].clockMillisecondsRemaining).toBeLessThan(
+          591000
+        );
+      } finally {
+        nowSpy.mockRestore();
+        restore();
+      }
+    }
+  );
+
+  test.each(['FT+', 'STL', 'TOV', 'DREB'])(
+    'uses the corrected clock on a new event after saving %s',
+    async (stat) => {
+      currentResponse = createResponse({
+        game: {
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+          gameFormat: {
+            regulationSegmentType: 'quarter',
+            regulationSegmentDurationSeconds: 600,
+            overtimeDurationSeconds: 300,
+          },
+          clock: {
+            status: 'paused',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            remainingMilliseconds: 300000,
+            runningSince: null,
+          },
+        },
+      });
+      apiMocks.updateClock.mockImplementation(async (_id, command) => {
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              remainingMilliseconds: command.remainingMilliseconds,
+            },
+          },
+        };
+        return currentResponse;
+      });
+      renderPage();
+      await screen.findByTestId('interactive-court-image');
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: stat }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Correct' }));
+      fireEvent.change(screen.getByLabelText('Clock minutes'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Clock seconds'), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(screen.getByLabelText('Game clock')).toHaveTextContent('2:00'));
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer('Alex');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Miss' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[0][1].clockMillisecondsRemaining).toBe(300000);
+      expect(apiMocks.appendEvent.mock.calls[1][1].clockMillisecondsRemaining).toBe(120000);
+    }
+  );
+
+  test.each(['switch team', 'exit fullscreen'])(
+    'uses a fresh clock snapshot after abandoning an entry through %s',
+    async (exit) => {
+      currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+      currentResponse.game.gameFormat = {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      };
+      currentResponse.game.clock = {
+        status: 'paused',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 300000,
+        runningSince: null,
+      };
+      apiMocks.updateClock.mockImplementation(async (_id, command) => {
+        currentResponse = {
+          ...currentResponse,
+          game: {
+            ...currentResponse.game,
+            clock: {
+              ...currentResponse.game.clock,
+              remainingMilliseconds: command.remainingMilliseconds,
+            },
+          },
+        };
+        return currentResponse;
+      });
+      renderPage();
+      await screen.findByTestId('interactive-court-image');
+      if (exit === 'exit fullscreen')
+        fireEvent.click(screen.getByRole('button', { name: /Fullscreen/i }));
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      if (exit === 'switch team')
+        fireEvent.click(screen.getByRole('button', { name: 'Select Away Squad' }));
+      else fireEvent.click(screen.getByRole('button', { name: 'Close fullscreen tracking' }));
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0);
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Correct' }));
+      fireEvent.change(screen.getByLabelText('Clock minutes'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Clock seconds'), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(screen.getByLabelText('Game clock')).toHaveTextContent('2:00'));
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer(exit === 'switch team' ? 'Away 1' : 'Alex');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Miss' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+        teamSide: exit === 'switch team' ? 'away' : 'home',
+        clockMillisecondsRemaining: 120000,
+      });
+    }
+  );
+
+  test('cancelling an insertion clears its historical clock snapshot', async () => {
+    currentResponse = createResponse({
+      game: {
+        startingLineupPlayerIds: ONE_SIDED_LINEUP,
+        currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 2,
+          remainingMilliseconds: 300000,
+          runningSince: null,
+        },
+        events: [
+          {
+            id: 'historical',
+            playerId: 'player-1',
+            statType: 'FG2_MADE',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            clockMillisecondsRemaining: 550000,
+          },
+        ],
+      },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Events' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Insert stat before this event' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Court' }));
+    tapCourtAt(250, 800);
+    await waitForEventPicker();
+    await selectPickerPlayer('Alex');
+    fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'Miss' }));
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+      segmentNumber: 2,
+      clockMillisecondsRemaining: 300000,
+    });
+    expect(apiMocks.insertEventBefore).not.toHaveBeenCalled();
+  });
+
+  test.each([404, 403, undefined])(
+    'shows an initial load error and allows retry (status: %s)',
+    async (status) => {
+      apiMocks.getById.mockRejectedValueOnce(
+        Object.assign(new Error('Could not load game'), { status })
+      );
+      renderPage();
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not load game');
+      expect(screen.queryByText('Loading tracking session')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('button', { name: 'Save Lineup' });
+      expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText('Could not load game')).not.toBeInTheDocument();
+    }
+  );
+
+  test.each(['validation', 'network before commit', 'network after commit'])(
+    'reconciles a failed substitution and discards its draft (%s)',
+    async (failure) => {
+      currentResponse = createResponse({
+        game: {
+          startingLineupPlayerIds: ONE_SIDED_LINEUP,
+          currentLineupPlayerIds: ONE_SIDED_LINEUP,
+        },
+      });
+      const substitute = apiMocks.substitute.getMockImplementation();
+      apiMocks.substitute.mockImplementationOnce(async (...args) => {
+        if (failure === 'network after commit') await substitute(...args);
+        throw Object.assign(new Error('Substitution request failed'), {
+          status: failure === 'validation' ? 400 : undefined,
+        });
+      });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Subs' }));
+      fireEvent.click(getLastButtonByName('Alex'));
+      fireEvent.click(getLastButtonByName('Flynn'));
+      fireEvent.click(screen.getByRole('button', { name: /Record Sub/i }));
+      await screen.findByText('Substitution request failed');
+      expect(apiMocks.substitute).toHaveBeenCalledTimes(1);
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      expect(apiMocks.getById).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole('button', { name: /Record Sub/i })).not.toBeInTheDocument();
+      expect(currentResponse.game.currentLineupPlayerIds).toHaveLength(5);
+      expect(currentResponse.game.events).toHaveLength(failure === 'network after commit' ? 2 : 0);
+      const onCourt = screen.getByText('On Court — tap to sub out').parentElement;
+      expect(within(onCourt).queryByRole('button', { name: 'Flynn' }) !== null).toBe(
+        failure === 'network after commit'
+      );
+      expect(within(onCourt).queryByRole('button', { name: 'Alex' }) !== null).toBe(
+        failure !== 'network after commit'
+      );
+    }
+  );
+
   test('updates on-court and bench lists after a substitution', async () => {
     currentResponse = createResponse({
       game: {
@@ -3917,17 +4414,16 @@ describe('GameTrackPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Record Sub/i }));
 
     await waitFor(() => {
-      expect(apiMocks.appendEvent).toHaveBeenNthCalledWith(1, 'game-1', {
-        playerId: 'player-1',
-        relatedPlayerId: 'player-6',
-        statType: 'SUB_OUT',
-      });
-      expect(apiMocks.appendEvent).toHaveBeenNthCalledWith(2, 'game-1', {
-        playerId: 'player-6',
-        relatedPlayerId: 'player-1',
-        statType: 'SUB_IN',
+      expect(apiMocks.substitute).toHaveBeenCalledWith('game-1', {
+        playerOutId: 'player-1',
+        playerInId: 'player-6',
       });
     });
+    expect(currentResponse.game.events.map((event) => event.statType)).toEqual([
+      'SUB_OUT',
+      'SUB_IN',
+    ]);
+    expect(apiMocks.appendEvent).not.toHaveBeenCalled();
 
     expect(screen.getByText(/On Bench/i)).toBeInTheDocument();
 

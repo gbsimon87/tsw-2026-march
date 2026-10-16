@@ -260,6 +260,18 @@ const setLineupSchema = z.object({
   teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
 });
 
+const substitutionSchema = eventClockSnapshotSchema
+  .extend({
+    playerOutId: z.string().min(1),
+    playerInId: z.string().min(1),
+    teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
+    ...videoTimestampField,
+  })
+  .refine((value) => value.playerOutId !== value.playerInId, {
+    message: 'Choose different outgoing and incoming players',
+    path: ['playerInId'],
+  });
+
 const updateEventSchema = z
   .object({
     playerId: z.string().min(1).optional(),
@@ -323,6 +335,7 @@ module.exports = {
   updateGameSchema,
   appendEventSchema,
   setLineupSchema,
+  substitutionSchema,
   statTypeSchema,
   updateEventSchema,
   listGamesSchema,
