@@ -101,6 +101,11 @@ function isReasonLabel(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function requiresMutationReconciliation(error) {
+  // A server failure may occur while building the response after a successful save.
+  return error?.status == null || error.status === 409 || error.status >= 500;
+}
+
 // The spoken confirmation for an answered follow-up. Dual-team rebounds are the only
 // prompt whose stat depends on which side answered, mirroring handleFollowUpSelection.
 function followUpLabelFor(prompt, resolved) {
@@ -612,6 +617,8 @@ export function GameTrackPage() {
   const ghostClickGuardRef = useRef(null);
   const eventPickerRef = useRef(null);
   const inflightRef = useRef(Promise.resolve());
+  const followUpSavingRef = useRef(false);
+  const gameMutationQueueRef = useRef(Promise.resolve());
   const videoIframeRef = useRef(null);
   const muxRef = useRef(null);
   const onMuxPlay = useCallback(() => {
@@ -804,6 +811,7 @@ export function GameTrackPage() {
   }
 
   const loadGame = useCallback(async () => {
+    setError('');
     try {
       const response = await gamesApi.getById(gameId);
       const isDualTeam = response.game?.trackingMode === 'dual_team';
@@ -1192,11 +1200,15 @@ export function GameTrackPage() {
   // refs, so this composes with the court-tap path rather than double-firing against it.
   // Panel switches are deliberately excluded: they are not modal, and pausing every time someone
   // glanced at the box score would be its own annoyance.
+  const hasSubstitutionDraft = Boolean(
+    currentSideState.substitutionState.playerOutId || currentSideState.substitutionState.playerInId
+  );
   const playbackHeldByUi = Boolean(
     isEventPickerOpen ||
     isCourtVoiceAttempt ||
     isAddPlayerOpen ||
     isVoiceSubInOpen ||
+    hasSubstitutionDraft ||
     editingEvent ||
     isStandaloneLineupEditing ||
     lineupSetupStep ||
@@ -1243,6 +1255,15 @@ export function GameTrackPage() {
         ...updates,
       },
     }));
+  }
+
+  // Clock synchronization can run from an effect while a stat, lineup, or edit is
+  // saving. Every write saves the same versioned Game document, so serialize them
+  // together. A failed request still reaches its caller and never blocks later writes.
+  function enqueueGameMutation(mutation) {
+    const request = gameMutationQueueRef.current.then(mutation);
+    gameMutationQueueRef.current = request.catch(() => undefined);
+    return request;
   }
 
   function updateData(response, actionLabel = '') {
@@ -1356,34 +1377,45 @@ export function GameTrackPage() {
   }
 
   async function submitEvent(payload, { insertBeforeId = '', ...eventContext } = {}) {
-    if (!eventContext.clockSnapshot) captureEntrySnapshot();
     const eventPayload = buildEventPayload(payload, eventContext);
+    const response = await submitTrackingMutation(() =>
+      insertBeforeId
+        ? gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
+        : gamesApi.appendEvent(gameId, eventPayload)
+    );
+    if (isScrimmage && !insertBeforeId && Number.isFinite(eventPayload.videoTimestamp)) {
+      try {
+        window.localStorage.setItem(
+          `scrimmageTracking.${gameId}`,
+          JSON.stringify({ videoUrl: game.videoUrl, position: eventPayload.videoTimestamp })
+        );
+      } catch {
+        /* Tracking works without browser storage. */
+      }
+    }
+    return response;
+  }
+
+  function submitSubstitution(playerOutId, playerInId, eventContext = {}) {
+    const payload = buildEventPayload({ playerOutId, playerInId }, eventContext);
+    return submitTrackingMutation(() => gamesApi.substitute(gameId, payload));
+  }
+
+  async function submitTrackingMutation(mutation) {
     // Pausing/resuming the clock writes the same optimistically-concurrent Game
     // document as a stat. Wait for any entry clock transition so a quick tap on
     // FT+ (or another stat) cannot race that write and receive a false 409.
     await entryClockTransitionRef.current.catch(() => undefined);
     try {
       setSaveStatus('saving');
-      const response = insertBeforeId
-        ? await gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
-        : await gamesApi.appendEvent(gameId, eventPayload);
+      const response = await enqueueGameMutation(mutation);
       setSaveStatus('saved');
-      if (isScrimmage && !insertBeforeId && Number.isFinite(eventPayload.videoTimestamp)) {
-        try {
-          window.localStorage.setItem(
-            `scrimmageTracking.${gameId}`,
-            JSON.stringify({ videoUrl: game.videoUrl, position: eventPayload.videoTimestamp })
-          );
-        } catch {
-          /* Tracking works without browser storage. */
-        }
-      }
       return response;
     } catch (submitError) {
       setSaveStatus('failed');
       // A conflict or transport failure can mean that local Events are stale, or that the
       // response was lost after the server wrote. Reconcile once, but never replay a mutation.
-      if (submitError?.status === 409 || submitError?.status == null) {
+      if (requiresMutationReconciliation(submitError)) {
         await loadGame();
       }
       throw submitError;
@@ -1432,7 +1464,7 @@ export function GameTrackPage() {
     entryClockWasRunningRef.current = true;
     const transition = entryClockTransitionRef.current
       .catch(() => undefined)
-      .then(() => gamesApi.updateClock(gameId, { action: 'pause' }))
+      .then(() => enqueueGameMutation(() => gamesApi.updateClock(gameId, { action: 'pause' })))
       .then((response) => updateData(response))
       .catch((clockError) => {
         entryClockWasRunningRef.current = false;
@@ -1457,7 +1489,7 @@ export function GameTrackPage() {
     clockPausedByVideoRef.current = true;
     const transition = entryClockTransitionRef.current
       .catch(() => undefined)
-      .then(() => gamesApi.updateClock(gameId, { action: 'pause' }))
+      .then(() => enqueueGameMutation(() => gamesApi.updateClock(gameId, { action: 'pause' })))
       .then((response) => updateData(response))
       .catch((clockError) => {
         clockPausedByVideoRef.current = false;
@@ -1472,7 +1504,7 @@ export function GameTrackPage() {
     clockPausedByVideoRef.current = false;
     const transition = entryClockTransitionRef.current
       .catch(() => undefined)
-      .then(() => gamesApi.updateClock(gameId, { action: 'start' }))
+      .then(() => enqueueGameMutation(() => gamesApi.updateClock(gameId, { action: 'start' })))
       .then((response) => updateData(response))
       .catch((clockError) => {
         setError(clockError.message || 'The video resumed, but the game clock stayed paused');
@@ -1490,7 +1522,7 @@ export function GameTrackPage() {
     entryClockWasRunningRef.current = false;
     const transition = entryClockTransitionRef.current
       .catch(() => undefined)
-      .then(() => gamesApi.updateClock(gameId, { action: 'start' }))
+      .then(() => enqueueGameMutation(() => gamesApi.updateClock(gameId, { action: 'start' })))
       .then((response) => updateData(response))
       .catch((clockError) => {
         setError(clockError.message || 'Stat saved, but the game clock remains paused');
@@ -1542,15 +1574,13 @@ export function GameTrackPage() {
 
   function closeTrackingOverlay() {
     if (voiceBusy) return;
-    setSelectedShot(null);
-    setPendingFollowUpPrompt(null);
+    clearEventPicker();
     setIsTrackingFullscreen(false);
     trackEvent('game_tracking_overlay_closed', { game_id: gameId });
   }
 
   function resetTransientTrackingState() {
-    setSelectedShot(null);
-    setPendingFollowUpPrompt(null);
+    clearEventPicker();
     setError('');
   }
 
@@ -1559,8 +1589,27 @@ export function GameTrackPage() {
       return;
     }
 
+    if (hasSubstitutionDraft && !isSaving) cancelSubstitution();
     resetTransientTrackingState();
     setActiveSide(nextSide);
+  }
+
+  function changeActivePanel(nextPanel) {
+    if (
+      activePanel === 'substitutions' &&
+      nextPanel !== activePanel &&
+      hasSubstitutionDraft &&
+      !isSaving
+    ) {
+      cancelSubstitution();
+    }
+    setActivePanel(nextPanel);
+  }
+
+  function cancelInsertion() {
+    setInsertBeforeEventId('');
+    clearEventPicker();
+    setActivePanel('events');
   }
 
   // Ending an entry always hands back everything the court tap took: the picker, mobile entry
@@ -1606,6 +1655,7 @@ export function GameTrackPage() {
     const courtFields = buildCourtFields(shot);
     const payload = { playerId: reboundPlayerId, statType, ...courtFields };
     const label = statLabels[statType] || statType;
+    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
 
     // Transition UI immediately.
     if (isInsert) {
@@ -1631,14 +1681,14 @@ export function GameTrackPage() {
           courtLocation: courtFields,
         });
       } else {
-        setPendingFollowUpPrompt(null);
+        clearEventPicker();
       }
     }
 
     inflightRef.current = submitEvent(payload, {
       insertBeforeId: isInsert ? insertBeforeEventId : '',
       teamSide,
-      ...eventContext,
+      ...submissionContext,
     })
       .then((response) => {
         updateData(response, label);
@@ -1665,6 +1715,7 @@ export function GameTrackPage() {
   // Returns whether the answer was stored (or deliberately stored nothing, as with
   // Unassisted). Voice needs that outcome; the buttons ignore it.
   async function handleFollowUpSelection(option, { source = 'manual' } = {}) {
+    if (followUpSavingRef.current) return false;
     if (voiceBusy && source !== 'voice') return false;
     if (!pendingFollowUpPrompt) {
       clearEventPicker();
@@ -1679,6 +1730,8 @@ export function GameTrackPage() {
       return true;
     }
 
+    // Claim synchronously: two clicks can arrive before React commits isSaving.
+    followUpSavingRef.current = true;
     setError('');
     setIsSaving(true);
 
@@ -1687,12 +1740,6 @@ export function GameTrackPage() {
     // — the primary's catch already reset the UI so nothing more to do.
     try {
       await inflightRef.current;
-    } catch {
-      setIsSaving(false);
-      return false;
-    }
-
-    try {
       let payload;
       let label;
 
@@ -1732,9 +1779,6 @@ export function GameTrackPage() {
         };
         label = statLabels[prompt.statType] || prompt.statType;
       } else if (prompt.kind === 'who_was_fouled') {
-        // Nothing is stored, so this returns before the write chain whose finally would
-        // release the saving lock. Release it here, or every later court tap is ignored.
-        setIsSaving(false);
         clearEventPicker();
         return true;
       } else {
@@ -1762,18 +1806,22 @@ export function GameTrackPage() {
           // The prompt stays open after a failed answer. Leaving a rejected promise in
           // inflightRef would make the next attempt bail at its own await and no-op.
           inflightRef.current = Promise.resolve();
+          if (requiresMutationReconciliation(submitError)) {
+            // Reconciliation cannot prove a lost response was a non-write. Close
+            // this question so answering again cannot duplicate a committed stat.
+            clearEventPicker();
+          }
           throw submitError;
-        })
-        .finally(() => setIsSaving(false));
+        });
 
       await inflightRef.current;
       return true;
     } catch {
-      // Error already handled and displayed by the promise chain above. Its finally releases the
-      // saving lock, but anything that throws before the chain starts never reaches it — release
-      // it here too so a failed answer can never leave the court ignoring every tap.
-      setIsSaving(false);
+      // The primary or follow-up request already displayed its error.
       return false;
+    } finally {
+      followUpSavingRef.current = false;
+      setIsSaving(false);
     }
   }
 
@@ -1813,6 +1861,7 @@ export function GameTrackPage() {
       x: Number(shot.x.toFixed(2)),
       y: Number(shot.y.toFixed(2)),
     };
+    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
 
     // Transition UI immediately — don't wait for the API.
     if (isInsert) {
@@ -1844,7 +1893,7 @@ export function GameTrackPage() {
     inflightRef.current = submitEvent(payload, {
       insertBeforeId: isInsert ? insertBeforeEventId : '',
       teamSide,
-      ...eventContext,
+      ...submissionContext,
     })
       .then((response) => {
         updateData(response, shotLabel);
@@ -1900,6 +1949,7 @@ export function GameTrackPage() {
     const ftLabel = statLabels[payload.statType] || payload.statType;
     const actorPlayerId = playerId;
     const isInsert = Boolean(insertBeforeEventId);
+    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
 
     // Transition UI immediately.
     if (isInsert) {
@@ -1920,7 +1970,7 @@ export function GameTrackPage() {
     inflightRef.current = submitEvent(payload, {
       insertBeforeId: isInsert ? insertBeforeEventId : '',
       teamSide,
-      ...eventContext,
+      ...submissionContext,
     })
       .then((response) => {
         updateData(response, ftLabel);
@@ -1952,7 +2002,7 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
     try {
-      const response = await gamesApi.removeEvent(gameId, eventId);
+      const response = await enqueueGameMutation(() => gamesApi.removeEvent(gameId, eventId));
       updateData(response, 'Event removed');
       return true;
     } catch (removeError) {
@@ -1989,6 +2039,7 @@ export function GameTrackPage() {
     };
     const quickLabel = statLabels[statType] || statType;
     const actorPlayerId = playerId;
+    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
 
     // Transition UI immediately.
     if (isInsert) {
@@ -2040,7 +2091,7 @@ export function GameTrackPage() {
     inflightRef.current = submitEvent(payload, {
       insertBeforeId: isInsert ? insertBeforeEventId : '',
       teamSide,
-      ...eventContext,
+      ...submissionContext,
     })
       .then((response) => {
         updateData(response, quickLabel);
@@ -2091,9 +2142,9 @@ export function GameTrackPage() {
       return true;
     } catch (submitError) {
       setError(submitError.message || 'Failed to add opponent score');
-      if (eventContext.source === 'voice') {
-        // A lost response may still mean the server wrote the event. Do not reopen the picker and
-        // offer a second chance to record the same score.
+      if (eventContext.source === 'voice' || requiresMutationReconciliation(submitError)) {
+        // A lost response may still mean the server wrote the event. Close the
+        // picker for either input method so a retry cannot duplicate the score.
         clearEventPicker();
       }
       return false;
@@ -2135,7 +2186,9 @@ export function GameTrackPage() {
     patch.segmentNumber = Number(editingEvent.segmentNumber);
     patch.clockMillisecondsRemaining = Number(editingEvent.clockMillisecondsRemaining);
     try {
-      const response = await gamesApi.updateEvent(gameId, editingEvent.id, patch);
+      const response = await enqueueGameMutation(() =>
+        gamesApi.updateEvent(gameId, editingEvent.id, patch)
+      );
       updateData(response, 'Event updated');
       setEditingEvent(null);
     } catch (err) {
@@ -2212,26 +2265,16 @@ export function GameTrackPage() {
 
     try {
       if (playerOutId) {
+        lineupResponse = await submitSubstitution(playerOutId, player.id, {
+          ...substitutionContext,
+          teamSide: side,
+        });
+      } else {
         lineupResponse = await submitEvent(
-          {
-            playerId: playerOutId,
-            relatedPlayerId: player.id,
-            statType: 'SUB_OUT',
-            ...sideFields,
-          },
+          { playerId: player.id, statType: 'SUB_IN', ...sideFields },
           substitutionContext
         );
       }
-
-      lineupResponse = await submitEvent(
-        {
-          playerId: player.id,
-          ...(playerOutId ? { relatedPlayerId: playerOutId } : {}),
-          statType: 'SUB_IN',
-          ...sideFields,
-        },
-        substitutionContext
-      );
     } catch {
       // A lost response may mean a substitution was written. Reconcile once and do not expose a
       // retry that could submit the same lineup mutation twice. The original stat has definitely
@@ -2270,11 +2313,13 @@ export function GameTrackPage() {
     const targetSide = pending?.side || activeSide;
 
     if (!pending) {
-      await gamesApi.addRosterPlayer(gameId, {
-        ...(isDualTeam ? { side: targetSide } : {}),
-        displayName,
-        jerseyNumber,
-      });
+      await enqueueGameMutation(() =>
+        gamesApi.addRosterPlayer(gameId, {
+          ...(isDualTeam ? { side: targetSide } : {}),
+          displayName,
+          jerseyNumber,
+        })
+      );
       // Refetch rather than patch local state: the roster is derived from either
       // participantsBySide or team.players depending on game shape, and the server
       // is the only thing that knows which snapshot it just appended to.
@@ -2285,11 +2330,13 @@ export function GameTrackPage() {
 
     requireChosenPlayerOut(pending, playerOutId);
 
-    const addResponse = await gamesApi.addRosterPlayer(gameId, {
-      ...(isDualTeam ? { side: targetSide } : {}),
-      displayName,
-      jerseyNumber,
-    });
+    const addResponse = await enqueueGameMutation(() =>
+      gamesApi.addRosterPlayer(gameId, {
+        ...(isDualTeam ? { side: targetSide } : {}),
+        displayName,
+        jerseyNumber,
+      })
+    );
     const returnedPlayer = addResponse?.player;
     const returnedPlayerId = returnedPlayer?.id || returnedPlayer?._id;
     if (!returnedPlayer || !returnedPlayerId) {
@@ -2381,11 +2428,13 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
     try {
-      const response = await gamesApi.setLineup(
-        gameId,
-        isDualTeam
-          ? { playerIds: currentSideState.lineupDraft, teamSide: activeSide }
-          : { playerIds: currentSideState.lineupDraft }
+      const response = await enqueueGameMutation(() =>
+        gamesApi.setLineup(
+          gameId,
+          isDualTeam
+            ? { playerIds: currentSideState.lineupDraft, teamSide: activeSide }
+            : { playerIds: currentSideState.lineupDraft }
+        )
       );
       updateData(
         response,
@@ -2428,19 +2477,10 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
     try {
-      const commonPayload = isDualTeam ? { teamSide: activeSide, relatedTeamSide: activeSide } : {};
-      await submitEvent({
-        playerId: currentSideState.substitutionState.playerOutId,
-        relatedPlayerId: currentSideState.substitutionState.playerInId,
-        statType: 'SUB_OUT',
-        ...commonPayload,
-      });
-      const subInResponse = await submitEvent({
-        playerId: currentSideState.substitutionState.playerInId,
-        relatedPlayerId: currentSideState.substitutionState.playerOutId,
-        statType: 'SUB_IN',
-        ...commonPayload,
-      });
+      const subInResponse = await submitSubstitution(
+        currentSideState.substitutionState.playerOutId,
+        currentSideState.substitutionState.playerInId
+      );
       updateData(subInResponse, 'Substitution recorded');
       updateSideState(activeKey, {
         selectedPlayerId:
@@ -2449,16 +2489,34 @@ export function GameTrackPage() {
             : currentSideState.selectedPlayerId,
         substitutionState: { playerOutId: '', playerInId: '' },
       });
-      setCurrentVideoTimestamp(null);
+      clearEventPicker();
     } catch (saveError) {
+      // Even an atomic write can commit before its response is lost. Reload
+      // and discard the draft rather than offering to replay an uncertain pair.
+      if (!requiresMutationReconciliation(saveError)) await loadGame();
+      cancelSubstitution();
       setError(saveError.message || 'Failed to save substitution');
     } finally {
       setIsSaving(false);
     }
   }
 
+  function cancelSubstitution() {
+    updateSideState(activeKey, { substitutionState: { playerOutId: '', playerInId: '' } });
+    clearEventPicker();
+  }
+
   function toggleSubstitutionPlayer(field, playerId) {
+    if (isSaving) return;
     const currentId = currentSideState.substitutionState[field];
+    const nextSubstitution = {
+      ...currentSideState.substitutionState,
+      [field]: currentId === playerId ? '' : playerId,
+    };
+    if (!nextSubstitution.playerOutId && !nextSubstitution.playerInId) {
+      cancelSubstitution();
+      return;
+    }
     if (
       !currentId &&
       !currentSideState.substitutionState.playerOutId &&
@@ -2466,13 +2524,11 @@ export function GameTrackPage() {
     ) {
       captureVideoTimestamp();
       captureEntrySnapshot();
+      pauseVideoForEntry();
       pauseClockForEntry();
     }
     updateSideState(activeKey, {
-      substitutionState: {
-        ...currentSideState.substitutionState,
-        [field]: currentId === playerId ? '' : playerId,
-      },
+      substitutionState: nextSubstitution,
     });
   }
 
@@ -2484,7 +2540,9 @@ export function GameTrackPage() {
       // Send null (not '') when cleared, so the server can detach the video — an empty
       // string fails the server's youtubeUrlSchema.min(1), whereas null is accepted.
       const trimmed = videoUrlDraft.trim();
-      const response = await gamesApi.update(gameId, { videoUrl: trimmed || null });
+      const response = await enqueueGameMutation(() =>
+        gamesApi.update(gameId, { videoUrl: trimmed || null })
+      );
       updateData(response);
       setIsVideoUrlEditOpen(false);
     } catch (err) {
@@ -2502,7 +2560,7 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
     try {
-      await gamesApi.finish(gameId);
+      await enqueueGameMutation(() => gamesApi.finish(gameId));
       navigate(
         isScrimmage
           ? `/admin/scrimmage/${data.game.scrimmageId}/sessions/${data.game.scrimmageSessionId}`
@@ -2528,7 +2586,7 @@ export function GameTrackPage() {
     setError('');
     setIsSaving(true);
     try {
-      const response = await gamesApi.updateClock(gameId, command);
+      const response = await enqueueGameMutation(() => gamesApi.updateClock(gameId, command));
       updateData(response);
       // Pause and Start carry the video with them, but only footage the clock itself paused.
       // Both run after the clock write lands, so the video's own pause/play event finds the clock
@@ -3128,7 +3186,9 @@ export function GameTrackPage() {
       await inflightRef.current.catch(() => {});
       await entryClockTransitionRef.current.catch(() => {});
       if (liveClockStatusRef.current === 'running') {
-        const response = await gamesApi.updateClock(gameId, { action: 'pause' });
+        const response = await enqueueGameMutation(() =>
+          gamesApi.updateClock(gameId, { action: 'pause' })
+        );
         updateData(response);
       }
       if (kind === 'navigator') setShowScrimmageNavigator(true);
@@ -3154,7 +3214,7 @@ export function GameTrackPage() {
     if (!pendingExitDestination || isSaving) return;
     setIsSaving(true);
     try {
-      await gamesApi.updateClock(gameId, { action: 'pause' });
+      await enqueueGameMutation(() => gamesApi.updateClock(gameId, { action: 'pause' }));
       navigate(pendingExitDestination);
       setPendingExitDestination('');
     } catch (clockError) {
@@ -3209,6 +3269,23 @@ export function GameTrackPage() {
   }, [isEventPickerOpen]);
 
   if (!data || !game || !boxScore) {
+    if (error) {
+      return (
+        <main className="mx-auto max-w-lg space-y-4 px-4 py-12">
+          <h1 className="text-lg font-semibold text-slate-900">Unable to load tracking session</h1>
+          <p role="alert" className="text-sm text-red-700">
+            {error}
+          </p>
+          <button
+            type="button"
+            onClick={loadGame}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+          >
+            Retry
+          </button>
+        </main>
+      );
+    }
     return <SportsLoader label="Loading tracking session" fullPage />;
   }
 
@@ -3488,6 +3565,7 @@ export function GameTrackPage() {
                               key={player.id}
                               type="button"
                               aria-label={player.displayName}
+                              disabled={isSaving}
                               className={playerButtonClass(false)}
                               onClick={() => handleFollowUpSelection(player.id)}
                             >
@@ -3514,6 +3592,7 @@ export function GameTrackPage() {
                         key={player.id}
                         type="button"
                         aria-label={player.displayName}
+                        disabled={isSaving}
                         className={playerButtonClass(
                           currentSideState.selectedPlayerId === player.id
                         )}
@@ -4047,7 +4126,7 @@ export function GameTrackPage() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActivePanel(tab.id)}
+                    onClick={() => changeActivePanel(tab.id)}
                     disabled={voiceBusy}
                     aria-label={tab.label}
                     aria-pressed={activePanel === tab.id}
@@ -4173,10 +4252,7 @@ export function GameTrackPage() {
                             </p>
                             <button
                               type="button"
-                              onClick={() => {
-                                setInsertBeforeEventId('');
-                                setActivePanel('events');
-                              }}
+                              onClick={cancelInsertion}
                               className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
                             >
                               Cancel
@@ -4207,10 +4283,7 @@ export function GameTrackPage() {
                           </p>
                           <button
                             type="button"
-                            onClick={() => {
-                              setInsertBeforeEventId('');
-                              setActivePanel('events');
-                            }}
+                            onClick={cancelInsertion}
                             className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
                           >
                             Cancel
@@ -5368,7 +5441,11 @@ export function GameTrackPage() {
               <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
                 <button
                   type="button"
-                  onClick={() => setShowClockRecovery(false)}
+                  onClick={() => {
+                    // Later entry pauses/resumes belong to this acknowledged session.
+                    clockOperatedThisMountRef.current = true;
+                    setShowClockRecovery(false);
+                  }}
                   className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
                 >
                   Accept elapsed time

@@ -2536,6 +2536,77 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
   return getGameForUser(userId, gameId, { includeVideoUpload: false });
 }
 
+// Validate both players before mutating, then persist both events with one
+// version-checked document save. A rejected sub-in must never commit a sub-out.
+async function substituteForUser(userId, gameId, payload) {
+  const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  if (game.gameContext === 'scrimmage') {
+    throw new ApiError(400, 'Scrimmages do not track substitutions');
+  }
+  if (game.status !== 'completed' && game.clock?.status === CLOCK_STATUSES.READY) {
+    throw new ApiError(400, 'Start the game clock before recording an event');
+  }
+  if (!validateSnapshot(game.gameFormat, payload)) {
+    throw new ApiError(400, 'Event period and clock time are invalid for this game');
+  }
+  const context = await resolveGameTeamContext(userId, game);
+  const dual = game.trackingMode === 'dual_team';
+  if (dual && ![TEAM_SIDES.HOME, TEAM_SIDES.AWAY].includes(payload.teamSide)) {
+    throw new ApiError(400, 'teamSide is required for dual-team events');
+  }
+  requireBothLineups(game);
+  const teamDoc = dual
+    ? getTeamDocForSide(game, context.participants, payload.teamSide, null)
+    : context.teamDoc;
+  for (const playerId of [payload.playerOutId, payload.playerInId]) {
+    const player = findTeamPlayerById(teamDoc, playerId);
+    if (!player || !player.isActive) {
+      throw new ApiError(400, 'Player is not active on this team');
+    }
+  }
+  const currentField = dual
+    ? getDualLineupFieldName(payload.teamSide, 'current')
+    : 'currentLineupPlayerIds';
+  const lineupIds = (game[currentField] || []).map(String);
+  if (!lineupIds.includes(payload.playerOutId)) {
+    throw new ApiError(400, 'Outgoing player is not currently on the court');
+  }
+  if (lineupIds.includes(payload.playerInId)) {
+    throw new ApiError(400, 'Incoming player is already on the court');
+  }
+  const commonFields = {
+    ...(dual ? { teamSide: payload.teamSide, relatedTeamSide: payload.teamSide } : {}),
+    ...buildEventVideoFields(game, payload.videoTimestamp),
+    segmentKind: payload.segmentKind,
+    segmentNumber: payload.segmentNumber,
+    clockMillisecondsRemaining: payload.clockMillisecondsRemaining,
+    occurredAt: new Date(),
+  };
+  game.events.push(
+    {
+      ...commonFields,
+      statType: STAT_TYPES.SUB_OUT,
+      playerId: payload.playerOutId,
+      relatedPlayerId: payload.playerInId,
+    },
+    {
+      ...commonFields,
+      statType: STAT_TYPES.SUB_IN,
+      playerId: payload.playerInId,
+      relatedPlayerId: payload.playerOutId,
+    }
+  );
+  recalculateCurrentLineup(game);
+  clearAiSummaryAfterCompletedLeagueEdit(game);
+  syncGameDenormalizedAfterEventChange(game);
+  await saveGameEventMutation(game);
+  if (game.status === 'completed') {
+    scheduleLeagueRecomputeForGame(game);
+    await refreezeGameBoxScoreIfCompleted(userId, game);
+  }
+  return buildSlimGameEventDelta(userId, game, context);
+}
+
 async function setGameLineup(userId, gameId, payloadOrPlayerIds) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (!['scheduled', 'in_progress'].includes(game.status)) {
@@ -2935,6 +3006,7 @@ module.exports = {
   appendEventForUser,
   updateEventForUser,
   setGameLineup,
+  substituteForUser,
   removeEventForUser,
   deleteGameForUser,
   finishGameForUser,

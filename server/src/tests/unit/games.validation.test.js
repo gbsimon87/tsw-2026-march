@@ -3,6 +3,7 @@ const {
   appendEventSchema,
   updateEventSchema,
   clockCommandSchema,
+  substitutionSchema,
 } = require('../../modules/games/games.validation');
 
 const GAME_FORMAT = {
@@ -17,6 +18,21 @@ const CLOCK_SNAPSHOT = {
 };
 
 describe('games validation', () => {
+  test('validates a substitution pair and its captured time', () => {
+    const payload = {
+      ...CLOCK_SNAPSHOT,
+      playerOutId: 'out',
+      playerInId: 'in',
+      teamSide: 'home',
+      videoTimestamp: 42,
+    };
+    expect(substitutionSchema.parse(payload)).toEqual(payload);
+    expect(substitutionSchema.safeParse({ ...payload, playerInId: 'out' }).success).toBe(false);
+    expect(substitutionSchema.safeParse({ ...payload, playerInId: undefined }).success).toBe(false);
+    expect(substitutionSchema.safeParse({ ...payload, segmentNumber: undefined }).success).toBe(
+      false
+    );
+  });
   test('accepts the manual finish-period clock command', () => {
     expect(clockCommandSchema.parse({ action: 'finish_segment' })).toEqual({
       action: 'finish_segment',

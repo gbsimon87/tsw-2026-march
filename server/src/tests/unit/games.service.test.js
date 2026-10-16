@@ -151,6 +151,7 @@ const {
   getPublicGame,
   deleteGameForUser,
   setGameLineup,
+  substituteForUser,
   updateClockForUser,
   computeGameFinalScore,
   buildGameMarketing,
@@ -1758,6 +1759,125 @@ describe('games service event mutation contract (OPT-015)', () => {
       ...overrides,
     });
   }
+
+  describe('atomic substitutions', () => {
+    function setupSubstitution({ mode = 'dual_team', side = 'home', incomingActive = true } = {}) {
+      const game = buildSlimTestGame();
+      const snapshotField = `${side}RosterSnapshot`;
+      game[snapshotField].push(buildLeagueSnapshotPlayer('bench-1', 'Bench Player'));
+      game[snapshotField].at(-1).isActive = incomingActive;
+      game.homeStartingLineupPlayerIds = [...game.homeCurrentLineupPlayerIds];
+      game.awayStartingLineupPlayerIds = [...game.awayCurrentLineupPlayerIds];
+      if (mode === 'one_sided') {
+        game.trackingMode = mode;
+        game.gameContext = 'standalone';
+        game.teamId = 'team-1';
+        game.startingLineupPlayerIds = [...game.homeCurrentLineupPlayerIds];
+        game.currentLineupPlayerIds = [...game.startingLineupPlayerIds];
+        findTeamByIdAndOwner.mockResolvedValue({
+          _id: 'team-1',
+          name: 'Home',
+          players: buildPlayers(game.homeRosterSnapshot),
+        });
+      }
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      return {
+        game,
+        payload: {
+          ...EVENT_CLOCK,
+          playerOutId: `${side}-snap-1`,
+          playerInId: 'bench-1',
+          ...(mode === 'dual_team' ? { teamSide: side } : {}),
+          videoTimestamp: 42,
+        },
+      };
+    }
+
+    test.each([
+      ['dual_team', 'home'],
+      ['dual_team', 'away'],
+      ['one_sided', 'home'],
+    ])(
+      'saves both events together and updates only the selected lineup (%s %s)',
+      async (mode, side) => {
+        const { game, payload } = setupSubstitution({ mode, side });
+        saveGame.mockImplementation(async (doc) => {
+          expect(doc.events).toHaveLength(2);
+          expect(doc.events.map((event) => event.statType)).toEqual(['SUB_OUT', 'SUB_IN']);
+          return doc;
+        });
+        const result = await substituteForUser('user-1', 'game-1', payload);
+        expect(saveGame).toHaveBeenCalledTimes(1);
+        expect(game.events[0]).toMatchObject({
+          ...EVENT_CLOCK,
+          playerId: payload.playerOutId,
+          relatedPlayerId: 'bench-1',
+          videoTimestamp: 42,
+        });
+        expect(game.events[1]).toMatchObject({
+          ...EVENT_CLOCK,
+          playerId: 'bench-1',
+          relatedPlayerId: payload.playerOutId,
+          videoTimestamp: 42,
+        });
+        const ids =
+          mode === 'dual_team'
+            ? result.lineups[side].currentPlayerIds
+            : result.game.currentLineupPlayerIds;
+        expect(ids).not.toContain(payload.playerOutId);
+        expect(ids).toContain('bench-1');
+        expect(ids).toHaveLength(5);
+        if (mode === 'dual_team')
+          expect(result.lineups[side === 'home' ? 'away' : 'home'].currentPlayerIds).toHaveLength(
+            5
+          );
+      }
+    );
+
+    test.each(['dual_team', 'one_sided'])(
+      'rejects an inactive incoming player before removing anyone (%s)',
+      async (mode) => {
+        const { game, payload } = setupSubstitution({ mode, incomingActive: false });
+        await expect(substituteForUser('user-1', 'game-1', payload)).rejects.toMatchObject({
+          statusCode: 400,
+        });
+        expect(saveGame).not.toHaveBeenCalled();
+        expect(game.events).toEqual([]);
+        expect(
+          mode === 'dual_team' ? game.homeCurrentLineupPlayerIds : game.currentLineupPlayerIds
+        ).toContain(payload.playerOutId);
+      }
+    );
+
+    test.each(['outgoing', 'incoming', 'side', 'clock', 'ready'])(
+      'rejects invalid %s without saving either event',
+      async (invalid) => {
+        const { game, payload } = setupSubstitution();
+        if (invalid === 'outgoing') payload.playerOutId = 'bench-1';
+        if (invalid === 'incoming') payload.playerInId = 'home-snap-2';
+        if (invalid === 'side') payload.teamSide = undefined;
+        if (invalid === 'clock') payload.clockMillisecondsRemaining = 99999999;
+        if (invalid === 'ready') game.clock = { status: 'ready' };
+        await expect(substituteForUser('user-1', 'game-1', payload)).rejects.toMatchObject({
+          statusCode: 400,
+        });
+        expect(saveGame).not.toHaveBeenCalled();
+        expect(game.events).toEqual([]);
+      }
+    );
+
+    test('does not replay a substitution after a version conflict', async () => {
+      const { payload } = setupSubstitution();
+      saveGame.mockRejectedValue(
+        Object.assign(new Error('Stale version'), { name: 'VersionError' })
+      );
+      await expect(substituteForUser('user-1', 'game-1', payload)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+      expect(saveGame).toHaveBeenCalledTimes(1);
+    });
+  });
 
   test('appendEventForUser returns the slim delta shape, not the full game-detail response', async () => {
     const game = buildSlimTestGame();
