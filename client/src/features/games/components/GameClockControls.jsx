@@ -53,12 +53,16 @@ export function GameClockControls({
   }[clock.status];
   const ClockActions = compact ? 'details' : 'div';
 
+  // An already-open correction or confirmation must not outlive the lock
+  // (e.g. a desktop entry opening or a save starting after it was opened).
   function finishSegment() {
     setShowFinishConfirm(false);
+    if (disabled) return;
     onCommand({ action: 'finish_segment' });
   }
 
   function saveCorrection() {
+    if (disabled) return;
     const remainingMilliseconds = (Number(minutes || 0) * 60 + Number(seconds || 0)) * 1000;
     onCommand({
       action: 'correct',
@@ -192,6 +196,7 @@ export function GameClockControls({
             aria-label="Clock minutes"
             type="number"
             min="0"
+            disabled={disabled}
             value={minutes}
             onChange={(event) => setMinutes(event.target.value)}
             className="h-9 w-14 rounded-md border border-slate-500 bg-white px-2 text-center font-mono text-sm font-bold text-slate-900"
@@ -203,14 +208,16 @@ export function GameClockControls({
             min="0"
             max="59.9"
             step="0.1"
+            disabled={disabled}
             value={seconds}
             onChange={(event) => setSeconds(event.target.value)}
             className="h-9 w-16 rounded-md border border-slate-500 bg-white px-2 text-center font-mono text-sm font-bold text-slate-900"
           />
           <button
             type="button"
+            disabled={disabled}
             onClick={saveCorrection}
-            className="h-9 rounded-md bg-[#1B4332] px-3 text-xs font-black text-white transition-colors hover:bg-[#245c44]"
+            className="h-9 rounded-md bg-[#1B4332] px-3 text-xs font-black text-white transition-colors hover:bg-[#245c44] disabled:opacity-50"
           >
             Save
           </button>
@@ -242,8 +249,9 @@ export function GameClockControls({
           </button>
           <button
             type="button"
+            disabled={disabled}
             onClick={finishSegment}
-            className="flex-1 rounded-xl bg-[#B42318] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#912013]"
+            className="flex-1 rounded-xl bg-[#B42318] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#912013] disabled:opacity-50"
           >
             Finish period
           </button>

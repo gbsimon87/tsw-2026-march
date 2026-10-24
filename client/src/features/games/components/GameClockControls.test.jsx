@@ -45,6 +45,30 @@ describe('GameClockControls manual period finish', () => {
     expect(onCommand).toHaveBeenCalledWith({ action: 'finish_segment' });
   });
 
+  test('an already-open correction cannot submit after controls become disabled', () => {
+    const onCommand = vi.fn();
+    const props = { game: game(), onCommand };
+    const { rerender } = render(<GameClockControls {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Correct', exact: true }));
+    rerender(<GameClockControls {...props} disabled />);
+    expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    expect(screen.getByRole('spinbutton', { name: 'Clock minutes' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  test('an already-open period confirmation cannot submit after controls become disabled', () => {
+    const onCommand = vi.fn();
+    const props = { game: game(), onCommand };
+    const { rerender } = render(<GameClockControls {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish quarter' }));
+    rerender(<GameClockControls {...props} disabled />);
+    const confirm = screen.getByRole('button', { name: 'Finish period' });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   test('labels overtime correctly and honors cancellation', async () => {
     const onCommand = vi.fn();
     render(

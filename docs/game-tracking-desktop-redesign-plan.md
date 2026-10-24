@@ -8,6 +8,12 @@ It records decisions for a coding model to follow without needing the conversati
 The user approved implementation after this plan was written. The desktop redesign
 is now implemented; verification and remaining integration checks are recorded below.
 
+## Desktop video and scoreboard columns
+
+When the desktop league workspace has a playable video, put `GameTrackScoreHeader` directly above the video in the left grid column. The tracking sidebar spans the full available workspace height and begins level with the scoreboard. Keep the existing grid column widths and place the header/video in a `min-height: 0` flex column, with a nonshrinking header and flexible video region. Do not clip the score header’s overflow: Clock actions must open visibly above the video. Preserve the mounted video while switching tracking tabs. No-video, mobile, scrimmage, and explicit fullscreen layouts retain their prior score-header placement.
+
+Verified with the real tracking component and local video fixture in Chrome at 1024, 1280, 1440, and 1920px widths: no horizontal/header overflow, matching header/video column widths, sidebar aligned with the scoreboard, visible clock actions, no video remount on tab change, and no page errors. The 768px mobile video-first route remains available.
+
 ## Foul types and statistics
 
 Implemented across the tracking and public statistics surfaces:

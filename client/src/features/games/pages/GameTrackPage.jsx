@@ -1537,6 +1537,19 @@ export function GameTrackPage() {
   }
 
   function captureEntrySnapshot() {
+    // Insert mode outlives a cancelled or failed entry, which clears the ref; the next entry
+    // must re-derive the target's historical time rather than fall back to the live clock.
+    const insertTarget =
+      !entryClockSnapshotRef.current && insertBeforeEventId
+        ? data?.game?.events?.find((event) => event.id === insertBeforeEventId)
+        : null;
+    if (insertTarget) {
+      entryClockSnapshotRef.current = {
+        segmentKind: insertTarget.segmentKind,
+        segmentNumber: insertTarget.segmentNumber,
+        clockMillisecondsRemaining: insertTarget.clockMillisecondsRemaining,
+      };
+    }
     if (!entryClockSnapshotRef.current && data?.game?.clock) {
       entryClockSnapshotRef.current = clockSnapshot(
         data.game,
@@ -2442,6 +2455,7 @@ export function GameTrackPage() {
   }
 
   function openEditEvent(event) {
+    if (isSaving) return;
     setEditingEvent({
       id: event.id,
       playerId: event.playerId || '',
@@ -4388,8 +4402,9 @@ export function GameTrackPage() {
             ) : null}
             <button
               type="button"
+              disabled={isSaving}
               onClick={() => undoLastEvent()}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800 disabled:opacity-50"
             >
               Undo Last
             </button>
@@ -4477,8 +4492,9 @@ export function GameTrackPage() {
                     <button
                       type="button"
                       aria-label="Edit this event"
+                      disabled={isSaving}
                       onClick={() => openEditEvent(event)}
-                      className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50"
+                      className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       <svg
                         viewBox="0 0 16 16"
@@ -4493,6 +4509,7 @@ export function GameTrackPage() {
                     <button
                       type="button"
                       aria-label="Insert stat before this event"
+                      disabled={isSaving}
                       onClick={() => {
                         setInsertBeforeEventId(event.id);
                         entryClockSnapshotRef.current = {
@@ -4502,7 +4519,7 @@ export function GameTrackPage() {
                         };
                         setActivePanel('court');
                       }}
-                      className="rounded-md p-1.5 text-[#1B4332] transition-colors hover:bg-[#1B4332]/10"
+                      className="rounded-md p-1.5 text-[#1B4332] transition-colors hover:bg-[#1B4332]/10 disabled:opacity-50"
                     >
                       <svg
                         viewBox="0 0 16 16"
@@ -4518,8 +4535,9 @@ export function GameTrackPage() {
                     <button
                       type="button"
                       aria-label="Remove this event"
+                      disabled={isSaving}
                       onClick={() => removeEvent(event.id)}
-                      className="rounded-md p-1.5 text-[#B42318] transition-colors hover:bg-[#B42318]/10"
+                      className="rounded-md p-1.5 text-[#B42318] transition-colors hover:bg-[#B42318]/10 disabled:opacity-50"
                     >
                       <svg
                         viewBox="0 0 16 16"
@@ -5181,7 +5199,7 @@ export function GameTrackPage() {
         <ol className="mt-3 space-y-3">
           {[
             'Turn on Voice Tracking in Options.',
-            'Name anyone on the roster. If they are on the bench — or not on the team yet — you are asked to bring them on before the stat is recorded.',
+            'Name anyone on the roster. If they are on the bench, or not on the team yet, you are asked to bring them on before the stat is recorded.',
             'Open Court and tap where the event happened. That tap starts the microphone.',
             'Say one player and one action. Nothing is recorded unless both are unambiguous.',
             'Answer any follow-up question using the microphone beside it.',
@@ -5407,6 +5425,8 @@ export function GameTrackPage() {
         onClickCapture={(event) => {
           if (desktopOpeningPointerRef.current) {
             desktopOpeningPointerRef.current = false;
+            // Keyboard activation (detail 0) can never be the opening tap's ghost click.
+            if (event.detail === 0) return;
             event.preventDefault();
             event.stopPropagation();
           }
@@ -5543,6 +5563,44 @@ export function GameTrackPage() {
     </DesktopGameTrackingWorkspace>
   );
 
+  const desktopVideoWorkspace = useDesktopLeagueWorkspace && hasPlayableVideo(game);
+  const scoreHeader = (
+    <GameTrackScoreHeader
+      compact={useDesktopLeagueWorkspace}
+      teamSelectionDisabled={useDesktopLeagueWorkspace && desktopNavigationLocked}
+      gameSummary={gameSummary}
+      activeSide={activeSide}
+      onChangeActiveSide={changeActiveSide}
+      isDualTeam={isDualTeam}
+      participantsBySide={participantsBySide}
+      team={team}
+      clockControls={
+        <GameClockControls
+          compact={useDesktopLeagueWorkspace}
+          game={game}
+          onCommand={runClockCommand}
+          disabled={
+            isSaving || !allStartingLineupsReady || (useDesktopLeagueWorkspace && desktopEntryOpen)
+          }
+          disabledReason={
+            allStartingLineupsReady ? '' : 'Save a starting five below to start the clock.'
+          }
+          serverOffsetMilliseconds={serverOffsetMilliseconds}
+        />
+      }
+    />
+  );
+  const desktopVideo = (
+    <GameVideoPanel
+      game={{ ...game, playbackStartTimestamp: resumeVideoPosition ?? game.videoStartTimestamp }}
+      title={game.title}
+      videoIframeRef={videoIframeRef}
+      muxRef={muxRef}
+      onMuxPlay={onMuxPlay}
+      onMuxPause={onMuxPause}
+    />
+  );
+
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
       {isScrimmage && (
@@ -5674,32 +5732,7 @@ export function GameTrackPage() {
         </div>
       ) : null}
 
-      <GameTrackScoreHeader
-        compact={useDesktopLeagueWorkspace}
-        teamSelectionDisabled={useDesktopLeagueWorkspace && desktopNavigationLocked}
-        gameSummary={gameSummary}
-        activeSide={activeSide}
-        onChangeActiveSide={changeActiveSide}
-        isDualTeam={isDualTeam}
-        participantsBySide={participantsBySide}
-        team={team}
-        clockControls={
-          <GameClockControls
-            compact={useDesktopLeagueWorkspace}
-            game={game}
-            onCommand={runClockCommand}
-            disabled={
-              isSaving ||
-              !allStartingLineupsReady ||
-              (useDesktopLeagueWorkspace && desktopEntryOpen)
-            }
-            disabledReason={
-              allStartingLineupsReady ? '' : 'Save a starting five below to start the clock.'
-            }
-            serverOffsetMilliseconds={serverOffsetMilliseconds}
-          />
-        }
-      />
+      {!desktopVideoWorkspace && scoreHeader}
 
       {createPortal(
         <GameVideoUploader
@@ -5715,23 +5748,26 @@ export function GameTrackPage() {
       <div className={trackingShellClassName}>
         {hasPlayableVideo(game) && isDesktopLayout ? (
           <div
+            role={desktopVideoWorkspace ? 'region' : undefined}
+            aria-label={desktopVideoWorkspace ? 'Game video and score' : undefined}
             className={
               useDesktopLeagueWorkspace
-                ? 'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl bg-slate-950'
+                ? 'flex min-h-0 min-w-0 flex-col gap-3'
                 : 'lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col'
             }
           >
-            <GameVideoPanel
-              game={{
-                ...game,
-                playbackStartTimestamp: resumeVideoPosition ?? game.videoStartTimestamp,
-              }}
-              title={game.title}
-              videoIframeRef={videoIframeRef}
-              muxRef={muxRef}
-              onMuxPlay={onMuxPlay}
-              onMuxPause={onMuxPause}
-            />
+            {desktopVideoWorkspace ? (
+              <>
+                <div className="relative z-20 shrink-0 rounded-xl border border-slate-200 [&>div]:rounded-xl [&>div>button:first-child]:rounded-l-xl [&>div>button:nth-child(2)]:rounded-r-xl">
+                  {scoreHeader}
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-slate-950">
+                  {desktopVideo}
+                </div>
+              </>
+            ) : (
+              desktopVideo
+            )}
           </div>
         ) : null}
 

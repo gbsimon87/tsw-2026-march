@@ -2095,6 +2095,52 @@ describe('games service event mutation contract (OPT-015)', () => {
     expect(result).not.toHaveProperty('team');
   });
 
+  test.each([{ playerId: 'not-in-this-game' }, { teamSide: 'away' }, { statType: 'OPP_REB' }])(
+    'rejects an event edit that violates team/player attribution: %j',
+    async (patch) => {
+      const original = {
+        _id: 'evt-1',
+        playerId: 'home-snap-1',
+        teamSide: 'home',
+        statType: 'FOUL',
+        ...EVENT_CLOCK,
+      };
+      const game = buildSlimTestGame({ events: buildEvents([original]) });
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      await expect(updateEventForUser('user-1', 'game-1', 'evt-1', patch)).rejects.toMatchObject({
+        statusCode: 400,
+      });
+      expect(saveGame).not.toHaveBeenCalled();
+      expect(game.events[0]).toMatchObject(original);
+    }
+  );
+
+  test('historical edits can still credit a valid roster player who is currently on the bench', async () => {
+    const game = buildSlimTestGame({
+      homeCurrentLineupPlayerIds: ['home-snap-2'],
+      events: buildEvents([
+        {
+          _id: 'evt-1',
+          playerId: 'home-snap-1',
+          teamSide: 'home',
+          statType: 'FOUL',
+          ...EVENT_CLOCK,
+        },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    const result = await updateEventForUser('user-1', 'game-1', 'evt-1', {
+      statType: 'TECHNICAL_FOUL',
+    });
+    expect(result.boxScore.home.totals).toMatchObject({
+      foul: 1,
+      personalFoul: 0,
+      technicalFoul: 1,
+    });
+  });
+
   test('updateEventForUser returns the slim delta shape', async () => {
     const game = buildSlimTestGame({
       events: buildEvents([

@@ -5154,6 +5154,65 @@ describe('GameTrackPage', () => {
       });
     });
 
+    test('places the desktop score header with the video, outside the tracking sidebar', async () => {
+      await openDesktopGame();
+      const media = screen.getByRole('region', { name: 'Game video and score' });
+      expect(within(media).getByTestId('game-track-score-header')).toBeInTheDocument();
+      expect(within(media).getByTestId('tracker-mux')).toBeInTheDocument();
+      expect(screen.getAllByTestId('game-track-score-header')).toHaveLength(1);
+      expect(
+        within(
+          screen.getByRole('complementary', { name: 'League tracking workspace' })
+        ).queryByTestId('game-track-score-header')
+      ).not.toBeInTheDocument();
+      const video = within(media).getByTestId('tracker-mux');
+      desktopClick(screen.getByRole('button', { name: 'Subs', exact: true }));
+      expect(within(media).getByTestId('tracker-mux')).toBe(video);
+    });
+
+    test('keyboard action after a court tap is not discarded as a ghost pointer click', async () => {
+      await openDesktopGame();
+      tapCourtAt(425, 470);
+      fireEvent.click(screen.getByRole('button', { name: /^Made/ }), { detail: 0 });
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    });
+
+    test('Events actions stay locked while a deletion is pending', async () => {
+      await openDesktopGame({
+        events: [
+          {
+            id: 'old',
+            playerId: 'player-1',
+            teamSide: 'home',
+            statType: 'FOUL',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            clockMillisecondsRemaining: 400000,
+          },
+        ],
+      });
+      desktopClick(screen.getByRole('button', { name: 'Events', exact: true }));
+      const original = apiMocks.removeEvent.getMockImplementation();
+      let release;
+      const pending = new Promise((resolve) => {
+        release = resolve;
+      });
+      apiMocks.removeEvent.mockImplementationOnce(async (...args) => {
+        await pending;
+        return original(...args);
+      });
+      desktopClick(screen.getByRole('button', { name: 'Remove this event', exact: true }));
+      expect(screen.getByRole('button', { name: 'Edit this event' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Insert stat before this event' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Undo Last' })).toBeDisabled();
+      desktopClick(screen.getByRole('button', { name: 'Edit this event' }));
+      expect(screen.queryByRole('region', { name: 'Edit event' })).not.toBeInTheDocument();
+      release();
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Remove this event' })).not.toBeInTheDocument()
+      );
+    });
+
     test('navigation and inline editing keep the video element mounted', async () => {
       await openDesktopGame();
       const video = screen.getByTestId('tracker-mux');
@@ -5190,6 +5249,31 @@ describe('GameTrackPage', () => {
         'old',
         expect.objectContaining({ statType: 'FT_MADE', clockMillisecondsRemaining: 400000 }),
       ]);
+    });
+
+    test('a cancelled entry during insertion keeps the target clock for the next entry', async () => {
+      await openDesktopGame({
+        events: [
+          {
+            id: 'old',
+            playerId: 'player-1',
+            teamSide: 'home',
+            statType: 'FOUL',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            clockMillisecondsRemaining: 400000,
+          },
+        ],
+      });
+      desktopClick(screen.getByRole('button', { name: /^Insert before: Home Squad/ }));
+      desktopClick(screen.getByRole('button', { name: 'Free throw made', exact: true }));
+      desktopClick(screen.getByRole('button', { name: 'Cancel', exact: true }));
+      expect(screen.getByText(/Insert before selected event/)).toBeInTheDocument();
+      answerQuick('Free throw made');
+      await waitFor(() => expect(apiMocks.insertEventBefore).toHaveBeenCalledTimes(1));
+      expect(apiMocks.insertEventBefore.mock.calls[0][2]).toMatchObject({
+        clockMillisecondsRemaining: 400000,
+      });
     });
 
     test.each([true, false])(

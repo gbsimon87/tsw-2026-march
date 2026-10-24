@@ -2837,6 +2837,47 @@ async function removeEventForUser(userId, gameId, eventId) {
   return buildSlimGameEventDelta(userId, game, context);
 }
 
+// Validate the edited event as a whole before mutating it: the player must be
+// on the roster of the (possibly changed) team side, and an edit must not turn
+// an event into a different kind (player/opponent/substitution) whose
+// attribution or lineup bookkeeping it cannot carry. Bench players stay valid
+// so historical events can still be corrected after a substitution.
+async function assertEventEditAttribution(userId, game, event, patch) {
+  const next = {
+    playerId: patch.playerId !== undefined ? patch.playerId : event.playerId,
+    teamSide: patch.teamSide !== undefined ? patch.teamSide : event.teamSide,
+    statType: patch.statType !== undefined ? patch.statType : event.statType,
+  };
+  const isSubstitution = (statType) =>
+    statType === STAT_TYPES.SUB_IN || statType === STAT_TYPES.SUB_OUT;
+  if (isSubstitution(event.statType) || isSubstitution(next.statType)) {
+    if (
+      next.statType !== event.statType ||
+      String(next.playerId || '') !== String(event.playerId || '') ||
+      (next.teamSide || null) !== (event.teamSide || null)
+    ) {
+      throw new ApiError(400, 'Substitution players and type cannot be edited');
+    }
+    return;
+  }
+  if (isOpponentEvent(next.statType) !== isOpponentEvent(event.statType)) {
+    throw new ApiError(400, 'Cannot change between player and opponent events');
+  }
+  const context = await resolveGameTeamContext(userId, game);
+  let teamDoc = context.teamDoc;
+  if (game.trackingMode === 'dual_team') {
+    if (![TEAM_SIDES.HOME, TEAM_SIDES.AWAY].includes(next.teamSide)) {
+      throw new ApiError(400, 'teamSide is required for dual-team events');
+    }
+    teamDoc = getTeamDocForSide(game, context.participants, next.teamSide, null);
+  } else if (patch.teamSide !== undefined) {
+    throw new ApiError(400, 'teamSide is only valid for dual-team games');
+  }
+  if (next.playerId && !findTeamPlayerById(teamDoc, next.playerId)) {
+    throw new ApiError(400, 'Player is not on this team');
+  }
+}
+
 async function updateEventForUser(userId, gameId, eventId, patch) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
   if (
@@ -2854,6 +2895,7 @@ async function updateEventForUser(userId, gameId, eventId, patch) {
   if (!event) {
     throw new ApiError(404, 'Event not found');
   }
+  await assertEventEditAttribution(userId, game, event, patch);
   if (patch.playerId !== undefined) event.playerId = patch.playerId;
   if (patch.teamSide !== undefined) event.teamSide = patch.teamSide;
   if (patch.statType !== undefined) event.statType = patch.statType;
