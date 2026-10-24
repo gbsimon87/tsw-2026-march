@@ -28,7 +28,10 @@ const STAT_TYPES = {
   STL: 'STL',
   BLK: 'BLK',
   TOV: 'TOV',
-  FOUL: 'FOUL',
+  FOUL: 'FOUL', // Legacy fouls are personal fouls.
+  TECHNICAL_FOUL: 'TECHNICAL_FOUL',
+  FLAGRANT_FOUL: 'FLAGRANT_FOUL',
+  FOUL_DRAWN: 'FOUL_DRAWN',
   SUB_IN: 'SUB_IN',
   SUB_OUT: 'SUB_OUT',
 };

@@ -1,3 +1,4 @@
+import { FOUL_STAT_COLUMNS } from '../foulStats';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -470,6 +471,7 @@ export function GameDetailPage() {
     { id: 'blk', label: 'BLK', align: 'right', sortKey: 'blk', render: (row) => row.blk || 0 },
     { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov || 0 },
     { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul || 0 },
+    ...FOUL_STAT_COLUMNS,
     {
       id: 'ft',
       label: 'FT',

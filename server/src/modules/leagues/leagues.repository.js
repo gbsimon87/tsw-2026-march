@@ -383,6 +383,10 @@ const leaguePlayerStatsSchema = new mongoose.Schema(
     blk: { type: Number, default: 0 },
     tov: { type: Number, default: 0 },
     foul: { type: Number, default: 0 },
+    personalFoul: { type: Number, default: 0 },
+    technicalFoul: { type: Number, default: 0 },
+    flagrantFoul: { type: Number, default: 0 },
+    foulDrawn: { type: Number, default: 0 },
     points: { type: Number, default: 0 },
   },
   { timestamps: true }

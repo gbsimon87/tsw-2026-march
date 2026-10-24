@@ -5,6 +5,7 @@ const {
   summarizeEvents,
   createEmptyPlayerStatLine,
   applyEventToPlayerStatLine,
+  summarizeEventsBySide,
 } = require('../../modules/shared/statSummary');
 const { STAT_TYPES } = require('../../modules/shared/stats.constants');
 
@@ -61,6 +62,10 @@ describe('createEmptyPlayerStatLine / applyEventToPlayerStatLine (OPT-006)', () 
       blk: 0,
       tov: 0,
       foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
       reb: 0,
       points: 0,
     });
@@ -78,6 +83,19 @@ describe('createEmptyPlayerStatLine / applyEventToPlayerStatLine (OPT-006)', () 
       playerId: 'p2',
       leaguePlayerId: null,
     });
+  });
+
+  test('credits a foul drawn separately from personal fouls and points', () => {
+    const line = createEmptyPlayerStatLine('p1', 'Alex');
+    applyEventToPlayerStatLine(line, STAT_TYPES.FOUL_DRAWN);
+    expect(line).toMatchObject({ foulDrawn: 1, foul: 0, points: 0 });
+
+    const summaries = summarizeEventsBySide([
+      { teamSide: 'home', statType: STAT_TYPES.FOUL },
+      { teamSide: 'away', statType: STAT_TYPES.FOUL_DRAWN },
+    ]);
+    expect(summaries.home).toMatchObject({ foul: 1, foulDrawn: 0, points: 0 });
+    expect(summaries.away).toMatchObject({ foul: 0, foulDrawn: 1, points: 0 });
   });
 
   test('accumulates makes, misses, points, rebounds and other stats', () => {
@@ -114,6 +132,45 @@ describe('createEmptyPlayerStatLine / applyEventToPlayerStatLine (OPT-006)', () 
       tov: 1,
       foul: 1,
       points: 6,
+    });
+  });
+});
+
+describe('foul classifications', () => {
+  test('totals each foul once, separates drawn fouls, and leaves points unchanged', () => {
+    const types = [
+      STAT_TYPES.FOUL,
+      STAT_TYPES.TECHNICAL_FOUL,
+      STAT_TYPES.FLAGRANT_FOUL,
+      STAT_TYPES.FOUL_DRAWN,
+    ];
+    const line = createEmptyPlayerStatLine('p1', 'Alex');
+    types.forEach((type) => applyEventToPlayerStatLine(line, type));
+    expect(line).toMatchObject({
+      foul: 3,
+      personalFoul: 1,
+      technicalFoul: 1,
+      flagrantFoul: 1,
+      foulDrawn: 1,
+      points: 0,
+    });
+    const summary = summarizeEventsBySide(
+      types.map((statType) => ({ statType, teamSide: 'home' }))
+    );
+    expect(summary.home).toMatchObject({
+      foul: 3,
+      personalFoul: 1,
+      technicalFoul: 1,
+      flagrantFoul: 1,
+      foulDrawn: 1,
+      points: 0,
+    });
+    expect(summary.away).toMatchObject({
+      foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
     });
   });
 });

@@ -22,6 +22,15 @@ function game(clockOverrides = {}, formatOverrides = {}) {
 }
 
 describe('GameClockControls manual period finish', () => {
+  test('closes compact clock actions when opening correction', () => {
+    render(<GameClockControls game={game()} onCommand={vi.fn()} compact />);
+    const menu = screen.getByText('Clock actions').closest('details');
+    fireEvent.click(screen.getByText('Clock actions'));
+    menu.open = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Correct', exact: true }));
+    expect(menu).not.toHaveAttribute('open');
+  });
+
   test('confirms and finishes the current quarter', () => {
     const onCommand = vi.fn();
     render(<GameClockControls game={game()} onCommand={onCommand} />);

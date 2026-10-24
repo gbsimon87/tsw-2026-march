@@ -1,3 +1,4 @@
+import { FOUL_STAT_COLUMNS, FOUL_STAT_FIELDS } from '../../games/foulStats';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -199,6 +200,7 @@ export function PublicLeaguePlayerPage() {
     { id: 'blk', label: 'BLK', value: summary.blk },
     { id: 'tov', label: 'TOV', value: summary.tov },
     { id: 'foul', label: 'FOUL', value: summary.foul },
+    ...FOUL_STAT_FIELDS.map(({ id, label }) => ({ id, label, value: summary[id] || 0 })),
     { id: 'oreb', label: 'OREB', value: summary.oreb },
     { id: 'dreb', label: 'DREB', value: summary.dreb },
     { id: 'reb', label: 'REB', value: summary.reb },
@@ -270,6 +272,7 @@ export function PublicLeaguePlayerPage() {
     { id: 'blk', label: 'BLK', align: 'right', render: (row) => row.blk },
     { id: 'tov', label: 'TOV', align: 'right', render: (row) => row.tov },
     { id: 'foul', label: 'FOUL', align: 'right', render: (row) => row.foul },
+    ...FOUL_STAT_COLUMNS,
     { id: 'oreb', label: 'OREB', align: 'right', render: (row) => row.oreb },
     { id: 'dreb', label: 'DREB', align: 'right', render: (row) => row.dreb },
     { id: 'reb', label: 'REB', align: 'right', render: (row) => row.reb },

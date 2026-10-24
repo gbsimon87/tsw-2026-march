@@ -28,7 +28,10 @@ export const STAT_LABELS = {
   STL: 'Steal',
   BLK: 'Block',
   TOV: 'Turnover',
-  FOUL: 'Foul',
+  FOUL: 'Personal Foul',
+  TECHNICAL_FOUL: 'Technical Foul',
+  FLAGRANT_FOUL: 'Flagrant Foul',
+  FOUL_DRAWN: 'Foul Drawn',
   SUB_IN: 'Sub In',
   SUB_OUT: 'Sub Out',
 };

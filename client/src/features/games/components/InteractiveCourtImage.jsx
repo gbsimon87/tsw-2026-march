@@ -34,6 +34,7 @@ export function InteractiveCourtImage({
   rotate90 = false,
   topControls = null,
   flat = false,
+  disabled = false,
   // The image, its intrinsic box and its calibration must come from one
   // registry entry. Defaulting to legacy keeps pre-versioning callers correct.
   layout = resolveCourtLayout(undefined),
@@ -44,6 +45,7 @@ export function InteractiveCourtImage({
   const shouldRotate90 = rotate90 || isMobileLandscape;
 
   function onSelectPoint(event) {
+    if (disabled) return;
     if (event.pointerType === 'touch') {
       event.preventDefault();
     }
@@ -171,7 +173,10 @@ export function InteractiveCourtImage({
                   <>
                     <span
                       className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-red-900 bg-red-500"
-                      style={{ left: `${selectedPoint.x}%`, top: `${selectedPoint.y}%` }}
+                      style={{
+                        left: `${selectedPoint.x}%`,
+                        top: `${selectedPoint.y}%`,
+                      }}
                     />
                     <span
                       className="pointer-events-none absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-red-500"

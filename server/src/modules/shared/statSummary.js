@@ -31,6 +31,10 @@ function createEmptyFullTeamStatSummary() {
     blk: 0,
     tov: 0,
     foul: 0,
+    personalFoul: 0,
+    technicalFoul: 0,
+    flagrantFoul: 0,
+    foulDrawn: 0,
   };
 }
 
@@ -164,8 +168,17 @@ function applyEventToFullTeamStatSummary(summary, statType, scoringRules = null)
     return summary;
   }
 
-  if (statType === STAT_TYPES.FOUL) {
+  const foulField = {
+    [STAT_TYPES.FOUL]: 'personalFoul',
+    [STAT_TYPES.TECHNICAL_FOUL]: 'technicalFoul',
+    [STAT_TYPES.FLAGRANT_FOUL]: 'flagrantFoul',
+  }[statType];
+  if (foulField) {
     summary.foul += 1;
+    summary[foulField] += 1;
+  }
+  if (statType === STAT_TYPES.FOUL_DRAWN) {
+    summary.foulDrawn += 1;
   }
 
   return summary;
@@ -193,6 +206,10 @@ function createEmptyPlayerStatLine(playerId, displayName, options = {}) {
     blk: 0,
     tov: 0,
     foul: 0,
+    personalFoul: 0,
+    technicalFoul: 0,
+    flagrantFoul: 0,
+    foulDrawn: 0,
     reb: 0,
     points: 0,
   };
@@ -255,8 +272,17 @@ function applyEventToPlayerStatLine(line, statType, scoringRules = null) {
     line.tov += 1;
     return line;
   }
-  if (statType === STAT_TYPES.FOUL) {
+  const foulField = {
+    [STAT_TYPES.FOUL]: 'personalFoul',
+    [STAT_TYPES.TECHNICAL_FOUL]: 'technicalFoul',
+    [STAT_TYPES.FLAGRANT_FOUL]: 'flagrantFoul',
+  }[statType];
+  if (foulField) {
     line.foul += 1;
+    line[foulField] += 1;
+  }
+  if (statType === STAT_TYPES.FOUL_DRAWN) {
+    line.foulDrawn += 1;
   }
   return line;
 }

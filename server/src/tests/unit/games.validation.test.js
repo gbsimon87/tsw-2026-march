@@ -18,6 +18,32 @@ const CLOCK_SNAPSHOT = {
 };
 
 describe('games validation', () => {
+  test.each(['FOUL', 'TECHNICAL_FOUL', 'FLAGRANT_FOUL'])(
+    'accepts and preserves %s for append and edit',
+    (statType) => {
+      const payload = { ...CLOCK_SNAPSHOT, playerId: 'player-1', teamSide: 'home', statType };
+      expect(appendEventSchema.parse(payload)).toMatchObject(payload);
+      expect(updateEventSchema.parse({ statType })).toEqual({ statType });
+      expect(appendEventSchema.safeParse({ ...payload, playerId: undefined }).success).toBe(false);
+    }
+  );
+
+  test('accepts a foul drawn with captured context and requires a player', () => {
+    const payload = {
+      ...CLOCK_SNAPSHOT,
+      playerId: 'away-player',
+      teamSide: 'away',
+      statType: 'FOUL_DRAWN',
+      zoneId: 'PAINT',
+      x: 50,
+      y: 20,
+      videoTimestamp: 42,
+    };
+    expect(appendEventSchema.parse(payload)).toEqual(payload);
+    expect(appendEventSchema.safeParse({ ...payload, playerId: undefined }).success).toBe(false);
+    expect(updateEventSchema.parse({ statType: 'FOUL_DRAWN' })).toEqual({ statType: 'FOUL_DRAWN' });
+  });
+
   test('validates a substitution pair and its captured time', () => {
     const payload = {
       ...CLOCK_SNAPSHOT,

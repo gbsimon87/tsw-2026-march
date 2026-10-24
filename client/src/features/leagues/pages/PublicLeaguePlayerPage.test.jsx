@@ -80,7 +80,16 @@ describe('PublicLeaguePlayerPage statistics filters', () => {
           seasonId: 'season-26',
           opponent: 'Falcons',
           completedAt: '2026-03-01T00:00:00.000Z',
-          stats: statLine(12, { reb: 4, ast: 2, stl: 1 }),
+          stats: statLine(12, {
+            reb: 4,
+            ast: 2,
+            stl: 1,
+            foul: 4,
+            personalFoul: 1,
+            technicalFoul: 2,
+            flagrantFoul: 1,
+            foulDrawn: 3,
+          }),
         },
         {
           gameId: 'game-25',
@@ -96,6 +105,25 @@ describe('PublicLeaguePlayerPage statistics filters', () => {
   });
 
   afterEach(cleanup);
+
+  test('shows typed and drawn foul totals and filters them by season', async () => {
+    renderPage();
+    await screen.findByText('Falcons');
+    expect(
+      screen.getByText('Technical fouls', { selector: 'article p' }).closest('article')
+    ).toHaveTextContent('2');
+    expect(
+      screen.getByText('Fouls drawn', { selector: 'article p' }).closest('article')
+    ).toHaveTextContent('3');
+    for (const name of ['Personal fouls', 'Technical fouls', 'Flagrant fouls', 'Fouls drawn'])
+      expect(within(screen.getByRole('table')).getByRole('button', { name })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Season' }), {
+      target: { value: 'season:season-25' },
+    });
+    expect(
+      screen.getByText('Fouls drawn', { selector: 'article p' }).closest('article')
+    ).toHaveTextContent('0');
+  });
 
   test('uses league season labels and filters totals and columns together', async () => {
     renderPage();

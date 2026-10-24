@@ -1,3 +1,5 @@
+import { DesktopFoulTypeEntry } from '../components/desktop/DesktopFoulTypeEntry';
+import { isFoulStat } from '../foulStats';
 import { formatVideoTime } from '../../scrimmages/videoTime';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -23,6 +25,19 @@ import { AddRosterPlayerDialog } from '../components/AddRosterPlayerDialog';
 import { ConfirmSubInDialog } from '../components/ConfirmSubInDialog';
 import { GameTrackScoreHeader } from '../components/GameTrackScoreHeader';
 import { GameClockControls } from '../components/GameClockControls';
+import { DesktopGameTrackingWorkspace } from '../components/desktop/DesktopGameTrackingWorkspace';
+import {
+  DesktopShotEntry,
+  desktopButton,
+  desktopStatColor,
+} from '../components/desktop/DesktopShotEntry';
+import {
+  DesktopQuickStatEntry,
+  DESKTOP_QUICK_STATS,
+} from '../components/desktop/DesktopQuickStatEntry';
+import { DesktopEntryHeader } from '../components/desktop/DesktopEntryHeader';
+import { DesktopFollowUpEntry } from '../components/desktop/DesktopFollowUpEntry';
+import { DesktopRecentEvents } from '../components/desktop/DesktopRecentEvents';
 import { VoiceTrackingControl } from '../components/VoiceTrackingControl';
 import { clockSnapshot, formatClock, segmentLabel } from '../gameClock';
 import {
@@ -54,6 +69,8 @@ const VOICE_QUICK_STAT_TYPES = {
   block: 'BLK',
   turnover: 'TOV',
   foul: 'FOUL',
+  technical_foul: 'TECHNICAL_FOUL',
+  flagrant_foul: 'FLAGRANT_FOUL',
 };
 
 function formatEventMeta(event, gameFormat) {
@@ -396,11 +413,15 @@ function voiceCommandTables(trackingMode) {
               ],
             ]
           : [['The opponent got it', 'opponent', 'Records an opponent rebound.']]),
-        [
-          'Who was fouled?',
-          'skip',
-          'TSW does not store who was fouled, so this question can only be closed.',
-        ],
+        ...(isDual
+          ? [
+              [
+                'Who was fouled?',
+                'away 7, or Blake',
+                'Credits the opposing player with a foul drawn.',
+              ],
+            ]
+          : []),
         ['Any question', 'skip', 'Closes the question without recording anything else.'],
       ],
     },
@@ -576,6 +597,7 @@ export function GameTrackPage() {
   const [currentVideoTimestamp, setCurrentVideoTimestamp] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
   const [activeSide, setActiveSide] = useState(TEAM_SIDES.HOME);
+  const [choosingFoulType, setChoosingFoulType] = useState(false);
   const [activePanel, setActivePanel] = useState('court');
   // Set when the short-lineup warning sends the user back to build a lineup.
   // The derived step below exits as soon as a side has ONE player, so without
@@ -591,6 +613,20 @@ export function GameTrackPage() {
   const [isDesktopLayout, setIsDesktopLayout] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
   );
+  const useDesktopLeagueWorkspace =
+    isDesktopLayout &&
+    data?.game?.gameContext === 'league' &&
+    data?.game?.trackingMode === 'dual_team' &&
+    !isTrackingFullscreen;
+  const [desktopQuickEntry, setDesktopQuickEntry] = useState(null);
+  const [desktopLocationMode, setDesktopLocationMode] = useState(null);
+  const [desktopRelatedShot, setDesktopRelatedShot] = useState(null);
+  const desktopEntryContextRef = useRef(null);
+  const desktopCommitRef = useRef(false);
+  const desktopCorrectionRef = useRef(false);
+  const desktopOpeningPointerRef = useRef(false);
+  const desktopOriginRef = useRef(null);
+  const desktopEntryHeadingRef = useRef(null);
   const [isMobileEntryMode, setIsMobileEntryMode] = useState(false);
   const [pauseVideoOnEntry, setPauseVideoOnEntry] = useState(() =>
     readLocalStorageFlag('gameTrack.pauseVideoOnEntry', true)
@@ -613,6 +649,13 @@ export function GameTrackPage() {
   const isVoiceSubInOpen = Boolean(pendingVoiceSubIn);
   const isEventPickerOpen = Boolean(
     pendingFollowUpPrompt || (selectedShot && !isCourtVoiceAttempt)
+  );
+  const desktopEntryOpen = Boolean(
+    selectedShot ||
+    pendingFollowUpPrompt ||
+    desktopQuickEntry ||
+    desktopLocationMode ||
+    isCourtVoiceAttempt
   );
   const ghostClickGuardRef = useRef(null);
   const eventPickerRef = useRef(null);
@@ -879,14 +922,23 @@ export function GameTrackPage() {
 
   useEffect(() => {
     const shouldLock =
-      isEventPickerOpen || isTrackingFullscreen || isAddPlayerOpen || isVoiceSubInOpen;
+      (isEventPickerOpen && !useDesktopLeagueWorkspace) ||
+      isTrackingFullscreen ||
+      isAddPlayerOpen ||
+      isVoiceSubInOpen;
     document.body.style.overflow = shouldLock ? 'hidden' : '';
     document.body.style.touchAction = shouldLock ? 'none' : '';
     return () => {
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
     };
-  }, [isAddPlayerOpen, isEventPickerOpen, isTrackingFullscreen, isVoiceSubInOpen]);
+  }, [
+    isAddPlayerOpen,
+    isEventPickerOpen,
+    isTrackingFullscreen,
+    isVoiceSubInOpen,
+    useDesktopLeagueWorkspace,
+  ]);
 
   const isDualTeam = data?.game?.trackingMode === 'dual_team';
   const isLeagueGame = data?.game?.gameContext === 'league';
@@ -1072,7 +1124,6 @@ export function GameTrackPage() {
     let rawGroups;
     let allowUnassisted = false;
     let allowOpponent = false;
-    let skipOnly = false;
 
     if (prompt.kind === 'assist') {
       rawGroups = [
@@ -1093,10 +1144,6 @@ export function GameTrackPage() {
         rawGroups = [{ side: null, players: onCourtPlayers }];
         allowOpponent = true;
       }
-    } else if (prompt.kind === 'who_was_fouled') {
-      // The model stores no foul victim, so this prompt can only be closed.
-      rawGroups = [{ side: otherSide, players: otherSidePlayers }];
-      skipOnly = true;
     } else if (prompt.playerPool === 'other') {
       rawGroups = [{ side: otherSide, players: otherSidePlayers }];
     } else {
@@ -1110,26 +1157,29 @@ export function GameTrackPage() {
 
     return {
       kind: prompt.kind,
-      statType: prompt.statType ?? null,
+      statType:
+        useDesktopLeagueWorkspace && prompt.kind === 'who_missed_shot' && desktopRelatedShot
+          ? buildShotStatType(desktopRelatedShot.shotFamily, 'miss')
+          : (prompt.statType ?? null),
       actorPlayerId: prompt.actorPlayerId ?? null,
       actorTeamSide: actorSide,
       courtLocation: prompt.courtLocation || null,
       groups,
-      pools: skipOnly
-        ? []
-        : groups.map((group) => ({
-            side: group.side,
-            playerIds: group.players.map((player) => player.id),
-          })),
+      pools: groups.map((group) => ({
+        side: group.side,
+        playerIds: group.players.map((player) => player.id),
+      })),
       allowUnassisted,
       allowOpponent,
-      skipOnly,
     };
   }
 
   const voiceContextVersion = useMemo(
     () =>
       JSON.stringify({
+        desktopQuickEntry,
+        desktopLocationMode,
+        desktopRelatedShot,
         gameId: game?.id,
         sport: game?.sport,
         trackingMode: game?.trackingMode,
@@ -1145,6 +1195,9 @@ export function GameTrackPage() {
         isVoiceSubInOpen,
       }),
     [
+      desktopQuickEntry,
+      desktopLocationMode,
+      desktopRelatedShot,
       data?.lineups,
       editingEvent?.id,
       game?.currentLineupPlayerIds,
@@ -1203,8 +1256,22 @@ export function GameTrackPage() {
   const hasSubstitutionDraft = Boolean(
     currentSideState.substitutionState.playerOutId || currentSideState.substitutionState.playerInId
   );
+  const desktopNavigationLocked = Boolean(
+    desktopEntryOpen ||
+    hasSubstitutionDraft ||
+    editingEvent ||
+    isSaving ||
+    voiceBusy ||
+    lineupSetupStep ||
+    showClockRecovery ||
+    showFinishConfirm ||
+    pendingExitDestination ||
+    isAddPlayerOpen ||
+    isVoiceSubInOpen
+  );
   const playbackHeldByUi = Boolean(
     isEventPickerOpen ||
+    Boolean(desktopQuickEntry || desktopLocationMode) ||
     isCourtVoiceAttempt ||
     isAddPlayerOpen ||
     isVoiceSubInOpen ||
@@ -1377,12 +1444,37 @@ export function GameTrackPage() {
   }
 
   async function submitEvent(payload, { insertBeforeId = '', ...eventContext } = {}) {
-    const eventPayload = buildEventPayload(payload, eventContext);
+    const desktopContext = eventContext.desktopContext || desktopEntryContextRef.current;
+    if (
+      desktopContext &&
+      (desktopContext.invalidated ||
+        desktopContext.gameId !== gameId ||
+        desktopContext.courtLayoutId !== courtLayout.id ||
+        desktopContext.videoSourceKeyAtStart !== gameVideoSourceKey(data?.game))
+    ) {
+      clearEventPicker();
+      throw Object.assign(new Error('The recording or layout changed. Start this entry again.'), {
+        status: 400,
+      });
+    }
+    const eventPayload = buildEventPayload(
+      payload,
+      desktopContext ? { ...eventContext, ...desktopContext } : eventContext
+    );
     const response = await submitTrackingMutation(() =>
       insertBeforeId
         ? gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
         : gamesApi.appendEvent(gameId, eventPayload)
     );
+    if (
+      desktopContext &&
+      desktopEntryContextRef.current === desktopContext &&
+      !desktopContext.primaryEventId &&
+      !insertBeforeId
+    ) {
+      desktopContext.primaryEventId = response.game?.events?.at(-1)?.id;
+      desktopContext.primaryStatType = payload.statType;
+    }
     if (isScrimmage && !insertBeforeId && Number.isFinite(eventPayload.videoTimestamp)) {
       try {
         window.localStorage.setItem(
@@ -1531,11 +1623,136 @@ export function GameTrackPage() {
     return transition;
   }
 
+  function beginDesktopEntry() {
+    desktopOriginRef.current = document.activeElement;
+    desktopEntryContextRef.current = {
+      gameId,
+      teamSide: activeSide,
+      videoTimestamp: captureVideoTimestamp(),
+      clockSnapshot: captureEntrySnapshot(),
+      courtLayoutId: courtLayout.id,
+      videoSourceKeyAtStart: gameVideoSourceKey(data?.game),
+      primaryEventId: null,
+    };
+    pauseVideoForEntry();
+    pauseClockForEntry();
+    setError('');
+    return desktopEntryContextRef.current;
+  }
+
+  function openDesktopQuickStat(statType) {
+    if (
+      desktopNavigationLocked ||
+      desktopCommitRef.current ||
+      document.querySelector('[aria-modal="true"]') ||
+      !requireLineup()
+    )
+      return;
+    beginDesktopEntry();
+    setDesktopQuickEntry({ statType, teamSide: activeSide, hoopSide: lastTappedHoop });
+  }
+
+  async function commitDesktopEntry(commit) {
+    if (isSaving || voiceBusy || desktopCommitRef.current) return false;
+    desktopCommitRef.current = true;
+    try {
+      return await commit();
+    } finally {
+      desktopCommitRef.current = false;
+    }
+  }
+
+  async function commitDesktopQuickStat(playerId, teamSide = desktopQuickEntry?.teamSide) {
+    const entry = desktopQuickEntry;
+    if (
+      !entry ||
+      isSaving ||
+      voiceBusy ||
+      desktopCommitRef.current ||
+      !onCourtPlayersBySide[teamSide]?.some((player) => player.id === playerId)
+    )
+      return;
+    if (isFoulStat(entry.statType) && !entry.foulTypeChosen) return;
+    if (desktopEntryContextRef.current) desktopEntryContextRef.current.teamSide = teamSide;
+    setActiveSide(teamSide);
+    const options = {
+      playerId,
+      teamSide,
+      shot: null,
+      eventContext: {
+        ...desktopEntryContextRef.current,
+        desktopContext: desktopEntryContextRef.current,
+        hoopSide: entry.hoopSide,
+      },
+    };
+    const saved = await commitDesktopEntry(() => {
+      if (entry.statType.startsWith('FT_'))
+        return addFreeThrowEvent(entry.statType === 'FT_MADE' ? 'made' : 'miss', options);
+      if (entry.statType === 'OREB' || entry.statType === 'DREB')
+        return addReboundEvent(entry.statType, options);
+      return addQuickStatEvent(entry.statType, options);
+    });
+    if (saved) {
+      updateSideState(teamSide, { selectedPlayerId: playerId });
+      if (entry.statType.startsWith('FT_')) setLastTappedHoop(entry.hoopSide);
+      setDesktopQuickEntry(null);
+    }
+  }
+
+  function beginDesktopInsertion(event) {
+    if (desktopNavigationLocked) return;
+    setInsertBeforeEventId(event.id);
+    entryClockSnapshotRef.current = {
+      segmentKind: event.segmentKind,
+      segmentNumber: event.segmentNumber,
+      clockMillisecondsRemaining: event.clockMillisecondsRemaining,
+    };
+    setActivePanel('court');
+  }
+
+  async function undoDesktopPrimary() {
+    const context = desktopEntryContextRef.current;
+    const target = context?.primaryEventId;
+    if (!target || isSaving || voiceBusy || desktopCommitRef.current) return;
+    if (data.game.events.at(-1)?.id !== target) {
+      setError('The event list changed. Nothing was undone.');
+      return;
+    }
+    await commitDesktopEntry(async () => {
+      const removed = await undoLastEvent({ expectedEventId: target, allowDesktopFollowUp: true });
+      if (removed && desktopEntryContextRef.current === context) clearEventPicker();
+      return removed;
+    });
+  }
+
   function onCourtSelect(point) {
+    if (
+      useDesktopLeagueWorkspace &&
+      (isSaving || voiceBusy || showClockRecovery || isAddPlayerOpen || isVoiceSubInOpen)
+    )
+      return;
+    if (useDesktopLeagueWorkspace && desktopLocationMode === 'related') {
+      setDesktopRelatedShot(inferCourtSelection(point.x, point.y, courtLayout.calibration));
+      setDesktopLocationMode(null);
+      return;
+    }
+    if (useDesktopLeagueWorkspace && desktopLocationMode === 'primary') {
+      const inferred = inferCourtSelection(point.x, point.y, courtLayout.calibration);
+      setSelectedShot(inferred);
+      setLastTappedHoop(inferred.nearestHoop);
+      setDesktopLocationMode(null);
+      return;
+    }
+    if (
+      useDesktopLeagueWorkspace &&
+      (desktopQuickEntry || pendingFollowUpPrompt || desktopCommitRef.current)
+    )
+      return;
     if (isSaving || voiceBusy || !requireLineup()) {
       return;
     }
 
+    if (useDesktopLeagueWorkspace) beginDesktopEntry();
     const inferred = inferCourtSelection(point.x, point.y, courtLayout.calibration);
     setSelectedShot(inferred);
     setPendingFollowUpPrompt(null);
@@ -1563,7 +1780,7 @@ export function GameTrackPage() {
   }
 
   function openTrackingOverlay() {
-    if (voiceBusy || !requireLineup()) {
+    if (voiceBusy || (useDesktopLeagueWorkspace && desktopEntryOpen) || !requireLineup()) {
       return;
     }
 
@@ -1585,7 +1802,12 @@ export function GameTrackPage() {
   }
 
   function changeActiveSide(nextSide) {
-    if (voiceBusy || !isDualTeam || nextSide === activeSide) {
+    if (
+      voiceBusy ||
+      (useDesktopLeagueWorkspace && desktopNavigationLocked) ||
+      !isDualTeam ||
+      nextSide === activeSide
+    ) {
       return;
     }
 
@@ -1595,6 +1817,7 @@ export function GameTrackPage() {
   }
 
   function changeActivePanel(nextPanel) {
+    if (useDesktopLeagueWorkspace && desktopNavigationLocked) return;
     if (
       activePanel === 'substitutions' &&
       nextPanel !== activePanel &&
@@ -1616,6 +1839,24 @@ export function GameTrackPage() {
   // mode, the video, and the clock. Every exit counts — recorded, skipped, closed or abandoned —
   // because an entry that ends without resuming strands playback and the clock indefinitely.
   function clearEventPicker(reason = '') {
+    const origin = desktopOriginRef.current;
+    const originStat = origin?.getAttribute?.('data-desktop-stat');
+    desktopOpeningPointerRef.current = false;
+    desktopEntryContextRef.current = null;
+    setDesktopQuickEntry(null);
+    setChoosingFoulType(false);
+    setDesktopLocationMode(null);
+    setDesktopRelatedShot(null);
+    if (useDesktopLeagueWorkspace)
+      requestAnimationFrame(() => {
+        if (document.querySelector('[aria-modal="true"]')) return;
+        const target = originStat
+          ? document.querySelector(`[data-desktop-stat="${originStat}"]`)
+          : origin?.isConnected && origin.matches('button,a,input,select,textarea,[tabindex]')
+            ? origin
+            : desktopEntryHeadingRef.current;
+        target?.focus?.({ preventScroll: true });
+      });
     setIsCourtVoiceAttempt(false);
     setSelectedShot(null);
     setPendingFollowUpPrompt(null);
@@ -1655,7 +1896,11 @@ export function GameTrackPage() {
     const courtFields = buildCourtFields(shot);
     const payload = { playerId: reboundPlayerId, statType, ...courtFields };
     const label = statLabels[statType] || statType;
-    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
+    const submissionContext = {
+      clockSnapshot: entryClockSnapshotRef.current,
+      ...(useDesktopLeagueWorkspace ? { desktopContext: desktopEntryContextRef.current } : {}),
+      ...eventContext,
+    };
 
     // Transition UI immediately.
     if (isInsert) {
@@ -1716,6 +1961,7 @@ export function GameTrackPage() {
   // Unassisted). Voice needs that outcome; the buttons ignore it.
   async function handleFollowUpSelection(option, { source = 'manual' } = {}) {
     if (followUpSavingRef.current) return false;
+    if (useDesktopLeagueWorkspace && isSaving) return false;
     if (voiceBusy && source !== 'voice') return false;
     if (!pendingFollowUpPrompt) {
       clearEventPicker();
@@ -1758,17 +2004,23 @@ export function GameTrackPage() {
         payload = { playerId: option, statType, teamSide: rebounderSide, ...followUpCourt };
         label = statLabels[statType] || statType;
       } else if (prompt.kind === 'who_missed_shot') {
+        if (useDesktopLeagueWorkspace && !desktopRelatedShot) {
+          setError('Choose the missed shot location first.');
+          return false;
+        }
         const playerSide = isDualTeam
           ? playerSideMap.get(option) ||
             (prompt.playerPool === 'other' ? opposingActorSide : actorTeamSide)
           : undefined;
         payload = {
           playerId: option,
-          statType: 'FG2_MISS',
-          ...followUpCourt,
+          statType: useDesktopLeagueWorkspace
+            ? buildShotStatType(desktopRelatedShot.shotFamily, 'miss')
+            : 'FG2_MISS',
+          ...(useDesktopLeagueWorkspace ? buildCourtFields(desktopRelatedShot) : followUpCourt),
           ...(playerSide ? { teamSide: playerSide } : {}),
         };
-        label = statLabels['FG2_MISS'] || 'FG2 Miss';
+        label = statLabels[payload.statType] || 'Missed shot';
       } else if (prompt.kind === 'who_turned_over' || prompt.kind === 'who_got_steal') {
         const playerSide = isDualTeam ? playerSideMap.get(option) || opposingActorSide : undefined;
         payload = {
@@ -1779,8 +2031,13 @@ export function GameTrackPage() {
         };
         label = statLabels[prompt.statType] || prompt.statType;
       } else if (prompt.kind === 'who_was_fouled') {
-        clearEventPicker();
-        return true;
+        payload = {
+          playerId: option,
+          statType: 'FOUL_DRAWN',
+          teamSide: playerSideMap.get(option) || opposingActorSide,
+          ...followUpCourt,
+        };
+        label = statLabels.FOUL_DRAWN;
       } else {
         payload = {
           playerId: option,
@@ -1797,11 +2054,13 @@ export function GameTrackPage() {
           clearEventPicker();
         })
         .catch((submitError) => {
+          const failureMessages = {
+            assist: 'Basket recorded, but failed to add assist',
+            rebound: 'Miss recorded, but failed to add rebound',
+            who_was_fouled: 'Foul recorded, but failed to add foul drawn',
+          };
           setError(
-            submitError.message ||
-              (followUpKind === 'assist'
-                ? 'Basket recorded, but failed to add assist'
-                : 'Miss recorded, but failed to add rebound')
+            submitError.message || failureMessages[followUpKind] || 'Failed to add follow-up event'
           );
           // The prompt stays open after a failed answer. Leaving a rejected promise in
           // inflightRef would make the next attempt bail at its own await and no-op.
@@ -1861,7 +2120,11 @@ export function GameTrackPage() {
       x: Number(shot.x.toFixed(2)),
       y: Number(shot.y.toFixed(2)),
     };
-    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
+    const submissionContext = {
+      clockSnapshot: entryClockSnapshotRef.current,
+      ...(useDesktopLeagueWorkspace ? { desktopContext: desktopEntryContextRef.current } : {}),
+      ...eventContext,
+    };
 
     // Transition UI immediately — don't wait for the API.
     if (isInsert) {
@@ -1935,7 +2198,7 @@ export function GameTrackPage() {
     setIsSaving(true);
 
     const inferred = buildFreeThrowPayload(
-      shot?.nearestHoop || lastTappedHoop,
+      eventContext.hoopSide || shot?.nearestHoop || lastTappedHoop,
       outcome,
       courtLayout.calibration
     );
@@ -1949,7 +2212,11 @@ export function GameTrackPage() {
     const ftLabel = statLabels[payload.statType] || payload.statType;
     const actorPlayerId = playerId;
     const isInsert = Boolean(insertBeforeEventId);
-    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
+    const submissionContext = {
+      clockSnapshot: entryClockSnapshotRef.current,
+      ...(useDesktopLeagueWorkspace ? { desktopContext: desktopEntryContextRef.current } : {}),
+      ...eventContext,
+    };
 
     // Transition UI immediately.
     if (isInsert) {
@@ -1995,20 +2262,37 @@ export function GameTrackPage() {
   }
 
   async function removeEvent(eventId) {
-    if (isSaving) {
+    if (isSaving || (useDesktopLeagueWorkspace && desktopCorrectionRef.current)) {
       return false;
     }
-
+    if (useDesktopLeagueWorkspace) {
+      desktopCorrectionRef.current = true;
+      setSaveStatus('saving');
+    }
     setError('');
     setIsSaving(true);
     try {
       const response = await enqueueGameMutation(() => gamesApi.removeEvent(gameId, eventId));
       updateData(response, 'Event removed');
+      if (useDesktopLeagueWorkspace) setSaveStatus('saved');
       return true;
     } catch (removeError) {
+      if (useDesktopLeagueWorkspace) {
+        setSaveStatus('failed');
+        if (requiresMutationReconciliation(removeError)) {
+          try {
+            const response = await gamesApi.getById(gameId);
+            updateData(response);
+            if (!response.game.events.some((event) => event.id === eventId)) clearEventPicker();
+          } catch {
+            /* Preserve the error and never replay an uncertain deletion. */
+          }
+        }
+      }
       setError(removeError.message || 'Failed to remove event');
       return false;
     } finally {
+      desktopCorrectionRef.current = false;
       setIsSaving(false);
     }
   }
@@ -2039,7 +2323,11 @@ export function GameTrackPage() {
     };
     const quickLabel = statLabels[statType] || statType;
     const actorPlayerId = playerId;
-    const submissionContext = { clockSnapshot: entryClockSnapshotRef.current, ...eventContext };
+    const submissionContext = {
+      clockSnapshot: entryClockSnapshotRef.current,
+      ...(useDesktopLeagueWorkspace ? { desktopContext: desktopEntryContextRef.current } : {}),
+      ...eventContext,
+    };
 
     // Transition UI immediately.
     if (isInsert) {
@@ -2074,11 +2362,11 @@ export function GameTrackPage() {
         playerPool: 'other',
         courtLocation: courtFields,
       });
-    } else if (statType === 'FOUL' && isDualTeam) {
+    } else if (isFoulStat(statType) && isDualTeam) {
       setSelectedShot(null);
       setPendingFollowUpPrompt({
         kind: 'who_was_fouled',
-        statType: null,
+        statType: 'FOUL_DRAWN',
         actorPlayerId,
         actorTeamSide: teamSide,
         playerPool: 'other',
@@ -2169,7 +2457,12 @@ export function GameTrackPage() {
   }
 
   async function saveEventEdit() {
-    if (!editingEvent || isSaving) return;
+    if (!editingEvent || isSaving || (useDesktopLeagueWorkspace && desktopCorrectionRef.current))
+      return;
+    if (useDesktopLeagueWorkspace) {
+      desktopCorrectionRef.current = true;
+      setSaveStatus('saving');
+    }
     setIsSaving(true);
     setError('');
     const patch = {};
@@ -2190,11 +2483,18 @@ export function GameTrackPage() {
         gamesApi.updateEvent(gameId, editingEvent.id, patch)
       );
       updateData(response, 'Event updated');
+      if (useDesktopLeagueWorkspace) setSaveStatus('saved');
       setEditingEvent(null);
     } catch (err) {
       setSaveStatus('failed');
       setError(err.message || 'Failed to update event');
+      if (useDesktopLeagueWorkspace && requiresMutationReconciliation(err)) {
+        await loadGame();
+        setEditingEvent(null);
+        setError('The edit could not be confirmed. Check the event list before trying again.');
+      }
     } finally {
+      desktopCorrectionRef.current = false;
       setIsSaving(false);
     }
   }
@@ -2203,12 +2503,21 @@ export function GameTrackPage() {
     source = 'manual',
     expectedEventId = null,
     allowSelectedShot = false,
+    allowDesktopFollowUp = false,
   } = {}) {
     if (isSaving) return false;
     // voiceBusy is true for the whole cycle that is calling this, so only other sources
     // are held off.
     if (voiceBusy && source !== 'voice') return false;
-    if (pendingFollowUpPrompt || (selectedShot && !allowSelectedShot)) {
+    const canUndoDesktopFollowUp =
+      allowDesktopFollowUp &&
+      useDesktopLeagueWorkspace &&
+      expectedEventId &&
+      desktopEntryContextRef.current?.primaryEventId === expectedEventId;
+    if (
+      (pendingFollowUpPrompt && !canUndoDesktopFollowUp) ||
+      (selectedShot && !allowSelectedShot)
+    ) {
       if (source !== 'voice') setError('Close the open event question first');
       return false;
     }
@@ -2719,8 +3028,6 @@ export function GameTrackPage() {
         'That answer is not valid for this question. Say a player number, or “skip”.',
       wrong_side: 'This question is about the other team.',
       invalid_side: 'That team is not part of this question.',
-      answer_not_stored:
-        'The fouled player is not recorded yet. Say “skip” to close this question.',
       undo_not_allowed: 'Finish or skip the open question before saying “undo”.',
       undo_unavailable: 'There is no event to undo.',
       undo_changed: 'The event log changed. Nothing was undone.',
@@ -2842,9 +3149,6 @@ export function GameTrackPage() {
         ? { ok: true, message: 'Opponent rebound recorded.' }
         : voiceRejection('write_failed');
     }
-
-    // Reject before resolution so naming a player does not imply the player was wrong.
-    if (prompt.skipOnly) return voiceRejection('answer_not_stored');
 
     const resolved = resolveFollowUpAnswer(context, intent);
     if (!resolved.ok) return voiceRejection(resolved.reason);
@@ -3246,8 +3550,64 @@ export function GameTrackPage() {
   const clearEventPickerRef = useRef(clearEventPicker);
   clearEventPickerRef.current = clearEventPicker;
 
+  const desktopFlowKey = useDesktopLeagueWorkspace
+    ? `${desktopQuickEntry?.statType || ''}:${pendingFollowUpPrompt?.kind || ''}:${desktopLocationMode || ''}:${Boolean(selectedShot)}:${Boolean(editingEvent)}:${choosingFoulType}:${Boolean(desktopQuickEntry?.foulTypeChosen)}`
+    : '';
   useEffect(() => {
-    if (!isEventPickerOpen) return undefined;
+    if (
+      !useDesktopLeagueWorkspace ||
+      !desktopEntryOpen ||
+      document.querySelector('[aria-modal="true"]')
+    )
+      return;
+    desktopEntryHeadingRef.current?.focus({ preventScroll: true });
+  }, [desktopFlowKey, useDesktopLeagueWorkspace, desktopEntryOpen]);
+
+  useEffect(() => {
+    if (!useDesktopLeagueWorkspace) return;
+    function onDesktopEscape(event) {
+      if (event.key !== 'Escape' || document.querySelector('[aria-modal="true"]')) return;
+      const menu = event.target.closest?.('details[open]');
+      if (menu) {
+        menu.open = false;
+        return;
+      }
+      if (isSaving || desktopCommitRef.current) return;
+      if (editingEvent) setEditingEvent(null);
+      else if (desktopEntryOpen) {
+        if (insertBeforeEventId) {
+          setInsertBeforeEventId('');
+          setActivePanel('events');
+        }
+        clearEventPickerRef.current();
+      }
+    }
+    document.addEventListener('keydown', onDesktopEscape);
+    return () => document.removeEventListener('keydown', onDesktopEscape);
+  }, [useDesktopLeagueWorkspace, desktopEntryOpen, isSaving, editingEvent, insertBeforeEventId]);
+
+  useEffect(() => {
+    const context = desktopEntryContextRef.current;
+    if (
+      !context ||
+      (isDesktopLayout &&
+        context.gameId === gameId &&
+        context.courtLayoutId === courtLayout.id &&
+        context.videoSourceKeyAtStart === videoSourceKey)
+    )
+      return;
+    context.invalidated = true;
+    Promise.resolve(inflightRef.current)
+      .catch(() => undefined)
+      .then(() => {
+        if (desktopEntryContextRef.current !== context) return;
+        clearEventPickerRef.current();
+        setError('Layout or recording changed. Unfinished entry closed; saved events remain.');
+      });
+  }, [isDesktopLayout, videoSourceKey, gameId, courtLayout.id]);
+
+  useEffect(() => {
+    if (!isEventPickerOpen || useDesktopLeagueWorkspace) return undefined;
 
     // Focus the dialog itself rather than its first button: the first button is
     // a player row, and focusing it would read as a selection the user did not
@@ -3266,7 +3626,7 @@ export function GameTrackPage() {
 
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isEventPickerOpen]);
+  }, [isEventPickerOpen, useDesktopLeagueWorkspace]);
 
   if (!data || !game || !boxScore) {
     if (error) {
@@ -3296,10 +3656,15 @@ export function GameTrackPage() {
     opponentPoints: boxScore.opponentTotals?.points || 0,
   };
   const recentEvents = [...game.events].reverse();
-  const visibleRecentEvents = showAllRecentEvents ? recentEvents : recentEvents.slice(0, 3);
-  const trackingShellClassName = hasPlayableVideo(game)
-    ? 'mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col lg:flex-row lg:gap-4'
-    : 'mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col';
+  const visibleRecentEvents =
+    showAllRecentEvents || useDesktopLeagueWorkspace ? recentEvents : recentEvents.slice(0, 3);
+  const trackingShellClassName = useDesktopLeagueWorkspace
+    ? hasPlayableVideo(game)
+      ? 'mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 grid-cols-[minmax(0,1fr)_clamp(380px,34vw,460px)] gap-4 px-4 pb-4 pt-3'
+      : 'mx-auto flex min-h-0 w-full max-w-[792px] flex-1 px-4 py-3'
+    : hasPlayableVideo(game)
+      ? 'mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col lg:flex-row lg:gap-4'
+      : 'mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col';
 
   // The mobile "watch" view (video-first, not yet in entry mode) fills the whole remaining
   // area edge-to-edge — no padding, no scroll — so the video is as large as possible below
@@ -3387,7 +3752,15 @@ export function GameTrackPage() {
   // A shot picker never gets a second microphone: with voice enabled, the court tap itself starts
   // the single court control. The picker retains a microphone only for a real follow-up question.
   const followUpVoiceControl =
-    voiceEnabled && voiceSportSupported && pendingFollowUpPrompt && !lineupSetupStep ? (
+    !(
+      useDesktopLeagueWorkspace &&
+      pendingFollowUpPrompt?.kind === 'who_missed_shot' &&
+      !desktopRelatedShot
+    ) &&
+    voiceEnabled &&
+    voiceSportSupported &&
+    pendingFollowUpPrompt &&
+    !lineupSetupStep ? (
       <VoiceTrackingControl
         disabled={voiceDisabled}
         contextVersion={voiceContextVersion}
@@ -3401,358 +3774,309 @@ export function GameTrackPage() {
 
   const inlineVoiceControl = isEventPickerOpen || isTrackingFullscreen ? null : courtVoiceControl;
 
-  const eventPicker = isEventPickerOpen ? (
-    // onKeyDown/onClickCapture below are Escape handling + a ghost-click guard, not
-    // user-facing interactions — the actual dismiss control is the invisible backdrop
-    // <button> beneath this dialog.
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-    <div
-      ref={eventPickerRef}
-      tabIndex={-1}
-      aria-modal="true"
-      aria-label="Add event"
-      className={`${eventPickerShellClass} t-modal-backdrop focus:outline-none`}
-      role="dialog"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          clearEventPicker();
-        }
-      }}
-      onClickCapture={(event) => {
-        if (ghostClickGuardRef.current !== null && Date.now() - ghostClickGuardRef.current < 350) {
-          event.stopPropagation();
-          event.preventDefault();
-          ghostClickGuardRef.current = null;
-        }
-      }}
-    >
-      <button
-        type="button"
-        aria-label="Close"
-        tabIndex={-1}
-        className="fixed inset-0 h-full w-full cursor-default"
-        onClick={clearEventPicker}
-        onPointerDown={(event) => event.stopPropagation()}
-      />
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
-          stop-propagation guard only, not an interactive control. */}
+  const foulTypeEntry = (
+    <DesktopFoulTypeEntry
+      location={ZONE_LABELS[selectedShot?.zoneId]}
+      disabled={isSaving || voiceBusy}
+      onSelect={(statType) =>
+        commitDesktopEntry(() => {
+          setChoosingFoulType(false);
+          return addQuickStatEvent(statType);
+        })
+      }
+      onBack={() => setChoosingFoulType(false)}
+      onCancel={() => clearEventPicker()}
+    />
+  );
+
+  const eventPicker =
+    isEventPickerOpen && !useDesktopLeagueWorkspace ? (
+      // onKeyDown/onClickCapture below are Escape handling + a ghost-click guard, not
+      // user-facing interactions — the actual dismiss control is the invisible backdrop
+      // <button> beneath this dialog.
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
       <div
-        className={eventPickerPanelClass}
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
+        ref={eventPickerRef}
+        tabIndex={-1}
+        aria-modal="true"
+        aria-label="Add event"
+        className={`${eventPickerShellClass} t-modal-backdrop focus:outline-none`}
+        role="dialog"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            clearEventPicker();
+          }
+        }}
+        onClickCapture={(event) => {
+          if (
+            ghostClickGuardRef.current !== null &&
+            Date.now() - ghostClickGuardRef.current < 350
+          ) {
+            event.stopPropagation();
+            event.preventDefault();
+            ghostClickGuardRef.current = null;
+          }
+        }}
       >
-        <div className={eventPickerBodyClass}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
-                {insertBeforeEventId ? 'Insert Event Before' : 'Add Event'}
-              </p>
-              <p className="text-xs text-slate-600">
-                {pendingFollowUpPrompt
-                  ? {
-                      assist: 'Who assisted?',
-                      rebound: 'Who got the rebound?',
-                      who_missed_shot: 'Who missed the shot?',
-                      who_turned_over: 'Who turned over the ball?',
-                      who_got_steal: 'Who got the steal?',
-                      who_was_fouled: 'Who was fouled?',
-                    }[pendingFollowUpPrompt.kind] || 'Follow up'
-                  : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-label="Close event picker"
-              className="rounded-md border border-slate-300 p-1 text-slate-600 transition hover:bg-slate-50"
-              onClick={() => clearEventPicker()}
-            >
-              <svg
-                viewBox="0 0 20 20"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
+        <button
+          type="button"
+          aria-label="Close"
+          tabIndex={-1}
+          className="fixed inset-0 h-full w-full cursor-default"
+          onClick={clearEventPicker}
+          onPointerDown={(event) => event.stopPropagation()}
+        />
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
+          stop-propagation guard only, not an interactive control. */}
+        <div
+          className={eventPickerPanelClass}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className={eventPickerBodyClass}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {insertBeforeEventId ? 'Insert Event Before' : 'Add Event'}
+                </p>
+                <p className="text-xs text-slate-600">
+                  {pendingFollowUpPrompt
+                    ? {
+                        assist: 'Who assisted?',
+                        rebound: 'Who got the rebound?',
+                        who_missed_shot: 'Who missed the shot?',
+                        who_turned_over: 'Who turned over the ball?',
+                        who_got_steal: 'Who got the steal?',
+                        who_was_fouled: 'Who was fouled?',
+                      }[pendingFollowUpPrompt.kind] || 'Follow up'
+                    : `${ZONE_LABELS[selectedShot.zoneId] || selectedShot.zoneId} • ${selectedShot.shotFamily}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close event picker"
+                className="rounded-md border border-slate-300 p-1 text-slate-600 transition hover:bg-slate-50"
+                onClick={() => clearEventPicker()}
               >
-                <path d="m5 5 10 10" />
-                <path d="M15 5 5 15" />
-              </svg>
-            </button>
-          </div>
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="m5 5 10 10" />
+                  <path d="M15 5 5 15" />
+                </svg>
+              </button>
+            </div>
 
-          {followUpVoiceControl ? <div className="mb-3">{followUpVoiceControl}</div> : null}
+            {followUpVoiceControl ? <div className="mb-3">{followUpVoiceControl}</div> : null}
 
-          <div className={eventPickerGridClass}>
-            <div className="flex min-h-0 flex-col space-y-1 overflow-hidden">
-              {isDualTeam && !pendingFollowUpPrompt ? (
-                <div className="mb-3 flex gap-2">
-                  {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
-                    const isActive = activeSide === side;
-                    const logoUrl = participantsBySide[side]?.logo?.url;
-                    const name = participantsBySide[side]?.displayName || side;
-                    return (
-                      <button
-                        key={side}
-                        type="button"
-                        onClick={() => setActiveSide(side)}
-                        className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2 transition ${
-                          isActive
-                            ? 'border-[#141414] bg-[#141414] text-white shadow-sm'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {logoUrl ? (
-                          <CloudinaryImage
-                            src={logoUrl}
-                            alt=""
-                            width={24}
-                            height={24}
-                            loading="lazy"
-                            decoding="async"
-                            srcSetWidths={[24, 48, 72]}
-                            sizes="24px"
-                            className={`h-6 w-6 shrink-0 rounded-full object-cover ${isActive ? 'ring-2 ring-white/50' : 'border border-slate-200'}`}
-                          />
-                        ) : (
-                          <span
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
-                              isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+            {choosingFoulType ? (
+              foulTypeEntry
+            ) : (
+              <div className={eventPickerGridClass}>
+                <div className="flex min-h-0 flex-col space-y-1 overflow-hidden">
+                  {isDualTeam && !pendingFollowUpPrompt ? (
+                    <div className="mb-3 flex gap-2">
+                      {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
+                        const isActive = activeSide === side;
+                        const logoUrl = participantsBySide[side]?.logo?.url;
+                        const name = participantsBySide[side]?.displayName || side;
+                        return (
+                          <button
+                            key={side}
+                            type="button"
+                            onClick={() => setActiveSide(side)}
+                            className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2 transition ${
+                              isActive
+                                ? 'border-[#141414] bg-[#141414] text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                             }`}
                           >
-                            {name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                        <span className="truncate text-xs font-semibold">{name}</span>
-                      </button>
-                    );
-                  })}
+                            {logoUrl ? (
+                              <CloudinaryImage
+                                src={logoUrl}
+                                alt=""
+                                width={24}
+                                height={24}
+                                loading="lazy"
+                                decoding="async"
+                                srcSetWidths={[24, 48, 72]}
+                                sizes="24px"
+                                className={`h-6 w-6 shrink-0 rounded-full object-cover ${isActive ? 'ring-2 ring-white/50' : 'border border-slate-200'}`}
+                              />
+                            ) : (
+                              <span
+                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                                  isActive
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-slate-100 text-slate-500'
+                                }`}
+                              >
+                                {name.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                            <span className="truncate text-xs font-semibold">{name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {pendingFollowUpPrompt
+                      ? pendingFollowUpPrompt.kind === 'assist'
+                        ? 'Pick Assister'
+                        : pendingFollowUpPrompt.kind === 'rebound'
+                          ? 'Pick Rebounder'
+                          : 'Pick Player'
+                      : 'Pick Player'}
+                  </p>
+                  <div className="min-h-0 overflow-y-auto pr-1">
+                    {isDualTeam && pendingFollowUpPrompt?.kind === 'rebound' ? (
+                      <div className="space-y-3">
+                        {[
+                          {
+                            side: followUpActorSide,
+                            label:
+                              participantsBySide[followUpActorSide]?.displayName ||
+                              followUpActorSide,
+                            reboundType: 'OREB',
+                            players: onCourtPlayersBySide[followUpActorSide] || [],
+                          },
+                          {
+                            side: followUpOtherSide,
+                            label:
+                              participantsBySide[followUpOtherSide]?.displayName ||
+                              followUpOtherSide,
+                            reboundType: 'DREB',
+                            players: onCourtPlayersBySide[followUpOtherSide] || [],
+                          },
+                        ].map((group) => (
+                          <div key={group.side}>
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              {group.label} — {group.reboundType}
+                            </p>
+                            <div className="space-y-1.5">
+                              {group.players.map((player) => (
+                                <button
+                                  key={player.id}
+                                  type="button"
+                                  aria-label={player.displayName}
+                                  disabled={isSaving}
+                                  className={playerButtonClass(false)}
+                                  onClick={() => handleFollowUpSelection(player.id)}
+                                >
+                                  <span className={playerAvatarClass} aria-hidden="true">
+                                    {(player.displayName || '?').trim().charAt(0).toUpperCase() ||
+                                      '?'}
+                                  </span>
+                                  <span className={playerNumberClass}>
+                                    {player.jerseyNumber ?? '—'}
+                                  </span>
+                                  <span className={playerNameClass}>{player.displayName}</span>
+                                </button>
+                              ))}
+                              {group.players.length === 0 ? (
+                                <p className="px-1 text-xs text-slate-400">No players on court</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {followUpPlayers.map((player) => (
+                          <button
+                            key={player.id}
+                            type="button"
+                            aria-label={player.displayName}
+                            disabled={isSaving}
+                            className={playerButtonClass(
+                              currentSideState.selectedPlayerId === player.id
+                            )}
+                            onClick={() =>
+                              pendingFollowUpPrompt
+                                ? handleFollowUpSelection(player.id)
+                                : updateSideState(activeKey, { selectedPlayerId: player.id })
+                            }
+                          >
+                            <span className={playerAvatarClass} aria-hidden="true">
+                              {/* {(player.displayName || '?').trim().charAt(0).toUpperCase() || '?'} */}
+                            </span>
+                            <span className={playerNumberClass}>{player.jerseyNumber ?? '—'}</span>
+                            <span className={playerNameClass}>{player.displayName}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : null}
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {pendingFollowUpPrompt
-                  ? pendingFollowUpPrompt.kind === 'assist'
-                    ? 'Pick Assister'
-                    : pendingFollowUpPrompt.kind === 'rebound'
-                      ? 'Pick Rebounder'
-                      : 'Pick Player'
-                  : 'Pick Player'}
-              </p>
-              <div className="min-h-0 overflow-y-auto pr-1">
-                {isDualTeam && pendingFollowUpPrompt?.kind === 'rebound' ? (
-                  <div className="space-y-3">
-                    {[
-                      {
-                        side: followUpActorSide,
-                        label:
-                          participantsBySide[followUpActorSide]?.displayName || followUpActorSide,
-                        reboundType: 'OREB',
-                        players: onCourtPlayersBySide[followUpActorSide] || [],
-                      },
-                      {
-                        side: followUpOtherSide,
-                        label:
-                          participantsBySide[followUpOtherSide]?.displayName || followUpOtherSide,
-                        reboundType: 'DREB',
-                        players: onCourtPlayersBySide[followUpOtherSide] || [],
-                      },
-                    ].map((group) => (
-                      <div key={group.side}>
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          {group.label} — {group.reboundType}
-                        </p>
-                        <div className="space-y-1.5">
-                          {group.players.map((player) => (
-                            <button
-                              key={player.id}
-                              type="button"
-                              aria-label={player.displayName}
-                              disabled={isSaving}
-                              className={playerButtonClass(false)}
-                              onClick={() => handleFollowUpSelection(player.id)}
-                            >
-                              <span className={playerAvatarClass} aria-hidden="true">
-                                {(player.displayName || '?').trim().charAt(0).toUpperCase() || '?'}
-                              </span>
-                              <span className={playerNumberClass}>
-                                {player.jerseyNumber ?? '—'}
-                              </span>
-                              <span className={playerNameClass}>{player.displayName}</span>
-                            </button>
-                          ))}
-                          {group.players.length === 0 ? (
-                            <p className="px-1 text-xs text-slate-400">No players on court</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {followUpPlayers.map((player) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        aria-label={player.displayName}
-                        disabled={isSaving}
-                        className={playerButtonClass(
-                          currentSideState.selectedPlayerId === player.id
-                        )}
-                        onClick={() =>
-                          pendingFollowUpPrompt
-                            ? handleFollowUpSelection(player.id)
-                            : updateSideState(activeKey, { selectedPlayerId: player.id })
-                        }
-                      >
-                        <span className={playerAvatarClass} aria-hidden="true">
-                          {/* {(player.displayName || '?').trim().charAt(0).toUpperCase() || '?'} */}
-                        </span>
-                        <span className={playerNumberClass}>{player.jerseyNumber ?? '—'}</span>
-                        <span className={playerNameClass}>{player.displayName}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
 
-            <div className={actionColumnClass}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Action</p>
-              <div className={actionScrollerClass}>
-                <div className={actionGridClass}>
-                  {pendingFollowUpPrompt ? (
-                    <>
-                      {pendingFollowUpPrompt.kind === 'assist' ? (
-                        <button
-                          type="button"
-                          className={actionButtonClass('slate')}
-                          disabled={isSaving}
-                          onClick={() => handleFollowUpSelection('NO_ASSIST')}
-                        >
-                          Unassisted
-                        </button>
-                      ) : pendingFollowUpPrompt.kind === 'rebound' && !isDualTeam ? (
-                        <button
-                          type="button"
-                          className={actionButtonClass('opponent')}
-                          disabled={isSaving}
-                          onClick={() => handleFollowUpSelection('OPP_REB')}
-                        >
-                          Opp Rebound
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                        disabled={isSaving}
-                        onClick={() => clearEventPicker()}
-                      >
-                        Skip this question
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className={actionGroupClass}>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                          Shot
-                        </p>
-                        <div className={actionPairClass}>
+                <div className={actionColumnClass}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Action
+                  </p>
+                  <div className={actionScrollerClass}>
+                    <div className={actionGridClass}>
+                      {pendingFollowUpPrompt ? (
+                        <>
+                          {pendingFollowUpPrompt.kind === 'assist' ? (
+                            <button
+                              type="button"
+                              className={actionButtonClass('slate')}
+                              disabled={isSaving}
+                              onClick={() => handleFollowUpSelection('NO_ASSIST')}
+                            >
+                              Unassisted
+                            </button>
+                          ) : pendingFollowUpPrompt.kind === 'rebound' && !isDualTeam ? (
+                            <button
+                              type="button"
+                              className={actionButtonClass('opponent')}
+                              disabled={isSaving}
+                              onClick={() => handleFollowUpSelection('OPP_REB')}
+                            >
+                              Opp Rebound
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            className={actionButtonClass('make')}
+                            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                             disabled={isSaving}
-                            onClick={() => addShotEvent('made')}
+                            onClick={() => clearEventPicker()}
                           >
-                            Make
+                            Skip this question
                           </button>
-                          <button
-                            type="button"
-                            className={actionButtonClass('miss')}
-                            disabled={isSaving}
-                            onClick={() => addShotEvent('miss')}
-                          >
-                            Miss
-                          </button>
-                        </div>
-                      </div>
-                      {isScrimmage ? (
-                        <div className={actionGroupClass}>
-                          <button
-                            type="button"
-                            className={actionButtonClass('foul')}
-                            disabled={isSaving}
-                            onClick={() => addQuickStatEvent('TOV')}
-                          >
-                            TOV
-                          </button>
-                        </div>
+                        </>
                       ) : (
                         <>
                           <div className={actionGroupClass}>
                             <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                              Free Throw
+                              Shot
                             </p>
                             <div className={actionPairClass}>
                               <button
                                 type="button"
-                                className={actionButtonClass('ft')}
+                                className={actionButtonClass('make')}
                                 disabled={isSaving}
-                                onClick={() => addFreeThrowEvent('made')}
+                                onClick={() => addShotEvent('made')}
                               >
-                                FT+
+                                Make
                               </button>
                               <button
                                 type="button"
                                 className={actionButtonClass('miss')}
                                 disabled={isSaving}
-                                onClick={() => addFreeThrowEvent('miss')}
+                                onClick={() => addShotEvent('miss')}
                               >
-                                FT-
+                                Miss
                               </button>
                             </div>
                           </div>
-                          <div className={actionGroupClass}>
-                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                              Rebound
-                            </p>
-                            <div className={actionPairClass}>
-                              <button
-                                type="button"
-                                className={actionButtonClass('rebound')}
-                                disabled={isSaving}
-                                onClick={() => addReboundEvent('DREB')}
-                              >
-                                DREB
-                              </button>
-                              <button
-                                type="button"
-                                className={actionButtonClass('rebound')}
-                                disabled={isSaving}
-                                onClick={() => addReboundEvent('OREB')}
-                              >
-                                OREB
-                              </button>
-                            </div>
-                          </div>
-                          <div className={actionGroupClass}>
-                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                              Possession
-                            </p>
-                            <div className={actionTripleClass}>
-                              <button
-                                type="button"
-                                className={actionButtonClass('defense')}
-                                disabled={isSaving}
-                                onClick={() => addQuickStatEvent('STL')}
-                              >
-                                STL
-                              </button>
-                              <button
-                                type="button"
-                                className={actionButtonClass('defense')}
-                                disabled={isSaving}
-                                onClick={() => addQuickStatEvent('BLK')}
-                              >
-                                BLK
-                              </button>
+                          {isScrimmage ? (
+                            <div className={actionGroupClass}>
                               <button
                                 type="button"
                                 className={actionButtonClass('foul')}
@@ -3762,65 +4086,1462 @@ export function GameTrackPage() {
                                 TOV
                               </button>
                             </div>
-                          </div>
-                          <div className={actionGroupClass}>
-                            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                              Foul
-                            </p>
-                            <button
-                              type="button"
-                              className={actionButtonClass('foul')}
-                              disabled={isSaving}
-                              onClick={() => addQuickStatEvent('FOUL')}
-                            >
-                              FOUL
-                            </button>
-                          </div>
+                          ) : (
+                            <>
+                              <div className={actionGroupClass}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  Free Throw
+                                </p>
+                                <div className={actionPairClass}>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('ft')}
+                                    disabled={isSaving}
+                                    onClick={() => addFreeThrowEvent('made')}
+                                  >
+                                    FT+
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('miss')}
+                                    disabled={isSaving}
+                                    onClick={() => addFreeThrowEvent('miss')}
+                                  >
+                                    FT-
+                                  </button>
+                                </div>
+                              </div>
+                              <div className={actionGroupClass}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  Rebound
+                                </p>
+                                <div className={actionPairClass}>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('rebound')}
+                                    disabled={isSaving}
+                                    onClick={() => addReboundEvent('DREB')}
+                                  >
+                                    DREB
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('rebound')}
+                                    disabled={isSaving}
+                                    onClick={() => addReboundEvent('OREB')}
+                                  >
+                                    OREB
+                                  </button>
+                                </div>
+                              </div>
+                              <div className={actionGroupClass}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  Possession
+                                </p>
+                                <div className={actionTripleClass}>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('defense')}
+                                    disabled={isSaving}
+                                    onClick={() => addQuickStatEvent('STL')}
+                                  >
+                                    STL
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('defense')}
+                                    disabled={isSaving}
+                                    onClick={() => addQuickStatEvent('BLK')}
+                                  >
+                                    BLK
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={actionButtonClass('foul')}
+                                    disabled={isSaving}
+                                    onClick={() => addQuickStatEvent('TOV')}
+                                  >
+                                    TOV
+                                  </button>
+                                </div>
+                              </div>
+                              <div className={actionGroupClass}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                  Foul
+                                </p>
+                                <button
+                                  type="button"
+                                  className={actionButtonClass('foul')}
+                                  disabled={isSaving}
+                                  onClick={() => setChoosingFoulType(true)}
+                                >
+                                  FOUL
+                                </button>
+                              </div>
+                            </>
+                          )}
+                          {!isDualTeam ? (
+                            <div className={actionGroupClass}>
+                              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                Opponent
+                              </p>
+                              <div className={actionTripleClass}>
+                                <button
+                                  type="button"
+                                  className={actionButtonClass('opponent')}
+                                  disabled={isSaving}
+                                  onClick={() => addOpponentScore('OPP_FT_MADE')}
+                                >
+                                  +1
+                                </button>
+                                <button
+                                  type="button"
+                                  className={actionButtonClass('opponent')}
+                                  disabled={isSaving}
+                                  onClick={() => addOpponentScore('OPP_FG2_MADE')}
+                                >
+                                  +2
+                                </button>
+                                <button
+                                  type="button"
+                                  className={actionButtonClass('opponent')}
+                                  disabled={isSaving}
+                                  onClick={() => addOpponentScore('OPP_FG3_MADE')}
+                                >
+                                  +3
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </>
                       )}
-                      {!isDualTeam ? (
-                        <div className={actionGroupClass}>
-                          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                            Opponent
-                          </p>
-                          <div className={actionTripleClass}>
-                            <button
-                              type="button"
-                              className={actionButtonClass('opponent')}
-                              disabled={isSaving}
-                              onClick={() => addOpponentScore('OPP_FT_MADE')}
-                            >
-                              +1
-                            </button>
-                            <button
-                              type="button"
-                              className={actionButtonClass('opponent')}
-                              disabled={isSaving}
-                              onClick={() => addOpponentScore('OPP_FG2_MADE')}
-                            >
-                              +2
-                            </button>
-                            <button
-                              type="button"
-                              className={actionButtonClass('opponent')}
-                              disabled={isSaving}
-                              onClick={() => addOpponentScore('OPP_FG3_MADE')}
-                            >
-                              +3
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
-    </div>
+    ) : null;
+
+  const legacyInlineEventPicker =
+    isTrackingFullscreen && isDesktopLayout && isLeagueGame ? null : eventPicker;
+
+  const substitutionsContent =
+    activePanel === 'substitutions'
+      ? (() => {
+          const { playerOutId, playerInId } = currentSideState.substitutionState;
+          const playerOut = playerOutId ? playersById.get(playerOutId) : null;
+          const playerIn = playerInId ? playersById.get(playerInId) : null;
+          const bothSelected = Boolean(playerOutId && playerInId);
+
+          function SubPlayerCard({ player, isSelected, tone, onToggle }) {
+            const baseRing = tone === 'out' ? 'ring-[#B42318]' : 'ring-[#1B4332]';
+            const selectedBg = tone === 'out' ? 'bg-[#FDF3F2]' : 'bg-[#EEF6F1]';
+            const avatarBg =
+              tone === 'out' ? 'bg-[#FBE3E1] text-[#8f1c12]' : 'bg-[#DCEBE3] text-[#1B4332]';
+            const defaultAvatarBg = 'bg-slate-100 text-slate-600';
+            return (
+              <button
+                type="button"
+                onClick={onToggle}
+                aria-label={player.displayName}
+                aria-pressed={isSelected}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition ${
+                  isSelected
+                    ? `${selectedBg} border-transparent ring-2 ${baseRing}`
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span
+                  className={`flex h-11 w-11 items-center justify-center rounded-full text-lg font-black tabular-nums ${
+                    isSelected ? avatarBg : defaultAvatarBg
+                  }`}
+                >
+                  {player.jerseyNumber ?? '?'}
+                </span>
+                <span className="w-full overflow-hidden text-center text-[11px] font-semibold leading-tight text-slate-700">
+                  {player.displayName}
+                </span>
+              </button>
+            );
+          }
+
+          return (
+            <div className="relative">
+              <div className={`space-y-5 transition-all ${bothSelected ? 'pb-20' : ''}`}>
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    On Court — tap to sub out
+                  </p>
+                  {onCourtPlayers.length === 0 ? (
+                    <p className="text-sm text-slate-400">No players on court yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-5 gap-1">
+                      {onCourtPlayers.map((player) => (
+                        <SubPlayerCard
+                          key={player.id}
+                          player={player}
+                          tone="out"
+                          isSelected={playerOutId === player.id}
+                          onToggle={() => toggleSubstitutionPlayer('playerOutId', player.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      On Bench — tap to sub in
+                    </p>
+                    {canAddRosterPlayer ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddPlayerOpen(true)}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        + Add player
+                      </button>
+                    ) : null}
+                  </div>
+                  {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
+                    <p className="text-sm text-slate-400">No bench players available.</p>
+                  ) : (
+                    <div className="grid grid-cols-5 gap-1">
+                      {benchPlayers
+                        .filter((p) => p.isActive !== false)
+                        .map((player) => (
+                          <SubPlayerCard
+                            key={player.id}
+                            player={player}
+                            tone="in"
+                            isSelected={playerInId === player.id}
+                            onToggle={() => toggleSubstitutionPlayer('playerInId', player.id)}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {bothSelected ? (
+                <div className="absolute inset-x-0 bottom-0 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                  <div className="mb-3 flex items-center justify-center gap-3">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FBE3E1] text-sm font-black text-[#8f1c12]">
+                        {playerOut?.jerseyNumber ?? '?'}
+                      </span>
+                      <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
+                        {playerOut?.displayName}
+                      </span>
+                    </div>
+                    <svg
+                      viewBox="0 0 20 20"
+                      className="h-5 w-5 shrink-0 text-slate-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M4 7h12M13 4l3 3-3 3M16 13H4M7 10l-3 3 3 3" />
+                    </svg>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#DCEBE3] text-sm font-black text-[#1B4332]">
+                        {playerIn?.jerseyNumber ?? '?'}
+                      </span>
+                      <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
+                        {playerIn?.displayName}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveSubstitution}
+                    disabled={isSaving}
+                    className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Saving…' : 'Record Sub'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })()
+      : null;
+
+  const eventsContent =
+    activePanel === 'events' ? (
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-slate-900">Recent Events</h2>
+          <div className="flex items-center gap-2">
+            {recentEvents.length > 3 && !useDesktopLeagueWorkspace ? (
+              <button
+                type="button"
+                onClick={() => setShowAllRecentEvents((value) => !value)}
+                className="text-sm font-medium text-[#1B4332] hover:underline"
+              >
+                {showAllRecentEvents ? 'Show less' : 'Show all'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => undoLastEvent()}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
+            >
+              Undo Last
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {!useDesktopLeagueWorkspace && (
+            <span className="text-xs text-slate-400">On each row:</span>
+          )}
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5 shrink-0 text-slate-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
+            </svg>
+            Edit event
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5 shrink-0 text-[#1B4332]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M8 3v8M5 8l3 3 3-3" />
+              <path d="M3 13h10" />
+            </svg>
+            Insert stat before
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5 shrink-0 text-[#B42318]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
+            </svg>
+            Delete event
+          </span>
+        </div>
+        <div className="mt-4 space-y-2">
+          {visibleRecentEvents.map((event) => {
+            const eventLogoUrl = isDualTeam
+              ? participantsBySide[event.teamSide]?.logo?.url || teamPlaceholder
+              : event.playerId
+                ? team?.logo?.url || teamPlaceholder
+                : null;
+            const { actor, statLabel, meta } = parseEventParts(
+              event,
+              playersById,
+              game.gameFormat,
+              statLabels
+            );
+            return (
+              <div key={event.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    {eventLogoUrl ? (
+                      <CloudinaryImage
+                        src={eventLogoUrl}
+                        alt=""
+                        width={24}
+                        height={24}
+                        loading="lazy"
+                        decoding="async"
+                        srcSetWidths={[24, 48, 72]}
+                        sizes="24px"
+                        className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                      />
+                    ) : null}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{actor}</p>
+                      {statLabel ? <p className="text-xs text-slate-600">{statLabel}</p> : null}
+                      {meta ? <p className="text-xs text-slate-400">{meta}</p> : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Edit this event"
+                      onClick={() => openEditEvent(event)}
+                      className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Insert stat before this event"
+                      onClick={() => {
+                        setInsertBeforeEventId(event.id);
+                        entryClockSnapshotRef.current = {
+                          segmentKind: event.segmentKind,
+                          segmentNumber: event.segmentNumber,
+                          clockMillisecondsRemaining: event.clockMillisecondsRemaining,
+                        };
+                        setActivePanel('court');
+                      }}
+                      className="rounded-md p-1.5 text-[#1B4332] transition-colors hover:bg-[#1B4332]/10"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="M8 3v8M5 8l3 3 3-3" />
+                        <path d="M3 13h10" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Remove this event"
+                      onClick={() => removeEvent(event.id)}
+                      className="rounded-md p-1.5 text-[#B42318] transition-colors hover:bg-[#B42318]/10"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ) : null;
+
+  const optionsContent =
+    activePanel === 'options' ? (
+      <div className="space-y-6 pb-2">
+        <section aria-labelledby="voice-tracking-settings-heading">
+          <h2
+            id="voice-tracking-settings-heading"
+            className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
+          >
+            Voice tracking
+          </h2>
+          <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <button
+              type="button"
+              aria-pressed={voiceEnabled}
+              disabled={!speechSupport.supported || !voiceSportSupported || isSaving}
+              onClick={() => setVoiceEnabled((enabled) => !enabled)}
+              className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">Voice Tracking</p>
+                <p className="text-xs text-slate-500">
+                  {!voiceSportSupported
+                    ? 'Not available for this sport.'
+                    : !speechSupport.supported
+                      ? speechSupport.reason === 'insecure'
+                        ? 'Requires a secure HTTPS connection.'
+                        : 'Not supported by this browser.'
+                      : voiceEnabled
+                        ? 'On - select a court position to start listening.'
+                        : 'Off - tap to enable for this tracking session.'}
+                </p>
+                {speechSupport.supported && voiceSportSupported ? (
+                  <p className="mt-1 text-[11px] leading-4 text-slate-400">
+                    Your browser may process audio remotely. TSW does not store audio or
+                    transcripts.
+                  </p>
+                ) : null}
+              </div>
+              <span
+                className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${voiceEnabled ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
+              >
+                {voiceEnabled ? 'On' : 'Off'}
+              </span>
+            </button>
+
+            {voiceSportSupported ? (
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-label="How to use voice commands"
+                onClick={() => setIsVoiceHelpOpen(true)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EEF6F1] text-sm font-black text-[#1B4332]">
+                  ?
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-900">
+                    How to use voice commands
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    See the process, phrase structure, and examples.
+                  </span>
+                </span>
+                <svg
+                  viewBox="0 0 20 20"
+                  className="ml-auto h-5 w-5 shrink-0 text-slate-400"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="m7 4 6 6-6 6" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+        </section>
+
+        <section aria-labelledby="tracking-setup-heading">
+          <h2
+            id="tracking-setup-heading"
+            className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
+          >
+            Tracking setup
+          </h2>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() =>
+                setCourtOrientation((o) => (o === 'vertical' ? 'horizontal' : 'vertical'))
+              }
+              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M4 4v5h5M16 16v-5h-5" />
+                  <path d="M4.5 9a7.5 7.5 0 0 1 12.6-4M15.5 11a7.5 7.5 0 0 1-12.6 4" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Rotate Court</p>
+                <p className="text-xs text-slate-500">
+                  Currently {courtOrientation} - tap to rotate{' '}
+                  {courtOrientation === 'vertical' ? 'horizontal' : 'vertical'}
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={togglePauseVideoOnEntry}
+              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M7 4v12M13 4v12" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Pause During Stat Entry</p>
+                <p className="text-xs text-slate-500">
+                  {pauseVideoOnEntry
+                    ? `On - ${hasPlayableVideo(game) ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
+                    : `Off - ${hasPlayableVideo(game) ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
+                </p>
+              </div>
+              <span
+                className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
+              >
+                {pauseVideoOnEntry ? 'On' : 'Off'}
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section aria-labelledby="game-video-heading">
+          <h2
+            id="game-video-heading"
+            className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
+          >
+            Game video
+          </h2>
+          <p className="mb-2 px-1 text-xs text-slate-500">{gameVideoSourceSummary}</p>
+          <div className="space-y-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isVideoUrlEditOpen) {
+                    setIsVideoUrlEditOpen(false);
+                    return;
+                  }
+                  setVideoUrlDraft(game.videoUrl || '');
+                  setIsVideoUrlEditOpen(true);
+                }}
+                className="flex w-full items-center gap-3 text-left"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <rect x="2" y="5" width="12" height="10" rx="1.5" />
+                    <path d="M14 8.5l4-2.5v8l-4-2.5" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {game.videoUrl ? 'Change YouTube Link' : 'Link YouTube Video'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {game.videoUrl
+                      ? 'Replace or remove the linked YouTube video.'
+                      : 'Paste a YouTube link to watch while you track.'}
+                  </p>
+                </div>
+              </button>
+
+              {isVideoUrlEditOpen ? (
+                <div className="mt-3 space-y-2">
+                  <input
+                    type="url"
+                    aria-label="Game video URL"
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={videoUrlDraft}
+                    onChange={(e) => setVideoUrlDraft(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={saveVideoUrl}
+                      disabled={isSaving}
+                      className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                    >
+                      {isSaving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsVideoUrlEditOpen(false)}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div ref={videoUploaderSlotRef} className="has-[>div:empty]:hidden" />
+          </div>
+        </section>
+
+        <section aria-labelledby="game-actions-heading">
+          <h2
+            id="game-actions-heading"
+            className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
+          >
+            Game actions
+          </h2>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => leaveTracker('/admin')}
+              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                <svg
+                  viewBox="0 0 20 20"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M3 10h14M10 3l7 7-7 7" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Save & Exit</p>
+                <p className="text-xs text-slate-500">
+                  Return to admin. All changes are already saved.
+                </p>
+              </div>
+            </button>
+
+            {isCompleted ? (
+              <button
+                type="button"
+                onClick={() => leaveTracker(`/games/${gameId}`)}
+                disabled={isSaving}
+                className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Done Editing</p>
+                  <p className="text-xs text-slate-500">View the finalized game record.</p>
+                </div>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowFinishConfirm(true)}
+                disabled={isSaving}
+                className="flex w-full items-center gap-3 rounded-xl border border-[#1B4332]/25 bg-[#EEF6F1] px-4 py-4 text-left transition-colors hover:bg-[#DCEBE3] disabled:opacity-60"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1B4332] text-white">
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-[#1B4332]">Finish Game</p>
+                  <p className="text-xs text-[#2c5c47]">Mark the game as complete.</p>
+                </div>
+              </button>
+            )}
+          </div>
+        </section>
+      </div>
+    ) : null;
+
+  const eventEditor = editingEvent
+    ? (() => {
+        const allStatTypes = Object.keys(statLabels);
+        const AdvancedFields = useDesktopLeagueWorkspace ? 'details' : 'div';
+        return (
+          // Escape handling only — the actual dismiss control is the invisible
+          // backdrop <button> beneath this dialog.
+          <div
+            role={useDesktopLeagueWorkspace ? 'region' : 'dialog'}
+            aria-modal={useDesktopLeagueWorkspace ? undefined : true}
+            aria-label="Edit event"
+            className={
+              useDesktopLeagueWorkspace
+                ? 'w-full'
+                : 'fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]'
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !(useDesktopLeagueWorkspace && isSaving))
+                setEditingEvent(null);
+            }}
+          >
+            {!useDesktopLeagueWorkspace && (
+              <button
+                type="button"
+                aria-label="Close"
+                tabIndex={-1}
+                className="fixed inset-0 h-full w-full cursor-default"
+                onClick={() => setEditingEvent(null)}
+              />
+            )}
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
+                      stop-propagation guard only, not an interactive control. */}
+            <div
+              className={
+                useDesktopLeagueWorkspace
+                  ? 'w-full bg-white'
+                  : 'relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl'
+              }
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-base font-semibold text-slate-900">Edit Event</p>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  disabled={useDesktopLeagueWorkspace && isSaving}
+                  onClick={() => setEditingEvent(null)}
+                  className="rounded-md border border-slate-300 p-1 text-slate-500 hover:bg-slate-50"
+                >
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="m5 5 10 10M15 5 5 15" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {isDualTeam ? (
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Team
+                    </p>
+                    <div className="flex gap-2">
+                      {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
+                        <button
+                          key={side}
+                          type="button"
+                          onClick={() => {
+                            const sidePlayers = participantsBySide[side]?.players || [];
+                            const playerStillValid = sidePlayers.some(
+                              (p) => p.id === editingEvent.playerId
+                            );
+                            setEditingEvent((ev) => ({
+                              ...ev,
+                              teamSide: side,
+                              playerId: playerStillValid ? ev.playerId : '',
+                            }));
+                          }}
+                          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${editingEvent.teamSide === side ? 'border-[#141414] bg-[#141414] text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          {participantsBySide[side]?.displayName || side}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Player
+                  </p>
+                  <select
+                    aria-label="Player"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    value={editingEvent.playerId}
+                    onChange={(e) => setEditingEvent((ev) => ({ ...ev, playerId: e.target.value }))}
+                  >
+                    <option value="">— No player (opponent) —</option>
+                    {(isDualTeam
+                      ? participantsBySide[editingEvent.teamSide]?.players || []
+                      : players
+                    ).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
+                        {p.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Stat
+                  </p>
+                  <select
+                    aria-label="Stat type"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    value={editingEvent.statType}
+                    onChange={(e) => setEditingEvent((ev) => ({ ...ev, statType: e.target.value }))}
+                  >
+                    {allStatTypes.map((st) => (
+                      <option key={st} value={st}>
+                        {statLabels[st]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <AdvancedFields className="space-y-4">
+                  {useDesktopLeagueWorkspace && (
+                    <summary className="cursor-pointer text-sm font-semibold text-slate-600">
+                      More details
+                    </summary>
+                  )}
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Period and game time
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        aria-label="Period kind"
+                        value={editingEvent.segmentKind}
+                        onChange={(e) =>
+                          setEditingEvent((ev) => ({ ...ev, segmentKind: e.target.value }))
+                        }
+                        className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                      >
+                        <option value="regulation">Regulation</option>
+                        <option value="overtime">Overtime</option>
+                      </select>
+                      <input
+                        aria-label="Period number"
+                        type="number"
+                        min="1"
+                        value={editingEvent.segmentNumber}
+                        onChange={(e) =>
+                          setEditingEvent((ev) => ({ ...ev, segmentNumber: e.target.value }))
+                        }
+                        className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                      />
+                      <input
+                        aria-label="Milliseconds remaining"
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={editingEvent.clockMillisecondsRemaining}
+                        onChange={(e) =>
+                          setEditingEvent((ev) => ({
+                            ...ev,
+                            clockMillisecondsRemaining: e.target.value,
+                          }))
+                        }
+                        className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Zone
+                    </p>
+                    <select
+                      aria-label="Court zone"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                      value={editingEvent.zoneId}
+                      onChange={(e) => setEditingEvent((ev) => ({ ...ev, zoneId: e.target.value }))}
+                    >
+                      <option value="">— No zone —</option>
+                      {Object.entries(ZONE_LABELS).map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-2 flex gap-2">
+                      <div className="flex-1">
+                        <p className="mb-1 text-xs text-slate-500">X (0–100)</p>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          aria-label="X coordinate (0–100)"
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          value={editingEvent.x}
+                          onChange={(e) => setEditingEvent((ev) => ({ ...ev, x: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="mb-1 text-xs text-slate-500">Y (0–100)</p>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          aria-label="Y coordinate (0–100)"
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          value={editingEvent.y}
+                          onChange={(e) => setEditingEvent((ev) => ({ ...ev, y: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </AdvancedFields>
+              </div>
+
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  disabled={useDesktopLeagueWorkspace && isSaving}
+                  onClick={() => setEditingEvent(null)}
+                  className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={saveEventEdit}
+                  className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+                >
+                  {isSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()
+    : null;
+
+  const desktopSetup = lineupSetupStep ? (
+    <LineupPicker
+      variant="fullscreen"
+      stepLabel={
+        lineupRevisitSide
+          ? 'Add players'
+          : !isDualTeam
+            ? null
+            : lineupSetupStep === 'home'
+              ? 'Step 1 of 2'
+              : 'Step 2 of 2'
+      }
+      isDualTeam={isDualTeam}
+      teamDisplayName={
+        isDualTeam
+          ? participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+          : team?.name || 'Team'
+      }
+      players={isDualTeam ? participantsBySide[lineupSetupStep]?.players || [] : players}
+      canManageRoster={canAddRosterPlayer}
+      onAddPlayer={() => setIsAddPlayerOpen(true)}
+      onExit={lineupRevisitSide ? () => setLineupRevisitSide(null) : null}
+      lineupDraft={sideState[lineupSetupStep]?.lineupDraft || []}
+      onToggle={(playerId, checked) => {
+        const draft = sideState[lineupSetupStep]?.lineupDraft || [];
+        const nextDraft = checked ? [...draft, playerId] : draft.filter((id) => id !== playerId);
+        updateSideState(lineupSetupStep, { lineupDraft: nextDraft });
+      }}
+      onSave={saveLineup}
+      isSaving={isSaving}
+    />
   ) : null;
+
+  const voiceHelpBody = (
+    <div className="space-y-6 text-sm text-slate-600">
+      <section className="rounded-xl border border-[#B7D8C8] bg-[#EEF6F1] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[#356859]">This game</p>
+        <h3 className="mt-1 text-base font-semibold text-slate-900">
+          {isDualTeam ? 'Dual-team tracking' : 'One-team tracking'}
+        </h3>
+        <p className="mt-1 text-xs text-slate-600">
+          {isDualTeam
+            ? 'You are tracking both teams, so every command starts with home or away to say which lineup to search.'
+            : 'You are tracking one team, so never say home or away. Commands search your own on-court lineup.'}
+        </p>
+        <p className="mt-3 text-xs text-slate-600">
+          Every command below is written exactly as you would say it in this game:{' '}
+          <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900">
+            {isDualTeam ? 'home/away + player + action' : 'player + action'}
+          </code>
+        </p>
+      </section>
+
+      <section>
+        <h3 className="font-semibold text-slate-900">Track a stat</h3>
+        <ol className="mt-3 space-y-3">
+          {[
+            'Turn on Voice Tracking in Options.',
+            'Name anyone on the roster. If they are on the bench — or not on the team yet — you are asked to bring them on before the stat is recorded.',
+            'Open Court and tap where the event happened. That tap starts the microphone.',
+            'Say one player and one action. Nothing is recorded unless both are unambiguous.',
+            'Answer any follow-up question using the microphone beside it.',
+          ].map((step, index) => (
+            <li key={step} className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#EEF6F1] text-xs font-bold text-[#1B4332]">
+                {index + 1}
+              </span>
+              <span className="pt-0.5">{step}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {voiceCommandTables(isDualTeam ? 'dual_team' : 'one_sided').map((table) => (
+        <VoiceHelpTable
+          key={table.title}
+          title={table.title}
+          description={table.description}
+          columns={table.columns}
+          rows={table.rows}
+        />
+      ))}
+
+      <details className="rounded-xl border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer px-4 py-3 font-semibold text-slate-900">
+          Commands for a {isDualTeam ? 'one-team' : 'dual-team'} game
+        </summary>
+        <div className="space-y-6 border-t border-slate-200 px-4 py-4">
+          <p className="text-xs text-slate-500">
+            {isDualTeam
+              ? 'This game is not tracked this way. In a one-team game you never say a side, and you can score the opponent as a total.'
+              : 'This game is not tracked this way. In a dual-team game every command names a side, and the opponent is tracked as real players rather than a total.'}
+          </p>
+          {voiceCommandTables(isDualTeam ? 'one_sided' : 'dual_team').map((table) => (
+            <VoiceHelpTable
+              key={table.title}
+              idPrefix="voice-help-other"
+              title={table.title}
+              description={table.description}
+              columns={table.columns}
+              rows={table.rows}
+            />
+          ))}
+        </div>
+      </details>
+
+      <section className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
+        <h3 className="font-semibold text-slate-900">Player names and numbers</h3>
+        <p className="mt-2">
+          You can say a jersey number from 0–999 or a uniquely matching player name. Number words
+          zero through nineteen and combinations such as <code>twenty three</code> are supported;
+          say exact multiples of ten such as jersey 20 as digits. You can also put{' '}
+          <code>number</code> or <code>jersey</code> in front of a number, as in{' '}
+          <code>number 13 steal</code>.
+        </p>
+      </section>
+    </div>
+  );
+
+  const desktopBlocked =
+    isSaving ||
+    voiceBusy ||
+    showClockRecovery ||
+    showFinishConfirm ||
+    Boolean(pendingExitDestination) ||
+    isAddPlayerOpen ||
+    isVoiceSubInOpen;
+  const desktopNeedsRelatedLocation =
+    pendingFollowUpPrompt?.kind === 'who_missed_shot' &&
+    (!desktopRelatedShot || desktopLocationMode === 'related');
+  const desktopCourt = (
+    <div className="space-y-3">
+      {desktopLocationMode === 'primary' && (
+        <DesktopEntryHeader
+          title="Change location"
+          actions={
+            <button
+              type="button"
+              disabled={desktopBlocked}
+              className={desktopButton}
+              onClick={() => clearEventPicker()}
+            >
+              Cancel
+            </button>
+          }
+        />
+      )}
+      <div
+        style={{
+          aspectRatio: rotateCourt
+            ? courtLayout.height / courtLayout.width
+            : courtLayout.width / courtLayout.height,
+        }}
+        className="relative w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+        onPointerDownCapture={(event) => {
+          if (event.target.closest('[data-testid="interactive-court-image"]'))
+            desktopOpeningPointerRef.current = true;
+        }}
+      >
+        <InteractiveCourtImage
+          onSelect={(point) => {
+            if (desktopBlocked) return;
+            if (desktopNeedsRelatedLocation) {
+              setDesktopRelatedShot(inferCourtSelection(point.x, point.y, courtLayout.calibration));
+              setDesktopLocationMode(null);
+            } else onCourtSelect(point);
+          }}
+          selectedPoint={desktopNeedsRelatedLocation ? desktopRelatedShot : selectedShot}
+          containerClassName="h-full"
+          courtClassName="h-full"
+          rotate90={rotateCourt}
+          layout={courtLayout}
+          flat
+          helperText=""
+          disabled={desktopBlocked}
+        />
+        {!desktopEntryOpen && (
+          <button
+            type="button"
+            disabled={desktopNavigationLocked}
+            onClick={openTrackingOverlay}
+            aria-label="Open fullscreen tracking"
+            title="Expand court"
+            className="absolute bottom-2 right-2 rounded-lg border border-slate-300 bg-white p-2 text-slate-500 hover:bg-slate-100"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 16"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M6 2H2v4M10 2h4v4M2 10v4h4M14 10v4h-4" />
+            </svg>
+          </button>
+        )}
+      </div>
+      {!desktopEntryOpen && (
+        <p className="text-xs leading-relaxed text-slate-500">
+          Click the court to record an event with its location.
+        </p>
+      )}
+      {!pendingFollowUpPrompt && courtVoiceControl}
+    </div>
+  );
+  const desktopDescribeEvent = (event) => {
+    const parts = parseEventParts(event, playersById, game.gameFormat, statLabels);
+    const player = playersById.get(event.playerId);
+    return {
+      ...parts,
+      actor: `${participantsBySide[event.teamSide]?.displayName || ''}${player?.jerseyNumber != null ? ` · #${player.jerseyNumber}` : ''} · ${parts.actor}`,
+    };
+  };
+  const desktopWorkspace = (
+    <DesktopGameTrackingWorkspace
+      activePanel={activePanel}
+      onNavigate={changeActivePanel}
+      locked={desktopNavigationLocked}
+      status={
+        isSaving
+          ? 'Saving…'
+          : saveStatus === 'failed'
+            ? 'Save unconfirmed'
+            : saveStatus === 'saved'
+              ? 'Saved'
+              : 'Synced'
+      }
+      paused={Boolean(entryVideoWasPausedRef.current || entryClockWasRunningRef.current)}
+      quickStats={
+        !lineupSetupStep && !editingEvent && !desktopEntryOpen && activePanel === 'court' ? (
+          <section aria-label="Quick stats" className="border-t border-slate-200 pt-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="font-bold text-slate-900">Quick stats</h2>
+              <p className="text-xs text-slate-500">No court location needed.</p>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {DESKTOP_QUICK_STATS.map((stat) => (
+                <button
+                  type="button"
+                  key={stat.type}
+                  data-desktop-stat={stat.type}
+                  onClick={() => openDesktopQuickStat(stat.type)}
+                  disabled={desktopNavigationLocked}
+                  className={`${desktopButton} !px-1.5 !py-1.5 !text-xs ${desktopStatColor(stat.type)}`}
+                >
+                  {stat.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null
+      }
+      recentEvents={
+        !lineupSetupStep && activePanel === 'court' ? (
+          <DesktopRecentEvents
+            events={recentEvents}
+            describeEvent={desktopDescribeEvent}
+            disabled={desktopNavigationLocked}
+            undoDisabled={desktopNavigationLocked}
+            onUndo={() =>
+              commitDesktopEntry(() => undoLastEvent({ expectedEventId: recentEvents[0]?.id }))
+            }
+            onEdit={openEditEvent}
+            onInsert={beginDesktopInsertion}
+            onDelete={(id) => commitDesktopEntry(() => removeEvent(id))}
+            onViewAll={() => {
+              setShowAllRecentEvents(true);
+              changeActivePanel('events');
+            }}
+          />
+        ) : null
+      }
+    >
+      <div
+        ref={desktopEntryHeadingRef}
+        tabIndex={-1}
+        className="outline-none"
+        onPointerDownCapture={() => {
+          desktopOpeningPointerRef.current = false;
+        }}
+        onClickCapture={(event) => {
+          if (desktopOpeningPointerRef.current) {
+            desktopOpeningPointerRef.current = false;
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+      >
+        {insertBeforeEventId && (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-lg bg-amber-50 p-3 text-sm">
+            <span>Insert before selected event · historical game time</span>
+            <button
+              type="button"
+              disabled={desktopBlocked}
+              className={desktopButton}
+              onClick={cancelInsertion}
+            >
+              Cancel insertion
+            </button>
+          </div>
+        )}
+        {lineupSetupStep ? (
+          desktopSetup
+        ) : editingEvent ? (
+          eventEditor
+        ) : activePanel === 'substitutions' ? (
+          <>
+            {substitutionsContent}
+            {hasSubstitutionDraft && (
+              <button
+                type="button"
+                className={desktopButton}
+                disabled={isSaving}
+                onClick={cancelSubstitution}
+              >
+                Cancel substitution
+              </button>
+            )}
+          </>
+        ) : activePanel === 'events' ? (
+          eventsContent
+        ) : activePanel === 'options' ? (
+          isVoiceHelpOpen ? (
+            <section aria-label="Voice tracking help">
+              <button
+                type="button"
+                onClick={() => setIsVoiceHelpOpen(false)}
+                className={`${desktopButton} mb-4`}
+              >
+                Back to settings
+              </button>
+              {voiceHelpBody}
+            </section>
+          ) : (
+            <div className="[&_button]:!py-2">{optionsContent}</div>
+          )
+        ) : pendingFollowUpPrompt ? (
+          <DesktopFollowUpEntry
+            prompt={pendingFollowUpPrompt}
+            groups={followUpGroups.groups}
+            teams={participantsBySide}
+            disabled={desktopBlocked}
+            onSelect={(option) => commitDesktopEntry(() => handleFollowUpSelection(option))}
+            onSkip={() => clearEventPicker()}
+            needsLocation={desktopNeedsRelatedLocation}
+            court={desktopCourt}
+            relatedShot={desktopRelatedShot}
+            relatedZoneLabel={ZONE_LABELS[desktopRelatedShot?.zoneId]}
+            onChangeLocation={() => setDesktopLocationMode('related')}
+            voiceControl={followUpVoiceControl}
+            canUndo={Boolean(desktopEntryContextRef.current?.primaryEventId)}
+            primaryStatType={desktopEntryContextRef.current?.primaryStatType}
+            saving={isSaving}
+            onUndo={undoDesktopPrimary}
+          />
+        ) : desktopQuickEntry ? (
+          <DesktopQuickStatEntry
+            entry={desktopQuickEntry}
+            playersBySide={onCourtPlayersBySide}
+            teams={participantsBySide}
+            onCommit={commitDesktopQuickStat}
+            onFoulTypeChange={(statType) =>
+              setDesktopQuickEntry((entry) => ({ ...entry, statType, foulTypeChosen: true }))
+            }
+            onChangeFoulType={() =>
+              setDesktopQuickEntry((entry) => ({ ...entry, foulTypeChosen: false }))
+            }
+            onBasketChange={(hoopSide) => setDesktopQuickEntry((entry) => ({ ...entry, hoopSide }))}
+            horizontal={rotateCourt}
+            disabled={desktopBlocked}
+            onCancel={() => clearEventPicker()}
+          />
+        ) : choosingFoulType ? (
+          foulTypeEntry
+        ) : selectedShot && !isCourtVoiceAttempt && desktopLocationMode !== 'primary' ? (
+          <DesktopShotEntry
+            shot={selectedShot}
+            zoneLabel={ZONE_LABELS[selectedShot.zoneId]}
+            points={
+              selectedShot.shotFamily === 'FG3'
+                ? (game.scoringRules?.outsideArc ?? 3)
+                : (game.scoringRules?.insideArc ?? 2)
+            }
+            teams={participantsBySide}
+            playersBySide={onCourtPlayersBySide}
+            selectedSide={activeSide}
+            selectedPlayerId={currentSideState.selectedPlayerId}
+            onSelectPlayer={(side, id) => {
+              if (
+                desktopBlocked ||
+                desktopCommitRef.current ||
+                !onCourtPlayersBySide[side]?.some((player) => player.id === id)
+              )
+                return;
+              setActiveSide(side);
+              updateSideState(side, { selectedPlayerId: id });
+              if (desktopEntryContextRef.current) desktopEntryContextRef.current.teamSide = side;
+            }}
+            onCommit={(outcome) => commitDesktopEntry(() => addShotEvent(outcome))}
+            onOtherStat={(type) =>
+              type === 'FOUL'
+                ? setChoosingFoulType(true)
+                : commitDesktopEntry(() =>
+                    type === 'OREB' || type === 'DREB'
+                      ? addReboundEvent(type)
+                      : addQuickStatEvent(type)
+                  )
+            }
+            onChangeLocation={() => setDesktopLocationMode('primary')}
+            onCancel={() => clearEventPicker()}
+            disabled={desktopBlocked}
+          />
+        ) : (
+          desktopCourt
+        )}
+      </div>
+    </DesktopGameTrackingWorkspace>
+  );
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
@@ -3954,6 +5675,8 @@ export function GameTrackPage() {
       ) : null}
 
       <GameTrackScoreHeader
+        compact={useDesktopLeagueWorkspace}
+        teamSelectionDisabled={useDesktopLeagueWorkspace && desktopNavigationLocked}
         gameSummary={gameSummary}
         activeSide={activeSide}
         onChangeActiveSide={changeActiveSide}
@@ -3962,9 +5685,14 @@ export function GameTrackPage() {
         team={team}
         clockControls={
           <GameClockControls
+            compact={useDesktopLeagueWorkspace}
             game={game}
             onCommand={runClockCommand}
-            disabled={isSaving || !allStartingLineupsReady}
+            disabled={
+              isSaving ||
+              !allStartingLineupsReady ||
+              (useDesktopLeagueWorkspace && desktopEntryOpen)
+            }
             disabledReason={
               allStartingLineupsReady ? '' : 'Save a starting five below to start the clock.'
             }
@@ -3986,7 +5714,13 @@ export function GameTrackPage() {
       )}
       <div className={trackingShellClassName}>
         {hasPlayableVideo(game) && isDesktopLayout ? (
-          <div className="lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col">
+          <div
+            className={
+              useDesktopLeagueWorkspace
+                ? 'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl bg-slate-950'
+                : 'lg:flex lg:w-[65%] lg:shrink-0 lg:flex-col'
+            }
+          >
             <GameVideoPanel
               game={{
                 ...game,
@@ -4003,7 +5737,10 @@ export function GameTrackPage() {
 
         <div className="flex min-h-0 flex-1 flex-col">
           {error ? (
-            <p className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+            <p
+              role={useDesktopLeagueWorkspace ? 'alert' : undefined}
+              className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700"
+            >
               {error}
             </p>
           ) : null}
@@ -4020,333 +5757,226 @@ export function GameTrackPage() {
             </p>
           ) : null}
 
-          {lineupSetupStep ? (
-            <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
-              <LineupPicker
-                variant="fullscreen"
-                stepLabel={
-                  lineupRevisitSide
-                    ? 'Add players'
-                    : !isDualTeam
-                      ? null
-                      : lineupSetupStep === 'home'
-                        ? 'Step 1 of 2'
-                        : 'Step 2 of 2'
-                }
-                isDualTeam={isDualTeam}
-                teamDisplayName={
-                  isDualTeam
-                    ? participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
-                    : team?.name || 'Team'
-                }
-                players={isDualTeam ? participantsBySide[lineupSetupStep]?.players || [] : players}
-                canManageRoster={canAddRosterPlayer}
-                onAddPlayer={() => setIsAddPlayerOpen(true)}
-                onExit={lineupRevisitSide ? () => setLineupRevisitSide(null) : null}
-                lineupDraft={sideState[lineupSetupStep]?.lineupDraft || []}
-                onToggle={(playerId, checked) => {
-                  const draft = sideState[lineupSetupStep]?.lineupDraft || [];
-                  const nextDraft = checked
-                    ? [...draft, playerId]
-                    : draft.filter((id) => id !== playerId);
-                  updateSideState(lineupSetupStep, { lineupDraft: nextDraft });
-                }}
-                onSave={saveLineup}
-                isSaving={isSaving}
-              />
-            </div>
+          {useDesktopLeagueWorkspace ? (
+            desktopWorkspace
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
-              <div className="shrink-0 grid grid-cols-4 gap-1 border-b border-slate-200 p-1.5 landscape-compact:p-1">
-                {[
-                  {
-                    id: 'court',
-                    label: 'Court',
-                    icon: (
-                      <svg
-                        viewBox="0 0 16 16"
-                        className="h-4 w-4 shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <rect x="2" y="2" width="12" height="12" rx="1.5" />
-                        <path d="M8 2v12M2 8h12" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'substitutions',
-                    label: 'Subs',
-                    icon: (
-                      <svg
-                        viewBox="0 0 16 16"
-                        className="h-4 w-4 shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="M3 5h10M11 3l2 2-2 2" />
-                        <path d="M13 11H3M5 9l-2 2 2 2" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'events',
-                    label: 'Events',
-                    icon: (
-                      <svg
-                        viewBox="0 0 16 16"
-                        className="h-4 w-4 shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="M3 4h10M3 8h7M3 12h5" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'options',
-                    label: 'Options',
-                    icon: (
-                      <svg
-                        viewBox="0 0 16 16"
-                        className="h-4 w-4 shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <circle cx="8" cy="8" r="2.25" />
-                        <path d="M8 1.75v1.6M8 12.65v1.6M1.75 8h1.6M12.65 8h1.6M3.6 3.6l1.13 1.13M11.27 11.27l1.13 1.13M12.4 3.6l-1.13 1.13M4.73 11.27L3.6 12.4" />
-                      </svg>
-                    ),
-                  },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => changeActivePanel(tab.id)}
-                    disabled={voiceBusy}
-                    aria-label={tab.label}
-                    aria-pressed={activePanel === tab.id}
-                    className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors landscape-compact:flex-row landscape-compact:justify-center landscape-compact:gap-1.5 landscape-compact:py-1.5 ${
-                      activePanel === tab.id
-                        ? 'bg-[#141414] text-white'
-                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    {tab.icon}
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {/* Persistent mobile video layer — stays mounted across tab switches and
-                    entry-mode toggles so playback position is never lost. It's only shown in
-                    the video-first "watch" view; otherwise it's hidden (not unmounted). The
-                    desktop video lives in its own persistent left column, so this mobile layer
-                    only renders when !isDesktopLayout, avoiding a second live iframe. */}
-                {hasPlayableVideo(game) && !isDesktopLayout ? (
-                  <div
-                    className={isMobileVideoWatchView ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
-                  >
-                    {!isDualTeam && (lineupIds.length === 0 || isStandaloneLineupEditing) ? (
-                      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                        <LineupPicker
-                          isDualTeam={false}
-                          teamDisplayName={team?.name || 'Team'}
-                          players={players}
-                          canManageRoster={canAddRosterPlayer}
-                          onAddPlayer={() => setIsAddPlayerOpen(true)}
-                          lineupDraft={currentSideState.lineupDraft}
-                          onToggle={(playerId, checked) => {
-                            const nextDraft = checked
-                              ? [...currentSideState.lineupDraft, playerId]
-                              : currentSideState.lineupDraft.filter((id) => id !== playerId);
-                            updateSideState(activeKey, { lineupDraft: nextDraft });
-                          }}
-                          onSave={saveLineup}
-                          isSaving={isSaving}
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsMobileEntryMode(true);
-                            pauseVideoForEntry();
-                            pauseClockForEntry();
-                          }}
-                          className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-                        >
+            <>
+              {lineupSetupStep ? (
+                <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
+                  <LineupPicker
+                    variant="fullscreen"
+                    stepLabel={
+                      lineupRevisitSide
+                        ? 'Add players'
+                        : !isDualTeam
+                          ? null
+                          : lineupSetupStep === 'home'
+                            ? 'Step 1 of 2'
+                            : 'Step 2 of 2'
+                    }
+                    isDualTeam={isDualTeam}
+                    teamDisplayName={
+                      isDualTeam
+                        ? participantsBySide[lineupSetupStep]?.displayName || lineupSetupStep
+                        : team?.name || 'Team'
+                    }
+                    players={
+                      isDualTeam ? participantsBySide[lineupSetupStep]?.players || [] : players
+                    }
+                    canManageRoster={canAddRosterPlayer}
+                    onAddPlayer={() => setIsAddPlayerOpen(true)}
+                    onExit={lineupRevisitSide ? () => setLineupRevisitSide(null) : null}
+                    lineupDraft={sideState[lineupSetupStep]?.lineupDraft || []}
+                    onToggle={(playerId, checked) => {
+                      const draft = sideState[lineupSetupStep]?.lineupDraft || [];
+                      const nextDraft = checked
+                        ? [...draft, playerId]
+                        : draft.filter((id) => id !== playerId);
+                      updateSideState(lineupSetupStep, { lineupDraft: nextDraft });
+                    }}
+                    onSave={saveLineup}
+                    isSaving={isSaving}
+                  />
+                </div>
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col border-x border-slate-200 bg-white shadow-sm">
+                  <div className="shrink-0 grid grid-cols-4 gap-1 border-b border-slate-200 p-1.5 landscape-compact:p-1">
+                    {[
+                      {
+                        id: 'court',
+                        label: 'Court',
+                        icon: (
                           <svg
-                            viewBox="0 0 20 20"
-                            className="h-5 w-5"
+                            viewBox="0 0 16 16"
+                            className="h-4 w-4 shrink-0"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.8"
                           >
-                            <rect x="2" y="2" width="16" height="16" rx="2" />
-                            <path d="M10 2v16M2 10h16" />
+                            <rect x="2" y="2" width="12" height="12" rx="1.5" />
+                            <path d="M8 2v12M2 8h12" />
                           </svg>
-                          Track Stat
-                        </button>
-                        <div className="min-h-0 flex-1">
-                          <GameVideoPanel
-                            game={{
-                              ...game,
-                              playbackStartTimestamp:
-                                resumeVideoPosition ?? game.videoStartTimestamp,
-                            }}
-                            title={game.title}
-                            videoIframeRef={videoIframeRef}
-                            muxRef={muxRef}
-                            onMuxPlay={onMuxPlay}
-                            onMuxPause={onMuxPause}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* Scrollable/padded content region — holds every tab's content EXCEPT the
-                    mobile watch view (which is the persistent layer above). Hidden entirely
-                    while the mobile watch view is showing. */}
-                <div
-                  className={`min-h-0 flex-1 overflow-y-auto p-4 landscape-compact:p-2 ${
-                    isMobileVideoWatchView ? 'hidden' : ''
-                  }`}
-                >
-                  {activePanel === 'court' &&
-                  hasPlayableVideo(game) &&
-                  !isDesktopLayout &&
-                  isMobileEntryMode ? (
-                    <div className="flex min-h-0 flex-1 flex-col landscape-compact:flex-row landscape-compact:items-start landscape-compact:gap-1.5">
+                        ),
+                      },
+                      {
+                        id: 'substitutions',
+                        label: 'Subs',
+                        icon: (
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-4 w-4 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M3 5h10M11 3l2 2-2 2" />
+                            <path d="M13 11H3M5 9l-2 2 2 2" />
+                          </svg>
+                        ),
+                      },
+                      {
+                        id: 'events',
+                        label: 'Events',
+                        icon: (
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-4 w-4 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path d="M3 4h10M3 8h7M3 12h5" />
+                          </svg>
+                        ),
+                      },
+                      {
+                        id: 'options',
+                        label: 'Options',
+                        icon: (
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-4 w-4 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <circle cx="8" cy="8" r="2.25" />
+                            <path d="M8 1.75v1.6M8 12.65v1.6M1.75 8h1.6M12.65 8h1.6M3.6 3.6l1.13 1.13M11.27 11.27l1.13 1.13M12.4 3.6l-1.13 1.13M4.73 11.27L3.6 12.4" />
+                          </svg>
+                        ),
+                      },
+                    ].map((tab) => (
                       <button
+                        key={tab.id}
                         type="button"
-                        onClick={() => setIsMobileEntryMode(false)}
+                        onClick={() => changeActivePanel(tab.id)}
                         disabled={voiceBusy}
-                        aria-label="Back to Video"
-                        className="mb-2 flex shrink-0 items-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 landscape-compact:mb-0 landscape-compact:shrink-0 landscape-compact:gap-0 landscape-compact:px-2 landscape-compact:py-1"
+                        aria-label={tab.label}
+                        aria-pressed={activePanel === tab.id}
+                        className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors landscape-compact:flex-row landscape-compact:justify-center landscape-compact:gap-1.5 landscape-compact:py-1.5 ${
+                          activePanel === tab.id
+                            ? 'bg-[#141414] text-white'
+                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                        }`}
                       >
-                        <svg
-                          viewBox="0 0 20 20"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                        >
-                          <path d="M12 15l-5-5 5-5" />
-                        </svg>
-                        <span className="landscape-compact:sr-only">Back to Video</span>
+                        {tab.icon}
+                        {tab.label}
                       </button>
-                      <div className="space-y-4 landscape-compact:min-w-0 landscape-compact:flex-1">
-                        {insertBeforeEventId ? (
-                          <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
-                            <p className="text-xs font-medium text-[#7a5200]">
-                              Tap the court to insert a shot before the selected event.
-                            </p>
+                    ))}
+                  </div>
+
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    {/* Persistent mobile video layer — stays mounted across tab switches and
+                    entry-mode toggles so playback position is never lost. It's only shown in
+                    the video-first "watch" view; otherwise it's hidden (not unmounted). The
+                    desktop video lives in its own persistent left column, so this mobile layer
+                    only renders when !isDesktopLayout, avoiding a second live iframe. */}
+                    {hasPlayableVideo(game) && !isDesktopLayout ? (
+                      <div
+                        className={
+                          isMobileVideoWatchView ? 'flex min-h-0 flex-1 flex-col' : 'hidden'
+                        }
+                      >
+                        {!isDualTeam && (lineupIds.length === 0 || isStandaloneLineupEditing) ? (
+                          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                            <LineupPicker
+                              isDualTeam={false}
+                              teamDisplayName={team?.name || 'Team'}
+                              players={players}
+                              canManageRoster={canAddRosterPlayer}
+                              onAddPlayer={() => setIsAddPlayerOpen(true)}
+                              lineupDraft={currentSideState.lineupDraft}
+                              onToggle={(playerId, checked) => {
+                                const nextDraft = checked
+                                  ? [...currentSideState.lineupDraft, playerId]
+                                  : currentSideState.lineupDraft.filter((id) => id !== playerId);
+                                updateSideState(activeKey, { lineupDraft: nextDraft });
+                              }}
+                              onSave={saveLineup}
+                              isSaving={isSaving}
+                            />
+                          </div>
+                        ) : (
+                          <>
                             <button
                               type="button"
-                              onClick={cancelInsertion}
-                              className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
+                              onClick={() => {
+                                setIsMobileEntryMode(true);
+                                pauseVideoForEntry();
+                                pauseClockForEntry();
+                              }}
+                              className="m-3 mb-2 flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
                             >
-                              Cancel
+                              <svg
+                                viewBox="0 0 20 20"
+                                className="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                              >
+                                <rect x="2" y="2" width="16" height="16" rx="2" />
+                                <path d="M10 2v16M2 10h16" />
+                              </svg>
+                              Track Stat
                             </button>
-                          </div>
-                        ) : null}
-                        <div>
-                          <div className="relative">
-                            <InteractiveCourtImage
-                              onSelect={onCourtSelect}
-                              containerClassName="min-h-[26rem] landscape-compact:h-[max(11rem,calc(100dvh_-_6.5rem))] landscape-compact:min-h-[11rem]"
-                              courtClassName="min-h-[22rem] landscape-compact:min-h-0"
-                              rotate90={rotateCourt}
-                              layout={courtLayout}
-                            />
-                            {eventPicker}
-                          </div>
-                        </div>
-                        {inlineVoiceControl}
+                            <div className="min-h-0 flex-1">
+                              <GameVideoPanel
+                                game={{
+                                  ...game,
+                                  playbackStartTimestamp:
+                                    resumeVideoPosition ?? game.videoStartTimestamp,
+                                }}
+                                title={game.title}
+                                videoIframeRef={videoIframeRef}
+                                muxRef={muxRef}
+                                onMuxPlay={onMuxPlay}
+                                onMuxPause={onMuxPause}
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
-                    </div>
-                  ) : activePanel === 'court' && !(hasPlayableVideo(game) && !isDesktopLayout) ? (
-                    <div className="space-y-4">
-                      {insertBeforeEventId ? (
-                        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
-                          <p className="text-xs font-medium text-[#7a5200]">
-                            Tap the court to insert a shot before the selected event.
-                          </p>
+                    ) : null}
+
+                    {/* Scrollable/padded content region — holds every tab's content EXCEPT the
+                    mobile watch view (which is the persistent layer above). Hidden entirely
+                    while the mobile watch view is showing. */}
+                    <div
+                      className={`min-h-0 flex-1 overflow-y-auto p-4 landscape-compact:p-2 ${
+                        isMobileVideoWatchView ? 'hidden' : ''
+                      }`}
+                    >
+                      {activePanel === 'court' &&
+                      hasPlayableVideo(game) &&
+                      !isDesktopLayout &&
+                      isMobileEntryMode ? (
+                        <div className="flex min-h-0 flex-1 flex-col landscape-compact:flex-row landscape-compact:items-start landscape-compact:gap-1.5">
                           <button
                             type="button"
-                            onClick={cancelInsertion}
-                            className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : null}
-                      <div>
-                        <div className="relative">
-                          <InteractiveCourtImage
-                            onSelect={onCourtSelect}
-                            containerClassName="mx-auto min-h-[26rem] w-full max-w-[calc(min(78vw,26rem))] sm:h-[min(64vh,40rem)] sm:min-h-[26rem] sm:max-w-[calc(min(64vh,40rem)*0.5526)] landscape-compact:h-[max(11rem,calc(100dvh_-_6.5rem))] landscape-compact:min-h-[11rem] landscape-compact:max-w-none"
-                            courtClassName="min-h-[22rem] landscape-compact:min-h-0"
-                            rotate90={rotateCourt}
-                            layout={courtLayout}
-                          />
-                          {eventPicker}
-                        </div>
-                        <div className="mt-3 flex items-center justify-between gap-2">
-                          {lastActionLabel ? (
-                            (() => {
-                              const lastPlayer = lastActionMeta.playerId
-                                ? playersById.get(lastActionMeta.playerId)
-                                : null;
-                              const lastLogoUrl = lastActionMeta.playerId
-                                ? isDualTeam
-                                  ? participantsBySide[playerSideMap.get(lastActionMeta.playerId)]
-                                      ?.logo?.url || teamPlaceholder
-                                  : team?.logo?.url || teamPlaceholder
-                                : null;
-                              return (
-                                <div className="flex min-w-0 items-center gap-2">
-                                  {lastLogoUrl ? (
-                                    <CloudinaryImage
-                                      src={lastLogoUrl}
-                                      alt=""
-                                      width={24}
-                                      height={24}
-                                      loading="lazy"
-                                      decoding="async"
-                                      srcSetWidths={[24, 48, 72]}
-                                      sizes="24px"
-                                      className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                                    />
-                                  ) : null}
-                                  {lastPlayer?.jerseyNumber != null ? (
-                                    <span className="shrink-0 text-xs font-bold text-slate-500">
-                                      #{lastPlayer.jerseyNumber}
-                                    </span>
-                                  ) : null}
-                                  <span className="truncate text-sm font-medium text-[#1B4332]">
-                                    {lastActionLabel}
-                                  </span>
-                                </div>
-                              );
-                            })()
-                          ) : (
-                            <div />
-                          )}
-                          <button
-                            type="button"
-                            onClick={openTrackingOverlay}
-                            aria-label="Open fullscreen tracking"
-                            className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
+                            onClick={() => setIsMobileEntryMode(false)}
+                            disabled={voiceBusy}
+                            aria-label="Back to Video"
+                            className="mb-2 flex shrink-0 items-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 landscape-compact:mb-0 landscape-compact:shrink-0 landscape-compact:gap-0 landscape-compact:px-2 landscape-compact:py-1"
                           >
                             <svg
                               viewBox="0 0 20 20"
@@ -4355,1038 +5985,177 @@ export function GameTrackPage() {
                               stroke="currentColor"
                               strokeWidth="1.8"
                             >
-                              <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+                              <path d="M12 15l-5-5 5-5" />
                             </svg>
+                            <span className="landscape-compact:sr-only">Back to Video</span>
                           </button>
-                        </div>
-                      </div>
-
-                      {inlineVoiceControl}
-
-                      {lineupIds.length === 0 || (!isDualTeam && isStandaloneLineupEditing) ? (
-                        <LineupPicker
-                          variant="inline"
-                          isDualTeam={isDualTeam}
-                          teamDisplayName={
-                            participantsBySide[activeSide]?.displayName || activeSide
-                          }
-                          players={players}
-                          canManageRoster={canAddRosterPlayer}
-                          onAddPlayer={() => setIsAddPlayerOpen(true)}
-                          lineupDraft={currentSideState.lineupDraft}
-                          onToggle={(playerId, checked) => {
-                            const nextDraft = checked
-                              ? [...currentSideState.lineupDraft, playerId]
-                              : currentSideState.lineupDraft.filter((id) => id !== playerId);
-                            updateSideState(activeKey, { lineupDraft: nextDraft });
-                          }}
-                          onSave={saveLineup}
-                          isSaving={isSaving}
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {activePanel === 'substitutions'
-                    ? (() => {
-                        const { playerOutId, playerInId } = currentSideState.substitutionState;
-                        const playerOut = playerOutId ? playersById.get(playerOutId) : null;
-                        const playerIn = playerInId ? playersById.get(playerInId) : null;
-                        const bothSelected = Boolean(playerOutId && playerInId);
-
-                        function SubPlayerCard({ player, isSelected, tone, onToggle }) {
-                          const baseRing = tone === 'out' ? 'ring-[#B42318]' : 'ring-[#1B4332]';
-                          const selectedBg = tone === 'out' ? 'bg-[#FDF3F2]' : 'bg-[#EEF6F1]';
-                          const avatarBg =
-                            tone === 'out'
-                              ? 'bg-[#FBE3E1] text-[#8f1c12]'
-                              : 'bg-[#DCEBE3] text-[#1B4332]';
-                          const defaultAvatarBg = 'bg-slate-100 text-slate-600';
-                          return (
-                            <button
-                              type="button"
-                              onClick={onToggle}
-                              aria-label={player.displayName}
-                              aria-pressed={isSelected}
-                              className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 transition ${
-                                isSelected
-                                  ? `${selectedBg} border-transparent ring-2 ${baseRing}`
-                                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              <span
-                                className={`flex h-11 w-11 items-center justify-center rounded-full text-lg font-black tabular-nums ${
-                                  isSelected ? avatarBg : defaultAvatarBg
-                                }`}
-                              >
-                                {player.jerseyNumber ?? '?'}
-                              </span>
-                              <span className="w-full overflow-hidden text-center text-[11px] font-semibold leading-tight text-slate-700">
-                                {player.displayName}
-                              </span>
-                            </button>
-                          );
-                        }
-
-                        return (
-                          <div className="relative">
-                            <div
-                              className={`space-y-5 transition-all ${bothSelected ? 'pb-20' : ''}`}
-                            >
-                              <div>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                  On Court — tap to sub out
+                          <div className="space-y-4 landscape-compact:min-w-0 landscape-compact:flex-1">
+                            {insertBeforeEventId ? (
+                              <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
+                                <p className="text-xs font-medium text-[#7a5200]">
+                                  Tap the court to insert a shot before the selected event.
                                 </p>
-                                {onCourtPlayers.length === 0 ? (
-                                  <p className="text-sm text-slate-400">No players on court yet.</p>
-                                ) : (
-                                  <div className="grid grid-cols-5 gap-1">
-                                    {onCourtPlayers.map((player) => (
-                                      <SubPlayerCard
-                                        key={player.id}
-                                        player={player}
-                                        tone="out"
-                                        isSelected={playerOutId === player.id}
-                                        onToggle={() =>
-                                          toggleSubstitutionPlayer('playerOutId', player.id)
-                                        }
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div>
-                                <div className="mb-2 flex items-center justify-between gap-2">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                    On Bench — tap to sub in
-                                  </p>
-                                  {canAddRosterPlayer ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setIsAddPlayerOpen(true)}
-                                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                                    >
-                                      + Add player
-                                    </button>
-                                  ) : null}
-                                </div>
-                                {benchPlayers.filter((p) => p.isActive !== false).length === 0 ? (
-                                  <p className="text-sm text-slate-400">
-                                    No bench players available.
-                                  </p>
-                                ) : (
-                                  <div className="grid grid-cols-5 gap-1">
-                                    {benchPlayers
-                                      .filter((p) => p.isActive !== false)
-                                      .map((player) => (
-                                        <SubPlayerCard
-                                          key={player.id}
-                                          player={player}
-                                          tone="in"
-                                          isSelected={playerInId === player.id}
-                                          onToggle={() =>
-                                            toggleSubstitutionPlayer('playerInId', player.id)
-                                          }
-                                        />
-                                      ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {bothSelected ? (
-                              <div className="absolute inset-x-0 bottom-0 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                                <div className="mb-3 flex items-center justify-center gap-3">
-                                  <div className="flex flex-col items-center gap-0.5">
-                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FBE3E1] text-sm font-black text-[#8f1c12]">
-                                      {playerOut?.jerseyNumber ?? '?'}
-                                    </span>
-                                    <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
-                                      {playerOut?.displayName}
-                                    </span>
-                                  </div>
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    className="h-5 w-5 shrink-0 text-slate-400"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                  >
-                                    <path d="M4 7h12M13 4l3 3-3 3M16 13H4M7 10l-3 3 3 3" />
-                                  </svg>
-                                  <div className="flex flex-col items-center gap-0.5">
-                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#DCEBE3] text-sm font-black text-[#1B4332]">
-                                      {playerIn?.jerseyNumber ?? '?'}
-                                    </span>
-                                    <span className="max-w-[4.5rem] truncate text-[10px] font-semibold text-slate-600">
-                                      {playerIn?.displayName}
-                                    </span>
-                                  </div>
-                                </div>
                                 <button
                                   type="button"
-                                  onClick={saveSubstitution}
-                                  disabled={isSaving}
-                                  className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                                  onClick={cancelInsertion}
+                                  className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
                                 >
-                                  {isSaving ? 'Saving…' : 'Record Sub'}
+                                  Cancel
                                 </button>
                               </div>
                             ) : null}
-                          </div>
-                        );
-                      })()
-                    : null}
-
-                  {activePanel === 'events' ? (
-                    <div>
-                      <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-base font-semibold text-slate-900">Recent Events</h2>
-                        <div className="flex items-center gap-2">
-                          {recentEvents.length > 3 ? (
-                            <button
-                              type="button"
-                              onClick={() => setShowAllRecentEvents((value) => !value)}
-                              className="text-sm font-medium text-[#1B4332] hover:underline"
-                            >
-                              {showAllRecentEvents ? 'Show less' : 'Show all'}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => undoLastEvent()}
-                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800"
-                          >
-                            Undo Last
-                          </button>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span className="text-xs text-slate-400">On each row:</span>
-                        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <svg
-                            viewBox="0 0 16 16"
-                            className="h-3.5 w-3.5 shrink-0 text-slate-400"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                          >
-                            <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
-                          </svg>
-                          Edit event
-                        </span>
-                        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <svg
-                            viewBox="0 0 16 16"
-                            className="h-3.5 w-3.5 shrink-0 text-[#1B4332]"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                          >
-                            <path d="M8 3v8M5 8l3 3 3-3" />
-                            <path d="M3 13h10" />
-                          </svg>
-                          Insert stat before
-                        </span>
-                        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <svg
-                            viewBox="0 0 16 16"
-                            className="h-3.5 w-3.5 shrink-0 text-[#B42318]"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                          >
-                            <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
-                          </svg>
-                          Delete event
-                        </span>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        {visibleRecentEvents.map((event) => {
-                          const eventLogoUrl = isDualTeam
-                            ? participantsBySide[event.teamSide]?.logo?.url || teamPlaceholder
-                            : event.playerId
-                              ? team?.logo?.url || teamPlaceholder
-                              : null;
-                          const { actor, statLabel, meta } = parseEventParts(
-                            event,
-                            playersById,
-                            game.gameFormat,
-                            statLabels
-                          );
-                          return (
-                            <div
-                              key={event.id}
-                              className="rounded-lg border border-slate-200 px-3 py-2"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-2">
-                                  {eventLogoUrl ? (
-                                    <CloudinaryImage
-                                      src={eventLogoUrl}
-                                      alt=""
-                                      width={24}
-                                      height={24}
-                                      loading="lazy"
-                                      decoding="async"
-                                      srcSetWidths={[24, 48, 72]}
-                                      sizes="24px"
-                                      className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
-                                    />
-                                  ) : null}
-                                  <div>
-                                    <p className="text-sm font-semibold text-slate-900">{actor}</p>
-                                    {statLabel ? (
-                                      <p className="text-xs text-slate-600">{statLabel}</p>
-                                    ) : null}
-                                    {meta ? <p className="text-xs text-slate-400">{meta}</p> : null}
-                                  </div>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <button
-                                    type="button"
-                                    aria-label="Edit this event"
-                                    onClick={() => openEditEvent(event)}
-                                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-50"
-                                  >
-                                    <svg
-                                      viewBox="0 0 16 16"
-                                      className="h-4 w-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.8"
-                                    >
-                                      <path d="M11 2.5a1.5 1.5 0 0 1 2.121 2.121L5 12.75l-3 .75.75-3L11 2.5Z" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label="Insert stat before this event"
-                                    onClick={() => {
-                                      setInsertBeforeEventId(event.id);
-                                      entryClockSnapshotRef.current = {
-                                        segmentKind: event.segmentKind,
-                                        segmentNumber: event.segmentNumber,
-                                        clockMillisecondsRemaining:
-                                          event.clockMillisecondsRemaining,
-                                      };
-                                      setActivePanel('court');
-                                    }}
-                                    className="rounded-md p-1.5 text-[#1B4332] transition-colors hover:bg-[#1B4332]/10"
-                                  >
-                                    <svg
-                                      viewBox="0 0 16 16"
-                                      className="h-4 w-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.8"
-                                    >
-                                      <path d="M8 3v8M5 8l3 3 3-3" />
-                                      <path d="M3 13h10" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label="Remove this event"
-                                    onClick={() => removeEvent(event.id)}
-                                    className="rounded-md p-1.5 text-[#B42318] transition-colors hover:bg-[#B42318]/10"
-                                  >
-                                    <svg
-                                      viewBox="0 0 16 16"
-                                      className="h-4 w-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.8"
-                                    >
-                                      <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5l.5-9" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {activePanel === 'options' ? (
-                    <div className="space-y-6 pb-2">
-                      <section aria-labelledby="voice-tracking-settings-heading">
-                        <h2
-                          id="voice-tracking-settings-heading"
-                          className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
-                        >
-                          Voice tracking
-                        </h2>
-                        <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                          <button
-                            type="button"
-                            aria-pressed={voiceEnabled}
-                            disabled={!speechSupport.supported || !voiceSportSupported || isSaving}
-                            onClick={() => setVoiceEnabled((enabled) => !enabled)}
-                            className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                              <svg
-                                viewBox="0 0 24 24"
-                                className="h-5 w-5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                aria-hidden="true"
-                              >
-                                <rect x="9" y="3" width="6" height="11" rx="3" />
-                                <path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6" />
-                              </svg>
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-900">Voice Tracking</p>
-                              <p className="text-xs text-slate-500">
-                                {!voiceSportSupported
-                                  ? 'Not available for this sport.'
-                                  : !speechSupport.supported
-                                    ? speechSupport.reason === 'insecure'
-                                      ? 'Requires a secure HTTPS connection.'
-                                      : 'Not supported by this browser.'
-                                    : voiceEnabled
-                                      ? 'On - select a court position to start listening.'
-                                      : 'Off - tap to enable for this tracking session.'}
-                              </p>
-                              {speechSupport.supported && voiceSportSupported ? (
-                                <p className="mt-1 text-[11px] leading-4 text-slate-400">
-                                  Your browser may process audio remotely. TSW does not store audio
-                                  or transcripts.
-                                </p>
-                              ) : null}
-                            </div>
-                            <span
-                              className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${voiceEnabled ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
-                            >
-                              {voiceEnabled ? 'On' : 'Off'}
-                            </span>
-                          </button>
-
-                          {voiceSportSupported ? (
-                            <button
-                              type="button"
-                              aria-haspopup="dialog"
-                              aria-label="How to use voice commands"
-                              onClick={() => setIsVoiceHelpOpen(true)}
-                              className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
-                            >
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EEF6F1] text-sm font-black text-[#1B4332]">
-                                ?
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block text-sm font-semibold text-slate-900">
-                                  How to use voice commands
-                                </span>
-                                <span className="block text-xs text-slate-500">
-                                  See the process, phrase structure, and examples.
-                                </span>
-                              </span>
-                              <svg
-                                viewBox="0 0 20 20"
-                                className="ml-auto h-5 w-5 shrink-0 text-slate-400"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                aria-hidden="true"
-                              >
-                                <path d="m7 4 6 6-6 6" />
-                              </svg>
-                            </button>
-                          ) : null}
-                        </div>
-                      </section>
-
-                      <section aria-labelledby="tracking-setup-heading">
-                        <h2
-                          id="tracking-setup-heading"
-                          className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
-                        >
-                          Tracking setup
-                        </h2>
-                        <div className="space-y-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCourtOrientation((o) =>
-                                o === 'vertical' ? 'horizontal' : 'vertical'
-                              )
-                            }
-                            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
-                          >
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                              <svg
-                                viewBox="0 0 20 20"
-                                className="h-5 w-5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <path d="M4 4v5h5M16 16v-5h-5" />
-                                <path d="M4.5 9a7.5 7.5 0 0 1 12.6-4M15.5 11a7.5 7.5 0 0 1-12.6 4" />
-                              </svg>
-                            </span>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">Rotate Court</p>
-                              <p className="text-xs text-slate-500">
-                                Currently {courtOrientation} - tap to rotate{' '}
-                                {courtOrientation === 'vertical' ? 'horizontal' : 'vertical'}
-                              </p>
-                            </div>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={togglePauseVideoOnEntry}
-                            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
-                          >
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                              <svg
-                                viewBox="0 0 20 20"
-                                className="h-5 w-5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <path d="M7 4v12M13 4v12" />
-                              </svg>
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                Pause During Stat Entry
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {pauseVideoOnEntry
-                                  ? `On - ${hasPlayableVideo(game) ? 'video and clock pause' : 'the clock pauses'} while you tag a stat, resuming once the event is recorded.`
-                                  : `Off - ${hasPlayableVideo(game) ? 'video and clock keep running' : 'the clock keeps running'} while you tag a stat.`}
-                              </p>
-                            </div>
-                            <span
-                              className={`ml-auto shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${pauseVideoOnEntry ? 'bg-[#1B4332] text-white' : 'bg-slate-200 text-slate-700'}`}
-                            >
-                              {pauseVideoOnEntry ? 'On' : 'Off'}
-                            </span>
-                          </button>
-                        </div>
-                      </section>
-
-                      <section aria-labelledby="game-video-heading">
-                        <h2
-                          id="game-video-heading"
-                          className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
-                        >
-                          Game video
-                        </h2>
-                        <p className="mb-2 px-1 text-xs text-slate-500">{gameVideoSourceSummary}</p>
-                        <div className="space-y-2">
-                          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isVideoUrlEditOpen) {
-                                  setIsVideoUrlEditOpen(false);
-                                  return;
-                                }
-                                setVideoUrlDraft(game.videoUrl || '');
-                                setIsVideoUrlEditOpen(true);
-                              }}
-                              className="flex w-full items-center gap-3 text-left"
-                            >
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                                <svg
-                                  viewBox="0 0 20 20"
-                                  className="h-5 w-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                >
-                                  <rect x="2" y="5" width="12" height="10" rx="1.5" />
-                                  <path d="M14 8.5l4-2.5v8l-4-2.5" />
-                                </svg>
-                              </span>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">
-                                  {game.videoUrl ? 'Change YouTube Link' : 'Link YouTube Video'}
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  {game.videoUrl
-                                    ? 'Replace or remove the linked YouTube video.'
-                                    : 'Paste a YouTube link to watch while you track.'}
-                                </p>
-                              </div>
-                            </button>
-
-                            {isVideoUrlEditOpen ? (
-                              <div className="mt-3 space-y-2">
-                                <input
-                                  type="url"
-                                  aria-label="Game video URL"
-                                  autoComplete="off"
-                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-[#F4A300]/60 focus:outline-none focus:ring-2 focus:ring-[#F4A300]/20"
-                                  placeholder="https://www.youtube.com/watch?v=..."
-                                  value={videoUrlDraft}
-                                  onChange={(e) => setVideoUrlDraft(e.target.value)}
+                              <div className="relative">
+                                <InteractiveCourtImage
+                                  onSelect={onCourtSelect}
+                                  containerClassName="min-h-[26rem] landscape-compact:h-[max(11rem,calc(100dvh_-_6.5rem))] landscape-compact:min-h-[11rem]"
+                                  courtClassName="min-h-[22rem] landscape-compact:min-h-0"
+                                  rotate90={rotateCourt}
+                                  layout={courtLayout}
                                 />
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={saveVideoUrl}
-                                    disabled={isSaving}
-                                    className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                                  >
-                                    {isSaving ? 'Saving…' : 'Save'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsVideoUrlEditOpen(false)}
-                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
+                                {legacyInlineEventPicker}
                               </div>
-                            ) : null}
-                          </div>
-                          <div ref={videoUploaderSlotRef} className="has-[>div:empty]:hidden" />
-                        </div>
-                      </section>
-
-                      <section aria-labelledby="game-actions-heading">
-                        <h2
-                          id="game-actions-heading"
-                          className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500"
-                        >
-                          Game actions
-                        </h2>
-                        <div className="space-y-2">
-                          <button
-                            type="button"
-                            onClick={() => leaveTracker('/admin')}
-                            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
-                          >
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                              <svg
-                                viewBox="0 0 20 20"
-                                className="h-5 w-5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <path d="M3 10h14M10 3l7 7-7 7" />
-                              </svg>
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                Save &amp; Exit
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                Return to admin. All changes are already saved.
-                              </p>
                             </div>
-                          </button>
-
-                          {isCompleted ? (
-                            <button
-                              type="button"
-                              onClick={() => leaveTracker(`/games/${gameId}`)}
-                              disabled={isSaving}
-                              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50 disabled:opacity-60"
-                            >
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                                <svg
-                                  viewBox="0 0 20 20"
-                                  className="h-5 w-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                >
-                                  <path d="M5 13l4 4L19 7" />
-                                </svg>
-                              </span>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">Done Editing</p>
-                                <p className="text-xs text-slate-500">
-                                  View the finalized game record.
-                                </p>
-                              </div>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setShowFinishConfirm(true)}
-                              disabled={isSaving}
-                              className="flex w-full items-center gap-3 rounded-xl border border-[#1B4332]/25 bg-[#EEF6F1] px-4 py-4 text-left transition-colors hover:bg-[#DCEBE3] disabled:opacity-60"
-                            >
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1B4332] text-white">
-                                <svg
-                                  viewBox="0 0 20 20"
-                                  className="h-5 w-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                >
-                                  <path d="M5 13l4 4L19 7" />
-                                </svg>
-                              </span>
-                              <div>
-                                <p className="text-sm font-semibold text-[#1B4332]">Finish Game</p>
-                                <p className="text-xs text-[#2c5c47]">Mark the game as complete.</p>
-                              </div>
-                            </button>
-                          )}
-                        </div>
-                      </section>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {editingEvent
-          ? (() => {
-              const allStatTypes = Object.keys(statLabels);
-              return (
-                // Escape handling only — the actual dismiss control is the invisible
-                // backdrop <button> beneath this dialog.
-                // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Edit event"
-                  className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[1px]"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setEditingEvent(null);
-                  }}
-                >
-                  <button
-                    type="button"
-                    aria-label="Close"
-                    tabIndex={-1}
-                    className="fixed inset-0 h-full w-full cursor-default"
-                    onClick={() => setEditingEvent(null)}
-                  />
-                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions --
-                      stop-propagation guard only, not an interactive control. */}
-                  <div
-                    className="relative z-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <p className="text-base font-semibold text-slate-900">Edit Event</p>
-                      <button
-                        type="button"
-                        aria-label="Close"
-                        onClick={() => setEditingEvent(null)}
-                        className="rounded-md border border-slate-300 p-1 text-slate-500 hover:bg-slate-50"
-                      >
-                        <svg
-                          viewBox="0 0 20 20"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                        >
-                          <path d="m5 5 10 10M15 5 5 15" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    <div className="space-y-4">
-                      {isDualTeam ? (
-                        <div>
-                          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Team
-                          </p>
-                          <div className="flex gap-2">
-                            {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => (
-                              <button
-                                key={side}
-                                type="button"
-                                onClick={() => {
-                                  const sidePlayers = participantsBySide[side]?.players || [];
-                                  const playerStillValid = sidePlayers.some(
-                                    (p) => p.id === editingEvent.playerId
-                                  );
-                                  setEditingEvent((ev) => ({
-                                    ...ev,
-                                    teamSide: side,
-                                    playerId: playerStillValid ? ev.playerId : '',
-                                  }));
-                                }}
-                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${editingEvent.teamSide === side ? 'border-[#141414] bg-[#141414] text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
-                              >
-                                {participantsBySide[side]?.displayName || side}
-                              </button>
-                            ))}
+                            {inlineVoiceControl}
                           </div>
+                        </div>
+                      ) : activePanel === 'court' &&
+                        !(hasPlayableVideo(game) && !isDesktopLayout) ? (
+                        <div className="space-y-4">
+                          {insertBeforeEventId ? (
+                            <div className="flex items-center justify-between gap-2 rounded-lg border border-[#F4A300]/40 bg-[#FFF7E6] px-3 py-2">
+                              <p className="text-xs font-medium text-[#7a5200]">
+                                Tap the court to insert a shot before the selected event.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={cancelInsertion}
+                                className="shrink-0 text-xs font-semibold text-[#7a5200] hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : null}
+                          <div>
+                            <div className="relative">
+                              <InteractiveCourtImage
+                                onSelect={onCourtSelect}
+                                containerClassName="mx-auto min-h-[26rem] w-full max-w-[calc(min(78vw,26rem))] sm:h-[min(64vh,40rem)] sm:min-h-[26rem] sm:max-w-[calc(min(64vh,40rem)*0.5526)] landscape-compact:h-[max(11rem,calc(100dvh_-_6.5rem))] landscape-compact:min-h-[11rem] landscape-compact:max-w-none"
+                                courtClassName="min-h-[22rem] landscape-compact:min-h-0"
+                                rotate90={rotateCourt}
+                                layout={courtLayout}
+                              />
+                              {legacyInlineEventPicker}
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              {lastActionLabel ? (
+                                (() => {
+                                  const lastPlayer = lastActionMeta.playerId
+                                    ? playersById.get(lastActionMeta.playerId)
+                                    : null;
+                                  const lastLogoUrl = lastActionMeta.playerId
+                                    ? isDualTeam
+                                      ? participantsBySide[
+                                          playerSideMap.get(lastActionMeta.playerId)
+                                        ]?.logo?.url || teamPlaceholder
+                                      : team?.logo?.url || teamPlaceholder
+                                    : null;
+                                  return (
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      {lastLogoUrl ? (
+                                        <CloudinaryImage
+                                          src={lastLogoUrl}
+                                          alt=""
+                                          width={24}
+                                          height={24}
+                                          loading="lazy"
+                                          decoding="async"
+                                          srcSetWidths={[24, 48, 72]}
+                                          sizes="24px"
+                                          className="h-6 w-6 shrink-0 rounded-full border border-slate-200 bg-white object-cover"
+                                        />
+                                      ) : null}
+                                      {lastPlayer?.jerseyNumber != null ? (
+                                        <span className="shrink-0 text-xs font-bold text-slate-500">
+                                          #{lastPlayer.jerseyNumber}
+                                        </span>
+                                      ) : null}
+                                      <span className="truncate text-sm font-medium text-[#1B4332]">
+                                        {lastActionLabel}
+                                      </span>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <div />
+                              )}
+                              <button
+                                type="button"
+                                onClick={openTrackingOverlay}
+                                aria-label="Open fullscreen tracking"
+                                className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-700 transition hover:bg-slate-50"
+                              >
+                                <svg
+                                  viewBox="0 0 20 20"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                >
+                                  <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+
+                          {inlineVoiceControl}
+
+                          {lineupIds.length === 0 || (!isDualTeam && isStandaloneLineupEditing) ? (
+                            <LineupPicker
+                              variant="inline"
+                              isDualTeam={isDualTeam}
+                              teamDisplayName={
+                                participantsBySide[activeSide]?.displayName || activeSide
+                              }
+                              players={players}
+                              canManageRoster={canAddRosterPlayer}
+                              onAddPlayer={() => setIsAddPlayerOpen(true)}
+                              lineupDraft={currentSideState.lineupDraft}
+                              onToggle={(playerId, checked) => {
+                                const nextDraft = checked
+                                  ? [...currentSideState.lineupDraft, playerId]
+                                  : currentSideState.lineupDraft.filter((id) => id !== playerId);
+                                updateSideState(activeKey, { lineupDraft: nextDraft });
+                              }}
+                              onSave={saveLineup}
+                              isSaving={isSaving}
+                            />
+                          ) : null}
                         </div>
                       ) : null}
 
-                      <div>
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Player
-                        </p>
-                        <select
-                          aria-label="Player"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                          value={editingEvent.playerId}
-                          onChange={(e) =>
-                            setEditingEvent((ev) => ({ ...ev, playerId: e.target.value }))
-                          }
-                        >
-                          <option value="">— No player (opponent) —</option>
-                          {(isDualTeam
-                            ? participantsBySide[editingEvent.teamSide]?.players || []
-                            : players
-                          ).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.jerseyNumber != null ? `#${p.jerseyNumber} ` : ''}
-                              {p.displayName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {substitutionsContent}
 
-                      <div>
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Stat
-                        </p>
-                        <select
-                          aria-label="Stat type"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                          value={editingEvent.statType}
-                          onChange={(e) =>
-                            setEditingEvent((ev) => ({ ...ev, statType: e.target.value }))
-                          }
-                        >
-                          {allStatTypes.map((st) => (
-                            <option key={st} value={st}>
-                              {statLabels[st]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {eventsContent}
 
-                      <div>
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Period and game time
-                        </p>
-                        <div className="grid grid-cols-3 gap-2">
-                          <select
-                            aria-label="Period kind"
-                            value={editingEvent.segmentKind}
-                            onChange={(e) =>
-                              setEditingEvent((ev) => ({ ...ev, segmentKind: e.target.value }))
-                            }
-                            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
-                          >
-                            <option value="regulation">Regulation</option>
-                            <option value="overtime">Overtime</option>
-                          </select>
-                          <input
-                            aria-label="Period number"
-                            type="number"
-                            min="1"
-                            value={editingEvent.segmentNumber}
-                            onChange={(e) =>
-                              setEditingEvent((ev) => ({ ...ev, segmentNumber: e.target.value }))
-                            }
-                            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
-                          />
-                          <input
-                            aria-label="Milliseconds remaining"
-                            type="number"
-                            min="0"
-                            step="100"
-                            value={editingEvent.clockMillisecondsRemaining}
-                            onChange={(e) =>
-                              setEditingEvent((ev) => ({
-                                ...ev,
-                                clockMillisecondsRemaining: e.target.value,
-                              }))
-                            }
-                            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Zone
-                        </p>
-                        <select
-                          aria-label="Court zone"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                          value={editingEvent.zoneId}
-                          onChange={(e) =>
-                            setEditingEvent((ev) => ({ ...ev, zoneId: e.target.value }))
-                          }
-                        >
-                          <option value="">— No zone —</option>
-                          {Object.entries(ZONE_LABELS).map(([id, label]) => (
-                            <option key={id} value={id}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="mt-2 flex gap-2">
-                          <div className="flex-1">
-                            <p className="mb-1 text-xs text-slate-500">X (0–100)</p>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              aria-label="X coordinate (0–100)"
-                              autoComplete="off"
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                              value={editingEvent.x}
-                              onChange={(e) =>
-                                setEditingEvent((ev) => ({ ...ev, x: e.target.value }))
-                              }
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <p className="mb-1 text-xs text-slate-500">Y (0–100)</p>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              aria-label="Y coordinate (0–100)"
-                              autoComplete="off"
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                              value={editingEvent.y}
-                              onChange={(e) =>
-                                setEditingEvent((ev) => ({ ...ev, y: e.target.value }))
-                              }
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setEditingEvent(null)}
-                        className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={saveEventEdit}
-                        className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
-                      >
-                        {isSaving ? 'Saving…' : 'Save'}
-                      </button>
+                      {optionsContent}
                     </div>
                   </div>
                 </div>
-              );
-            })()
-          : null}
+              )}
+            </>
+          )}
+        </div>
+
+        {!useDesktopLeagueWorkspace && eventEditor}
 
         <Modal
-          open={isVoiceHelpOpen}
+          open={isVoiceHelpOpen && !useDesktopLeagueWorkspace}
           onClose={() => setIsVoiceHelpOpen(false)}
           title="How to use voice tracking"
           panelClassName="max-w-3xl"
         >
-          <div className="space-y-6 text-sm text-slate-600">
-            <section className="rounded-xl border border-[#B7D8C8] bg-[#EEF6F1] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#356859]">
-                This game
-              </p>
-              <h3 className="mt-1 text-base font-semibold text-slate-900">
-                {isDualTeam ? 'Dual-team tracking' : 'One-team tracking'}
-              </h3>
-              <p className="mt-1 text-xs text-slate-600">
-                {isDualTeam
-                  ? 'You are tracking both teams, so every command starts with home or away to say which lineup to search.'
-                  : 'You are tracking one team, so never say home or away. Commands search your own on-court lineup.'}
-              </p>
-              <p className="mt-3 text-xs text-slate-600">
-                Every command below is written exactly as you would say it in this game:{' '}
-                <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900">
-                  {isDualTeam ? 'home/away + player + action' : 'player + action'}
-                </code>
-              </p>
-            </section>
-
-            <section>
-              <h3 className="font-semibold text-slate-900">Track a stat</h3>
-              <ol className="mt-3 space-y-3">
-                {[
-                  'Turn on Voice Tracking in Options.',
-                  'Name anyone on the roster. If they are on the bench — or not on the team yet — you are asked to bring them on before the stat is recorded.',
-                  'Open Court and tap where the event happened. That tap starts the microphone.',
-                  'Say one player and one action. Nothing is recorded unless both are unambiguous.',
-                  'Answer any follow-up question using the microphone beside it.',
-                ].map((step, index) => (
-                  <li key={step} className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#EEF6F1] text-xs font-bold text-[#1B4332]">
-                      {index + 1}
-                    </span>
-                    <span className="pt-0.5">{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-
-            {voiceCommandTables(isDualTeam ? 'dual_team' : 'one_sided').map((table) => (
-              <VoiceHelpTable
-                key={table.title}
-                title={table.title}
-                description={table.description}
-                columns={table.columns}
-                rows={table.rows}
-              />
-            ))}
-
-            <details className="rounded-xl border border-slate-200 bg-slate-50">
-              <summary className="cursor-pointer px-4 py-3 font-semibold text-slate-900">
-                Commands for a {isDualTeam ? 'one-team' : 'dual-team'} game
-              </summary>
-              <div className="space-y-6 border-t border-slate-200 px-4 py-4">
-                <p className="text-xs text-slate-500">
-                  {isDualTeam
-                    ? 'This game is not tracked this way. In a one-team game you never say a side, and you can score the opponent as a total.'
-                    : 'This game is not tracked this way. In a dual-team game every command names a side, and the opponent is tracked as real players rather than a total.'}
-                </p>
-                {voiceCommandTables(isDualTeam ? 'one_sided' : 'dual_team').map((table) => (
-                  <VoiceHelpTable
-                    key={table.title}
-                    idPrefix="voice-help-other"
-                    title={table.title}
-                    description={table.description}
-                    columns={table.columns}
-                    rows={table.rows}
-                  />
-                ))}
-              </div>
-            </details>
-
-            <section className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
-              <h3 className="font-semibold text-slate-900">Player names and numbers</h3>
-              <p className="mt-2">
-                You can say a jersey number from 0–999 or a uniquely matching player name. Number
-                words zero through nineteen and combinations such as <code>twenty three</code> are
-                supported; say exact multiples of ten such as jersey 20 as digits. You can also put{' '}
-                <code>number</code> or <code>jersey</code> in front of a number, as in{' '}
-                <code>number 13 steal</code>.
-              </p>
-            </section>
-          </div>
+          {voiceHelpBody}
         </Modal>
 
         <Modal

@@ -1,3 +1,4 @@
+import { FOUL_STAT_FIELDS } from '../games/foulStats';
 export const PLAYER_STAT_CATEGORIES = [
   { value: 'all', label: 'All statistics' },
   { value: 'scoring', label: 'Scoring' },
@@ -7,11 +8,25 @@ export const PLAYER_STAT_CATEGORIES = [
 ];
 
 const CATEGORY_STAT_IDS = {
-  all: ['ft', 'fg2', 'fg3', 'ast', 'stl', 'blk', 'tov', 'foul', 'oreb', 'dreb', 'reb', 'points'],
+  all: [
+    'ft',
+    'fg2',
+    'fg3',
+    'ast',
+    'stl',
+    'blk',
+    'tov',
+    'foul',
+    ...FOUL_STAT_FIELDS.map((field) => field.id),
+    'oreb',
+    'dreb',
+    'reb',
+    'points',
+  ],
   scoring: ['ft', 'fg2', 'fg3', 'points'],
   rebounding: ['oreb', 'dreb', 'reb'],
   playmaking: ['ast', 'tov'],
-  defense: ['stl', 'blk', 'foul'],
+  defense: ['stl', 'blk', 'foul', ...FOUL_STAT_FIELDS.map((field) => field.id)],
 };
 
 export function getCategoryStatIds(category) {
@@ -79,6 +94,10 @@ export function summarizePlayerGames(games = []) {
         blk: summary.blk + (stats.blk || 0),
         tov: summary.tov + (stats.tov || 0),
         foul: summary.foul + (stats.foul || 0),
+        personalFoul: summary.personalFoul + (stats.personalFoul || 0),
+        technicalFoul: summary.technicalFoul + (stats.technicalFoul || 0),
+        flagrantFoul: summary.flagrantFoul + (stats.flagrantFoul || 0),
+        foulDrawn: summary.foulDrawn + (stats.foulDrawn || 0),
         reb: summary.reb + (stats.reb || 0),
         points: summary.points + (stats.points || 0),
       };
@@ -97,6 +116,10 @@ export function summarizePlayerGames(games = []) {
       blk: 0,
       tov: 0,
       foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
       reb: 0,
       points: 0,
     }
@@ -114,5 +137,6 @@ export function summarizePlayerGames(games = []) {
     blocksPerGame: perGame(totals.blk),
     turnoversPerGame: perGame(totals.tov),
     foulsPerGame: perGame(totals.foul),
+    foulsDrawnPerGame: perGame(totals.foulDrawn),
   };
 }

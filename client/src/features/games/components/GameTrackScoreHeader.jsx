@@ -31,10 +31,15 @@ export function GameTrackScoreHeader({
   participantsBySide,
   team,
   clockControls = null,
+  compact = false,
+  teamSelectionDisabled = false,
 }) {
   if (isDualTeam) {
     return (
-      <div className={HEADER_GRID_CLASS} data-testid="game-track-score-header">
+      <div
+        className={`${HEADER_GRID_CLASS} ${compact ? '[&>button]:!py-2 [&>div]:!py-1' : ''}`}
+        data-testid="game-track-score-header"
+      >
         {[TEAM_SIDES.HOME, TEAM_SIDES.AWAY].map((side) => {
           const isActive = activeSide === side;
           const participant = participantsBySide[side];
@@ -46,6 +51,7 @@ export function GameTrackScoreHeader({
             <button
               key={side}
               type="button"
+              disabled={teamSelectionDisabled}
               onClick={() => onChangeActiveSide(side)}
               aria-label={`Select ${sideLabel}`}
               aria-pressed={isActive}

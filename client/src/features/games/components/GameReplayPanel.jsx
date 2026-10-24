@@ -1,3 +1,4 @@
+import { isFoulStat, FOUL_STAT_COLUMNS } from '../foulStats';
 import { useEffect, useMemo, useState } from 'react';
 import { StatsTable } from '../../teams/components/StatsTable';
 import gameConstants, { getStatLabels } from '../constants';
@@ -48,6 +49,10 @@ function emptyLine(player) {
     blk: 0,
     tov: 0,
     foul: 0,
+    personalFoul: 0,
+    technicalFoul: 0,
+    flagrantFoul: 0,
+    foulDrawn: 0,
     reb: 0,
     points: 0,
   };
@@ -147,9 +152,15 @@ function applyEventToLine(line, statType, scoringRules) {
     line.tov += 1;
     return;
   }
-  if (statType === 'FOUL') {
+  if (isFoulStat(statType)) {
     line.foul += 1;
+    line[
+      { FOUL: 'personalFoul', TECHNICAL_FOUL: 'technicalFoul', FLAGRANT_FOUL: 'flagrantFoul' }[
+        statType
+      ]
+    ] += 1;
   }
+  if (statType === 'FOUL_DRAWN') line.foulDrawn += 1;
 }
 
 export function GameReplayPanel({
@@ -235,6 +246,7 @@ export function GameReplayPanel({
     { id: 'blk', label: 'BLK', align: 'right', sortKey: 'blk', render: (row) => row.blk || 0 },
     { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov },
     { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul },
+    ...FOUL_STAT_COLUMNS,
     {
       id: 'ft',
       label: 'FT',

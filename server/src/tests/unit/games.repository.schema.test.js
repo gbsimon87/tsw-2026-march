@@ -13,6 +13,27 @@ require('../../modules/games/games.repository');
 
 const Game = mongoose.model('Game');
 
+test.each(['FOUL', 'TECHNICAL_FOUL', 'FLAGRANT_FOUL', 'FOUL_DRAWN'])(
+  'persists a %s event with its player and team',
+  (statType) => {
+    const playerId = new mongoose.Types.ObjectId();
+    const event = new Game({
+      events: [
+        {
+          playerId,
+          teamSide: 'away',
+          statType,
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          clockMillisecondsRemaining: 593000,
+        },
+      ],
+    }).events[0];
+    expect(event.validateSync()).toBeUndefined();
+    expect(event.toObject()).toMatchObject({ playerId, teamSide: 'away', statType });
+  }
+);
+
 describe('Game.homeParticipant/awayParticipant schema (OPT-022)', () => {
   test('participant sub-schema declares a slug field', () => {
     const homeSlugPath = Game.schema.path('homeParticipant.slug');

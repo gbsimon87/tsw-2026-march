@@ -176,3 +176,32 @@ describe('summarizePlayerGames', () => {
     expect(summarizePlayerGames().gamesCount).toBe(0);
   });
 });
+
+it('player season summaries and categories retain typed and drawn fouls', () => {
+  const games = [
+    {
+      seasonId: 'one',
+      stats: { foul: 2, personalFoul: 1, technicalFoul: 1, flagrantFoul: 0, foulDrawn: 3 },
+    },
+    {
+      seasonId: 'two',
+      stats: { foul: 1, personalFoul: 0, technicalFoul: 0, flagrantFoul: 1, foulDrawn: 2 },
+    },
+  ];
+  expect(summarizePlayerGames(games)).toMatchObject({
+    foul: 3,
+    personalFoul: 1,
+    technicalFoul: 1,
+    flagrantFoul: 1,
+    foulDrawn: 5,
+    foulsDrawnPerGame: 2.5,
+  });
+  expect(summarizePlayerGames(filterPlayerGamesBySeason(games, 'season:two'))).toMatchObject({
+    foul: 1,
+    flagrantFoul: 1,
+    foulDrawn: 2,
+  });
+  expect(getCategoryStatIds('defense')).toEqual(
+    expect.arrayContaining(['personalFoul', 'technicalFoul', 'flagrantFoul', 'foulDrawn'])
+  );
+});

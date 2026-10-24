@@ -1123,7 +1123,11 @@ describe('games service frozen box score (OPT-012)', () => {
   });
 
   test('getGameForUser serves the frozen boxScore/gameSummary for a completed game', async () => {
-    const frozenBoxScore = { home: { players: [], totals: {} }, away: { players: [], totals: {} } };
+    const foulTotals = { personalFoul: 0, technicalFoul: 0, flagrantFoul: 0, foulDrawn: 0 };
+    const frozenBoxScore = {
+      home: { players: [], totals: { ...foulTotals } },
+      away: { players: [], totals: { ...foulTotals } },
+    };
     const frozenSummary = { homePoints: 99, awayPoints: 1, teamPoints: 99, opponentPoints: 1 };
     const game = buildDualLeagueGame({
       status: 'completed',
@@ -1142,6 +1146,23 @@ describe('games service frozen box score (OPT-012)', () => {
 
     expect(result.boxScore).toBe(frozenBoxScore);
     expect(result.gameSummary).toBe(frozenSummary);
+  });
+
+  test('replays old completed box scores to expose personal and drawn fouls', async () => {
+    const game = buildDualLeagueGame({
+      status: 'completed',
+      boxScore: { home: { players: [], totals: {} }, away: { players: [], totals: {} } },
+      homeRosterSnapshot: [buildLeagueSnapshotPlayer('home-snap-1', 'Home One')],
+      awayRosterSnapshot: [buildLeagueSnapshotPlayer('away-snap-1', 'Away One')],
+      events: [
+        { playerId: 'home-snap-1', teamSide: 'home', statType: STAT_TYPES.FOUL },
+        { playerId: 'away-snap-1', teamSide: 'away', statType: STAT_TYPES.FOUL_DRAWN },
+      ],
+    });
+    findGameById.mockResolvedValue(game);
+    const result = await getGameForUser('user-1', 'game-1');
+    expect(result.boxScore.home.totals).toMatchObject({ foul: 1, personalFoul: 1 });
+    expect(result.boxScore.away.totals).toMatchObject({ foulDrawn: 1, foul: 0 });
   });
 
   test('T-13: a one-sided league game reflects the league live entitlements (active → premium)', async () => {
@@ -1877,6 +1898,103 @@ describe('games service event mutation contract (OPT-015)', () => {
       });
       expect(saveGame).toHaveBeenCalledTimes(1);
     });
+  });
+
+  test.each([
+    ['FOUL', 'personalFoul'],
+    ['TECHNICAL_FOUL', 'technicalFoul'],
+    ['FLAGRANT_FOUL', 'flagrantFoul'],
+  ])(
+    'records %s in player and team totals and rejects an off-court player',
+    async (statType, field) => {
+      const game = buildSlimTestGame();
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      const result = await appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'home-snap-1',
+        teamSide: 'home',
+        statType,
+      });
+      expect(result.boxScore.home.totals).toMatchObject({
+        foul: 1,
+        [field]: 1,
+        foulDrawn: 0,
+        points: 0,
+      });
+      expect(
+        result.boxScore.home.players.find((row) => row.playerId === 'home-snap-1')
+      ).toMatchObject({ foul: 1, [field]: 1 });
+      game.homeCurrentLineupPlayerIds = ['home-snap-2'];
+      await expect(
+        appendEventForUser('user-1', 'game-1', {
+          ...EVENT_CLOCK,
+          playerId: 'home-snap-1',
+          teamSide: 'home',
+          statType,
+        })
+      ).rejects.toMatchObject({ statusCode: 400 });
+    }
+  );
+
+  test('saves a foul drawn on the opposing player without adding a personal foul or points', async () => {
+    const game = buildSlimTestGame({
+      events: buildEvents([
+        {
+          _id: 'foul-1',
+          playerId: 'home-snap-1',
+          teamSide: 'home',
+          statType: STAT_TYPES.FOUL,
+          ...EVENT_CLOCK,
+        },
+      ]),
+    });
+    findGameById.mockResolvedValue(game);
+    saveGame.mockResolvedValue(game);
+    const result = await appendEventForUser('user-1', 'game-1', {
+      ...EVENT_CLOCK,
+      playerId: 'away-snap-2',
+      teamSide: 'away',
+      statType: STAT_TYPES.FOUL_DRAWN,
+      zoneId: 'PAINT',
+      x: 50,
+      y: 20,
+    });
+
+    expect(saveGame).toHaveBeenCalledTimes(1);
+    expect(game.events).toHaveLength(2);
+    expect(game.events[1]).toMatchObject({
+      ...EVENT_CLOCK,
+      playerId: 'away-snap-2',
+      teamSide: 'away',
+      statType: STAT_TYPES.FOUL_DRAWN,
+      zoneId: 'PAINT',
+      x: 50,
+      y: 20,
+    });
+    expect(result.boxScore.home.totals).toMatchObject({ foul: 1, foulDrawn: 0, points: 0 });
+    expect(result.boxScore.away.totals).toMatchObject({ foul: 0, foulDrawn: 1, points: 0 });
+    expect(
+      result.boxScore.away.players.find((row) => row.playerId === 'away-snap-2')
+    ).toMatchObject({
+      foul: 0,
+      foulDrawn: 1,
+      points: 0,
+    });
+  });
+
+  test('rejects a foul drawn by a player who is not on court', async () => {
+    const game = buildSlimTestGame({ awayCurrentLineupPlayerIds: ['away-snap-1'] });
+    findGameById.mockResolvedValue(game);
+    await expect(
+      appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'away-snap-2',
+        teamSide: 'away',
+        statType: STAT_TYPES.FOUL_DRAWN,
+      })
+    ).rejects.toMatchObject({ statusCode: 400, message: 'Player is not currently on the court' });
+    expect(saveGame).not.toHaveBeenCalled();
   });
 
   test('appendEventForUser returns the slim delta shape, not the full game-detail response', async () => {

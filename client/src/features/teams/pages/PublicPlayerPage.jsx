@@ -1,3 +1,4 @@
+import { FOUL_STAT_COLUMNS, FOUL_STAT_FIELDS } from '../../games/foulStats';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -236,6 +237,12 @@ export function PublicPlayerPage() {
     { id: 'blk', label: 'BPG', value: summary.blocksPerGame },
     { id: 'tov', label: 'TOPG', value: summary.turnoversPerGame },
     { id: 'foul', label: 'FPG', value: summary.foulsPerGame },
+    ...FOUL_STAT_FIELDS.map(({ id, label }) => ({
+      id,
+      label,
+      value: summary[id] || 0,
+      isTotal: true,
+    })),
   ].filter((stat) => getCategoryStatIds(statCategory).includes(stat.id));
   const gameLogColumns = [
     {
@@ -288,6 +295,7 @@ export function PublicPlayerPage() {
     { id: 'blk', label: 'BLK', align: 'right', sortKey: 'blk', render: (row) => row.blk || 0 },
     { id: 'tov', label: 'TOV', align: 'right', sortKey: 'tov', render: (row) => row.tov },
     { id: 'foul', label: 'FOUL', align: 'right', sortKey: 'foul', render: (row) => row.foul },
+    ...FOUL_STAT_COLUMNS,
     { id: 'oreb', label: 'OREB', align: 'right', sortKey: 'oreb', render: (row) => row.oreb },
     { id: 'dreb', label: 'DREB', align: 'right', sortKey: 'dreb', render: (row) => row.dreb },
     { id: 'reb', label: 'REB', align: 'right', sortKey: 'reb', render: (row) => row.reb },
@@ -457,7 +465,9 @@ export function PublicPlayerPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {stat.label}
               </p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{formatAverage(stat.value)}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {stat.isTotal ? stat.value : formatAverage(stat.value)}
+              </p>
             </article>
           ))}
         </div>

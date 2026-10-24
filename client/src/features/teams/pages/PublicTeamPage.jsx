@@ -1,3 +1,4 @@
+import { FOUL_STAT_COLUMNS } from '../../games/foulStats';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -367,6 +368,7 @@ export function PublicTeamPage() {
       sortValue: (row) => row.foul,
       render: (row) => row.foul,
     },
+    ...FOUL_STAT_COLUMNS,
     {
       id: 'ft',
       label: 'FT',

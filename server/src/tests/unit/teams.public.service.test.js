@@ -168,6 +168,10 @@ describe('teams public service', () => {
             stl: 0,
             tov: 0,
             foul: 0,
+            personalFoul: 0,
+            technicalFoul: 0,
+            flagrantFoul: 0,
+            foulDrawn: 0,
             blk: 0,
             reb: 0,
             points: 3,
@@ -180,6 +184,7 @@ describe('teams public service', () => {
             stealsPerGame: 0,
             turnoversPerGame: 0,
             foulsPerGame: 0,
+            foulsDrawnPerGame: 0,
           },
           {
             playerId: 'p2',
@@ -196,6 +201,10 @@ describe('teams public service', () => {
             stl: 0,
             tov: 0,
             foul: 0,
+            personalFoul: 0,
+            technicalFoul: 0,
+            flagrantFoul: 0,
+            foulDrawn: 0,
             blk: 0,
             reb: 1,
             points: 3,
@@ -208,6 +217,7 @@ describe('teams public service', () => {
             stealsPerGame: 0,
             turnoversPerGame: 0,
             foulsPerGame: 0,
+            foulsDrawnPerGame: 0,
           },
         ],
         teamTotals: {
@@ -223,6 +233,10 @@ describe('teams public service', () => {
           stl: 0,
           tov: 0,
           foul: 0,
+          personalFoul: 0,
+          technicalFoul: 0,
+          flagrantFoul: 0,
+          foulDrawn: 0,
           blk: 0,
           reb: 1,
           points: 6,
@@ -286,6 +300,10 @@ describe('teams public service', () => {
           stl: 0,
           tov: 0,
           foul: 0,
+          personalFoul: 0,
+          technicalFoul: 0,
+          flagrantFoul: 0,
+          foulDrawn: 0,
           blk: 0,
           reb: 0,
           points: 0,
@@ -334,6 +352,7 @@ describe('teams public service', () => {
         stealsPerGame: 0,
         turnoversPerGame: 0,
         foulsPerGame: 0,
+        foulsDrawnPerGame: 0,
       }),
     ]);
 
@@ -360,6 +379,7 @@ describe('teams public service', () => {
         stealsPerGame: 0,
         turnoversPerGame: 0,
         foulsPerGame: 0,
+        foulsDrawnPerGame: 0,
       }),
     ]);
   });
@@ -472,12 +492,17 @@ describe('teams public service', () => {
       stl: 0,
       tov: 0,
       foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
       pointsPerGame: 2.5,
       reboundsPerGame: 1,
       assistsPerGame: 0.5,
       stealsPerGame: 0,
       turnoversPerGame: 0,
       foulsPerGame: 0,
+      foulsDrawnPerGame: 0,
     });
     expect(result.games.map((game) => game.gameId)).toEqual(['g2', 'g1']);
     expect(result.games[0].opponentDestination).toEqual({
@@ -507,6 +532,10 @@ describe('teams public service', () => {
       stl: 0,
       tov: 0,
       foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
       reb: 1,
       points: 3,
     });
@@ -564,6 +593,10 @@ describe('teams public service', () => {
           stl: 0,
           tov: 0,
           foul: 0,
+          personalFoul: 0,
+          technicalFoul: 0,
+          flagrantFoul: 0,
+          foulDrawn: 0,
           reb: 0,
           points: 0,
         },
@@ -578,12 +611,17 @@ describe('teams public service', () => {
       stl: 0,
       tov: 0,
       foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
       pointsPerGame: 0,
       reboundsPerGame: 0,
       assistsPerGame: 0,
       stealsPerGame: 0,
       turnoversPerGame: 0,
       foulsPerGame: 0,
+      foulsDrawnPerGame: 0,
     });
   });
 
@@ -868,8 +906,39 @@ describe('team season summary materialisation (OPT-013)', () => {
     ]);
   }
 
+  test('standalone team and player summaries retain foul types and fouls drawn', async () => {
+    seedTeamAndGames();
+    const games = await listGamesByTeamId('team-1');
+    for (const statType of ['FOUL', 'TECHNICAL_FOUL', 'FLAGRANT_FOUL', 'FOUL_DRAWN'])
+      games[0].events.push({ playerId: 'p1', statType });
+    const summary = await computeTeamSeasonSummary('team-1');
+    expect(summary.boxScore.teamTotals).toMatchObject({
+      foul: 3,
+      personalFoul: 1,
+      technicalFoul: 1,
+      flagrantFoul: 1,
+      foulDrawn: 1,
+    });
+    const team = await findTeamById('team-1');
+    const gameRows = buildPublicPlayerGameRows(games, team, team.players[0]);
+    expect(buildPublicPlayerSummary(gameRows)).toMatchObject({
+      foul: 3,
+      personalFoul: 1,
+      technicalFoul: 1,
+      flagrantFoul: 1,
+      foulDrawn: 1,
+    });
+  });
+
   test('getTeamSeasonSummary returns materialised summary on a hit (no live compute)', async () => {
-    const storedSummary = { gamesCount: 5, points: 40 };
+    const storedSummary = {
+      gamesCount: 5,
+      points: 40,
+      boxScore: {
+        teamTotals: { personalFoul: 0, technicalFoul: 0, flagrantFoul: 0, foulDrawn: 0 },
+        players: [],
+      },
+    };
     findTeamSeasonSummary.mockResolvedValue({ teamId: 'team-1', summary: storedSummary });
 
     const result = await getTeamSeasonSummary('team-1');
@@ -877,6 +946,19 @@ describe('team season summary materialisation (OPT-013)', () => {
     expect(result).toBe(storedSummary);
     expect(listGamesByTeamId).not.toHaveBeenCalled();
     expect(upsertTeamSeasonSummary).not.toHaveBeenCalled();
+  });
+
+  test('rebuilds an old cached team summary missing foul counts', async () => {
+    findTeamSeasonSummary.mockResolvedValue({ summary: { gamesCount: 1, points: 40 } });
+    seedTeamAndGames();
+    const result = await getTeamSeasonSummary('team-1');
+    expect(result.boxScore.teamTotals).toMatchObject({
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
+    });
+    expect(upsertTeamSeasonSummary).toHaveBeenCalled();
   });
 
   test('getTeamSeasonSummary computes + persists on a miss (self-backfill)', async () => {
@@ -919,7 +1001,14 @@ describe('team season summary materialisation (OPT-013)', () => {
   });
 
   test('getPublicTeam serves the materialised summary when present', async () => {
-    const storedSummary = { gamesCount: 12, points: 100 };
+    const storedSummary = {
+      gamesCount: 12,
+      points: 100,
+      boxScore: {
+        teamTotals: { personalFoul: 0, technicalFoul: 0, flagrantFoul: 0, foulDrawn: 0 },
+        players: [],
+      },
+    };
     findTeamById.mockResolvedValue({
       _id: 'team-1',
       name: 'TSW Blue',

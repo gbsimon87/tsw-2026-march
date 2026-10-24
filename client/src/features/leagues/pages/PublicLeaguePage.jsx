@@ -1,3 +1,4 @@
+import { FOUL_STAT_COLUMNS } from '../../games/foulStats';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
@@ -165,6 +166,8 @@ const LEADERS_COLUMNS = [
     emphasis: true,
     render: (row) => row.fantasyScore.toFixed(1),
   },
+  { id: 'foul', label: 'FOUL', align: 'right', render: (row) => row.foul || 0 },
+  ...FOUL_STAT_COLUMNS,
 ];
 
 const DPOY_COLUMNS = [

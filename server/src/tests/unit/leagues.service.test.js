@@ -459,6 +459,22 @@ describe('league player stats materialisation (OPT-011)', () => {
     });
   });
 
+  test('league totals include all foul types and independently track fouls drawn', async () => {
+    seedTeamsAndGames();
+    const games = await listLeagueGamesByLeagueId('league-1');
+    for (const statType of ['FOUL', 'TECHNICAL_FOUL', 'FLAGRANT_FOUL', 'FOUL_DRAWN'])
+      games[0].events.push({ playerId: 'p1', teamSide: 'home', statType });
+    const rows = await computeLeaguePlayerStats('league-1', undefined);
+    expect(rows.find((row) => row.leaguePlayerId === 'lp1')).toMatchObject({
+      foul: 3,
+      personalFoul: 1,
+      technicalFoul: 1,
+      flagrantFoul: 1,
+      foulDrawn: 1,
+      points: 7,
+    });
+  });
+
   test('deriveLeaguePlayerScores computes ppg/fantasy/DPOY from raw totals', () => {
     const row = {
       gamesCount: 2,
@@ -487,7 +503,16 @@ describe('league player stats materialisation (OPT-011)', () => {
   });
 
   test('getLeaguePlayerStats returns materialised rows on a hit (no live compute)', async () => {
-    const storedRows = [{ leaguePlayerId: 'lp1', gamesCount: 3 }];
+    const storedRows = [
+      {
+        leaguePlayerId: 'lp1',
+        gamesCount: 3,
+        personalFoul: 0,
+        technicalFoul: 0,
+        flagrantFoul: 0,
+        foulDrawn: 0,
+      },
+    ];
     listLeaguePlayerStats.mockResolvedValue(storedRows);
 
     const result = await getLeaguePlayerStats('league-1', undefined);
@@ -495,6 +520,20 @@ describe('league player stats materialisation (OPT-011)', () => {
     expect(result).toBe(storedRows);
     expect(listLeagueGamesByLeagueId).not.toHaveBeenCalled();
     expect(replaceLeaguePlayerStats).not.toHaveBeenCalled();
+  });
+
+  test('rebuilds old cached player rows that lack foul breakdowns', async () => {
+    listLeaguePlayerStats.mockResolvedValue([{ leaguePlayerId: 'lp1', gamesCount: 1, foul: 2 }]);
+    seedTeamsAndGames();
+    const result = await getLeaguePlayerStats('league-1', undefined);
+    expect(listLeagueGamesByLeagueId).toHaveBeenCalled();
+    expect(replaceLeaguePlayerStats).toHaveBeenCalled();
+    expect(result[0]).toMatchObject({
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
+    });
   });
 
   test('getLeaguePlayerStats computes + persists on a miss (self-backfill)', async () => {
@@ -592,6 +631,10 @@ describe('league player stats materialisation (OPT-011)', () => {
         blk: 0,
         tov: 0,
         foul: 0,
+        personalFoul: 0,
+        technicalFoul: 0,
+        flagrantFoul: 0,
+        foulDrawn: 0,
         ftm: 0,
         fta: 0,
         fg2m: 5,
@@ -633,6 +676,10 @@ describe('league player stats materialisation (OPT-011)', () => {
         blk: 0,
         tov: 4,
         foul: 0,
+        personalFoul: 0,
+        technicalFoul: 0,
+        flagrantFoul: 0,
+        foulDrawn: 0,
         ftm: 0,
         fta: 0,
         fg2m: 20,
@@ -790,6 +837,10 @@ describe('unified profile assembly (public player profiles)', () => {
         blk: 0,
         tov: 4,
         foul: 8,
+        personalFoul: 8,
+        technicalFoul: 0,
+        flagrantFoul: 0,
+        foulDrawn: 0,
       },
     ]);
 

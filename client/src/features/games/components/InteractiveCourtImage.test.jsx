@@ -41,6 +41,13 @@ function mockMatchMedia(matches) {
 }
 
 describe('InteractiveCourtImage', () => {
+  test('disabled courts ignore pointer entry', () => {
+    const onSelect = vi.fn();
+    render(<InteractiveCourtImage disabled onSelect={onSelect} />);
+    pointerDown(screen.getByTestId('interactive-court-image'), { clientX: 25, clientY: 25 });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();

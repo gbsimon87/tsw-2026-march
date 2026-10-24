@@ -1249,6 +1249,10 @@ function buildLeaguePlayerSummary(gameRows) {
       blk: summary.blk + (game.stats.blk || 0),
       tov: summary.tov + game.stats.tov,
       foul: summary.foul + game.stats.foul,
+      personalFoul: summary.personalFoul + (game.stats.personalFoul || 0),
+      technicalFoul: summary.technicalFoul + (game.stats.technicalFoul || 0),
+      flagrantFoul: summary.flagrantFoul + (game.stats.flagrantFoul || 0),
+      foulDrawn: summary.foulDrawn + (game.stats.foulDrawn || 0),
       reb: summary.reb + game.stats.reb,
       points: summary.points + game.stats.points,
     }),
@@ -1265,6 +1269,10 @@ function buildLeaguePlayerSummary(gameRows) {
     blk: totals.blk,
     tov: totals.tov,
     foul: totals.foul,
+    personalFoul: totals.personalFoul,
+    technicalFoul: totals.technicalFoul,
+    flagrantFoul: totals.flagrantFoul,
+    foulDrawn: totals.foulDrawn,
     pointsPerGame: gamesCount > 0 ? totals.points / gamesCount : 0,
     reboundsPerGame: gamesCount > 0 ? totals.reb / gamesCount : 0,
     assistsPerGame: gamesCount > 0 ? totals.ast / gamesCount : 0,
@@ -1272,6 +1280,7 @@ function buildLeaguePlayerSummary(gameRows) {
     blocksPerGame: gamesCount > 0 ? totals.blk / gamesCount : 0,
     turnoversPerGame: gamesCount > 0 ? totals.tov / gamesCount : 0,
     foulsPerGame: gamesCount > 0 ? totals.foul / gamesCount : 0,
+    foulsDrawnPerGame: gamesCount > 0 ? totals.foulDrawn / gamesCount : 0,
   };
 }
 
@@ -2490,7 +2499,15 @@ async function getLeaguePlayerStats(leagueId, seasonId, prefetch = {}) {
   }
 
   const materialised = await listLeaguePlayerStats(leagueId, seasonId);
-  if (materialised.length > 0) {
+  // Old cached rows predate foul breakdowns; recompute from events once.
+  if (
+    materialised.length > 0 &&
+    materialised.every((row) =>
+      ['personalFoul', 'technicalFoul', 'flagrantFoul', 'foulDrawn'].every((field) =>
+        Number.isFinite(row[field])
+      )
+    )
+  ) {
     return materialised;
   }
 
@@ -3010,6 +3027,11 @@ async function getPublicLeagueLeaders(
       teamSlug: team?.slug || null,
       teamLogoUrl: transformCloudinaryUrl(team?.logo?.url || null),
       gamesCount: row.gamesCount,
+      foul: row.foul || 0,
+      personalFoul: row.personalFoul || 0,
+      technicalFoul: row.technicalFoul || 0,
+      flagrantFoul: row.flagrantFoul || 0,
+      foulDrawn: row.foulDrawn || 0,
       ...scores,
     };
   });

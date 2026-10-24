@@ -14,6 +14,9 @@ const RESERVED_ACTION_WORDS = new Set([
   'block',
   'turnover',
   'foul',
+  'personal',
+  'technical',
+  'flagrant',
   'point',
   'points',
   'pointer',
@@ -27,6 +30,9 @@ const SIMPLE_ACTIONS = [
   { phrase: ['steal'], action: 'steal' },
   { phrase: ['block'], action: 'block' },
   { phrase: ['turnover'], action: 'turnover' },
+  { phrase: ['personal', 'foul'], action: 'foul' },
+  { phrase: ['technical', 'foul'], action: 'technical_foul' },
+  { phrase: ['flagrant', 'foul'], action: 'flagrant_foul' },
   { phrase: ['foul'], action: 'foul' },
 ];
 

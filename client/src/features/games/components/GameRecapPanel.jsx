@@ -354,6 +354,10 @@ export function GameRecapPanel({
                     { label: 'Blocks', key: 'blk' },
                     { label: 'Turnovers', key: 'tov' },
                     { label: 'Fouls', key: 'foul' },
+                    { label: 'Personal fouls', key: 'personalFoul' },
+                    { label: 'Technical fouls', key: 'technicalFoul' },
+                    { label: 'Flagrant fouls', key: 'flagrantFoul' },
+                    { label: 'Fouls drawn', key: 'foulDrawn' },
                   ]
                     .filter(({ key }) => !isScrimmage || ['points', 'tov'].includes(key))
                     .map(({ label, key }) => (
@@ -425,6 +429,10 @@ export function GameRecapPanel({
                 { label: 'Steals', value: recap?.teamStats?.stl || 0 },
                 { label: 'Turnovers', value: recap?.teamStats?.tov || 0 },
                 { label: 'Fouls', value: recap?.teamStats?.foul || 0 },
+                { label: 'Personal fouls', value: recap?.teamStats?.personalFoul || 0 },
+                { label: 'Technical fouls', value: recap?.teamStats?.technicalFoul || 0 },
+                { label: 'Flagrant fouls', value: recap?.teamStats?.flagrantFoul || 0 },
+                { label: 'Fouls drawn', value: recap?.teamStats?.foulDrawn || 0 },
                 { label: 'FG2%', value: formatPercentage(recap?.teamStats?.fg2?.percentage) },
                 { label: 'FG3%', value: formatPercentage(recap?.teamStats?.fg3?.percentage) },
                 { label: 'FT%', value: formatPercentage(recap?.teamStats?.ft?.percentage) },

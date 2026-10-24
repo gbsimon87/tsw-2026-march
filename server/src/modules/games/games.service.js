@@ -776,6 +776,10 @@ function buildBoxScoreForSide(game, team, side) {
       blk: players.reduce((total, row) => total + (row.blk || 0), 0),
       tov: players.reduce((total, row) => total + row.tov, 0),
       foul: players.reduce((total, row) => total + row.foul, 0),
+      personalFoul: players.reduce((total, row) => total + (row.personalFoul || 0), 0),
+      technicalFoul: players.reduce((total, row) => total + (row.technicalFoul || 0), 0),
+      flagrantFoul: players.reduce((total, row) => total + (row.flagrantFoul || 0), 0),
+      foulDrawn: players.reduce((total, row) => total + row.foulDrawn, 0),
       reb: players.reduce((total, row) => total + row.reb, 0),
       points: summary.points,
     },
@@ -833,6 +837,10 @@ function computeBoxScore(game, team, options = {}) {
       blk: players.reduce((total, row) => total + (row.blk || 0), 0),
       tov: players.reduce((total, row) => total + row.tov, 0),
       foul: players.reduce((total, row) => total + row.foul, 0),
+      personalFoul: players.reduce((total, row) => total + (row.personalFoul || 0), 0),
+      technicalFoul: players.reduce((total, row) => total + (row.technicalFoul || 0), 0),
+      flagrantFoul: players.reduce((total, row) => total + (row.flagrantFoul || 0), 0),
+      foulDrawn: players.reduce((total, row) => total + row.foulDrawn, 0),
       reb: players.reduce((total, row) => total + row.reb, 0),
       points: summary.points,
     },
@@ -1949,6 +1957,26 @@ async function updateGameForUser(userId, gameId, payload) {
   return getGameForUser(userId, gameId);
 }
 
+// Completed box scores saved before foul breakdowns must be replayed from events.
+function hasCurrentFoulStats(boxScore, trackingMode) {
+  if (!boxScore) return false;
+  const sides =
+    trackingMode === 'dual_team'
+      ? [boxScore.home, boxScore.away]
+      : [{ totals: boxScore.teamTotals, players: boxScore.players }];
+  return sides.every(
+    (side) =>
+      side &&
+      [side.totals, ...(side.players || [])].every(
+        (row) =>
+          row &&
+          ['personalFoul', 'technicalFoul', 'flagrantFoul', 'foulDrawn'].every((field) =>
+            Number.isFinite(row[field])
+          )
+      )
+  );
+}
+
 // OPT-015: the slim response for the event-append/edit hot path. Returns only
 // the fields GameTrackPage actually reads after a tracked stat (game, lineups,
 // boxScore, gameSummary) — not recap/highlights/team/participants/league/
@@ -1961,7 +1989,7 @@ async function updateGameForUser(userId, gameId, payload) {
 function buildSlimGameEventDelta(userId, game, context) {
   const { teamDoc, participants } = context;
   const boxScore =
-    game.status === 'completed' && game.boxScore
+    game.status === 'completed' && hasCurrentFoulStats(game.boxScore, game.trackingMode)
       ? game.boxScore
       : game.trackingMode === 'dual_team'
         ? computeBoxScore(game, null, { participants })
@@ -2084,7 +2112,7 @@ async function getGameForUser(
   // absent (in-progress games, or completed games from before this field
   // existed — reversible, self-correcting on the next finish/edit).
   const boxScore =
-    game.status === 'completed' && game.boxScore
+    game.status === 'completed' && hasCurrentFoulStats(game.boxScore, game.trackingMode)
       ? game.boxScore
       : game.trackingMode === 'dual_team'
         ? computeBoxScore(game, null, { participants })
@@ -2380,6 +2408,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
         STAT_TYPES.BLK,
         STAT_TYPES.TOV,
         STAT_TYPES.FOUL,
+        STAT_TYPES.TECHNICAL_FOUL,
+        STAT_TYPES.FLAGRANT_FOUL,
+        STAT_TYPES.FOUL_DRAWN,
       ].includes(payload.statType)
     ) {
       if (
@@ -2468,6 +2499,9 @@ async function appendEventForUser(userId, gameId, payload, options = {}) {
       STAT_TYPES.BLK,
       STAT_TYPES.TOV,
       STAT_TYPES.FOUL,
+      STAT_TYPES.TECHNICAL_FOUL,
+      STAT_TYPES.FLAGRANT_FOUL,
+      STAT_TYPES.FOUL_DRAWN,
     ].includes(payload.statType)
   ) {
     const lineupIds = (game.currentLineupPlayerIds || []).map(String);

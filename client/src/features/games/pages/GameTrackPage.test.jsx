@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { GameTrackPage } from './GameTrackPage';
+import { buildFreeThrowPayload } from '../court/courtInference';
+import { COURT_LAYOUTS } from '../court/courtLayouts';
 
 class MockSpeechRecognition {
   static instances = [];
@@ -37,6 +39,7 @@ const apiMocks = vi.hoisted(() => ({
   removeEvent: vi.fn(),
   finish: vi.fn(),
   update: vi.fn(),
+  updateEvent: vi.fn(),
   updateClock: vi.fn(),
   addRosterPlayer: vi.fn(),
 }));
@@ -314,6 +317,7 @@ describe('GameTrackPage', () => {
     apiMocks.removeEvent.mockReset();
     apiMocks.finish.mockReset();
     apiMocks.update.mockReset();
+    apiMocks.updateEvent.mockReset();
     apiMocks.updateClock.mockReset();
     apiMocks.addRosterPlayer.mockReset();
     sessionStorage.clear();
@@ -2541,20 +2545,47 @@ describe('GameTrackPage', () => {
     }
   );
 
-  test('treats the who-was-fouled follow-up as skip-only', async () => {
+  test.each([
+    ['technical', 'TECHNICAL_FOUL'],
+    ['flagrant', 'FLAGRANT_FOUL'],
+  ])('records a %s foul by voice with the same optional follow-up', async (spoken, statType) => {
+    await renderDualTeamVoiceGame();
+    await speak(`home Alex ${spoken} foul`);
+    await expectFollowUpQuestion(/Who was fouled\?/i);
+    expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+      statType,
+      playerId: 'player-1',
+      teamSide: 'home',
+    });
+  });
+
+  test('records the opposing player who drew a foul by voice', async () => {
     await renderDualTeamVoiceGame();
     await speak('home Alex foul');
     await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
     await expectFollowUpQuestion(/Who was fouled\?/i);
 
+    await speak('home Blake');
+    await expectVoiceMessage('This question is about the other team.');
+    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+
     await speak('away Away 2');
 
-    await expectVoiceMessage(
-      'The fouled player is not recorded yet. Say “skip” to close this question.'
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+    expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ playerId: 'away-2', statType: 'FOUL_DRAWN', teamSide: 'away' })
     );
-    expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
-    expect(within(getEventPicker()).getByText(/Who was fouled\?/i)).toBeInTheDocument();
+    await expectVoiceMessage('Away 2: Foul Drawn recorded.');
+    await waitFor(() =>
+      expect(screen.queryAllByRole('button', { name: /Close event picker/i })).toHaveLength(0)
+    );
+  });
 
+  test('skips a foul-drawn follow-up without changing the recorded foul', async () => {
+    await renderDualTeamVoiceGame();
+    await speak('home Alex foul');
+    await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+    await expectFollowUpQuestion(/Who was fouled\?/i);
     await speak('skip');
 
     await expectVoiceMessage('Question skipped. No stat was recorded.');
@@ -2626,11 +2657,11 @@ describe('GameTrackPage', () => {
     expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
   });
 
-  test.each(['assist', 'rebound'])(
+  test.each(['assist', 'rebound', 'foul drawn'])(
     'ignores repeated player clicks while a %s follow-up is saving',
     async (kind) => {
       currentResponse =
-        kind === 'rebound'
+        kind !== 'assist'
           ? createLeagueDualTeamResponse({ homeReady: true, awayReady: true })
           : createResponse({
               game: {
@@ -2645,9 +2676,13 @@ describe('GameTrackPage', () => {
       await selectPickerPlayer('Alex');
       fireEvent.click(
         within(getEventPicker()).getByRole('button', {
-          name: kind === 'rebound' ? 'FT-' : 'Make',
+          name: kind === 'rebound' ? 'FT-' : kind === 'foul drawn' ? 'FOUL' : 'Make',
         })
       );
+      if (kind === 'foul drawn')
+        fireEvent.click(
+          within(getEventPicker()).getByRole('button', { name: 'Personal foul', exact: true })
+        );
       await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
       const appendEvent = apiMocks.appendEvent.getMockImplementation();
       let releaseSave;
@@ -2659,7 +2694,7 @@ describe('GameTrackPage', () => {
         return appendEvent(...args);
       });
       const answer = within(getEventPicker()).getByRole('button', {
-        name: 'Blake',
+        name: kind === 'foul drawn' ? 'Away 2' : 'Blake',
       });
       try {
         fireEvent.click(answer);
@@ -3669,6 +3704,69 @@ describe('GameTrackPage', () => {
     };
   }
 
+  test.each(['home', 'away'])(
+    'records a manual foul drawn against the opponent of %s',
+    async (side) => {
+      currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+      currentResponse.game.gameFormat = {
+        regulationSegmentType: 'quarter',
+        regulationSegmentDurationSeconds: 600,
+        overtimeDurationSeconds: 300,
+      };
+      currentResponse.game.clock = {
+        status: 'paused',
+        segmentKind: 'regulation',
+        segmentNumber: 1,
+        remainingMilliseconds: 593000,
+      };
+      renderPage();
+      await screen.findByRole('button', { name: 'Select Home Squad' });
+      if (side === 'away')
+        fireEvent.click(screen.getByRole('button', { name: 'Select Away Squad' }));
+      tapCourtAt(250, 800);
+      await waitForEventPicker();
+      await selectPickerPlayer(side === 'home' ? 'Alex' : 'Away 1');
+      fireEvent.click(within(getEventPicker()).getByRole('button', { name: 'FOUL', exact: true }));
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      fireEvent.click(
+        within(getEventPicker()).getByRole('button', { name: 'Personal foul', exact: true })
+      );
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      const primary = apiMocks.appendEvent.mock.calls[0][1];
+      expect(primary.statType).toBe('FOUL');
+      await expectFollowUpQuestion(/Who was fouled\?/i);
+      const picker = within(getEventPicker());
+      expect(
+        picker.queryByRole('button', { name: side === 'home' ? 'Blake' : 'Away 2' })
+      ).not.toBeInTheDocument();
+      expect(
+        picker.queryByRole('button', { name: side === 'home' ? 'Away 6' : 'Flynn' })
+      ).not.toBeInTheDocument();
+      fireEvent.click(picker.getByRole('button', { name: side === 'home' ? 'Away 2' : 'Blake' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[1][1]).toEqual(
+        expect.objectContaining({
+          playerId: side === 'home' ? 'away-2' : 'player-2',
+          teamSide: side === 'home' ? 'away' : 'home',
+          statType: 'FOUL_DRAWN',
+          zoneId: primary.zoneId,
+          x: primary.x,
+          y: primary.y,
+          segmentKind: primary.segmentKind,
+          segmentNumber: primary.segmentNumber,
+          clockMillisecondsRemaining: primary.clockMillisecondsRemaining,
+        })
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('button', { name: /Close event picker/i })
+        ).not.toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Events', exact: true }));
+      expect(screen.getByText('Foul Drawn')).toBeInTheDocument();
+    }
+  );
+
   test.each([
     ['FOUL', /Who was fouled\?/i],
     ['STL', /Who turned over the ball\?/i],
@@ -3685,6 +3783,10 @@ describe('GameTrackPage', () => {
     // Clicks that land right after the court tap are dropped as ghost clicks.
     await new Promise((resolve) => setTimeout(resolve, 400));
     fireEvent.click(within(getEventPicker()).getByRole('button', { name: stat }));
+    if (stat === 'FOUL')
+      fireEvent.click(
+        within(getEventPicker()).getByRole('button', { name: 'Personal foul', exact: true })
+      );
     await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
     await within(getEventPicker()).findByText(question);
 
@@ -4223,6 +4325,10 @@ describe('GameTrackPage', () => {
       await waitForEventPicker();
       await selectPickerPlayer('Alex');
       fireEvent.click(within(getEventPicker()).getByRole('button', { name: stat }));
+      if (stat === 'FOUL')
+        fireEvent.click(
+          within(getEventPicker()).getByRole('button', { name: 'Personal foul', exact: true })
+        );
       await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
       fireEvent.click(screen.getByRole('button', { name: 'Correct' }));
       fireEvent.change(screen.getByLabelText('Clock minutes'), { target: { value: '2' } });
@@ -4587,6 +4693,631 @@ describe('GameTrackPage', () => {
       window.matchMedia = originalMatchMedia;
     };
   }
+
+  describe('Desktop league workspace', () => {
+    function desktopClick(element) {
+      pointerDown(element);
+      fireEvent.click(element);
+    }
+    let restoreMedia;
+    beforeEach(() => {
+      restoreMedia = stubMatchMedia(true);
+    });
+    afterEach(() => restoreMedia());
+
+    async function openDesktopGame({ video = true, layout = 'legacy-v1', events = [] } = {}) {
+      currentResponse = createLeagueDualTeamResponse({ homeReady: true, awayReady: true });
+      Object.assign(currentResponse.game, {
+        sport: 'basketball',
+        courtLayoutId: layout,
+        events,
+        gameFormat: {
+          regulationSegmentType: 'quarter',
+          regulationSegmentDurationSeconds: 600,
+          overtimeDurationSeconds: 300,
+        },
+        clock: {
+          status: 'paused',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          remainingMilliseconds: 593000,
+        },
+        ...(video ? { video: { provider: 'mux', status: 'ready', version: 'v1' } } : {}),
+      });
+      renderPage();
+      await screen.findByRole('complementary', { name: 'League tracking workspace' });
+      if (video) {
+        Object.defineProperty(screen.getByTestId('tracker-mux'), 'readyState', {
+          configurable: true,
+          value: 4,
+        });
+        screen.getByTestId('tracker-mux').currentTime = 42;
+      }
+    }
+
+    function answerQuick(action, name = 'Alex') {
+      desktopClick(screen.getByRole('button', { name: action, exact: true }));
+      if (action === 'Foul')
+        desktopClick(screen.getByRole('button', { name: 'Personal foul', exact: true }));
+      desktopClick(
+        screen.getByRole('button', {
+          name: new RegExp(`Record ${action.toLowerCase()} for ${name}$`, 'i'),
+        })
+      );
+    }
+
+    test.each([
+      ['Steal', 'STL'],
+      ['Block', 'BLK'],
+      ['Turnover', 'TOV'],
+      ['Foul', 'FOUL'],
+      ['Offensive rebound', 'OREB'],
+      ['Defensive rebound', 'DREB'],
+      ['Free throw made', 'FT_MADE'],
+      ['Free throw missed', 'FT_MISS'],
+    ])('records direct %s once without a court tap', async (action, statType) => {
+      await openDesktopGame();
+      const video = screen.getByTestId('tracker-mux');
+      desktopClick(screen.getByRole('button', { name: action, exact: true }));
+      if (action === 'Foul')
+        desktopClick(screen.getByRole('button', { name: 'Personal foul', exact: true }));
+      video.currentTime = 89;
+      expect(screen.queryByRole('dialog', { name: 'Add event' })).not.toBeInTheDocument();
+      expect(document.body.style.touchAction).not.toBe('none');
+      const player = screen.getByRole('button', {
+        name: new RegExp(`Record ${action.toLowerCase()} for Alex$`, 'i'),
+      });
+      desktopClick(player);
+      desktopClick(player);
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+        playerId: 'player-1',
+        teamSide: 'home',
+        statType,
+        videoTimestamp: 42,
+        segmentNumber: 1,
+        clockMillisecondsRemaining: 593000,
+      });
+      if (!statType.startsWith('FT_'))
+        expect(apiMocks.appendEvent.mock.calls[0][1]).not.toHaveProperty('x');
+      expect(screen.getByTestId('tracker-mux')).toBe(video);
+    });
+
+    test.each([
+      ['Steal', 'STL'],
+      ['Block', 'BLK'],
+      ['Turnover', 'TOV'],
+      ['Foul', 'FOUL'],
+      ['Offensive rebound', 'OREB'],
+      ['Defensive rebound', 'DREB'],
+      ['Free throw made', 'FT_MADE'],
+      ['Free throw missed', 'FT_MISS'],
+    ])(
+      'quick %s offers both team rows and records the chosen opposing player',
+      async (action, statType) => {
+        await openDesktopGame();
+        desktopClick(screen.getByRole('button', { name: action, exact: true }));
+        if (action === 'Foul')
+          desktopClick(screen.getByRole('button', { name: 'Personal foul', exact: true }));
+        const entry = screen.getByRole('region', { name: `Record ${action}` });
+        expect(within(entry).getAllByRole('group')).toHaveLength(2);
+        screen.getByTestId('tracker-mux').currentTime = 99;
+        desktopClick(
+          within(entry).getByRole('button', {
+            name: new RegExp(`Record ${action.toLowerCase()} for Away 2$`, 'i'),
+          })
+        );
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+        expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+          playerId: 'away-2',
+          teamSide: 'away',
+          statType,
+          videoTimestamp: 42,
+        });
+        if (!statType.startsWith('FT_'))
+          expect(apiMocks.appendEvent.mock.calls[0][1]).not.toHaveProperty('x');
+      }
+    );
+
+    test.each([
+      [425, 470, 'FG2_MADE'],
+      [400, 47, 'FG3_MADE'],
+    ])('infers a shot from court %s,%s without a point-value choice', async (x, y, type) => {
+      await openDesktopGame();
+      tapCourtAt(x, y);
+      const editor = screen.getByRole('region', { name: 'Record shot' });
+      expect(within(editor).getByRole('button', { name: 'Foul' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Add event' })).not.toBeInTheDocument();
+      screen.getByTestId('tracker-mux').currentTime = 99;
+      desktopClick(within(editor).getByRole('button', { name: /^Made/ }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+        statType: type,
+        videoTimestamp: 42,
+        playerId: 'player-1',
+        courtLayoutId: 'legacy-v1',
+      });
+    });
+
+    test('changing shot location preserves time and cancellation releases the inline entry', async () => {
+      await openDesktopGame();
+      tapCourtAt(425, 470);
+      desktopClick(screen.getByRole('button', { name: 'Change location' }));
+      screen.getByTestId('tracker-mux').currentTime = 100;
+      tapCourtAt(400, 47);
+      desktopClick(screen.getByRole('button', { name: /^Made/ }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+        statType: 'FG3_MADE',
+        videoTimestamp: 42,
+      });
+      desktopClick(screen.getByRole('button', { name: 'Skip this question' }));
+      desktopClick(screen.getByRole('button', { name: 'Steal', exact: true }));
+      desktopClick(screen.getByRole('button', { name: 'Cancel', exact: true }));
+      expect(screen.getByRole('button', { name: 'Options', exact: true })).toBeEnabled();
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['Offensive rebound', 'player-2', 'Who missed the shot? for Blake'],
+      ['Defensive rebound', 'away-2', 'Who missed the shot? for Away 2'],
+      ['Block', 'away-2', 'Who missed the shot? for Away 2'],
+    ])('collects a separate inferred missed shot after %s', async (action, shooter, answer) => {
+      await openDesktopGame();
+      answerQuick(action);
+      await screen.findByRole('heading', { name: 'Where was the missed shot?' });
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+      screen.getByTestId('tracker-mux').currentTime = 100;
+      tapCourtAt(400, 47);
+      desktopClick(screen.getByRole('button', { name: answer }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[1][1]).toMatchObject({
+        playerId: shooter,
+        statType: 'FG3_MISS',
+        videoTimestamp: 42,
+        clockMillisecondsRemaining: 593000,
+        x: 5,
+        y: 20,
+      });
+      expect(screen.queryByRole('region', { name: 'Related event' })).not.toBeInTheDocument();
+    });
+
+    test.each(['legacy-v1', 'court-v2'])(
+      'constructs a calibrated free throw at the chosen basket (%s)',
+      async (layout) => {
+        await openDesktopGame({ layout });
+        desktopClick(screen.getByRole('button', { name: 'Free throw made', exact: true }));
+        fireEvent.change(screen.getByRole('combobox', { name: 'Free throw basket' }), {
+          target: { value: 'north' },
+        });
+        desktopClick(screen.getByRole('button', { name: 'Record free throw made for Alex' }));
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+        const expected = buildFreeThrowPayload('north', 'made', COURT_LAYOUTS[layout].calibration);
+        expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+          x: expected.x,
+          y: expected.y,
+          zoneId: 'FREE_THROW_LINE',
+          courtLayoutId: layout,
+        });
+      }
+    );
+
+    test.each([
+      ['TECHNICAL_FOUL', 'Technical foul'],
+      ['FLAGRANT_FOUL', 'Flagrant foul'],
+    ])(
+      'quick foul type %s retains the opposing player and supports foul drawn',
+      async (statType, label) => {
+        await openDesktopGame();
+        desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+        expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: /Record foul for/ })).not.toBeInTheDocument();
+        desktopClick(screen.getByRole('button', { name: label, exact: true }));
+        desktopClick(
+          screen.getByRole('button', { name: `Record ${label.toLowerCase()} for Away 2` })
+        );
+        await screen.findByRole('heading', { name: 'Who was fouled?' });
+        expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+          statType,
+          playerId: 'away-2',
+          teamSide: 'away',
+          videoTimestamp: 42,
+        });
+        desktopClick(screen.getByRole('button', { name: 'Who was fouled? for Alex' }));
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+        expect(apiMocks.appendEvent.mock.calls[1][1]).toMatchObject({
+          statType: 'FOUL_DRAWN',
+          playerId: 'player-1',
+          teamSide: 'home',
+          videoTimestamp: 42,
+        });
+      }
+    );
+
+    test('foul type selection is category-first and Back or Cancel never records an event', async () => {
+      await openDesktopGame();
+      expect(screen.queryByRole('group', { name: 'Foul type' })).not.toBeInTheDocument();
+      tapCourtAt(425, 470);
+      expect(screen.queryByRole('group', { name: 'Foul type' })).not.toBeInTheDocument();
+      desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+      expect(screen.getByRole('group', { name: 'Foul type' })).toBeInTheDocument();
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      desktopClick(screen.getByRole('button', { name: 'Back', exact: true }));
+      expect(screen.getByRole('region', { name: 'Record shot' })).toBeInTheDocument();
+      desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+      desktopClick(screen.getByRole('button', { name: 'Cancel', exact: true }));
+      expect(screen.queryByRole('group', { name: 'Foul type' })).not.toBeInTheDocument();
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+      desktopClick(screen.getByRole('button', { name: 'Technical foul', exact: true }));
+      desktopClick(screen.getByRole('button', { name: 'Change type', exact: true }));
+      expect(screen.getByRole('group', { name: 'Foul type' })).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Record technical foul for/ })
+      ).not.toBeInTheDocument();
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+    });
+
+    test('court foul type keeps location, supports Skip and can be corrected inline', async () => {
+      await openDesktopGame();
+      tapCourtAt(425, 470);
+      expect(screen.queryByRole('group', { name: 'Foul type' })).not.toBeInTheDocument();
+      desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      desktopClick(screen.getByRole('button', { name: 'Flagrant foul', exact: true }));
+      await screen.findByRole('heading', { name: 'Who was fouled?' });
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+        statType: 'FLAGRANT_FOUL',
+        x: expect.any(Number),
+        y: expect.any(Number),
+        videoTimestamp: 42,
+      });
+      desktopClick(screen.getByRole('button', { name: 'Skip this question' }));
+      desktopClick(screen.getByRole('button', { name: /^Edit event: Home Squad/ }));
+      expect(screen.getByRole('option', { name: 'Technical Foul' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Flagrant Foul' })).toBeInTheDocument();
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test('records foul drawn and Undo removes only the related event', async () => {
+      await openDesktopGame();
+      answerQuick('Foul');
+      await screen.findByRole('heading', { name: 'Who was fouled?' });
+      desktopClick(screen.getByRole('button', { name: 'Who was fouled? for Away 2' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[1][1]).toMatchObject({
+        playerId: 'away-2',
+        statType: 'FOUL_DRAWN',
+        teamSide: 'away',
+        videoTimestamp: 42,
+      });
+      const recent = screen.getByRole('region', { name: 'Recent plays' });
+      await waitFor(() =>
+        expect(within(recent).getByRole('button', { name: /^Undo/ })).toBeEnabled()
+      );
+      desktopClick(within(recent).getByRole('button', { name: /^Undo/ }));
+      await waitFor(() => expect(apiMocks.removeEvent).toHaveBeenCalledWith('game-1', 'event-2'));
+      expect(currentResponse.game.events.map((event) => event.statType)).toEqual(['FOUL']);
+    });
+
+    test('can undo the confirmed primary while its question is open', async () => {
+      await openDesktopGame();
+      answerQuick('Foul');
+      const undo = await screen.findByRole('button', { name: 'Undo foul', exact: true });
+      desktopClick(undo);
+      await waitFor(() => expect(apiMocks.removeEvent).toHaveBeenCalledWith('game-1', 'event-1'));
+      await waitFor(() =>
+        expect(screen.queryByRole('region', { name: 'Related event' })).not.toBeInTheDocument()
+      );
+    });
+
+    test('a definite failed follow-up remains answerable without repeating the primary', async () => {
+      await openDesktopGame();
+      answerQuick('Foul');
+      await screen.findByRole('heading', { name: 'Who was fouled?' });
+      apiMocks.appendEvent.mockRejectedValueOnce(
+        Object.assign(new Error('Answer rejected'), { status: 400 })
+      );
+      desktopClick(screen.getByRole('button', { name: 'Who was fouled? for Away 2' }));
+      await screen.findByText('Answer rejected');
+      desktopClick(screen.getByRole('button', { name: 'Who was fouled? for Away 3' }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(3));
+      expect(apiMocks.appendEvent.mock.calls[2][1]).toMatchObject({
+        statType: 'FOUL_DRAWN',
+        playerId: 'away-3',
+        videoTimestamp: 42,
+      });
+      expect(currentResponse.game.events.map((event) => event.statType)).toEqual([
+        'FOUL',
+        'FOUL_DRAWN',
+      ]);
+    });
+
+    test('keeps four icon tabs, recent plays on Court and session actions in Options', async () => {
+      await openDesktopGame();
+      for (const label of ['Court', 'Subs', 'Events', 'Options']) {
+        expect(
+          screen.getByRole('button', { name: label, exact: true }).querySelector('svg')
+        ).toBeTruthy();
+      }
+      expect(screen.queryByText('Where did the shot happen?')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Rotate court/i })).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Open fullscreen tracking' }).querySelector('svg')
+      ).toBeTruthy();
+      for (const label of ['Subs', 'Events', 'Options']) {
+        desktopClick(screen.getByRole('button', { name: label, exact: true }));
+        expect(screen.queryByRole('region', { name: 'Recent plays' })).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', { name: /Back to tracking|Done editing|Exit tracking/ })
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText('On each row:')).not.toBeInTheDocument();
+      }
+      expect(screen.getByRole('button', { name: /Save & Exit/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Rotate Court/i })).toBeInTheDocument();
+    });
+
+    test.each([
+      ['Made', 'FG2_MADE'],
+      ['Foul', 'FOUL'],
+      ['Off. rebound', 'OREB'],
+    ])(
+      'selects an opposing player before recording %s without losing location or time',
+      async (action, statType) => {
+        await openDesktopGame();
+        expect(screen.queryByRole('button', { name: 'Track Home Squad' })).not.toBeInTheDocument();
+        tapCourtAt(425, 470);
+        const editor = screen.getByRole('region', { name: 'Record shot' });
+        expect(
+          within(editor).getByRole('group', { name: 'Home Squad on-court players' })
+        ).toBeInTheDocument();
+        expect(
+          within(editor).getByRole('group', { name: 'Away Squad on-court players' })
+        ).toBeInTheDocument();
+        desktopClick(within(editor).getByRole('button', { name: 'Away 2', exact: true }));
+        expect(within(editor).getByRole('button', { name: 'Away 2', exact: true })).toHaveAttribute(
+          'aria-pressed',
+          'true'
+        );
+        expect(within(editor).queryByText(/Selected:/)).not.toBeInTheDocument();
+        screen.getByTestId('tracker-mux').currentTime = 100;
+        desktopClick(
+          within(editor).getByRole('button', {
+            name: action === 'Made' ? /^Made/ : action,
+            exact: action !== 'Made',
+          })
+        );
+        if (action === 'Foul')
+          desktopClick(screen.getByRole('button', { name: 'Personal foul', exact: true }));
+        await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+        expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+          statType,
+          playerId: 'away-2',
+          teamSide: 'away',
+          videoTimestamp: 42,
+          x: expect.any(Number),
+          y: expect.any(Number),
+        });
+      }
+    );
+
+    test('Events tab shows the complete list without a show-more control', async () => {
+      await openDesktopGame({
+        events: Array.from({ length: 5 }, (_, i) => ({
+          id: `event-${i}`,
+          playerId: 'player-1',
+          teamSide: 'home',
+          statType: 'TOV',
+          segmentKind: 'regulation',
+          segmentNumber: 1,
+          clockMillisecondsRemaining: 400000,
+        })),
+      });
+      expect(screen.getAllByRole('button', { name: /^Edit event:/ })).toHaveLength(1);
+      desktopClick(screen.getByRole('button', { name: 'Events', exact: true }));
+      expect(screen.getAllByRole('button', { name: 'Edit this event', exact: true })).toHaveLength(
+        5
+      );
+      expect(
+        screen.queryByRole('button', { name: /Show all|Show less|Back to tracking/ })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText('On each row:')).not.toBeInTheDocument();
+    });
+
+    test.each([
+      ['Off. rebound', 'OREB'],
+      ['Def. rebound', 'DREB'],
+      ['Steal', 'STL'],
+      ['Block', 'BLK'],
+      ['Turnover', 'TOV'],
+      ['Foul', 'FOUL'],
+    ])('records %s at the selected court location', async (label, statType) => {
+      await openDesktopGame();
+      tapCourtAt(425, 470);
+      desktopClick(
+        within(screen.getByRole('region', { name: 'Record shot' })).getByRole('button', {
+          name: label,
+          exact: true,
+        })
+      );
+      if (statType === 'FOUL')
+        desktopClick(screen.getByRole('button', { name: 'Personal foul', exact: true }));
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      expect(apiMocks.appendEvent.mock.calls[0][1]).toMatchObject({
+        statType,
+        playerId: 'player-1',
+        teamSide: 'home',
+        videoTimestamp: 42,
+        courtLayoutId: 'legacy-v1',
+        x: expect.any(Number),
+        y: expect.any(Number),
+      });
+    });
+
+    test('navigation and inline editing keep the video element mounted', async () => {
+      await openDesktopGame();
+      const video = screen.getByTestId('tracker-mux');
+      desktopClick(screen.getByRole('button', { name: 'Options', exact: true }));
+      desktopClick(screen.getByRole('button', { name: 'Court', exact: true }));
+      answerQuick('Foul');
+      await screen.findByRole('heading', { name: 'Who was fouled?' });
+      desktopClick(screen.getByRole('button', { name: 'Skip this question' }));
+      desktopClick(screen.getByRole('button', { name: /^Edit event: Home Squad/ }));
+      expect(screen.getByRole('region', { name: 'Edit event' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Edit event' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('tracker-mux')).toBe(video);
+    });
+
+    test('historical quick-stat insertion uses target clock instead of the live clock', async () => {
+      await openDesktopGame({
+        events: [
+          {
+            id: 'old',
+            playerId: 'player-1',
+            teamSide: 'home',
+            statType: 'FOUL',
+            segmentKind: 'regulation',
+            segmentNumber: 1,
+            clockMillisecondsRemaining: 400000,
+          },
+        ],
+      });
+      desktopClick(screen.getByRole('button', { name: /^Insert before: Home Squad/ }));
+      answerQuick('Free throw made');
+      await waitFor(() => expect(apiMocks.insertEventBefore).toHaveBeenCalledTimes(1));
+      expect(apiMocks.insertEventBefore.mock.calls[0]).toEqual([
+        'game-1',
+        'old',
+        expect.objectContaining({ statType: 'FT_MADE', clockMillisecondsRemaining: 400000 }),
+      ]);
+    });
+
+    test.each([true, false])(
+      'respects pause ownership for direct entry (preference %s)',
+      async (preference) => {
+        await openDesktopGame();
+        if (!preference) {
+          desktopClick(screen.getByRole('button', { name: 'Options', exact: true }));
+          desktopClick(screen.getByRole('button', { name: /Pause During Stat Entry/ }));
+          desktopClick(screen.getByRole('button', { name: 'Court', exact: true }));
+        }
+        const video = screen.getByTestId('tracker-mux');
+        video.pause = vi.fn();
+        video.play = vi.fn(() => Promise.resolve());
+        fireEvent.play(video);
+        desktopClick(screen.getByRole('button', { name: 'Steal', exact: true }));
+        expect(video.pause).toHaveBeenCalledTimes(preference ? 1 : 0);
+        desktopClick(screen.getByRole('button', { name: 'Cancel', exact: true }));
+        await waitFor(() => expect(video.play).toHaveBeenCalledTimes(preference ? 1 : 0));
+        expect(apiMocks.updateClock).not.toHaveBeenCalled();
+      }
+    );
+
+    test('Escape closes a quick draft without writing and an uncertain save is never replayed', async () => {
+      await openDesktopGame();
+      desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Foul', exact: true })).toBeEnabled();
+      apiMocks.appendEvent.mockRejectedValueOnce(new Error('Connection lost'));
+      answerQuick('Foul');
+      await screen.findByText('Connection lost');
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('region', { name: 'Related event' })).not.toBeInTheDocument();
+      expect(screen.getByText('Save unconfirmed')).toBeInTheDocument();
+    });
+
+    test('breakpoint crossing cancels an unsaved desktop quick draft', async () => {
+      let change;
+      const media = {
+        matches: true,
+        addEventListener: (_event, callback) => {
+          change = callback;
+        },
+        removeEventListener: () => {},
+      };
+      window.matchMedia = (query) =>
+        query === '(min-width: 1024px)' ? media : makeMatchMediaStub(false)(query);
+      await openDesktopGame({ video: false });
+      desktopClick(screen.getByRole('button', { name: 'Foul', exact: true }));
+      await act(async () => {
+        media.matches = false;
+        change();
+      });
+      await screen.findByText(
+        'Layout or recording changed. Unfinished entry closed; saved events remain.'
+      );
+      expect(apiMocks.appendEvent).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole('complementary', { name: 'League tracking workspace' })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Add event' })).not.toBeInTheDocument();
+    });
+
+    test('an in-flight primary settles once across a breakpoint change', async () => {
+      let change;
+      const media = {
+        matches: true,
+        addEventListener: (_event, callback) => {
+          change = callback;
+        },
+        removeEventListener: () => {},
+      };
+      window.matchMedia = (query) =>
+        query === '(min-width: 1024px)' ? media : makeMatchMediaStub(false)(query);
+      await openDesktopGame({ video: false });
+      const append = apiMocks.appendEvent.getMockImplementation();
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      apiMocks.appendEvent.mockImplementation(async (...args) => {
+        await gate;
+        return append(...args);
+      });
+      answerQuick('Foul');
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        media.matches = false;
+        change();
+        release();
+      });
+      await screen.findByText(
+        'Layout or recording changed. Unfinished entry closed; saved events remain.'
+      );
+      expect(currentResponse.game.events.map((event) => event.statType)).toEqual(['FOUL']);
+      expect(apiMocks.appendEvent).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog', { name: 'Add event' })).not.toBeInTheDocument();
+    });
+
+    test('desktop foul follow-up accepts voice while retaining the manual entry timestamp', async () => {
+      installSpeechRecognition();
+      await openDesktopGame();
+      desktopClick(screen.getByRole('button', { name: 'Options', exact: true }));
+      desktopClick(screen.getByRole('button', { name: /Voice Tracking/ }));
+      desktopClick(screen.getByRole('button', { name: 'Court', exact: true }));
+      answerQuick('Foul');
+      await screen.findByRole('heading', { name: 'Who was fouled?' });
+      await speak('away Away 2');
+      await waitFor(() => expect(apiMocks.appendEvent).toHaveBeenCalledTimes(2));
+      expect(apiMocks.appendEvent.mock.calls[1][1]).toMatchObject({
+        statType: 'FOUL_DRAWN',
+        teamSide: 'away',
+        playerId: 'away-2',
+        videoTimestamp: 42,
+      });
+    });
+
+    test('works without video and keeps explicit fullscreen on its legacy chooser', async () => {
+      await openDesktopGame({ video: false });
+      answerQuick('Foul');
+      await screen.findByRole('heading', { name: 'Who was fouled?' });
+      desktopClick(screen.getByRole('button', { name: 'Skip this question' }));
+      desktopClick(screen.getByRole('button', { name: 'Open fullscreen tracking' }));
+      tapCourtAt(425, 470);
+      expect(screen.getByRole('dialog', { name: 'Add event' })).toBeInTheDocument();
+    });
+  });
 
   test('renders the video panel in a left column on desktop when a video URL is set', async () => {
     const restoreMatchMedia = stubMatchMedia(true);

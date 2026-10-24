@@ -5,6 +5,7 @@ const { buildCursorPage } = require('../../utils/pagination');
 const {
   summarizeEvents,
   createEmptyTeamStatSummary,
+  createEmptyPlayerStatLine,
   applyEventToTeamStatSummary,
   finalizeTeamStatSummary,
 } = require('../shared/statSummary');
@@ -333,6 +334,7 @@ function buildPublicTeamSummary(games, team) {
     stealsPerGame: gamesCount > 0 ? row.stl / gamesCount : 0,
     turnoversPerGame: gamesCount > 0 ? row.tov / gamesCount : 0,
     foulsPerGame: gamesCount > 0 ? row.foul / gamesCount : 0,
+    foulsDrawnPerGame: gamesCount > 0 ? row.foulDrawn / gamesCount : 0,
   }));
 
   return {
@@ -371,7 +373,19 @@ async function computeTeamSeasonSummary(
 // itself always runs first so the O(G×E) compute is still avoided on a hit.
 async function getTeamSeasonSummary(teamId, prefetch = {}) {
   const materialised = await findTeamSeasonSummary(teamId);
-  if (materialised && materialised.summary) {
+  if (
+    materialised?.summary?.boxScore &&
+    [
+      materialised.summary.boxScore.teamTotals,
+      ...(materialised.summary.boxScore.players || []),
+    ].every(
+      (row) =>
+        row &&
+        ['personalFoul', 'technicalFoul', 'flagrantFoul', 'foulDrawn'].every((field) =>
+          Number.isFinite(row[field])
+        )
+    )
+  ) {
     return materialised.summary;
   }
 
@@ -481,21 +495,9 @@ function buildPublicPlayerGameRows(games, team, player, teamLookup = new Map()) 
     .filter((game) => game.status === 'completed' && isGamePubliclyViewable(game))
     .map((game) => {
       const boxScore = computeBoxScore(game, team, { includeInactivePlayers: true });
-      const playerRow = boxScore.players.find((row) => row.playerId === String(player._id)) || {
-        playerId: String(player._id),
-        displayName: player.displayName,
-        ftm: 0,
-        fta: 0,
-        fg2m: 0,
-        fg2a: 0,
-        fg3m: 0,
-        fg3a: 0,
-        ast: 0,
-        oreb: 0,
-        dreb: 0,
-        reb: 0,
-        points: 0,
-      };
+      const playerRow =
+        boxScore.players.find((row) => row.playerId === String(player._id)) ||
+        createEmptyPlayerStatLine(String(player._id), player.displayName);
 
       const opponentName = game.opponent ?? null;
 
@@ -521,6 +523,10 @@ function buildPublicPlayerGameRows(games, team, player, teamLookup = new Map()) 
           stl: playerRow.stl,
           tov: playerRow.tov,
           foul: playerRow.foul,
+          personalFoul: playerRow.personalFoul || 0,
+          technicalFoul: playerRow.technicalFoul || 0,
+          flagrantFoul: playerRow.flagrantFoul || 0,
+          foulDrawn: playerRow.foulDrawn || 0,
           reb: playerRow.reb,
           points: playerRow.points,
         },
@@ -538,8 +544,23 @@ function buildPublicPlayerSummary(gameRows) {
       stl: summary.stl + game.stats.stl,
       tov: summary.tov + game.stats.tov,
       foul: summary.foul + game.stats.foul,
+      personalFoul: summary.personalFoul + (game.stats.personalFoul || 0),
+      technicalFoul: summary.technicalFoul + (game.stats.technicalFoul || 0),
+      flagrantFoul: summary.flagrantFoul + (game.stats.flagrantFoul || 0),
+      foulDrawn: summary.foulDrawn + (game.stats.foulDrawn || 0),
     }),
-    { points: 0, reb: 0, ast: 0, stl: 0, tov: 0, foul: 0 }
+    {
+      points: 0,
+      reb: 0,
+      ast: 0,
+      stl: 0,
+      tov: 0,
+      foul: 0,
+      personalFoul: 0,
+      technicalFoul: 0,
+      flagrantFoul: 0,
+      foulDrawn: 0,
+    }
   );
   const gamesCount = gameRows.length;
 
@@ -552,6 +573,7 @@ function buildPublicPlayerSummary(gameRows) {
     stealsPerGame: gamesCount > 0 ? totals.stl / gamesCount : 0,
     turnoversPerGame: gamesCount > 0 ? totals.tov / gamesCount : 0,
     foulsPerGame: gamesCount > 0 ? totals.foul / gamesCount : 0,
+    foulsDrawnPerGame: gamesCount > 0 ? totals.foulDrawn / gamesCount : 0,
   };
 }
 

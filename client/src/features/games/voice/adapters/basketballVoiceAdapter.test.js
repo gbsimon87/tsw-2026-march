@@ -97,6 +97,17 @@ describe('basketballVoiceAdapter primary commands', () => {
     expect(parsePrimary(transcript, context)).toEqual({ ok: true, intent });
   });
 
+  test.each([
+    ['personal', 'foul'],
+    ['technical', 'technical_foul'],
+    ['flagrant', 'flagrant_foul'],
+  ])('parses an explicit %s foul', (type, action) => {
+    expect(parsePrimary(`home 13 ${type} foul`)).toMatchObject({
+      ok: true,
+      intent: { action, side: 'home', participant: { kind: 'jersey', value: 13 } },
+    });
+  });
+
   test('interprets homophones only in an expected number slot', () => {
     expect(parsePrimary('home number too block')).toMatchObject({
       ok: true,

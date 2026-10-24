@@ -15,6 +15,7 @@ export function GameClockControls({
   // moment in the tracker: the gate (save a starting five) was never stated.
   disabledReason = '',
   serverOffsetMilliseconds = 0,
+  compact = false,
 }) {
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(false);
@@ -50,6 +51,7 @@ export function GameClockControls({
     ready: 'Ready',
     segment_complete: 'Period complete',
   }[clock.status];
+  const ClockActions = compact ? 'details' : 'div';
 
   function finishSegment() {
     setShowFinishConfirm(false);
@@ -69,7 +71,11 @@ export function GameClockControls({
 
   return (
     <section
-      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-950 px-3 py-3 text-white shadow-lg sm:min-w-[15rem] sm:px-4 landscape-compact:flex-row landscape-compact:gap-3 landscape-compact:px-2 landscape-compact:py-1.5"
+      className={
+        compact
+          ? 'flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white sm:min-w-[19rem]'
+          : 'flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-950 px-3 py-3 text-white shadow-lg sm:min-w-[15rem] sm:px-4 landscape-compact:flex-row landscape-compact:gap-3 landscape-compact:px-2 landscape-compact:py-1.5'
+      }
       aria-label="Game clock controls"
     >
       <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3 landscape-compact:w-auto landscape-compact:shrink-0 landscape-compact:gap-2">
@@ -77,7 +83,11 @@ export function GameClockControls({
           {segmentLabel(game.gameFormat, clock.segmentKind, clock.segmentNumber)}
         </span>
         <span
-          className="justify-self-center font-mono text-3xl font-black leading-none tracking-tight tabular-nums sm:text-[2.75rem] landscape-compact:text-2xl"
+          className={
+            compact
+              ? 'justify-self-center font-mono text-3xl font-black leading-none tabular-nums'
+              : 'justify-self-center font-mono text-3xl font-black leading-none tracking-tight tabular-nums sm:text-[2.75rem] landscape-compact:text-2xl'
+          }
           aria-label="Game clock"
         >
           {formatClock(remaining)}
@@ -132,28 +142,44 @@ export function GameClockControls({
             Start overtime
           </button>
         )}
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            setMinutes(String(Math.floor(remaining / 60000)));
-            setSeconds(String((remaining % 60000) / 1000));
-            setEditing(true);
-          }}
-          className="min-h-9 rounded-lg border border-slate-500 bg-white/5 px-3 py-2 text-xs font-bold text-slate-100 transition hover:bg-white/10 disabled:opacity-50"
-        >
-          Correct
-        </button>
-        {canFinishSegment ? (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setShowFinishConfirm(true)}
-            className="min-h-9 rounded-lg border border-red-400/60 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-100 transition-colors hover:bg-red-500/25 disabled:opacity-50"
+        <ClockActions className={compact ? 'relative' : 'contents'}>
+          {compact && (
+            <summary className="min-h-9 cursor-pointer rounded-lg border border-slate-500 px-3 py-2 text-xs font-bold">
+              Clock actions
+            </summary>
+          )}
+          <div
+            className={
+              compact
+                ? 'absolute right-0 top-full z-40 mt-1 grid min-w-40 gap-2 rounded-lg border border-slate-600 bg-slate-950 p-2 shadow-lg'
+                : 'contents'
+            }
           >
-            {finishLabel}
-          </button>
-        ) : null}
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(event) => {
+                if (compact) event.currentTarget.closest('details')?.removeAttribute('open');
+                setMinutes(String(Math.floor(remaining / 60000)));
+                setSeconds(String((remaining % 60000) / 1000));
+                setEditing(true);
+              }}
+              className="min-h-9 rounded-lg border border-slate-500 bg-white/5 px-3 py-2 text-xs font-bold text-slate-100 transition hover:bg-white/10 disabled:opacity-50"
+            >
+              Correct
+            </button>
+            {canFinishSegment ? (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => setShowFinishConfirm(true)}
+                className="min-h-9 rounded-lg border border-red-400/60 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-100 transition-colors hover:bg-red-500/25 disabled:opacity-50"
+              >
+                {finishLabel}
+              </button>
+            ) : null}
+          </div>
+        </ClockActions>
       </div>
       {disabled && disabledReason ? (
         <p className="w-full text-balance text-center text-[11px] font-semibold leading-snug text-amber-200">

@@ -60,6 +60,30 @@ describe('PublicPlayerPage', () => {
     cleanup();
   });
 
+  test('shows foul types and fouls drawn in the player summary and game log', async () => {
+    teamsApi.getPublicPlayerById.mockResolvedValue({
+      team: { id: 'team-1', name: 'Hawks' },
+      player: { id: 'p1', displayName: 'Alex' },
+      summary: {},
+      games: [
+        {
+          gameId: 'g1',
+          opponent: 'Falcons',
+          completedAt: '2026-03-01T00:00:00Z',
+          stats: { foul: 3, personalFoul: 1, technicalFoul: 1, flagrantFoul: 1, foulDrawn: 2 },
+        },
+      ],
+      highlights: [],
+    });
+    renderPage();
+    await screen.findByText('Falcons');
+    expect(
+      screen.getByText('Fouls drawn', { selector: 'article p' }).closest('article')
+    ).toHaveTextContent('2');
+    for (const name of ['Personal fouls', 'Technical fouls', 'Flagrant fouls', 'Fouls drawn'])
+      expect(within(screen.getByRole('table')).getByRole('button', { name })).toBeInTheDocument();
+  });
+
   test('renders player hero, averages, and game log table', async () => {
     teamsApi.getPublicPlayerById.mockResolvedValue({
       team: {

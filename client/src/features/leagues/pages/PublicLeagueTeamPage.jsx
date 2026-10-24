@@ -1,3 +1,4 @@
+import { FOUL_STAT_COLUMNS } from '../../games/foulStats';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../app/store/AuthContext';
@@ -135,6 +136,8 @@ const PLAYER_STATS_COLUMNS = [
     align: 'right',
     render: (row) => row.tov,
   },
+  { id: 'foul', label: 'FOUL', align: 'right', render: (row) => row.foul || 0 },
+  ...FOUL_STAT_COLUMNS,
 ];
 
 export function PublicLeagueTeamPage() {
