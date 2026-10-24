@@ -2364,8 +2364,24 @@ function requireBothLineups(game) {
   }
 }
 
+// Optional for older clients. This is a write precondition, never a client-supplied
+// timeline binding. Match the desktop's gameVideoSourceKey and derive stored video
+// fields from the server document as before; optimistic concurrency covers replacements
+// that happen after this read and before the event save.
+function assertEventVideoSource(game, expectedSource) {
+  if (expectedSource === undefined) return;
+  const currentSource =
+    game.video?.provider === 'mux' && game.video.status === 'ready'
+      ? `mux:${String(game._id)}:${game.video.version}`
+      : (game.videoUrl ?? 'none');
+  if (expectedSource !== currentSource) {
+    throw new ApiError(409, 'The game recording changed. Start this entry again.');
+  }
+}
+
 async function appendEventForUser(userId, gameId, payload, options = {}) {
   const game = await assertGameAccess(userId, gameId, { requireWritable: true });
+  assertEventVideoSource(game, payload.expectedVideoSourceKey);
   assertCourtLayoutPrecondition(
     game,
     payload.courtLayoutId,

@@ -28,6 +28,22 @@ describe('games validation', () => {
     }
   );
 
+  test('keeps the optional source precondition while still stripping a forged timeline binding', () => {
+    const input = {
+      ...CLOCK_SNAPSHOT,
+      playerId: 'player-1',
+      statType: 'FOUL',
+      expectedVideoSourceKey: 'mux:game-1:2',
+      videoTimelineId: 'mux:forged',
+    };
+    const parsed = appendEventSchema.parse(input);
+    expect(parsed.expectedVideoSourceKey).toBe('mux:game-1:2');
+    expect(parsed).not.toHaveProperty('videoTimelineId');
+    expect(appendEventSchema.safeParse({ ...input, expectedVideoSourceKey: 2 }).success).toBe(
+      false
+    );
+  });
+
   test('accepts a foul drawn with captured context and requires a player', () => {
     const payload = {
       ...CLOCK_SNAPSHOT,

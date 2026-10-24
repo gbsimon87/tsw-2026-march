@@ -198,6 +198,9 @@ const opponentStatTypeSchema = z.enum([
   STAT_TYPES.OPP_REB,
 ]);
 
+const eventVideoSourcePrecondition = {
+  expectedVideoSourceKey: z.string().max(8192).optional(),
+};
 const videoTimestampField = { videoTimestamp: z.number().min(0).optional() };
 const eventClockSnapshotSchema = z.object({
   segmentKind: z.enum(['regulation', 'overtime']),
@@ -206,6 +209,7 @@ const eventClockSnapshotSchema = z.object({
 });
 
 const baseEventSchema = z.object({
+  ...eventVideoSourcePrecondition,
   playerId: z.string().min(1),
   occurredAt: z.string().datetime().optional(),
   teamSide: z.enum([TEAM_SIDES.HOME, TEAM_SIDES.AWAY]).optional(),
@@ -246,6 +250,7 @@ const appendSubstitutionEventSchema = baseEventSchema.extend({
 });
 
 const appendOpponentEventSchema = z.object({
+  ...eventVideoSourcePrecondition,
   statType: opponentStatTypeSchema,
   occurredAt: z.string().datetime().optional(),
   ...courtFieldsSchema,

@@ -1457,10 +1457,13 @@ export function GameTrackPage() {
         status: 400,
       });
     }
-    const eventPayload = buildEventPayload(
-      payload,
-      desktopContext ? { ...eventContext, ...desktopContext } : eventContext
-    );
+    const eventPayload = {
+      ...buildEventPayload(
+        payload,
+        desktopContext ? { ...eventContext, ...desktopContext } : eventContext
+      ),
+      ...(desktopContext ? { expectedVideoSourceKey: desktopContext.videoSourceKeyAtStart } : {}),
+    };
     const response = await submitTrackingMutation(() =>
       insertBeforeId
         ? gamesApi.insertEventBefore(gameId, insertBeforeId, eventPayload)
@@ -4399,7 +4402,7 @@ export function GameTrackPage() {
             ) : null}
             <button
               type="button"
-              disabled={isSaving}
+              disabled={isSaving || voiceBusy}
               onClick={() => undoLastEvent()}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800 disabled:opacity-50"
             >

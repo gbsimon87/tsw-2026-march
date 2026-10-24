@@ -4775,6 +4775,7 @@ describe('GameTrackPage', () => {
         teamSide: 'home',
         statType,
         videoTimestamp: 42,
+        expectedVideoSourceKey: 'mux:game-1:v1',
         segmentNumber: 1,
         clockMillisecondsRemaining: 593000,
       });

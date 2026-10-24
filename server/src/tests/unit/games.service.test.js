@@ -1997,6 +1997,56 @@ describe('games service event mutation contract (OPT-015)', () => {
     expect(saveGame).not.toHaveBeenCalled();
   });
 
+  test.each([
+    [{ videoUrl: 'https://www.youtube.com/watch?v=new' }, 'https://www.youtube.com/watch?v=old'],
+    [{ videoUrl: 'https://www.youtube.com/watch?v=new' }, 'none'],
+    [{ video: { provider: 'mux', status: 'ready', version: 2 } }, 'mux:game-1:1'],
+  ])(
+    'rejects a stale source precondition before saving: %j',
+    async (media, expectedVideoSourceKey) => {
+      const game = buildSlimTestGame(media);
+      findGameById.mockResolvedValue(game);
+      await expect(
+        appendEventForUser('user-1', 'game-1', {
+          ...EVENT_CLOCK,
+          playerId: 'home-snap-1',
+          teamSide: 'home',
+          statType: 'FOUL',
+          videoTimestamp: 42,
+          expectedVideoSourceKey,
+        })
+      ).rejects.toMatchObject({ statusCode: 409 });
+      expect(saveGame).not.toHaveBeenCalled();
+      expect(game.events).toHaveLength(0);
+    }
+  );
+
+  test.each([
+    [{}, 'none'],
+    [
+      { videoUrl: 'https://www.youtube.com/watch?v=current' },
+      'https://www.youtube.com/watch?v=current',
+    ],
+    [{ video: { provider: 'mux', status: 'ready', version: 2 } }, 'mux:game-1:2'],
+  ])(
+    'accepts a matching source precondition and never persists it: %j',
+    async (media, expectedVideoSourceKey) => {
+      const game = buildSlimTestGame(media);
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      await appendEventForUser('user-1', 'game-1', {
+        ...EVENT_CLOCK,
+        playerId: 'home-snap-1',
+        teamSide: 'home',
+        statType: 'FOUL',
+        videoTimestamp: 42,
+        expectedVideoSourceKey,
+      });
+      expect(game.events).toHaveLength(1);
+      expect(game.events[0]).not.toHaveProperty('expectedVideoSourceKey');
+    }
+  );
+
   test('appendEventForUser returns the slim delta shape, not the full game-detail response', async () => {
     const game = buildSlimTestGame();
     findGameById.mockResolvedValue(game);
