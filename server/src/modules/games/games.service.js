@@ -2321,7 +2321,35 @@ function insertEvent(game, eventPayload, insertBeforeEventId) {
     throw new ApiError(404, 'Insert point not found');
   }
 
+  // Replay, lineups and minutes read events in array order, so an inserted event must fall
+  // between its neighbours in game time. A neighbour without a clock snapshot (legacy data),
+  // or a previous neighbour already out of order, imposes no bound.
+  const target = game.events[insertIndex];
+  const previous = insertIndex > 0 ? game.events[insertIndex - 1] : null;
+  const inserted = compareGameTime(eventPayload, target);
+  const afterPrevious = previous ? compareGameTime(eventPayload, previous) : null;
+  const previousInOrder = previous ? compareGameTime(previous, target) : null;
+  if (inserted > 0 || (previousInOrder !== null && previousInOrder <= 0 && afterPrevious < 0)) {
+    throw new ApiError(400, 'Inserted event time must fall between its neighbouring events');
+  }
+
   game.events.splice(insertIndex, 0, eventPayload);
+}
+
+// Negative when a happened before b, positive after, 0 when simultaneous; null when either
+// lacks a clock snapshot. Regulation precedes overtime; within a segment the clock counts down.
+function compareGameTime(a, b) {
+  const hasClock = (event) =>
+    event?.segmentKind &&
+    Number.isFinite(event.segmentNumber) &&
+    Number.isFinite(event.clockMillisecondsRemaining);
+  if (!hasClock(a) || !hasClock(b)) return null;
+  const kindRank = (event) => (event.segmentKind === 'overtime' ? 1 : 0);
+  return (
+    kindRank(a) - kindRank(b) ||
+    a.segmentNumber - b.segmentNumber ||
+    b.clockMillisecondsRemaining - a.clockMillisecondsRemaining
+  );
 }
 
 function requireBothLineups(game) {

@@ -1,4 +1,5 @@
 import { DesktopFoulTypeEntry } from '../components/desktop/DesktopFoulTypeEntry';
+import { useSaveLock } from '../hooks/useSaveLock';
 import { isFoulStat } from '../foulStats';
 import { formatVideoTime } from '../../scrimmages/videoTime';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -569,7 +570,7 @@ export function GameTrackPage() {
   const [selectedShot, setSelectedShot] = useState(null);
   const [pendingFollowUpPrompt, setPendingFollowUpPrompt] = useState(null);
   const [lastTappedHoop, setLastTappedHoop] = useState('south');
-  const [isSaving, setIsSaving] = useState(false);
+  const { isSaving, isSavingNow, beginSave } = useSaveLock();
   const [saveStatus, setSaveStatus] = useState('synced');
   const [resumeCheckpoint, setResumeCheckpoint] = useState(null);
   const [resumeVideoPosition, setResumeVideoPosition] = useState(null);
@@ -623,7 +624,6 @@ export function GameTrackPage() {
   const [desktopRelatedShot, setDesktopRelatedShot] = useState(null);
   const desktopEntryContextRef = useRef(null);
   const desktopCommitRef = useRef(false);
-  const desktopCorrectionRef = useRef(false);
   const desktopOpeningPointerRef = useRef(false);
   const desktopOriginRef = useRef(null);
   const desktopEntryHeadingRef = useRef(null);
@@ -1314,12 +1314,14 @@ export function GameTrackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineupSetupStep]);
 
+  // updates may be a function of the side's latest state, for callers that resume after an
+  // await and must not apply a selection captured before it.
   function updateSideState(key, updates) {
     setSideState((current) => ({
       ...current,
       [key]: {
         ...current[key],
-        ...updates,
+        ...(typeof updates === 'function' ? updates(current[key]) : updates),
       },
     }));
   }
@@ -1342,23 +1344,21 @@ export function GameTrackPage() {
     if (isDualTeam) {
       for (const side of [TEAM_SIDES.HOME, TEAM_SIDES.AWAY]) {
         const nextLineupIds = response.lineups?.[side]?.currentPlayerIds || [];
-        updateSideState(side, {
+        updateSideState(side, (current) => ({
           selectedPlayerId:
-            nextLineupIds.includes(sideState[side].selectedPlayerId) &&
-            sideState[side].selectedPlayerId
-              ? sideState[side].selectedPlayerId
+            current.selectedPlayerId && nextLineupIds.includes(current.selectedPlayerId)
+              ? current.selectedPlayerId
               : nextLineupIds[0] || participantsBySide[side]?.players?.[0]?.id || '',
-        });
+        }));
       }
     } else {
       const nextLineupIds = response.game?.currentLineupPlayerIds || [];
-      updateSideState('oneSided', {
+      updateSideState('oneSided', (current) => ({
         selectedPlayerId:
-          nextLineupIds.includes(sideState.oneSided.selectedPlayerId) &&
-          sideState.oneSided.selectedPlayerId
-            ? sideState.oneSided.selectedPlayerId
+          current.selectedPlayerId && nextLineupIds.includes(current.selectedPlayerId)
+            ? current.selectedPlayerId
             : nextLineupIds[0] || team?.players?.[0]?.id || '',
-      });
+      }));
     }
 
     if (actionLabel) {
@@ -1399,7 +1399,7 @@ export function GameTrackPage() {
   }
 
   function requirePlayerSelection(playerId = currentSideState.selectedPlayerId) {
-    if (isSaving) {
+    if (isSavingNow()) {
       return false;
     }
 
@@ -1666,7 +1666,7 @@ export function GameTrackPage() {
   }
 
   async function commitDesktopEntry(commit) {
-    if (isSaving || voiceBusy || desktopCommitRef.current) return false;
+    if (isSavingNow() || voiceBusy || desktopCommitRef.current) return false;
     desktopCommitRef.current = true;
     try {
       return await commit();
@@ -1679,7 +1679,7 @@ export function GameTrackPage() {
     const entry = desktopQuickEntry;
     if (
       !entry ||
-      isSaving ||
+      isSavingNow() ||
       voiceBusy ||
       desktopCommitRef.current ||
       !onCourtPlayersBySide[teamSide]?.some((player) => player.id === playerId)
@@ -1726,7 +1726,7 @@ export function GameTrackPage() {
   async function undoDesktopPrimary() {
     const context = desktopEntryContextRef.current;
     const target = context?.primaryEventId;
-    if (!target || isSaving || voiceBusy || desktopCommitRef.current) return;
+    if (!target || isSavingNow() || voiceBusy || desktopCommitRef.current) return;
     if (data.game.events.at(-1)?.id !== target) {
       setError('The event list changed. Nothing was undone.');
       return;
@@ -1741,7 +1741,7 @@ export function GameTrackPage() {
   function onCourtSelect(point) {
     if (
       useDesktopLeagueWorkspace &&
-      (isSaving || voiceBusy || showClockRecovery || isAddPlayerOpen || isVoiceSubInOpen)
+      (isSavingNow() || voiceBusy || showClockRecovery || isAddPlayerOpen || isVoiceSubInOpen)
     )
       return;
     if (useDesktopLeagueWorkspace && desktopLocationMode === 'related') {
@@ -1761,7 +1761,7 @@ export function GameTrackPage() {
       (desktopQuickEntry || pendingFollowUpPrompt || desktopCommitRef.current)
     )
       return;
-    if (isSaving || voiceBusy || !requireLineup()) {
+    if (isSavingNow() || voiceBusy || !requireLineup()) {
       return;
     }
 
@@ -1824,7 +1824,7 @@ export function GameTrackPage() {
       return;
     }
 
-    if (hasSubstitutionDraft && !isSaving) cancelSubstitution();
+    if (hasSubstitutionDraft && !isSavingNow()) cancelSubstitution();
     resetTransientTrackingState();
     setActiveSide(nextSide);
   }
@@ -1835,7 +1835,7 @@ export function GameTrackPage() {
       activePanel === 'substitutions' &&
       nextPanel !== activePanel &&
       hasSubstitutionDraft &&
-      !isSaving
+      !isSavingNow()
     ) {
       cancelSubstitution();
     }
@@ -1892,7 +1892,7 @@ export function GameTrackPage() {
       eventContext = {},
     } = {}
   ) {
-    if (isSaving || (voiceBusy && eventContext.source !== 'voice')) {
+    if (isSavingNow() || (voiceBusy && eventContext.source !== 'voice')) {
       return;
     }
 
@@ -1903,7 +1903,7 @@ export function GameTrackPage() {
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(shot);
@@ -1961,7 +1961,7 @@ export function GameTrackPage() {
         clearEventPicker();
         throw err;
       })
-      .finally(() => setIsSaving(false));
+      .finally(endSave);
     try {
       await inflightRef.current;
       return true;
@@ -1974,7 +1974,7 @@ export function GameTrackPage() {
   // Unassisted). Voice needs that outcome; the buttons ignore it.
   async function handleFollowUpSelection(option, { source = 'manual' } = {}) {
     if (followUpSavingRef.current) return false;
-    if (useDesktopLeagueWorkspace && isSaving) return false;
+    if (useDesktopLeagueWorkspace && isSavingNow()) return false;
     if (voiceBusy && source !== 'voice') return false;
     if (!pendingFollowUpPrompt) {
       clearEventPicker();
@@ -1992,7 +1992,7 @@ export function GameTrackPage() {
     // Claim synchronously: two clicks can arrive before React commits isSaving.
     followUpSavingRef.current = true;
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
 
     // Chain onto the primary event. inflightRef always holds a Promise, so
     // this await is always real. If the primary failed (re-threw), we bail here
@@ -2093,7 +2093,7 @@ export function GameTrackPage() {
       return false;
     } finally {
       followUpSavingRef.current = false;
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -2117,7 +2117,7 @@ export function GameTrackPage() {
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
 
     const payload = {
       playerId,
@@ -2184,7 +2184,7 @@ export function GameTrackPage() {
         clearEventPicker();
         throw err;
       })
-      .finally(() => setIsSaving(false));
+      .finally(endSave);
     try {
       await inflightRef.current;
       return true;
@@ -2208,7 +2208,7 @@ export function GameTrackPage() {
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
 
     const inferred = buildFreeThrowPayload(
       eventContext.hoopSide || shot?.nearestHoop || lastTappedHoop,
@@ -2265,7 +2265,7 @@ export function GameTrackPage() {
         clearEventPicker();
         throw err;
       })
-      .finally(() => setIsSaving(false));
+      .finally(endSave);
     try {
       await inflightRef.current;
       return true;
@@ -2275,15 +2275,12 @@ export function GameTrackPage() {
   }
 
   async function removeEvent(eventId) {
-    if (isSaving || (useDesktopLeagueWorkspace && desktopCorrectionRef.current)) {
+    if (isSavingNow()) {
       return false;
     }
-    if (useDesktopLeagueWorkspace) {
-      desktopCorrectionRef.current = true;
-      setSaveStatus('saving');
-    }
+    if (useDesktopLeagueWorkspace) setSaveStatus('saving');
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     try {
       const response = await enqueueGameMutation(() => gamesApi.removeEvent(gameId, eventId));
       updateData(response, 'Event removed');
@@ -2305,8 +2302,7 @@ export function GameTrackPage() {
       setError(removeError.message || 'Failed to remove event');
       return false;
     } finally {
-      desktopCorrectionRef.current = false;
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -2325,7 +2321,7 @@ export function GameTrackPage() {
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
 
     const isInsert = Boolean(insertBeforeEventId);
     const courtFields = buildCourtFields(shot);
@@ -2407,7 +2403,7 @@ export function GameTrackPage() {
         clearEventPicker();
         throw err;
       })
-      .finally(() => setIsSaving(false));
+      .finally(endSave);
     try {
       await inflightRef.current;
       return true;
@@ -2417,12 +2413,12 @@ export function GameTrackPage() {
   }
 
   async function addOpponentScore(statType, { shot = selectedShot, eventContext = {} } = {}) {
-    if (isSaving || (voiceBusy && eventContext.source !== 'voice')) {
+    if (isSavingNow() || (voiceBusy && eventContext.source !== 'voice')) {
       return false;
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     const resolvedEventContext = Object.prototype.hasOwnProperty.call(
       eventContext,
       'videoTimestamp'
@@ -2450,12 +2446,12 @@ export function GameTrackPage() {
       }
       return false;
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
   function openEditEvent(event) {
-    if (isSaving) return;
+    if (isSavingNow()) return;
     setEditingEvent({
       id: event.id,
       playerId: event.playerId || '',
@@ -2471,14 +2467,15 @@ export function GameTrackPage() {
   }
 
   async function saveEventEdit() {
-    if (!editingEvent || isSaving || (useDesktopLeagueWorkspace && desktopCorrectionRef.current))
-      return;
-    if (useDesktopLeagueWorkspace) {
-      desktopCorrectionRef.current = true;
-      setSaveStatus('saving');
-    }
-    setIsSaving(true);
+    if (!editingEvent || isSavingNow()) return;
+    if (useDesktopLeagueWorkspace) setSaveStatus('saving');
+    const endSave = beginSave();
     setError('');
+    // Only close the editor this save belongs to: on mobile the dialog can be dismissed while
+    // the save is in flight, and another event's editor may be open when it settles.
+    const editedId = editingEvent.id;
+    const closeEditor = () =>
+      setEditingEvent((current) => (current?.id === editedId ? null : current));
     const patch = {};
     if (editingEvent.playerId) patch.playerId = editingEvent.playerId;
     if (isDualTeam && editingEvent.teamSide) patch.teamSide = editingEvent.teamSide;
@@ -2494,22 +2491,21 @@ export function GameTrackPage() {
     patch.clockMillisecondsRemaining = Number(editingEvent.clockMillisecondsRemaining);
     try {
       const response = await enqueueGameMutation(() =>
-        gamesApi.updateEvent(gameId, editingEvent.id, patch)
+        gamesApi.updateEvent(gameId, editedId, patch)
       );
       updateData(response, 'Event updated');
       if (useDesktopLeagueWorkspace) setSaveStatus('saved');
-      setEditingEvent(null);
+      closeEditor();
     } catch (err) {
       setSaveStatus('failed');
       setError(err.message || 'Failed to update event');
       if (useDesktopLeagueWorkspace && requiresMutationReconciliation(err)) {
         await loadGame();
-        setEditingEvent(null);
+        closeEditor();
         setError('The edit could not be confirmed. Check the event list before trying again.');
       }
     } finally {
-      desktopCorrectionRef.current = false;
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -2519,7 +2515,7 @@ export function GameTrackPage() {
     allowSelectedShot = false,
     allowDesktopFollowUp = false,
   } = {}) {
-    if (isSaving) return false;
+    if (isSavingNow()) return false;
     // voiceBusy is true for the whole cycle that is calling this, so only other sources
     // are held off.
     if (voiceBusy && source !== 'voice') return false;
@@ -2739,7 +2735,7 @@ export function GameTrackPage() {
   }
 
   async function saveLineup() {
-    if (isSaving) {
+    if (isSavingNow()) {
       return;
     }
 
@@ -2749,7 +2745,7 @@ export function GameTrackPage() {
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     try {
       const response = await enqueueGameMutation(() =>
         gamesApi.setLineup(
@@ -2776,12 +2772,12 @@ export function GameTrackPage() {
       setSaveStatus('failed');
       setError(saveError.message || 'Failed to save lineup');
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
   async function saveSubstitution() {
-    if (isSaving) {
+    if (isSavingNow()) {
       return;
     }
 
@@ -2798,7 +2794,7 @@ export function GameTrackPage() {
     }
 
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     try {
       const subInResponse = await submitSubstitution(
         currentSideState.substitutionState.playerOutId,
@@ -2820,7 +2816,7 @@ export function GameTrackPage() {
       cancelSubstitution();
       setError(saveError.message || 'Failed to save substitution');
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -2830,7 +2826,7 @@ export function GameTrackPage() {
   }
 
   function toggleSubstitutionPlayer(field, playerId) {
-    if (isSaving) return;
+    if (isSavingNow()) return;
     const currentId = currentSideState.substitutionState[field];
     const nextSubstitution = {
       ...currentSideState.substitutionState,
@@ -2856,9 +2852,9 @@ export function GameTrackPage() {
   }
 
   async function saveVideoUrl() {
-    if (isSaving) return;
+    if (isSavingNow()) return;
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     try {
       // Send null (not '') when cleared, so the server can detach the video — an empty
       // string fails the server's youtubeUrlSchema.min(1), whereas null is accepted.
@@ -2872,7 +2868,7 @@ export function GameTrackPage() {
       setSaveStatus('failed');
       setError(err.message || 'Failed to save video URL');
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -2881,7 +2877,7 @@ export function GameTrackPage() {
     // concurrently with the finish request. Release ownership so no competing start is sent.
     entryClockWasRunningRef.current = false;
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     try {
       await enqueueGameMutation(() => gamesApi.finish(gameId));
       navigate(
@@ -2893,12 +2889,12 @@ export function GameTrackPage() {
       setSaveStatus('failed');
       setError(finishError.message || 'Failed to finish game');
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
   async function executeClockCommand(command) {
-    if (isSaving || voiceBusy) return false;
+    if (isSavingNow() || voiceBusy) return false;
     clockOperatedThisMountRef.current = true;
     // Operating the clock by hand takes it back from the video: a later play must not restart a
     // clock the scorekeeper just stopped, nor stop one they just started.
@@ -2907,7 +2903,7 @@ export function GameTrackPage() {
     clockPausedByVideoRef.current = false;
     videoPausedByClockRef.current = false;
     setError('');
-    setIsSaving(true);
+    const endSave = beginSave();
     try {
       const response = await enqueueGameMutation(() => gamesApi.updateClock(gameId, command));
       updateData(response);
@@ -2935,7 +2931,7 @@ export function GameTrackPage() {
       }
       return false;
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -3488,8 +3484,9 @@ export function GameTrackPage() {
   }
 
   async function openScrimmageDialog(kind) {
-    if (isSaving || voiceBusy || isEventPickerOpen || editingEvent || showClockRecovery) return;
-    setIsSaving(true);
+    if (isSavingNow() || voiceBusy || isEventPickerOpen || editingEvent || showClockRecovery)
+      return;
+    const endSave = beginSave();
     setError('');
     pauseVideo();
     videoPlaybackStateRef.current = 'paused';
@@ -3516,7 +3513,7 @@ export function GameTrackPage() {
       setError(err.message || 'Could not pause the game clock');
     } finally {
       entryClockWasRunningRef.current = false;
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -3529,8 +3526,8 @@ export function GameTrackPage() {
   }
 
   async function pauseClockAndLeave() {
-    if (!pendingExitDestination || isSaving) return;
-    setIsSaving(true);
+    if (!pendingExitDestination || isSavingNow()) return;
+    const endSave = beginSave();
     try {
       await enqueueGameMutation(() => gamesApi.updateClock(gameId, { action: 'pause' }));
       navigate(pendingExitDestination);
@@ -3538,7 +3535,7 @@ export function GameTrackPage() {
     } catch (clockError) {
       setError(clockError.message || 'Could not pause the clock; tracking remains open');
     } finally {
-      setIsSaving(false);
+      endSave();
     }
   }
 
@@ -3586,7 +3583,7 @@ export function GameTrackPage() {
         menu.open = false;
         return;
       }
-      if (isSaving || desktopCommitRef.current) return;
+      if (isSavingNow() || desktopCommitRef.current) return;
       if (editingEvent) setEditingEvent(null);
       else if (desktopEntryOpen) {
         if (insertBeforeEventId) {
@@ -3598,7 +3595,7 @@ export function GameTrackPage() {
     }
     document.addEventListener('keydown', onDesktopEscape);
     return () => document.removeEventListener('keydown', onDesktopEscape);
-  }, [useDesktopLeagueWorkspace, desktopEntryOpen, isSaving, editingEvent, insertBeforeEventId]);
+  }, [useDesktopLeagueWorkspace, desktopEntryOpen, isSavingNow, editingEvent, insertBeforeEventId]);
 
   useEffect(() => {
     const context = desktopEntryContextRef.current;

@@ -2116,6 +2116,65 @@ describe('games service event mutation contract (OPT-015)', () => {
     }
   );
 
+  describe('insert clock order', () => {
+    const clockAt = (segmentNumber, clockMillisecondsRemaining) => ({
+      segmentKind: 'regulation',
+      segmentNumber,
+      clockMillisecondsRemaining,
+    });
+
+    function setupInsert() {
+      const game = buildSlimTestGame({
+        events: buildEvents([
+          {
+            _id: 'prev',
+            playerId: 'home-snap-1',
+            teamSide: 'home',
+            statType: 'FOUL',
+            ...clockAt(1, 500000),
+          },
+          {
+            _id: 'target',
+            playerId: 'home-snap-1',
+            teamSide: 'home',
+            statType: 'FOUL',
+            ...clockAt(1, 400000),
+          },
+        ]),
+      });
+      findGameById.mockResolvedValue(game);
+      saveGame.mockResolvedValue(game);
+      return game;
+    }
+
+    const insert = (clock) =>
+      appendEventForUser(
+        'user-1',
+        'game-1',
+        { playerId: 'home-snap-2', teamSide: 'home', statType: 'STL', ...clock },
+        { insertBeforeEventId: 'target' }
+      );
+
+    test.each([
+      ['later than the target', clockAt(2, 300000)],
+      ['earlier than the previous event', clockAt(1, 550000)],
+    ])('rejects an insert %s', async (_label, clock) => {
+      const game = setupInsert();
+      await expect(insert(clock)).rejects.toMatchObject({ statusCode: 400 });
+      expect(saveGame).not.toHaveBeenCalled();
+      expect(game.events.map((event) => event._id)).toEqual(['prev', 'target']);
+    });
+
+    test.each([
+      ['between its neighbours', clockAt(1, 450000)],
+      ['at the target time', clockAt(1, 400000)],
+    ])('accepts an insert %s', async (_label, clock) => {
+      const game = setupInsert();
+      await insert(clock);
+      expect(game.events.map((event) => event.statType)).toEqual(['FOUL', 'STL', 'FOUL']);
+    });
+  });
+
   test('historical edits can still credit a valid roster player who is currently on the bench', async () => {
     const game = buildSlimTestGame({
       homeCurrentLineupPlayerIds: ['home-snap-2'],
